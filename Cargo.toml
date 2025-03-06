@@ -1,0 +1,8 @@
+[package]
+name = "pcie40-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Rust bindings for the PCIe40 drivers"
+
+[dependencies]
+bindgen = "0.71.1"

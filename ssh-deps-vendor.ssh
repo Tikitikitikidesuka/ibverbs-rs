@@ -1,0 +1,130 @@
+#!/bin/bash
+#
+# rust-deps-vendor.sh - Vendor Rust dependencies for an offline server
+#
+# This script:
+# 1. Fetches Cargo.toml and Cargo.lock from a remote server via SSH
+# 2. Creates a temporary project environment locally
+# 3. Downloads all dependencies using cargo vendor
+# 4. Uploads the vendored dependencies back to the remote server
+# 5. Configures the remote project to use the vendored dependencies
+#
+# Usage: ./rust-deps-vendor.sh user@server:/path/to/rust/project
+#
+# It is meant to be used from the users device, not from the deployment server.
+# This will be replaced by a dev build container and building will moved away from the server.
+# The built executable will be uploaded to the server and run there.
+
+set -e
+
+# ===== Argument Handling =====
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 user@server:/path/to/rust/project"
+    exit 1
+fi
+
+# Parse SSH destination and project path
+SSH_DEST=$(echo "$1" | cut -d':' -f1)
+REMOTE_PATH=$(echo "$1" | cut -d':' -f2)
+
+# ===== Setup Local Environment =====
+# Create temporary directories
+TEMP_DIR=$(mktemp -d)
+VENDOR_DIR="$TEMP_DIR/vendor"
+PROJECT_FILES="$TEMP_DIR/project_files"
+
+# Create the directory structure
+mkdir -p "$PROJECT_FILES"
+mkdir -p "$VENDOR_DIR"
+
+echo "🔄 Fetching project details from $SSH_DEST:$REMOTE_PATH..."
+
+# ===== Get Project Files =====
+# Copy the Cargo.toml and Cargo.lock from the remote server
+ssh "$SSH_DEST" "cd $REMOTE_PATH && tar -czf - Cargo.toml Cargo.lock" | tar -xzf - -C "$PROJECT_FILES"
+
+# Verify Cargo.toml exists
+if [ ! -f "$PROJECT_FILES/Cargo.toml" ]; then
+    echo "❌ Error: Cargo.toml not found in the remote project"
+    rm -rf "$TEMP_DIR"
+    exit 1
+fi
+
+# Check if Cargo.lock exists
+if [ ! -f "$PROJECT_FILES/Cargo.lock" ]; then
+    echo "⚠️ Warning: Cargo.lock not found. This may lead to version mismatches."
+    echo "   Consider running 'cargo build' on the remote server first to generate Cargo.lock."
+fi
+
+echo "📦 Vendoring dependencies locally..."
+
+# ===== Configure Local Cargo =====
+# Set up a temporary Rust project
+CARGO_HOME="$TEMP_DIR/.cargo"
+mkdir -p "$CARGO_HOME"
+
+# Create config for vendoring
+cat > "$CARGO_HOME/config.toml" << EOF
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "$VENDOR_DIR"
+EOF
+
+# Copy Cargo files to the temporary directory
+cp "$PROJECT_FILES/Cargo.toml" "$TEMP_DIR/"
+if [ -f "$PROJECT_FILES/Cargo.lock" ]; then
+    cp "$PROJECT_FILES/Cargo.lock" "$TEMP_DIR/"
+fi
+
+# Create minimal src/lib.rs to satisfy Cargo's requirement for a target
+mkdir -p "$TEMP_DIR/src"
+touch "$TEMP_DIR/src/lib.rs"
+
+# ===== Vendor Dependencies =====
+# Vendor the dependencies
+cd "$TEMP_DIR"
+cargo vendor
+
+# ===== Prepare for Upload =====
+echo "📤 Preparing vendored dependencies..."
+
+# Compress the vendor directory
+cd "$TEMP_DIR"
+tar -czf "rust_vendor.tar.gz" vendor
+
+# Create .cargo directory config for the remote server
+mkdir -p "$TEMP_DIR/cargo_config"
+cat > "$TEMP_DIR/cargo_config/config.toml" << EOF
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+EOF
+
+# Compress the cargo config
+cd "$TEMP_DIR"
+tar -czf "cargo_config.tar.gz" cargo_config
+
+# ===== Upload to Remote Server =====
+echo "📤 Uploading vendored dependencies to $SSH_DEST:$REMOTE_PATH..."
+scp "$TEMP_DIR/rust_vendor.tar.gz" "$TEMP_DIR/cargo_config.tar.gz" "$SSH_DEST:$REMOTE_PATH/"
+
+# ===== Extract on Remote Server =====
+echo "📂 Extracting dependencies on the remote server..."
+ssh "$SSH_DEST" "cd $REMOTE_PATH && \
+                 tar -xzf rust_vendor.tar.gz && \
+                 mkdir -p .cargo && \
+                 tar -xzf cargo_config.tar.gz && \
+                 cp cargo_config/config.toml .cargo/ && \
+                 rm -rf cargo_config && \
+                 rm rust_vendor.tar.gz cargo_config.tar.gz"
+
+# ===== Cleanup =====
+# Remove temporary files
+rm -rf "$TEMP_DIR"
+
+echo "✅ Done! Dependencies have been vendored and uploaded to $SSH_DEST:$REMOTE_PATH"
+echo "   Your Rust project is now configured to use vendored dependencies."
