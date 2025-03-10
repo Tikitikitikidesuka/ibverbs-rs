@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  dev:
+    build:
+      context: .devcontainer
+      dockerfile: Dockerfile
+      args:
+        USERNAME: dev
+        USER_UID: 1000
+        USER_GID: 1000
+    platform: linux/amd64  # Force x86_64 architecture
+    volumes:
+      - .:/home/dev/project:cached
+      - rust-cache:/home/dev/.cargo/registry
+    # Add any environment variables your project needs
+    environment:
+      - RUST_BACKTRACE=1
+    # Either use this to keep the container running
+    command: sleep infinity
+    # Or this for an interactive shell
+    # command: /bin/bash
+    # Enable privileged mode for PCIe40 driver access (if needed)
+    privileged: true
+    # Uncomment if you need direct access to host devices
+    # devices:
+    #   - /dev/pcie40:/dev/pcie40
+
+volumes:
+  rust-cache:

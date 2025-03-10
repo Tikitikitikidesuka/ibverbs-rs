@@ -18,6 +18,7 @@ RUN dnf update -y && \
     wget \
     git \
     vim \
+    clang \
     cmake \
     make \
     gcc \

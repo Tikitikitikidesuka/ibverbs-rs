@@ -1,0 +1,33 @@
+{
+  "name": "PCIe40 Rust Development Environment",
+  "dockerFile": "Dockerfile",
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--security-opt",
+    "seccomp=unconfined"
+  ],
+  // Set environment variables
+  "containerEnv": {
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "en_US.UTF-8",
+    "RUST_BACKTRACE": "1"
+  },
+  // Configure VS Code settings
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "rust-analyzer.checkOnSave.command": "clippy",
+        "editor.formatOnSave": true
+      },
+      // Add recommended extensions for Rust development
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+  // Run commands after the container is created
+  "postCreateCommand": "rustup component add clippy rustfmt && cargo check"
+}
