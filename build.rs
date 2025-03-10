@@ -6,8 +6,7 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.h");
 
     // Link to the p40 libraries
-    println!("cargo:rustc-link-lib=p40");
-    println!("cargo:rustc-link-lib=p40_daq");
+    println!("cargo:rustc-link-lib=pcie40_daq");
 
     // Generate bindings using the wrapper header
     let bindings = bindgen::Builder::default()
