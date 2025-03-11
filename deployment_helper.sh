@@ -23,8 +23,9 @@ show_usage() {
     echo ""
     echo "Commands:"
     echo "  build    Build the project in the Docker container"
-    echo "  deploy   Build and copy the binary to the server"
-    echo "  run      Build, deploy, and run the binary on the server"
+    echo "  deploy   Copy the binary to the server (without building)"
+    echo "  run      Run the binary on the server (without building or deploying)"
+    echo "  all      Build, deploy, and run the binary on the server"
     echo "  help     Show this help message"
     echo ""
     echo "Options:"
@@ -32,11 +33,11 @@ show_usage() {
     echo "  --release       Build in release mode"
     echo ""
     echo "Examples:"
-    echo "  $0 build                # Build in debug mode"
-    echo "  $0 build --debug        # Explicitly build in debug mode"
-    echo "  $0 build --release      # Build in release mode"
-    echo "  $0 deploy --release     # Build in release mode and deploy"
-    echo "  $0 run --release        # Build in release mode, deploy and run"
+    echo "  $0 build               # Build in debug mode"
+    echo "  $0 build --release     # Build in release mode"
+    echo "  $0 deploy --release    # Deploy the release binary (assumes it's already built)"
+    echo "  $0 run                 # Run the binary on server (assumes it's already deployed)"
+    echo "  $0 all --release       # Build in release mode, deploy and run"
     exit 0
 }
 
@@ -74,16 +75,32 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Parse command
+# Determine the correct binary path based on build mode
+if [ "$BUILD_MODE" = "release" ]; then
+    BINARY_PATH="./target/release/$BINARY_NAME"
+else
+    BINARY_PATH="./target/debug/$BINARY_NAME"
+fi
+
+# Default run command if not set in config
+if [ -z "$RUN_COMMAND" ]; then
+    REMOTE_COMMAND="cd $SERVER_PATH && ./$BINARY_NAME"
+else
+    REMOTE_COMMAND="$RUN_COMMAND"
+fi
+
+# Parse command - each command does exactly one thing
 case $COMMAND in
     build)
         DO_BUILD=true
         ;;
     deploy)
-        DO_BUILD=true
         DO_DEPLOY=true
         ;;
     run)
+        DO_RUN=true
+        ;;
+    all)
         DO_BUILD=true
         DO_DEPLOY=true
         DO_RUN=true
@@ -102,7 +119,7 @@ esac
 echo "====================================="
 echo "Rust Project Build & Deploy Automation"
 echo "====================================="
-echo "Command: $COMMAND"
+echo "Command: $COMMAND (mode: $BUILD_MODE)"
 echo "====================================="
 
 # Check for SSH key if needed for deploy or run
@@ -119,8 +136,9 @@ fi
 
 # Build step
 if [ "$DO_BUILD" = true ]; then
+    echo "[Step] Building project..."
     # Step 1: Build the Docker image if it doesn't exist
-    echo "[1/3] Checking Docker image..."
+    echo "Checking Docker image..."
     if [[ "$(docker images -q $DOCKER_IMAGE_NAME:$DOCKER_TAG 2> /dev/null)" == "" ]]; then
         echo "Building Docker image..."
 
@@ -134,15 +152,8 @@ if [ "$DO_BUILD" = true ]; then
     fi
 
     # Step 2: Run the container to build the Rust project
-    echo "[2/3] Building Rust project inside Docker container (mode: $BUILD_MODE)..."
+    echo "Building Rust project inside Docker container (mode: $BUILD_MODE)..."
     docker run --platform=linux/amd64 --rm -v "$(pwd)":/app $DOCKER_IMAGE_NAME:$DOCKER_TAG cargo build ${CARGO_ARGS:-}
-
-    # Determine the correct binary path based on build mode
-    if [ "$BUILD_MODE" = "release" ]; then
-        BINARY_PATH="./target/release/$BINARY_NAME"
-    else
-        BINARY_PATH="./target/debug/$BINARY_NAME"
-    fi
 
     # Check if binary was created
     if [ ! -f "$BINARY_PATH" ]; then
@@ -151,19 +162,20 @@ if [ "$DO_BUILD" = true ]; then
     fi
 
     echo "Build successful!"
-
-    # Default run command if not set in config
-    if [ -z "$RUN_COMMAND" ]; then
-        REMOTE_COMMAND="cd $SERVER_PATH && ./$BINARY_NAME"
-    else
-        REMOTE_COMMAND="$RUN_COMMAND"
-    fi
 fi
 
 # Deploy step
 if [ "$DO_DEPLOY" = true ]; then
-    # Step 3: Copy the binary to the server
-    echo "[3/3] Copying binary to server..."
+    echo "[Step] Deploying binary..."
+
+    # Check if binary exists before trying to deploy
+    if [ ! -f "$BINARY_PATH" ]; then
+        echo "Error: Binary not found at $BINARY_PATH. Run build first or check build mode."
+        exit 1
+    fi
+
+    # Copy the binary to the server
+    echo "Copying binary to server..."
     ssh "$SERVER" "mkdir -p $SERVER_PATH"
     scp "$BINARY_PATH" "$SERVER:$SERVER_PATH/$BINARY_NAME"
 
@@ -177,22 +189,30 @@ fi
 
 # Run step
 if [ "$DO_RUN" = true ]; then
-    # Step 4: Run on the server
-    echo "[3/3] Running binary on server..."
+    echo "[Step] Running binary on server..."
+
+    # Run the binary on the server
+    echo "Executing on server..."
     ssh "$SERVER" "$REMOTE_COMMAND"
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to run binary on server."
         exit 1
     fi
+
+    echo "Execution completed!"
 fi
 
 echo "====================================="
-if [ "$DO_RUN" = true ]; then
-    echo "Deployment and execution completed successfully!"
+if [ "$DO_BUILD" = true ] && [ "$DO_DEPLOY" = true ] && [ "$DO_RUN" = true ]; then
+    echo "Build, deployment, and execution completed successfully!"
+elif [ "$DO_BUILD" = true ] && [ "$DO_DEPLOY" = true ]; then
+    echo "Build and deployment completed successfully!"
+elif [ "$DO_BUILD" = true ]; then
+    echo "Build completed successfully!"
 elif [ "$DO_DEPLOY" = true ]; then
     echo "Deployment completed successfully!"
-else
-    echo "Build completed successfully!"
+elif [ "$DO_RUN" = true ]; then
+    echo "Execution completed successfully!"
 fi
 echo "====================================="
