@@ -213,10 +213,24 @@ if [ "$DO_BUILD" = true ]; then
     # Step 2: Run the container to build the Rust project
     echo "Building Rust project inside Docker container (mode: $BUILD_MODE)..."
     docker run --platform=linux/amd64 --rm -v "$(pwd)":/app $DOCKER_IMAGE_NAME:$DOCKER_TAG cargo build ${CARGO_ARGS:-}
+    BUILD_RESULT=$?
 
-    # Check if binary was created
+    # Check if the build was successful
+    if [ $BUILD_RESULT -ne 0 ]; then
+        echo "Error: Build failed with exit code $BUILD_RESULT. See above for details."
+        exit 1
+    fi
+
+    # Check if binary was created and has a non-zero size
     if [ ! -f "$SOURCE_BINARY_PATH" ]; then
-        echo "Error: Binary was not created at $SOURCE_BINARY_PATH. Check the build logs above."
+        echo "Error: Binary was not created at $SOURCE_BINARY_PATH."
+        exit 1
+    fi
+
+    # Check if the binary has a non-zero size
+    BINARY_SIZE=$(stat -c%s "$SOURCE_BINARY_PATH" 2>/dev/null || stat -f%z "$SOURCE_BINARY_PATH" 2>/dev/null)
+    if [ "$BINARY_SIZE" -eq 0 ]; then
+        echo "Error: Binary file has zero size. Build likely failed."
         exit 1
     fi
 
