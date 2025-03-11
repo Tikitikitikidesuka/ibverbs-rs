@@ -31,12 +31,14 @@ show_usage() {
     echo "Options:"
     echo "  --debug         Build in debug mode (default)"
     echo "  --release       Build in release mode"
+    echo "  --output FILE   Redirect output of run command to a local file"
     echo ""
     echo "Examples:"
     echo "  $0 build               # Build in debug mode"
     echo "  $0 build --release     # Build in release mode"
     echo "  $0 deploy --release    # Deploy the release binary (assumes it's already built)"
     echo "  $0 run                 # Run the binary on server (assumes it's already deployed)"
+    echo "  $0 run --output=log.txt  # Run and save output to log.txt"
     echo "  $0 all --release       # Build in release mode, deploy and run"
     exit 0
 }
@@ -55,6 +57,7 @@ BUILD_MODE="debug"
 CARGO_ARGS=""
 
 # Parse remaining arguments
+OUTPUT_REDIRECT=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --debug)
@@ -66,6 +69,20 @@ while [[ $# -gt 0 ]]; do
             BUILD_MODE="release"
             CARGO_ARGS="--release"
             shift
+            ;;
+        --output=*)
+            OUTPUT_FILE="${1#*=}"
+            OUTPUT_REDIRECT="> $OUTPUT_FILE"
+            shift
+            ;;
+        --output)
+            if [[ -z "$2" || "$2" == --* ]]; then
+                echo "Error: --output requires a filename argument"
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            OUTPUT_REDIRECT="> $OUTPUT_FILE"
+            shift 2
             ;;
         *)
             echo "Unknown option: $1"
@@ -193,7 +210,12 @@ if [ "$DO_RUN" = true ]; then
 
     # Run the binary on the server
     echo "Executing on server..."
-    ssh "$SERVER" "$REMOTE_COMMAND"
+    if [ -n "$OUTPUT_REDIRECT" ]; then
+        echo "Redirecting output to $OUTPUT_FILE"
+        eval "ssh \"$SERVER\" \"$REMOTE_COMMAND\" $OUTPUT_REDIRECT"
+    else
+        ssh "$SERVER" "$REMOTE_COMMAND"
+    fi
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to run binary on server."
