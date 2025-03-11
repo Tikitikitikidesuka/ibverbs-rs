@@ -10,6 +10,14 @@ DOCKERFILE_PATH=".devcontainer/Dockerfile"
 DOCKER_IMAGE_NAME="pcie40-rust-dev"
 DOCKER_TAG="latest"
 
+# Latest binary storage location
+LATEST_BINARY_DIR="./target/latest"
+LATEST_BINARY_PATH="$LATEST_BINARY_DIR/$BINARY_NAME"
+LATEST_MODE_FILE="$LATEST_BINARY_DIR/build_mode"
+
+# Deployed binary tracking
+DEPLOYED_MODE_FILE="$LATEST_BINARY_DIR/deployed_mode"
+
 # Load configuration from external file if it exists
 CONFIG_FILE="deploy_config.local"
 if [ -f "$CONFIG_FILE" ]; then
@@ -24,7 +32,7 @@ show_usage() {
     echo "Commands:"
     echo "  build    Build the project in the Docker container"
     echo "  deploy   Copy the binary to the server (without building)"
-    echo "  run      Run the binary on the server (without building or deploying)"
+    echo "  run      Run the binary on server (without building or deploying)"
     echo "  all      Build, deploy, and run the binary on the server"
     echo "  help     Show this help message"
     echo ""
@@ -36,8 +44,8 @@ show_usage() {
     echo "Examples:"
     echo "  $0 build               # Build in debug mode"
     echo "  $0 build --release     # Build in release mode"
-    echo "  $0 deploy --release    # Deploy the release binary (assumes it's already built)"
-    echo "  $0 run                 # Run the binary on server (assumes it's already deployed)"
+    echo "  $0 deploy              # Deploy the latest built binary"
+    echo "  $0 run                 # Run the binary on server"
     echo "  $0 run --output=log.txt  # Run and save output to log.txt"
     echo "  $0 all --release       # Build in release mode, deploy and run"
     exit 0
@@ -92,11 +100,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Determine the correct binary path based on build mode
+# Set binary paths based on build mode
 if [ "$BUILD_MODE" = "release" ]; then
-    BINARY_PATH="./target/release/$BINARY_NAME"
+    SOURCE_BINARY_PATH="./target/release/$BINARY_NAME"
 else
-    BINARY_PATH="./target/debug/$BINARY_NAME"
+    SOURCE_BINARY_PATH="./target/debug/$BINARY_NAME"
 fi
 
 # Default run command if not set in config
@@ -132,11 +140,45 @@ case $COMMAND in
         ;;
 esac
 
+# For deploy and run commands, we need to know which mode to display
+BUILD_DISPLAY_MODE="unknown"
+DEPLOYED_DISPLAY_MODE="unknown"
+
+# Get the build mode (for the build command or display)
+if [ -f "$LATEST_MODE_FILE" ]; then
+    BUILD_DISPLAY_MODE=$(cat "$LATEST_MODE_FILE")
+else
+    if [ "$DO_BUILD" = true ]; then
+        BUILD_DISPLAY_MODE=$BUILD_MODE
+    else
+        BUILD_DISPLAY_MODE="unknown (no latest build found)"
+    fi
+fi
+
+# Get the deployed mode (for the run command)
+if [ -f "$DEPLOYED_MODE_FILE" ]; then
+    DEPLOYED_DISPLAY_MODE=$(cat "$DEPLOYED_MODE_FILE")
+else
+    DEPLOYED_DISPLAY_MODE="unknown (no deployment info)"
+fi
+
 # Display script banner
 echo "====================================="
 echo "Rust Project Build & Deploy Automation"
 echo "====================================="
-echo "Command: $COMMAND (mode: $BUILD_MODE)"
+
+if [ "$DO_BUILD" = true ]; then
+    echo "Command: $COMMAND (build mode: $BUILD_MODE)"
+elif [ "$DO_DEPLOY" = true ]; then
+    echo "Command: $COMMAND (deploying build mode: $BUILD_DISPLAY_MODE)"
+elif [ "$DO_RUN" = true ]; then
+    echo "Command: $COMMAND (server has: $DEPLOYED_DISPLAY_MODE)"
+elif [ "$DO_BUILD" = true ] && [ "$DO_DEPLOY" = true ] && [ "$DO_RUN" = true ]; then
+    echo "Command: $COMMAND (build mode: $BUILD_MODE)"
+else
+    echo "Command: $COMMAND"
+fi
+
 echo "====================================="
 
 # Check for SSH key if needed for deploy or run
@@ -173,33 +215,46 @@ if [ "$DO_BUILD" = true ]; then
     docker run --platform=linux/amd64 --rm -v "$(pwd)":/app $DOCKER_IMAGE_NAME:$DOCKER_TAG cargo build ${CARGO_ARGS:-}
 
     # Check if binary was created
-    if [ ! -f "$BINARY_PATH" ]; then
-        echo "Error: Binary was not created at $BINARY_PATH. Check the build logs above."
+    if [ ! -f "$SOURCE_BINARY_PATH" ]; then
+        echo "Error: Binary was not created at $SOURCE_BINARY_PATH. Check the build logs above."
         exit 1
     fi
 
-    echo "Build successful!"
+    # Create the latest directory if it doesn't exist
+    mkdir -p "$LATEST_BINARY_DIR"
+
+    # Copy the binary to the latest directory
+    cp "$SOURCE_BINARY_PATH" "$LATEST_BINARY_PATH"
+
+    # Save the build mode to a file
+    echo "$BUILD_MODE" > "$LATEST_MODE_FILE"
+
+    echo "Build successful! Binary copied to $LATEST_BINARY_PATH"
 fi
 
 # Deploy step
 if [ "$DO_DEPLOY" = true ]; then
     echo "[Step] Deploying binary..."
 
-    # Check if binary exists before trying to deploy
-    if [ ! -f "$BINARY_PATH" ]; then
-        echo "Error: Binary not found at $BINARY_PATH. Run build first or check build mode."
+    # Check if latest binary exists
+    if [ ! -f "$LATEST_BINARY_PATH" ]; then
+        echo "Error: No binary found at $LATEST_BINARY_PATH. Run build first."
         exit 1
     fi
 
     # Copy the binary to the server
     echo "Copying binary to server..."
     ssh "$SERVER" "mkdir -p $SERVER_PATH"
-    scp "$BINARY_PATH" "$SERVER:$SERVER_PATH/$BINARY_NAME"
+    scp "$LATEST_BINARY_PATH" "$SERVER:$SERVER_PATH/$BINARY_NAME"
 
     if [ $? -ne 0 ]; then
         echo "Error: Failed to copy to server. Make sure SSH is properly configured."
         exit 1
     fi
+
+    # Save the deployed mode
+    mkdir -p "$LATEST_BINARY_DIR"
+    cat "$LATEST_MODE_FILE" > "$DEPLOYED_MODE_FILE"
 
     echo "Binary successfully copied to server!"
 fi
