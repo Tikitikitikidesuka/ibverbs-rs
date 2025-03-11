@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::fs;
 
 fn main() {
     // Tell cargo to re-run if the wrapper.h changes
@@ -7,6 +8,7 @@ fn main() {
 
     // Link to the p40 libraries
     println!("cargo:rustc-link-lib=pcie40_daq");
+    println!("cargo:rustc-link-lib=pcie40_id");
 
     // Generate bindings using the wrapper header
     let bindings = bindgen::Builder::default()
@@ -15,9 +17,16 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
 
-    // Write the bindings to the $OUT_DIR/bindings.rs file
-    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    // Write to src directory for IDE visibility
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let src_dir = manifest_dir.join("src");
+
+    // Make sure src directory exists
+    fs::create_dir_all(&src_dir).expect("Failed to create src directory");
+
     bindings
-        .write_to_file(out_path.join("bindings.rs"))
-        .expect("Couldn't write bindings!");
+        .write_to_file(src_dir.join("bindings.rs"))
+        .expect("Couldn't write bindings to src directory!");
+
+    println!("cargo:warning=Wrote bindings to src/bindings.rs");
 }

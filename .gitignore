@@ -1,3 +1,4 @@
 /target
 Cargo.lock
 deploy_config.local
+src/bindings.rs
