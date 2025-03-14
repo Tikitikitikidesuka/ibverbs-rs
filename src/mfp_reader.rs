@@ -1,8 +1,11 @@
-/// NEW VERSION
 use crate::bindings::*;
 use std::ffi::{CString, c_int, c_void};
 use std::ptr;
 use log::{debug, info, warn, error, trace};
+
+// ------------------------------------ //
+// -------- TRAIT DEFINITIONS -------- //
+// ------------------------------------ //
 
 pub struct MFP {}
 
@@ -13,9 +16,9 @@ pub trait MFPReader {
     fn iter() -> Self::MFPIteratorType;
 }
 
-// -------------------------------------- //
-// ------  PCIE40 IMPLEMENTATION   ------ //
-// -------------------------------------- //
+// ------------------------------------ //
+// --------- ERROR DEFINITIONS ------- //
+// ------------------------------------ //
 
 #[derive(thiserror::Error, Debug)]
 pub enum PCIe40ReadError {}
@@ -34,7 +37,7 @@ pub enum PCIe40OpenError {
     #[error("Failed to gather info from device with id {device_id}")]
     DeviceInfoError {device_id: i32 },
 
-    #[error("Failed to open stream {device_id} of device {stream_id}")]
+    #[error("Failed to open stream {stream_id} of device {device_id}")]
     StreamOpenError {
         device_id: i32,
         stream_id: P40_DAQ_STREAM,
@@ -65,86 +68,33 @@ pub enum PCIe40OpenError {
     },
 }
 
-pub struct PCIe40MFPIterator {}
+// ------------------------------------ //
+// --------- RESOURCE WRAPPERS ------- //
+// ------------------------------------ //
 
-impl Iterator for PCIe40MFPIterator {
-    type Item = Result<PCIe40ReadError, MFP>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        todo!()
-    }
+/// Safe wrapper for device ID resource
+struct DeviceHandle {
+    id: i32,
+    fd: c_int,
 }
 
-pub struct PCIe40MFPReader {
-    device_id: i32,
-    device_name: String,
-    id_fd: c_int,
-    stream_fd: c_int,
-    buffer: *mut c_void,
-    buffer_size: usize,
-    device_read_offset: usize,
-    internal_read_offset: usize,
-    next_ev_id: u32,
-}
+impl DeviceHandle {
+    /// Open a device by ID
+    fn open(device_id: i32) -> Result<Self, PCIe40OpenError> {
+        debug!("Opening device with ID: {}", device_id);
 
-impl MFPReader for PCIe40MFPReader {
-    type MFPIteratorType = PCIe40MFPIterator;
-    type ErrorType = PCIe40ReadError;
+        let fd = unsafe { p40_id_open(device_id) };
+        if fd < 0 {
+            error!("Failed to open device with ID: {}, fd: {}", device_id, fd);
+            return Err(PCIe40OpenError::DeviceOpenError { device_id });
+        }
 
-    fn iter() -> Self::MFPIteratorType {
-        trace!("Creating new PCIe40MFPIterator instance");
-        todo!()
-    }
-}
-
-impl PCIe40MFPReader {
-    pub fn open_by_device_name(name: &str, packing_factor: u32) -> Result<PCIe40MFPReader, PCIe40OpenError> {
-        info!("Opening PCIe40 device by name: '{}' with packing factor: {}", name, packing_factor);
-
-        // Get device id from name
-        let device_id = Self::get_device_id(name)?;
-
-        // Open device by its id
-        Self::open_by_device_id(device_id, packing_factor)
+        debug!("Device {} opened successfully with fd: {}", device_id, fd);
+        Ok(Self { id: device_id, fd })
     }
 
-    pub fn open_by_device_id(id: i32, packing_factor: u32) -> Result<PCIe40MFPReader, PCIe40OpenError> {
-        info!("Opening PCIe40 device by ID: {} with packing factor: {}", id, packing_factor);
-        const MAIN_STREAM: P40_DAQ_STREAM = P40_DAQ_STREAM_P40_DAQ_STREAM_MAIN;
-
-        // Open device
-        let id_fd = Self::open_device(id)?;
-
-        // Get device unique name
-        let name = Self::get_device_name(id, id_fd)?;
-
-        // Setup stream
-        let stream_fd = Self::setup_stream(id_fd, id, MAIN_STREAM)?;
-
-        // Setup buffer
-        let (buffer, buffer_size, device_read_offset) =
-            Self::setup_buffer(stream_fd, id, MAIN_STREAM)?;
-
-        // Configure MFP mode
-        Self::configure_mfp_mode(id, stream_fd, packing_factor)?;
-
-        let reader = PCIe40MFPReader {
-            device_id: id,
-            device_name: name,
-            id_fd,
-            stream_fd,
-            buffer,
-            buffer_size,
-            device_read_offset,
-            internal_read_offset: device_read_offset,
-            next_ev_id: 0,
-        };
-
-        info!("PCIe40MFPReader successfully created for device {}", id);
-        Ok(reader)
-    }
-
-    fn get_device_id(device_name: &str) -> Result<c_int, PCIe40OpenError> {
+    /// Find a device by name and open it
+    fn find_and_open(device_name: &str) -> Result<Self, PCIe40OpenError> {
         debug!("Searching for device ID by name: '{}'", device_name);
 
         // Get name as a C string
@@ -165,41 +115,24 @@ impl PCIe40MFPReader {
             return Err(PCIe40OpenError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             });
-        };
-
-        debug!("Found device ID {} for name '{}'", device_id, device_name);
-        Ok(device_id)
-    }
-
-    fn open_device(device_id: i32) -> Result<c_int, PCIe40OpenError> {
-        debug!("Opening device with ID: {}", device_id);
-
-        // Open device id
-        let id_fd = unsafe { p40_id_open(device_id) };
-        if id_fd < 0 {
-            error!("Failed to open device with ID: {}, fd: {}", device_id, id_fd);
-            return Err(PCIe40OpenError::DeviceOpenError { device_id });
         }
 
-        debug!("Device {} opened successfully with fd: {}", device_id, id_fd);
-        Ok(id_fd)
+        debug!("Found device ID {} for name '{}'", device_id, device_name);
+        Self::open(device_id)
     }
 
-    fn get_device_name(device_id: i32, id_fd: c_int) -> Result<String, PCIe40OpenError> {
-        debug!("Getting unique name for device ID: {}, fd: {}", device_id, id_fd);
+    /// Get the device's unique name
+    fn get_unique_name(&self) -> Result<String, PCIe40OpenError> {
+        debug!("Getting unique name for device ID: {}, fd: {}", self.id, self.fd);
 
-        // Get device name
-        let mut name_buf = [0u8; 256];
+        let mut name_buf = [0u8; 32];
         let result = unsafe {
-            p40_id_get_name_unique(id_fd, name_buf.as_mut_ptr() as *mut i8, name_buf.len())
+            p40_id_get_name_unique(self.fd, name_buf.as_mut_ptr() as *mut i8, name_buf.len())
         };
 
         if result != 0 {
-            error!("Failed to get unique name for device {}, error code: {}", device_id, result);
-            unsafe {
-                p40_id_close(id_fd);
-            }
-            return Err(PCIe40OpenError::DeviceInfoError { device_id });
+            error!("Failed to get unique name for device {}, error code: {}", self.id, result);
+            return Err(PCIe40OpenError::DeviceInfoError { device_id: self.id });
         }
 
         // Convert name to string
@@ -209,22 +142,35 @@ impl PCIe40MFPReader {
             .unwrap_or(name_buf.len());
         let name = String::from_utf8_lossy(&name_buf[..name_end]).to_string();
 
-        debug!("Device {} has unique name: '{}'", device_id, name);
+        debug!("Device {} has unique name: '{}'", self.id, name);
         Ok(name)
     }
+}
 
-    fn setup_stream(
-        id_fd: c_int,
-        device_id: i32,
-        stream_id: P40_DAQ_STREAM,
-    ) -> Result<c_int, PCIe40OpenError> {
+impl Drop for DeviceHandle {
+    fn drop(&mut self) {
+        debug!("Closing device {}", self.id);
+        unsafe { p40_id_close(self.fd) };
+    }
+}
+
+/// Safe wrapper for stream resource
+struct StreamHandle {
+    device_id: i32,
+    stream_id: P40_DAQ_STREAM,
+    fd: c_int,
+    is_locked: bool,
+}
+
+impl StreamHandle {
+    /// Open a stream
+    fn open(device_id: i32, stream_id: P40_DAQ_STREAM) -> Result<Self, PCIe40OpenError> {
         debug!("Setting up stream {} for device {}", stream_id, device_id);
 
         // Open stream
-        let stream_fd = unsafe { p40_stream_open(device_id, stream_id) };
-        if stream_fd < 0 {
-            error!("Failed to open stream {} for device {}, error: {}", stream_id, device_id, stream_fd);
-            unsafe { p40_id_close(id_fd) };
+        let fd = unsafe { p40_stream_open(device_id, stream_id) };
+        if fd < 0 {
+            error!("Failed to open stream {} for device {}, error: {}", stream_id, device_id, fd);
             return Err(PCIe40OpenError::StreamOpenError {
                 device_id,
                 stream_id,
@@ -233,12 +179,10 @@ impl PCIe40MFPReader {
         debug!("Stream {} opened for device {}", stream_id, device_id);
 
         // Check if stream is enabled
-        let enabled = unsafe { p40_stream_enabled(stream_fd) };
+        let enabled = unsafe { p40_stream_enabled(fd) };
         if enabled != 1 {
             error!("Stream {} of device {} is not enabled, status: {}", stream_id, device_id, enabled);
-            unsafe {
-                p40_stream_close(stream_fd, std::ptr::null_mut());
-            }
+            unsafe { p40_stream_close(fd, std::ptr::null_mut()) };
             return Err(PCIe40OpenError::StreamNotEnabled {
                 device_id,
                 stream_id,
@@ -246,169 +190,346 @@ impl PCIe40MFPReader {
         }
         debug!("Stream {} of device {} is enabled", stream_id, device_id);
 
-        // Lock stream
-        let lock_result = unsafe { p40_stream_lock(stream_fd) };
-        if lock_result != 0 {
-            error!("Failed to lock stream {} of device {}, error: {}", stream_id, device_id, lock_result);
-            unsafe {
-                p40_stream_close(stream_fd, std::ptr::null_mut());
-                p40_id_close(id_fd);
-            }
-            return Err(PCIe40OpenError::StreamLockError {
-                device_id,
-                stream_id,
-            });
-        }
-        debug!("Stream {} of device {} locked successfully", stream_id, device_id);
-
-        Ok(stream_fd)
+        Ok(Self {
+            device_id,
+            stream_id,
+            fd,
+            is_locked: false,
+        })
     }
 
-    fn setup_buffer(
-        stream_fd: c_int,
-        device_id: i32,
-        stream_id: P40_DAQ_STREAM,
-    ) -> Result<(*mut c_void, usize, usize), PCIe40OpenError> {
-        debug!("Setting up buffer for stream {} of device {}", stream_id, device_id);
+    /// Lock the stream
+    fn lock(&mut self) -> Result<(), PCIe40OpenError> {
+        if self.is_locked {
+            debug!("Stream {} of device {} already locked", self.stream_id, self.device_id);
+            return Ok(());
+        }
+
+        let lock_result = unsafe { p40_stream_lock(self.fd) };
+        if lock_result != 0 {
+            error!("Failed to lock stream {} of device {}, error: {}",
+                self.stream_id, self.device_id, lock_result);
+            return Err(PCIe40OpenError::StreamLockError {
+                device_id: self.device_id,
+                stream_id: self.stream_id,
+            });
+        }
+
+        self.is_locked = true;
+        debug!("Stream {} of device {} locked successfully", self.stream_id, self.device_id);
+        Ok(())
+    }
+
+    /// Unlock the stream
+    fn unlock(&mut self) {
+        if self.is_locked {
+            unsafe { p40_stream_unlock(self.fd) };
+            self.is_locked = false;
+            debug!("Stream {} of device {} unlocked", self.stream_id, self.device_id);
+        }
+    }
+
+    /// Get the stream's meta mask
+    fn get_meta_mask(&self, device_id: i32) -> i32 {
+        unsafe { p40_stream_id_to_meta_mask(device_id, self.fd) }
+    }
+
+    /// Set the packing factor
+    fn set_packing_factor(&self, factor: u32) -> Result<(), PCIe40OpenError> {
+        let result = unsafe { p40_stream_set_meta_packing(self.fd, factor as i32) };
+        if result != 0 {
+            error!("Failed to set packing factor for device {}, error: {}",
+                self.device_id, result);
+            return Err(PCIe40OpenError::StreamOpenError {
+                device_id: self.device_id,
+                stream_id: self.stream_id,
+            });
+        }
+        debug!("Packing factor {} set for stream {} of device {}",
+            factor, self.stream_id, self.device_id);
+        Ok(())
+    }
+}
+
+impl Drop for StreamHandle {
+    fn drop(&mut self) {
+        if self.is_locked {
+            self.unlock();
+        }
+        debug!("Closing stream {} of device {}", self.stream_id, self.device_id);
+        unsafe { p40_stream_close(self.fd, ptr::null_mut()) };
+    }
+}
+
+/// Safe wrapper for buffer resource
+struct BufferHandle {
+    device_id: i32,
+    stream_id: P40_DAQ_STREAM,
+    stream_fd: c_int,
+    buffer: *mut c_void,
+    buffer_size: usize,
+    read_offset: usize,
+}
+
+impl BufferHandle {
+    /// Map the buffer
+    fn map(stream: &StreamHandle) -> Result<Self, PCIe40OpenError> {
+        debug!("Setting up buffer for stream {} of device {}",
+            stream.stream_id, stream.device_id);
 
         // Get buffer size
-        let buffer_size = unsafe { p40_stream_get_host_buf_bytes(stream_fd) } as usize;
+        let buffer_size = unsafe { p40_stream_get_host_buf_bytes(stream.fd) } as usize;
         if buffer_size <= 0 {
-            error!("Failed to get buffer size for stream {} of device {}, size: {}", 
-                  stream_id, device_id, buffer_size);
-            unsafe {
-                p40_stream_unlock(stream_fd);
-                p40_stream_close(stream_fd, std::ptr::null_mut());
-            }
+            error!("Failed to get buffer size for stream {} of device {}, size: {}",
+                stream.stream_id, stream.device_id, buffer_size);
             return Err(PCIe40OpenError::BufferInfoError {
-                device_id,
-                stream_id,
+                device_id: stream.device_id,
+                stream_id: stream.stream_id,
             });
         }
-        debug!("Buffer size for stream {} of device {}: {}", stream_id, device_id, buffer_size);
+        debug!("Buffer size for stream {} of device {}: {}",
+            stream.stream_id, stream.device_id, buffer_size);
 
         // Map buffer
-        let buffer = unsafe { p40_stream_map(stream_fd) };
+        let buffer = unsafe { p40_stream_map(stream.fd) };
         if buffer.is_null() {
-            error!("Failed to map buffer for stream {} of device {}", stream_id, device_id);
-            unsafe {
-                p40_stream_unlock(stream_fd);
-                p40_stream_close(stream_fd, std::ptr::null_mut());
-            }
+            error!("Failed to map buffer for stream {} of device {}",
+                stream.stream_id, stream.device_id);
             return Err(PCIe40OpenError::BufferMapError {
-                device_id,
-                stream_id,
+                device_id: stream.device_id,
+                stream_id: stream.stream_id,
             });
         }
-        debug!("Buffer mapped for stream {} of device {} at address {:p}", stream_id, device_id, buffer);
+        debug!("Buffer mapped for stream {} of device {} at address {:p}",
+            stream.stream_id, stream.device_id, buffer);
 
         // Get read offset
-        let device_read_offset = unsafe { p40_stream_get_host_buf_read_off(stream_fd) } as usize;
-        if device_read_offset < 0 {
-            error!("Failed to get read offset for stream {} of device {}, offset: {}", 
-                  stream_id, device_id, device_read_offset);
-            unsafe {
-                p40_stream_unlock(stream_fd);
-                p40_stream_close(stream_fd, std::ptr::null_mut());
-            }
+        let read_offset = unsafe { p40_stream_get_host_buf_read_off(stream.fd) } as usize;
+        if read_offset < 0 {
+            error!("Failed to get read offset for stream {} of device {}, offset: {}",
+                stream.stream_id, stream.device_id, read_offset);
+            unsafe { p40_stream_close(stream.fd, buffer) };
             return Err(PCIe40OpenError::BufferInfoError {
-                device_id,
-                stream_id,
+                device_id: stream.device_id,
+                stream_id: stream.stream_id,
             });
         }
-        debug!("Read offset for stream {} of device {}: {}", stream_id, device_id, device_read_offset);
+        debug!("Read offset for stream {} of device {}: {}",
+            stream.stream_id, stream.device_id, read_offset);
 
-        trace!("Buffer setup complete: addr={:p}, size={}, read_offset={}", 
-              buffer, buffer_size, device_read_offset);
-        Ok((buffer, buffer_size, device_read_offset))
+        trace!("Buffer setup complete: addr={:p}, size={}, read_offset={}",
+            buffer, buffer_size, read_offset);
+
+        Ok(Self {
+            device_id: stream.device_id,
+            stream_id: stream.stream_id,
+            stream_fd: stream.fd,
+            buffer,
+            buffer_size,
+            read_offset,
+        })
+    }
+}
+
+// No Drop implementation for BufferHandle because it's handled in StreamHandle's Drop
+
+/// Control stream wrapper
+struct ControlHandle {
+    device_id: i32,
+    fd: c_int,
+}
+
+impl ControlHandle {
+    /// Open control stream
+    fn open(device_id: i32) -> Result<Self, PCIe40OpenError> {
+        debug!("Opening control stream for device {}", device_id);
+
+        let fd = unsafe { p40_ctrl_open(device_id) };
+        if fd < 0 {
+            error!("Failed to open control stream for device {}, error: {}", device_id, fd);
+            return Err(PCIe40OpenError::StreamOpenError {
+                device_id,
+                stream_id: P40_DAQ_STREAM_P40_DAQ_STREAM_META, // Using META as placeholder
+            });
+        }
+
+        debug!("Control stream opened for device {}", device_id);
+        Ok(Self { device_id, fd })
     }
 
-    fn configure_mfp_mode(device_id: i32, main_stream_fd: c_int, packing_factor: u32) -> Result<(), PCIe40OpenError> {
+    /// Get spill buffer size
+    fn get_spill_buffer_size(&self, stream_fd: c_int) -> i32 {
+        unsafe { p40_ctrl_get_spill_buf_size(self.fd, stream_fd) }
+    }
+
+    /// Set truncation threshold
+    fn set_truncation_threshold(&self, stream_fd: c_int, threshold: i32) -> Result<(), PCIe40OpenError> {
+        let result = unsafe { p40_ctrl_set_trunc_thres(self.fd, stream_fd, threshold) };
+        if result != 0 {
+            error!("Failed to set truncation threshold for device {}, error: {}",
+                self.device_id, result);
+            return Err(PCIe40OpenError::StreamOpenError {
+                device_id: self.device_id,
+                stream_id: P40_DAQ_STREAM_P40_DAQ_STREAM_META, // Using META as placeholder
+            });
+        }
+
+        debug!("Truncation threshold set for device {}", self.device_id);
+        Ok(())
+    }
+}
+
+impl Drop for ControlHandle {
+    fn drop(&mut self) {
+        debug!("Closing control stream for device {}", self.device_id);
+        unsafe { p40_ctrl_close(self.fd) };
+    }
+}
+
+// ------------------------------------ //
+// --------- ITERATOR STRUCTURE ------ //
+// ------------------------------------ //
+
+pub struct PCIe40MFPIterator {}
+
+impl Iterator for PCIe40MFPIterator {
+    type Item = Result<PCIe40ReadError, MFP>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
+    }
+}
+
+// ------------------------------------ //
+// --------- READER STRUCTURE -------- //
+// ------------------------------------ //
+
+/// PCIe40 MFP Reader implementation
+pub struct PCIe40MFPReader {
+    device_id: i32,
+    device_name: String,
+    device_handle: DeviceHandle,
+    stream_handle: StreamHandle,
+    buffer: BufferHandle,
+    internal_read_offset: usize,
+    next_ev_id: u32,
+}
+
+impl MFPReader for PCIe40MFPReader {
+    type MFPIteratorType = PCIe40MFPIterator;
+    type ErrorType = PCIe40ReadError;
+
+    fn iter() -> Self::MFPIteratorType {
+        trace!("Creating new PCIe40MFPIterator instance");
+        todo!()
+    }
+}
+
+impl PCIe40MFPReader {
+    /// Open a PCIe40 device by name
+    pub fn open_by_device_name(name: &str, packing_factor: u32) -> Result<Self, PCIe40OpenError> {
+        info!("Opening PCIe40 device by name: '{}' with packing factor: {}", name, packing_factor);
+
+        // Find and open device
+        let device_handle = DeviceHandle::find_and_open(name)?;
+
+        // Create reader using device ID
+        Self::create_reader(device_handle, packing_factor)
+    }
+
+    /// Open a PCIe40 device by ID
+    pub fn open_by_device_id(id: i32, packing_factor: u32) -> Result<Self, PCIe40OpenError> {
+        info!("Opening PCIe40 device by ID: {} with packing factor: {}", id, packing_factor);
+
+        // Open device
+        let device_handle = DeviceHandle::open(id)?;
+
+        // Create reader
+        Self::create_reader(device_handle, packing_factor)
+    }
+
+    /// Common function to create a reader after the device is opened
+    fn create_reader(device_handle: DeviceHandle, packing_factor: u32) -> Result<Self, PCIe40OpenError> {
+        const MAIN_STREAM: P40_DAQ_STREAM = P40_DAQ_STREAM_P40_DAQ_STREAM_MAIN;
+
+        // Get device name
+        let device_name = device_handle.get_unique_name()?;
+        let device_id = device_handle.id;
+
+        // Open and setup main stream
+        let mut stream_handle = StreamHandle::open(device_id, MAIN_STREAM)?;
+        stream_handle.lock()?;
+
+        // Map buffer
+        let buffer = BufferHandle::map(&stream_handle)?;
+
+        // Save the read offset before we move the buffer
+        let read_offset = buffer.read_offset;
+
+        // Configure MFP mode
+        Self::configure_mfp_mode(device_id, &stream_handle, packing_factor)?;
+
+        let reader = PCIe40MFPReader {
+            device_id,
+            device_name,
+            device_handle,
+            stream_handle,
+            buffer,
+            internal_read_offset: read_offset,
+            next_ev_id: 0,
+        };
+
+        info!("PCIe40MFPReader successfully created for device {}", device_id);
+        Ok(reader)
+    }
+
+    /// Configure the device for MFP mode
+    fn configure_mfp_mode(
+        device_id: i32,
+        main_stream: &StreamHandle,
+        packing_factor: u32
+    ) -> Result<(), PCIe40OpenError> {
         debug!("Configuring MFP mode for device {} with packing factor {}", device_id, packing_factor);
         const META_STREAM: P40_DAQ_STREAM = P40_DAQ_STREAM_P40_DAQ_STREAM_META;
 
-        // Open meta stream
-        debug!("Opening meta stream for device {}", device_id);
-        let meta_stream_fd = unsafe { p40_stream_open(device_id, META_STREAM) };
-        if meta_stream_fd < 0 {
-            error!("Failed to open meta stream for device {}, error: {}", device_id, meta_stream_fd);
-            return Err(PCIe40OpenError::StreamOpenError {device_id, stream_id: META_STREAM});
-        }
-        debug!("Meta stream opened for device {}", device_id);
+        // Open meta stream in its own scope to ensure it's closed when done
+        {
+            let meta_stream = StreamHandle::open(device_id, META_STREAM)?;
 
-        // Get meta mask
-        debug!("Getting meta mask for main stream of device {}", device_id);
-        let meta_mask = unsafe { p40_stream_id_to_meta_mask(device_id, main_stream_fd) };
-        debug!("Meta mask for device {}: {}", device_id, meta_mask);
+            // Get and enable meta mask
+            let meta_mask = main_stream.get_meta_mask(device_id);
+            debug!("Meta mask for device {}: {}", device_id, meta_mask);
 
-        // Enable meta mask
-        debug!("Enabling meta mask for device {}", device_id);
-        let enable_result = unsafe { p40_stream_enable_mask(meta_stream_fd, meta_mask) };
-        if enable_result != 0 {
-            error!("Failed to enable meta mask for device {}, error: {}", device_id, enable_result);
-            unsafe { p40_stream_close(meta_stream_fd, std::ptr::null_mut()) };
-            return Err(PCIe40OpenError::StreamOpenError {device_id, stream_id: META_STREAM});
+            let enable_result = unsafe { p40_stream_enable_mask(meta_stream.fd, meta_mask) };
+            if enable_result != 0 {
+                error!("Failed to enable meta mask for device {}, error: {}", device_id, enable_result);
+                return Err(PCIe40OpenError::StreamOpenError {
+                    device_id,
+                    stream_id: META_STREAM
+                });
+            }
+            debug!("Meta mask enabled for device {}", device_id);
         }
-        debug!("Meta mask enabled for device {}", device_id);
 
         // Set packing factor
-        debug!("Setting packing factor {} for device {}", packing_factor, device_id);
-        let packing_result = unsafe { p40_stream_set_meta_packing(main_stream_fd, packing_factor as i32) };
-        if packing_result != 0 {
-            error!("Failed to set packing factor for device {}, error: {}", device_id, packing_result);
-            unsafe { p40_stream_close(meta_stream_fd, std::ptr::null_mut()) };
-            return Err(PCIe40OpenError::StreamOpenError {device_id, stream_id: META_STREAM});
-        }
-        debug!("Packing factor set for device {}", device_id);
+        main_stream.set_packing_factor(packing_factor)?;
 
-        // Open control stream
-        debug!("Opening control stream for device {}", device_id);
-        let ctrl_fd = unsafe { p40_ctrl_open(device_id) };
-        if ctrl_fd < 0 {
-            error!("Failed to open control stream for device {}, error: {}", device_id, ctrl_fd);
-            unsafe { p40_stream_close(meta_stream_fd, ptr::null_mut()) };
-            return Err(PCIe40OpenError::StreamOpenError {device_id, stream_id: META_STREAM});
-        }
-        debug!("Control stream opened for device {}", device_id);
+        // Configure control settings
+        {
+            let ctrl = ControlHandle::open(device_id)?;
 
-        // Get spill buffer size as truncation threshold
-        debug!("Getting spill buffer size for device {}", device_id);
-        let trunc_thr = unsafe { p40_ctrl_get_spill_buf_size(ctrl_fd, main_stream_fd) };
-        debug!("Spill buffer size/truncation threshold for device {}: {}", device_id, trunc_thr);
+            // Get and set truncation threshold
+            let trunc_thr = ctrl.get_spill_buffer_size(main_stream.fd);
+            debug!("Spill buffer size/truncation threshold for device {}: {}", device_id, trunc_thr);
 
-        // Set truncation threshold
-        debug!("Setting truncation threshold for device {}", device_id);
-        let trunc_result = unsafe { p40_ctrl_set_trunc_thres(ctrl_fd, main_stream_fd, trunc_thr) };
-        if trunc_result != 0 {
-            error!("Failed to set truncation threshold for device {}, error: {}", device_id, trunc_result);
-            unsafe {
-                p40_ctrl_close(ctrl_fd);
-                p40_stream_close(meta_stream_fd, ptr::null_mut());
-            };
-            return Err(PCIe40OpenError::StreamOpenError {device_id, stream_id: META_STREAM});
+            ctrl.set_truncation_threshold(main_stream.fd, trunc_thr)?;
         }
-        debug!("Truncation threshold set for device {}", device_id);
-
-        // Close the streams we don't need to keep open
-        debug!("Closing temporary streams for device {}", device_id);
-        unsafe {
-            p40_ctrl_close(ctrl_fd);
-            p40_stream_close(meta_stream_fd, ptr::null_mut());
-        }
-        debug!("Temporary streams closed for device {}", device_id);
 
         info!("MFP mode configured successfully for device {}", device_id);
         Ok(())
     }
 }
 
-// Automatic resource cleanup
-impl Drop for PCIe40MFPReader {
-    fn drop(&mut self) {
-        unsafe {
-            p40_stream_unlock(self.stream_fd);
-            p40_stream_close(self.stream_fd, self.buffer);
-            p40_id_close(self.id_fd);
-        }
-    }
-}
+// Note: No explicit Drop implementation for PCIe40MFPReader needed
+// Resource cleanup happens automatically through the Drop implementations
+// of the contained handles
