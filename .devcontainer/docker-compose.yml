@@ -1,0 +1,22 @@
+services:
+  rust-dev:
+    image: gitlab-registry.cern.ch/mhermoso/pcie40-rs
+    volumes:
+      # Mount your project directory
+      - ./:/home/rust_user/project:Z
+      # Mount cargo cache to preserve dependencies between runs
+      - cargo-cache:/home/rust_user/.cargo/registry:Z
+      # Mount build cache to speed up incremental builds
+      - target-cache:/home/rust_user/project/target:Z
+
+    # Use privileged mode if you need to access hardware
+    privileged: true
+    # Use the host's network if needed for hardware access
+    # network_mode: "host"
+    # Uncomment if you need specific devices
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+
+volumes:
+  cargo-cache:
+  target-cache:

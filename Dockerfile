@@ -32,11 +32,11 @@ RUN dnf update -y && \
 
 # Install EPEL repository
 RUN dnf install -y epel-release && \
-dnf update -y
+    dnf update -y
 
 # Add DAQ40 repo configuration
 RUN mkdir -p /etc/yum.repos.d/ && \
-echo -e "[daq40-software-stable]\nname=DAQ40 stable packages for \$basearch\nbaseurl=https://lhcb-online-soft.web.cern.ch/rpm/daq/stable/el\$releasever/\$basearch\nenabled=1\ngpgcheck=0\nprotect=1" > /etc/yum.repos.d/daq40.repo
+    echo -e "[daq40-software-stable]\nname=DAQ40 stable packages for \$basearch\nbaseurl=https://lhcb-online-soft.web.cern.ch/rpm/daq/stable/el\$releasever/\$basearch\nenabled=1\ngpgcheck=0\nprotect=1" > /etc/yum.repos.d/daq40.repo
 
 # Install PCIe40 packages and documentation
 RUN dnf update -y && \
@@ -48,8 +48,26 @@ RUN dnf update -y && \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 
+# Install additional Rust components
+RUN rustup component add rustfmt clippy
+
 # Create a working directory
 WORKDIR /app
+
+# Copy only the dependency manifests
+COPY Cargo.toml ./
+
+# Create a minimal src/main.rs to trick cargo into downloading dependencies
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs
+
+# Download and build dependencies only
+RUN cargo build --release || cargo build
+
+# This image won't contain the project source code
+# The source should be mounted when running the container
+# For example:
+# podman run -v $(pwd):/app/src -it your-image-name
 
 # Set default command
 CMD ["/bin/bash"]

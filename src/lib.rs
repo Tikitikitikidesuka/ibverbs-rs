@@ -10,9 +10,10 @@ use std::ffi::CString;
 
 // Make bindings public so main.rs can use them
 pub mod bindings;
-pub mod mfp_reader;
-pub mod mfp_ref;
-
+//pub mod mfp_reader;
+//pub mod mfp_ref;
+//pub mod pcie40_mfp_reader;
+pub mod zero_copy_reader;
 /*
 // Error handling for PCIe40 operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
