@@ -1,6 +1,9 @@
 services:
   rust-dev:
     image: gitlab-registry.cern.ch/mhermoso/pcie40-rs
+    command: sleep infinity
+    environment:
+      - RUSTC_BOOTSTRAP=1
     volumes:
       # Mount your project directory
       - ./:/home/rust_user/project:Z

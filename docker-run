@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Run the command in a new container and remove it when done
+docker compose run --rm rust-dev "$@"
+
+# Alternative: if you want to run as root inside the container
+# Uncomment the line below and comment the line above
+# docker compose run --rm --user root rust-dev "$@"
