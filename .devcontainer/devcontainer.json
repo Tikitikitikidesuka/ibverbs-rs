@@ -1,0 +1,8 @@
+{
+	"name": "Rust PCIe40 Drivers Dev Container",
+	"dockerComposeFile": [
+		"../docker-compose.yml"
+	],
+	"service": "rust-dev",
+	"workspaceFolder": "/home/rust_user/project"
+}
