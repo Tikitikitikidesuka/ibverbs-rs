@@ -38,18 +38,22 @@ RUN dnf install -y epel-release && \
 RUN mkdir -p /etc/yum.repos.d/ && \
     echo -e "[daq40-software-stable]\nname=DAQ40 stable packages for \$basearch\nbaseurl=https://lhcb-online-soft.web.cern.ch/rpm/daq/stable/el\$releasever/\$basearch\nenabled=1\ngpgcheck=0\nprotect=1" > /etc/yum.repos.d/daq40.repo
 
-# Install PCIe40 packages and documentation
+# Install PCIe40 packages
 RUN dnf update -y && \
     dnf install -y \
     lhcb-pcie40-tools \
     lhcb-pcie40-driver
 
 # Install Rust using rustup
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    rustup install stable && \
+    rustup default stable
 
-# Install additional Rust components
-RUN rustup component add rustfmt clippy
+# Add Rust components
+RUN rustup component add rust-src rustfmt clippy
+
+# Add cargo bin to PATH
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Create a working directory
 WORKDIR /app
