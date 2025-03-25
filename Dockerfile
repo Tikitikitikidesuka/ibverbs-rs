@@ -1,7 +1,6 @@
 FROM --platform=linux/amd64 gitlab-registry.cern.ch/linuxsupport/alma9-base:latest
 
 # Set up environment variables
-ENV HOME /root
 ENV LANG en_US.UTF-8
 ENV LC_ALL en_US.UTF-8
 
@@ -44,16 +43,43 @@ RUN dnf update -y && \
     lhcb-pcie40-tools \
     lhcb-pcie40-driver
 
-# Install Rust using rustup
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+# Create a non-root user
+RUN useradd -m -s /bin/bash developer && \
+    echo "developer ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/developer
+
+# Set environment variables for Rust
+ENV RUSTUP_HOME=/opt/rustup
+ENV CARGO_HOME=/opt/cargo
+ENV PATH="/opt/cargo/bin:${PATH}"
+
+# Install Rust with explicit source components
+RUN mkdir -p ${RUSTUP_HOME} ${CARGO_HOME} && \
+    chmod -R 777 ${RUSTUP_HOME} ${CARGO_HOME} && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
     rustup install stable && \
-    rustup default stable
+    rustup default stable && \
+    rustup component add rust-src rustfmt clippy && \
+    chmod -R 777 ${RUSTUP_HOME} ${CARGO_HOME}
 
-# Add Rust components
-RUN rustup component add rust-src rustfmt clippy
+# Create working directory and set permissions
+WORKDIR /app
+RUN mkdir -p /app && chown -R developer:developer /app
 
-# Add cargo bin to PATH
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Switch to non-root user for the rest of the build
+USER developer
+
+# Copy only the dependency manifests (if they exist at build time)
+COPY --chown=developer:developer Cargo.toml* ./
+
+# Create a minimal src/main.rs to trick cargo into downloading dependencies
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs
+
+# Download and build dependencies only (with error handling)
+RUN cargo fetch || echo "Cargo fetch step skipped or failed" && \
+    cargo build --release || cargo build
+
+
 
 # Create a working directory
 WORKDIR /app

@@ -3,9 +3,9 @@ services:
     image: gitlab-registry.cern.ch/mhermoso/pcie40-rs
     command: sleep infinity
     volumes:
-      # Mount your project directory
-      - ./:/home/rust_user/project
-
+      # Mount your project directory to the working directory we set in the Dockerfile
+      - ./:/app
+    user: developer
     # Use privileged mode if you need to access hardware
     privileged: true
     # Use the host's network if needed for hardware access
