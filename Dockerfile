@@ -73,31 +73,11 @@ COPY --chown=developer:developer Cargo.toml* ./
 
 # Create a minimal src/main.rs to trick cargo into downloading dependencies
 RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs
+    echo "fn main() { println!(\"Hello, world!\"); }" > src/main.rs
 
 # Download and build dependencies only (with error handling)
 RUN cargo fetch || echo "Cargo fetch step skipped or failed" && \
-    cargo build --release || cargo build
+    cargo build --release || cargo build || echo "Initial build skipped"
 
-
-
-# Create a working directory
-WORKDIR /app
-
-# Copy only the dependency manifests
-COPY Cargo.toml ./
-
-# Create a minimal src/main.rs to trick cargo into downloading dependencies
-RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs
-
-# Download and build dependencies only
-RUN cargo build --release || cargo build
-
-# This image won't contain the project source code
-# The source should be mounted when running the container
-# For example:
-# podman run -v $(pwd):/app/src -it your-image-name
-
-# Set default command
+# Default command
 CMD ["/bin/bash"]
