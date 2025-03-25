@@ -61,7 +61,7 @@ RUN rustup install stable && \
 WORKDIR /app
 
 # Copy Cargo files
-COPY Cargo.toml* ./
+COPY Cargo.toml Cargo.lock ./
 
 # Create a minimal src/main.rs to trick cargo into downloading dependencies
 RUN mkdir -p src && \
