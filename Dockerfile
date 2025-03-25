@@ -1,6 +1,6 @@
 FROM gitlab-registry.cern.ch/linuxsupport/alma9-base:latest
 
-# Set up environment variables (corrected syntax)
+# Set up environment variables
 ENV HOME=/root
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
@@ -44,41 +44,31 @@ RUN dnf update -y && \
     lhcb-pcie40-tools \
     lhcb-pcie40-driver
 
-# Just create the developer user without sudo
-RUN useradd -m -s /bin/bash developer
-
 # Set environment variables for Rust
 ENV RUSTUP_HOME=/opt/rustup
 ENV CARGO_HOME=/opt/cargo
 ENV PATH="/opt/cargo/bin:${PATH}"
 
-# Install Rust with explicit source components
-RUN mkdir -p ${RUSTUP_HOME} ${CARGO_HOME} && \
-    chmod -R 777 ${RUSTUP_HOME} ${CARGO_HOME} && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path && \
-    rustup install stable && \
+# Install Rust with rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# Install stable rust and additional components
+RUN rustup install stable && \
     rustup default stable && \
-    rustup component add rust-src rustfmt clippy && \
-    chmod -R 777 ${RUSTUP_HOME} ${CARGO_HOME}
+    rustup component add rust-src rustfmt clippy
 
-# Create working directory and set permissions
+# Set working directory to the project dir
 WORKDIR /app
-RUN mkdir -p /app && chown -R developer:developer /app
 
-# Copy only the dependency manifests (if they exist at build time)
+# Copy Cargo files
 COPY Cargo.toml* ./
-RUN chown -R developer:developer /app
-
-# Switch to developer user
-USER developer
 
 # Create a minimal src/main.rs to trick cargo into downloading dependencies
 RUN mkdir -p src && \
-    echo "fn main() { println!(\"Hello, world!\"); }" > src/main.rs
+    echo "fn main() {}" > src/main.rs
 
-# Download and build dependencies only (with error handling)
-RUN cargo fetch || echo "Cargo fetch step skipped or failed" && \
-    cargo build --release || cargo build || echo "Initial build skipped"
+# Download and build dependencies only
+RUN cargo build --release || cargo build 
 
 # Default command
 CMD ["/bin/bash"]
