@@ -1,8 +1,9 @@
-FROM --platform=linux/amd64 gitlab-registry.cern.ch/linuxsupport/alma9-base:latest
+FROM gitlab-registry.cern.ch/linuxsupport/alma9-base:latest
 
-# Set up environment variables
-ENV LANG en_US.UTF-8
-ENV LC_ALL en_US.UTF-8
+# Set up environment variables (corrected syntax)
+ENV HOME=/root
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Fix locale issues
 RUN dnf install -y glibc-all-langpacks && \
@@ -43,9 +44,8 @@ RUN dnf update -y && \
     lhcb-pcie40-tools \
     lhcb-pcie40-driver
 
-# Create a non-root user
-RUN useradd -m -s /bin/bash developer && \
-    echo "developer ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/developer
+# Just create the developer user without sudo
+RUN useradd -m -s /bin/bash developer
 
 # Set environment variables for Rust
 ENV RUSTUP_HOME=/opt/rustup
@@ -65,11 +65,12 @@ RUN mkdir -p ${RUSTUP_HOME} ${CARGO_HOME} && \
 WORKDIR /app
 RUN mkdir -p /app && chown -R developer:developer /app
 
-# Switch to non-root user for the rest of the build
-USER developer
-
 # Copy only the dependency manifests (if they exist at build time)
-COPY --chown=developer:developer Cargo.toml* ./
+COPY Cargo.toml* ./
+RUN chown -R developer:developer /app
+
+# Switch to developer user
+USER developer
 
 # Create a minimal src/main.rs to trick cargo into downloading dependencies
 RUN mkdir -p src && \
