@@ -60,15 +60,15 @@ RUN rustup install stable && \
 # Set working directory to the project dir
 WORKDIR /app
 
+# Make /app a dummy rust project to vendor dependencies
+RUN cargo init
+
 # Copy Cargo files
 COPY Cargo.toml Cargo.lock ./
 
-# Create a minimal src/main.rs to trick cargo into downloading dependencies
-RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs
-
-# Download and build dependencies only
-RUN cargo build && cargo build --release && cargo test
+# Vendor dependencies and set config to use them
+RUN mkdir ~/.cargo
+RUN cargo vendor > ~/.cargo/config
 
 # Default command
 CMD ["/bin/bash"]
