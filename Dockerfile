@@ -68,7 +68,7 @@ RUN mkdir -p src && \
     echo "fn main() {}" > src/main.rs
 
 # Download and build dependencies only
-RUN cargo build --release || cargo build 
+RUN cargo build && cargo build --release && cargo test
 
 # Default command
 CMD ["/bin/bash"]
