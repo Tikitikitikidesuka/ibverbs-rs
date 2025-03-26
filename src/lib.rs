@@ -1,19 +1,20 @@
 // lib.rs
 use std::error::Error;
-use std::fmt;
 use std::ffi::CString;
+use std::fmt;
 
 // Suppress warnings about non-standard naming in imported C bindings
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
 #[allow(non_upper_case_globals)]
-
 // Make bindings public so main.rs can use them
 pub mod bindings;
 //pub mod mfp_reader;
 //pub mod mfp_ref;
 //pub mod pcie40_mfp_reader;
+pub mod pcie40_reader;
 pub mod zero_copy_reader;
+mod pcie40_api;
 /*
 // Error handling for PCIe40 operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
