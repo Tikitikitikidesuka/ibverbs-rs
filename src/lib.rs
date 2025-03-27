@@ -15,6 +15,8 @@ pub mod bindings;
 pub mod pcie40_reader;
 pub mod zero_copy_reader;
 pub mod pcie40_id;
+pub mod pcie40_ctrl;
+pub mod pcie40_stream;
 /*
 // Error handling for PCIe40 operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
