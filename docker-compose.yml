@@ -4,10 +4,6 @@ services:
     command: sleep infinity
     volumes:
       - ./:/app
-    # Use privileged mode if you need to access hardware
+    # Use privileged mode to access hardware
     privileged: true
-    # Use the host's network if needed for hardware access
-    # network_mode: "host"
-    # Uncomment if you need specific devices
-    # devices:
-    #   - /dev/bus/usb:/dev/bus/usb
+

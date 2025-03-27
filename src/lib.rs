@@ -14,7 +14,7 @@ pub mod bindings;
 //pub mod pcie40_mfp_reader;
 pub mod pcie40_reader;
 pub mod zero_copy_reader;
-pub mod pcie40;
+pub mod pcie40_id;
 /*
 // Error handling for PCIe40 operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
