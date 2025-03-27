@@ -23,7 +23,7 @@ pub enum PCIe40IdError {
 }
 
 impl PCIe40Id {
-    pub fn id_exists(device_id: i32) -> Result<bool, PCIe40IdError> {
+    pub fn device_exists(device_id: i32) -> Result<bool, PCIe40IdError> {
         let c_result = unsafe { p40_id_exists(device_id) };
 
         if c_result < 0 {
@@ -64,7 +64,7 @@ impl PCIe40Id {
             .collect())
     }
 
-    pub fn open_by_device_name(device_name: &str) -> Result<PCIe40DeviceId, PCIe40IdError> {
+    pub fn open_by_device_name(device_name: &str) -> Result<PCIe40IdStream, PCIe40IdError> {
         let c_str_device_name =
             CString::new(device_name).or(Err(PCIe40IdError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
@@ -80,7 +80,7 @@ impl PCIe40Id {
         Self::open_by_device_id(device_id)
     }
 
-    pub fn open_by_device_id(device_id: i32) -> Result<PCIe40DeviceId, PCIe40IdError> {
+    pub fn open_by_device_id(device_id: i32) -> Result<PCIe40IdStream, PCIe40IdError> {
         if unsafe { p40_id_exists(device_id) } != 0 {
             Err(PCIe40IdError::DeviceNotFoundById { device_id })?;
         }
@@ -90,17 +90,22 @@ impl PCIe40Id {
             Err(PCIe40IdError::DeviceOpenFail { device_id })?;
         }
 
-        Ok(PCIe40DeviceId { device_id, id_fd })
+        Ok(PCIe40IdStream { device_id, id_fd })
+    }
+
+    // Private function. Will be called by drop on PCIe40DeviceId
+    fn close(id_stream: &PCIe40IdStream) {
+        unsafe { p40_id_close(id_stream.id_fd) };
     }
 }
 
-pub struct PCIe40DeviceId {
+pub struct PCIe40IdStream {
     device_id: i32,
     id_fd: i32,
 }
 
 #[derive(Debug, Error)]
-pub enum PCIe40DeviceIdError {
+pub enum PCIe40IdStreamError {
     #[error("Error reading data from the PCIe40 device with id {device_id}")]
     DeviceReadError { device_id: i32 },
 
@@ -111,11 +116,17 @@ pub enum PCIe40DeviceIdError {
     InvalidDeviceName { device_name: String },
 }
 
-impl PCIe40DeviceId {
-    pub fn fpga_serial_number(&self) -> Result<i64, PCIe40DeviceIdError> {
+impl Drop for PCIe40IdStream {
+    fn drop(&mut self) {
+        PCIe40Id::close(self);
+    }
+}
+
+impl PCIe40IdStream {
+    pub fn fpga_serial_number(&self) -> Result<i64, PCIe40IdStreamError> {
         let c_result = unsafe { p40_id_get_fpga(self.id_fd) };
         if c_result < 0 {
-            Err(PCIe40DeviceIdError::DeviceReadError {
+            Err(PCIe40IdStreamError::DeviceReadError {
                 device_id: self.device_id,
             })?;
         }
@@ -123,7 +134,7 @@ impl PCIe40DeviceId {
         Ok(c_result)
     }
 
-    pub fn device_name(&mut self) -> Result<String, PCIe40DeviceIdError> {
+    pub fn device_name(&mut self) -> Result<String, PCIe40IdStreamError> {
         let mut buffer = vec![0u8; 9];
 
         let c_result = unsafe {
@@ -135,7 +146,7 @@ impl PCIe40DeviceId {
         };
 
         if c_result < 0 {
-            return Err(PCIe40DeviceIdError::DeviceReadError {
+            return Err(PCIe40IdStreamError::DeviceReadError {
                 device_id: self.device_id,
             });
         }
@@ -145,7 +156,7 @@ impl PCIe40DeviceId {
         Ok(device_name)
     }
 
-    pub fn unique_device_name(&mut self) -> Result<String, PCIe40DeviceIdError> {
+    pub fn unique_device_name(&mut self) -> Result<String, PCIe40IdStreamError> {
         let mut buffer = vec![0u8; 9];
 
         let c_result = unsafe {
@@ -157,7 +168,7 @@ impl PCIe40DeviceId {
         };
 
         if c_result < 0 {
-            return Err(PCIe40DeviceIdError::DeviceReadError {
+            return Err(PCIe40IdStreamError::DeviceReadError {
                 device_id: self.device_id,
             });
         }
@@ -167,16 +178,16 @@ impl PCIe40DeviceId {
         Ok(unique_device_name)
     }
 
-    pub fn set_name(&mut self, device_name: &str) -> Result<(), PCIe40DeviceIdError> {
+    pub fn set_name(&mut self, device_name: &str) -> Result<(), PCIe40IdStreamError> {
         let c_str_name =
-            CString::new(device_name).or(Err(PCIe40DeviceIdError::InvalidDeviceName {
+            CString::new(device_name).or(Err(PCIe40IdStreamError::InvalidDeviceName {
                 device_name: device_name.to_string(),
             }))?;
 
         let c_result = unsafe { p40_id_set_name(self.id_fd, c_str_name.as_ptr()) };
 
         if c_result < 0 {
-            return Err(PCIe40DeviceIdError::DeviceWriteError {
+            return Err(PCIe40IdStreamError::DeviceWriteError {
                 device_id: self.device_id,
             });
         }
@@ -195,13 +206,13 @@ impl PCIe40DeviceId {
     // TODO: pcie_version -> p40_id_get_version
 }
 
-impl PCIe40DeviceId {
-    fn c_buffer_to_string(&self, buffer: &[u8]) -> Result<String, PCIe40DeviceIdError> {
+impl PCIe40IdStream {
+    fn c_buffer_to_string(&self, buffer: &[u8]) -> Result<String, PCIe40IdStreamError> {
         let null_pos =
             buffer
                 .iter()
                 .position(|&c| c == 0)
-                .ok_or(PCIe40DeviceIdError::DeviceReadError {
+                .ok_or(PCIe40IdStreamError::DeviceReadError {
                     device_id: self.device_id,
                 })?;
 
