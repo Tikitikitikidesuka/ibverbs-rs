@@ -2,6 +2,8 @@
 //use log::{debug, LevelFilter};
 //use pcie40_rs::mfp_reader::PCIe40MFPReader;
 
+use std::thread;
+use std::time::Duration;
 use pcie40_rs::pcie40_ctrl::PCIe40Ctrl;
 use pcie40_rs::pcie40_id::PCIe40Id;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
@@ -9,11 +11,27 @@ use pcie40_rs::pcie40_stream::PCIe40Stream;
 
 fn main() {
     //let reader = ZeroCopyReader::new(PCIe40ZeroCopyReaderImpl::new());
+    /*
     let mut id_endpt = PCIe40Id::open_by_device_name("tdtel201_0").unwrap();
     println!("{}", id_endpt.unique_device_name().unwrap());
     println!("{}", id_endpt.fpga_serial_number().unwrap());
 
-    let mut ctrl_endpt = PCIe40Ctrl::open_by_device_name("tdtel201_0").unwrap();
+    let mut ctrl_endpt = PCIe40Ctrl::open_by_device_name("tdtel203_0").unwrap();
+    */
 
-    let mut stream_endpt = PCIe40Stream::open_by_device_name("tdtel201_0", MainStream).unwrap();
+    let mut stream_endpt = PCIe40Stream::open_by_device_name("tdtel203_0", MainStream).unwrap();
+    stream_endpt.locking_process();
+
+    /*
+    let mut stream_endpt2 = PCIe40Stream::open_by_device_name("tdtel203_0", MainStream).unwrap();
+
+    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
+    println!("Enabling...");
+    stream_endpt.enable().unwrap();
+    stream_endpt2.enable().unwrap();
+    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
+    println!("Disabling...");
+    stream_endpt.disable().unwrap();
+    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
+    */
 }

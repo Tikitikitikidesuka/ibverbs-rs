@@ -51,7 +51,7 @@ impl PCIe40Ctrl {
             Err(PCIe40CtrlError::DeviceNotFoundById { device_id })?;
         }
 
-        Ok(PCIe40CtrlEndpoint { ctrl_fd })
+        Ok(PCIe40CtrlEndpoint { ctrl_fd, device_id })
     }
 
     // Private function. Will be called by drop on PCIe40DeviceId
@@ -62,6 +62,7 @@ impl PCIe40Ctrl {
 
 pub struct PCIe40CtrlEndpoint {
     ctrl_fd: i32,
+    device_id: i32,
 }
 
 #[derive(Debug, Error)]

@@ -102,7 +102,10 @@ impl PCIe40Stream {
             Err(PCIe40CStreamError::DeviceNotFoundById { device_id })?;
         }
 
-        Ok(PCIe40StreamEndpoint { stream_fd })
+        Ok(PCIe40StreamEndpoint {
+            stream_fd,
+            device_id,
+        })
     }
 
     // Private function. Will be called by drop on PCIe40DeviceId
@@ -115,6 +118,7 @@ impl PCIe40Stream {
 
 pub struct PCIe40StreamEndpoint {
     stream_fd: i32,
+    device_id: i32,
 }
 
 #[derive(Debug, Error)]
@@ -135,4 +139,81 @@ impl Drop for PCIe40StreamEndpoint {
     }
 }
 
-impl PCIe40StreamEndpoint {}
+impl PCIe40StreamEndpoint {
+    pub fn enabled(&self) -> Result<bool, PCIe40StreamEndpointError> {
+        let c_result = unsafe { p40_stream_enabled(self.stream_fd) };
+
+        if c_result < 0 {
+            Err(PCIe40StreamEndpointError::DeviceReadError {
+                device_id: self.device_id,
+            })
+        } else {
+            Ok(c_result != 0)
+        }
+    }
+
+    pub fn enable(&mut self) -> Result<(), PCIe40StreamEndpointError> {
+        if self.enabled()? || unsafe { p40_stream_enable(self.stream_fd) } == 0 {
+            Ok(())
+        } else {
+            Err(PCIe40StreamEndpointError::DeviceWriteError {
+                device_id: self.device_id,
+            })
+        }
+    }
+
+    pub fn disable(&mut self) -> Result<(), PCIe40StreamEndpointError> {
+        if !self.enabled()? || unsafe { p40_stream_disable(self.stream_fd) } == 0 {
+            Ok(())
+        } else {
+            Err(PCIe40StreamEndpointError::DeviceWriteError {
+                device_id: self.device_id,
+            })
+        }
+    }
+
+    pub fn locking_process(&self) -> Result<Option<i32>, PCIe40StreamEndpointError> {
+        let c_result = unsafe { p40_stream_get_locker(self.stream_fd) };
+
+        if c_result == 0 {
+            Ok(None)
+        } else if c_result > 0 {
+            Ok(Some(c_result))
+        } else {
+            Err(PCIe40StreamEndpointError::DeviceReadError {
+                device_id: self.device_id,
+            })
+        }
+    }
+
+    // TODO: TOMORROW CHANGE THIS TO RETURN A STREAMGUARD, THAT WAY, LOCK IS STATICALLY ENFORCED
+    // TODO: CHECK IF ONE SINGLE PROCESS SHOULD BE ABLE TO HOLD TWO GUARDS, SINCE IT CAN HOLD TO STREAM ENDPOINTS :/
+    pub fn lock(&mut self) -> Result<bool, PCIe40StreamEndpointError> {
+        let c_result = unsafe { p40_stream_lock(self.stream_fd) };
+
+        if c_result == 0 {
+            Ok(true)
+        } else if c_result > 0 {
+            Ok(false)
+        } else {
+            Err(PCIe40StreamEndpointError::DeviceWriteError {
+                device_id: self.device_id,
+            })
+        }
+    }
+
+    // TODO: WHEN THIS IS CHANGED TO STREAMGUARD, IT SHOULD BE MOVED TO DROP
+    pub fn unlock(&mut self) -> Result<bool, PCIe40StreamEndpointError> {
+        let c_result = unsafe { p40_stream_unlock(self.stream_fd) };
+
+        if c_result == 0 {
+            Ok(true)
+        } else if c_result > 0 {
+            Ok(false)
+        } else {
+            Err(PCIe40StreamEndpointError::DeviceWriteError {
+                device_id: self.device_id,
+            })
+        }
+    }
+}
