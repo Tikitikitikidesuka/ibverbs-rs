@@ -290,27 +290,27 @@ pub struct PCIe40LockedStream {
     enabled_stream: PCIe40EnabledStream,
 }
 
-impl PCIe40LockedStream {}
+#[derive(Debug, Error)]
+pub enum PCIe40LockedStreamError {
+    #[error("{0}")]
+    StreamHandleError(PCIe40StreamHandleError),
 
-/*
-    // TODO: TOMORROW CHANGE THIS TO RETURN A STREAMGUARD, THAT WAY, LOCK IS STATICALLY ENFORCED
-    // TODO: CHECK IF ONE SINGLE PROCESS SHOULD BE ABLE TO HOLD TWO GUARDS, SINCE IT CAN HOLD TO STREAM ENDPOINTS :/
-    pub fn lock(&mut self) -> Result<bool, PCIe40StreamHandleError> {
+    #[error("Failed to unlock the stream")]
+    FailedToUnlock,
+}
 
-    }
-
-    // TODO: WHEN THIS IS CHANGED TO STREAMGUARD, IT SHOULD BE MOVED TO DROP
-    pub fn unlock(&mut self) -> Result<bool, PCIe40StreamHandleError> {
-        let c_result = unsafe { p40_stream_unlock(self.stream_fd) };
+impl PCIe40LockedStream {
+    pub fn unlock(self) -> Result<PCIe40EnabledStream, PCIe40LockedStreamError> {
+        let c_result = unsafe { p40_stream_unlock(self.enabled_stream.stream_handle.stream_fd) };
 
         if c_result == 0 {
-            Ok(true)
+            Ok(self.enabled_stream)
         } else if c_result > 0 {
-            Ok(false)
+            Err(PCIe40LockedStreamError::FailedToUnlock)
         } else {
-            Err(PCIe40StreamHandleError::DeviceWriteError {
-                device_id: self.device_id,
-            })
+            Err(PCIe40LockedStreamError::StreamHandleError(PCIe40StreamHandleError::DeviceWriteError {
+                device_id: self.enabled_stream.stream_handle.device_id,
+            }))
         }
     }
-*/
+}
