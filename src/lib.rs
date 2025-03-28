@@ -215,16 +215,6 @@ impl PCIe40Reader {
                 return Err(PCIe40Error::CtrlStreamOpen);
             }
 
-            // DMABUF support (if available)
-            #[cfg(feature = "dmabuf")]
-            {
-                self.dmabuf_fd = bindings::p40_stream_get_dmabuf(self.stream_fd);
-                if self.dmabuf_fd < 0 {
-                    self.close();
-                    return Err(PCIe40Error::DmabufOpen);
-                }
-            }
-
             self.update_device_ptr()?;
             self.internal_read_off = self.device_read_off;
             self.requested_size = 0;

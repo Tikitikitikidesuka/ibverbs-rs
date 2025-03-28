@@ -4,10 +4,11 @@
 
 use std::thread;
 use std::time::Duration;
-use pcie40_rs::pcie40_ctrl::PCIe40Ctrl;
-use pcie40_rs::pcie40_id::PCIe40Id;
+use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
+use pcie40_rs::pcie40_id::PCIe40IdManager;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40_stream::PCIe40Stream;
+use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 
 fn main() {
     //let reader = ZeroCopyReader::new(PCIe40ZeroCopyReaderImpl::new());
@@ -19,19 +20,9 @@ fn main() {
     let mut ctrl_endpt = PCIe40Ctrl::open_by_device_name("tdtel203_0").unwrap();
     */
 
-    let mut stream_endpt = PCIe40Stream::open_by_device_name("tdtel203_0", MainStream).unwrap();
-    stream_endpt.locking_process();
+    let mut stream_handle = PCIe40StreamManager::open_by_device_name("tdtel203_0", MainStream).unwrap();
 
-    /*
-    let mut stream_endpt2 = PCIe40Stream::open_by_device_name("tdtel203_0", MainStream).unwrap();
-
-    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
-    println!("Enabling...");
-    stream_endpt.enable().unwrap();
-    stream_endpt2.enable().unwrap();
-    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
-    println!("Disabling...");
-    stream_endpt.disable().unwrap();
-    println!("Enabled: {:?}", stream_endpt.enabled().unwrap());
-    */
+    stream_handle.set_raii_enable_state_close_mode(PreserveEnableState).unwrap();
+    let enabled_stream = stream_handle.enable().unwrap();
+    let stream_handle = enabled_stream.close().unwrap();
 }

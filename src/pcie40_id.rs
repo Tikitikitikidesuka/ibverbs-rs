@@ -2,10 +2,10 @@ use crate::bindings::*;
 use std::ffi::CString;
 use thiserror::Error;
 
-pub struct PCIe40Id {}
+pub struct PCIe40IdManager {}
 
 #[derive(Debug, Error)]
-pub enum PCIe40IdError {
+pub enum PCIe40IdManagerError {
     #[error("Invalid device name: {device_name}")]
     InvalidDeviceName { device_name: String },
 
@@ -22,12 +22,12 @@ pub enum PCIe40IdError {
     DeviceOpenFail { device_id: i32 },
 }
 
-impl PCIe40Id {
-    pub fn id_endpoint_exists(device_id: i32) -> Result<bool, PCIe40IdError> {
+impl PCIe40IdManager {
+    pub fn id_endpoint_exists(device_id: i32) -> Result<bool, PCIe40IdManagerError> {
         let c_result = unsafe { p40_id_exists(device_id) };
 
         if c_result < 0 {
-            Err(PCIe40IdError::DriverReadError)
+            Err(PCIe40IdManagerError::DriverReadError)
         } else if c_result == 0 {
             Ok(true)
         } else {
@@ -35,15 +35,15 @@ impl PCIe40Id {
         }
     }
 
-    pub fn find_id_by_name(device_name: &str) -> Result<i32, PCIe40IdError> {
+    pub fn find_id_by_name(device_name: &str) -> Result<i32, PCIe40IdManagerError> {
         let c_str_device_name =
-            CString::new(device_name).map_err(|_| PCIe40IdError::InvalidDeviceName {
+            CString::new(device_name).map_err(|_| PCIe40IdManagerError::InvalidDeviceName {
                 device_name: device_name.to_string(),
             })?;
         let device_id = unsafe { p40_id_find(c_str_device_name.as_ptr()) };
 
         if device_id < 0 {
-            Err(PCIe40IdError::DeviceNotFoundByName {
+            Err(PCIe40IdManagerError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             })
         } else {
@@ -51,9 +51,9 @@ impl PCIe40Id {
         }
     }
 
-    pub fn find_all_ids_by_name(device_name: &str) -> Result<Vec<i32>, PCIe40IdError> {
+    pub fn find_all_ids_by_name(device_name: &str) -> Result<Vec<i32>, PCIe40IdManagerError> {
         let c_str_device_name =
-            CString::new(device_name).map_err(|_| PCIe40IdError::InvalidDeviceName {
+            CString::new(device_name).map_err(|_| PCIe40IdManagerError::InvalidDeviceName {
                 device_name: device_name.to_string(),
             })?;
         let mask = unsafe { p40_id_find_all(c_str_device_name.as_ptr()) };
@@ -64,15 +64,15 @@ impl PCIe40Id {
             .collect())
     }
 
-    pub fn open_by_device_name(device_name: &str) -> Result<PCIe40IdEndpoint, PCIe40IdError> {
+    pub fn open_by_device_name(device_name: &str) -> Result<PCIe40IdEndpoint, PCIe40IdManagerError> {
         let c_str_device_name =
-            CString::new(device_name).or(Err(PCIe40IdError::DeviceNotFoundByName {
+            CString::new(device_name).or(Err(PCIe40IdManagerError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             }))?;
 
         let device_id = unsafe { p40_id_find(c_str_device_name.as_ptr()) };
         if device_id < 0 {
-            Err(PCIe40IdError::DeviceNotFoundByName {
+            Err(PCIe40IdManagerError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             })?;
         };
@@ -80,14 +80,14 @@ impl PCIe40Id {
         Self::open_by_device_id(device_id)
     }
 
-    pub fn open_by_device_id(device_id: i32) -> Result<PCIe40IdEndpoint, PCIe40IdError> {
+    pub fn open_by_device_id(device_id: i32) -> Result<PCIe40IdEndpoint, PCIe40IdManagerError> {
         if unsafe { p40_id_exists(device_id) } != 0 {
-            Err(PCIe40IdError::DeviceNotFoundById { device_id })?;
+            Err(PCIe40IdManagerError::DeviceNotFoundById { device_id })?;
         }
 
         let id_fd = unsafe { p40_id_open(device_id) };
         if id_fd < 0 {
-            Err(PCIe40IdError::DeviceOpenFail { device_id })?;
+            Err(PCIe40IdManagerError::DeviceOpenFail { device_id })?;
         }
 
         Ok(PCIe40IdEndpoint { device_id, id_fd })
@@ -118,7 +118,7 @@ pub enum PCIe40IdEndpointError {
 
 impl Drop for PCIe40IdEndpoint {
     fn drop(&mut self) {
-        PCIe40Id::close(self);
+        PCIe40IdManager::close(self);
     }
 }
 
