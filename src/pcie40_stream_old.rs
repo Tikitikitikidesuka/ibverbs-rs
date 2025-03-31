@@ -153,25 +153,13 @@ pub enum PCIe40StreamError {
         stream_type: PCIe40DAQStreamType,
     },
 
-    #[error("Failed to enable stream {stream_type:?} on device {device_id}")]
-    FailedToEnableStream {
-        device_id: i32,
-        stream_type: PCIe40DAQStreamType,
-    },
-
-    #[error("Failed to disable stream {stream_type:?} on device {device_id}")]
-    FailedToDisableStream {
-        device_id: i32,
-        stream_type: PCIe40DAQStreamType,
-    },
-
-    #[error("Failed to lock stream {stream_type:?} on device {device_id}")]
+    #[error("Failed to lock the stream")]
     FailedToLockStream {
         device_id: i32,
         stream_type: PCIe40DAQStreamType,
     },
 
-    #[error("Failed to unlock stream {stream_type:?} on device {device_id}")]
+    #[error("Failed to unlock the stream")]
     FailedToUnlockStream {
         device_id: i32,
         stream_type: PCIe40DAQStreamType,
@@ -252,34 +240,10 @@ impl PCIe40Stream {
         Ok(())
     }
 
-    pub fn locking_process(&self) -> Result<Option<i32>, PCIe40StreamError> {
-        let c_result = unsafe { p40_stream_get_locker(self.stream_fd) };
-
-        if c_result == 0 {
-            Ok(None)
-        } else if c_result > 0 {
-            Ok(Some(c_result))
-        } else {
-            Err(PCIe40StreamError::StreamReadError {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
-            })
-        }
-    }
-
-    pub fn lock(&mut self) -> Result<PCIe40StreamGuard, PCIe40StreamError> {
-        self.enable()?;
-
-        let c_result = unsafe { p40_stream_lock(self.stream_fd) };
-
-        if c_result == 0 {
-            Ok(PCIe40StreamGuard {
+    pub fn enable(mut self) -> Result<PCIe40EnabledStream, PCIe40StreamError> {
+        if self.enabled()? || unsafe { p40_stream_enable(self.stream_fd) } == 0 {
+            Ok(PCIe40EnabledStream {
                 stream_handle: self,
-            })
-        } else if c_result > 0 {
-            Err(PCIe40StreamError::FailedToLockStream {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
             })
         } else {
             Err(PCIe40StreamError::StreamWriteError {
@@ -289,20 +253,9 @@ impl PCIe40Stream {
         }
     }
 
-    fn enable(&mut self) -> Result<(), PCIe40StreamError> {
-        if self.enabled()? || unsafe { p40_stream_enable(self.stream_fd) } == 0 {
-            Ok(())
-        } else {
-            Err(PCIe40StreamError::FailedToEnableStream {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
-            })
-        }
-    }
-
     fn disable(&mut self) -> Result<(), PCIe40StreamError> {
         if self.enabled()? && unsafe { p40_stream_disable(self.stream_fd) } != 0 {
-            Err(PCIe40StreamError::FailedToDisableStream {
+            Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.device_id,
                 stream_type: self.stream_type,
             })?
@@ -328,19 +281,86 @@ impl PCIe40Stream {
     }
 }
 
-pub struct PCIe40StreamGuard<'a> {
-    stream_handle: &'a mut PCIe40Stream,
+// This type just exists to match the C drivers functions
+// In case functionality is added to an enabled yet unlocked stream
+// At the moment it does nothing more than act as a transition
+// between a stream handle and a locked stream
+pub struct PCIe40EnabledStream {
+    stream_handle: PCIe40Stream,
 }
 
-impl<'a> Drop for PCIe40StreamGuard<'a> {
+/*
+// No need to implement drop since internal attributes will be dropped automatically
+// and this struct does nothing on close, only return ownership of the handle.
+impl Drop for PCIe40EnabledStream {
+    fn drop(&mut self) {
+    }
+}
+*/
+
+impl PCIe40EnabledStream {
+    pub fn close(self) -> PCIe40Stream {
+        // Nothing to do here...
+        // The disable or not logic is in the handle
+        self.stream_handle
+    }
+
+    pub fn locking_process(&self) -> Result<Option<i32>, PCIe40StreamError> {
+        let c_result = unsafe { p40_stream_get_locker(self.stream_handle.stream_fd) };
+
+        if c_result == 0 {
+            Ok(None)
+        } else if c_result > 0 {
+            Ok(Some(c_result))
+        } else {
+            Err(PCIe40StreamError::StreamReadError {
+                device_id: self.stream_handle.device_id,
+                stream_type: self.stream_handle.stream_type,
+            })
+        }
+    }
+
+    pub fn lock(self) -> Result<PCIe40LockedStream, PCIe40StreamError> {
+        let c_result = unsafe { p40_stream_lock(self.stream_handle.stream_fd) };
+
+        if c_result == 0 {
+            Ok(PCIe40LockedStream {
+                stream_handle: self.stream_handle,
+            })
+        } else if c_result > 0 {
+            Err(PCIe40StreamError::FailedToLockStream {
+                device_id: self.stream_handle.device_id,
+                stream_type: self.stream_handle.stream_type,
+            })
+        } else {
+            Err(PCIe40StreamError::StreamWriteError {
+                device_id: self.stream_handle.device_id,
+                stream_type: self.stream_handle.stream_type,
+            })
+        }
+    }
+}
+
+pub struct PCIe40LockedStream {
+    stream_handle: PCIe40Stream,
+}
+
+impl Drop for PCIe40LockedStream {
     fn drop(&mut self) {
         let _ = self.ref_unlock();
     }
 }
 
-impl<'a> PCIe40StreamGuard<'a> {
-    fn new(stream_handle: &'a mut PCIe40Stream) -> Result<Self, PCIe40StreamError> {
-        let mut locked_stream = PCIe40StreamGuard { stream_handle };
+impl PCIe40LockedStream {
+    pub fn unlock(mut self) -> Result<PCIe40EnabledStream, PCIe40StreamError> {
+        self.ref_unlock()?;
+        Ok(PCIe40EnabledStream {
+            stream_handle: self.stream_handle,
+        })
+    }
+
+    fn new(stream_handle: PCIe40Stream) -> Result<Self, PCIe40StreamError> {
+        let mut locked_stream = PCIe40LockedStream { stream_handle };
 
         match locked_stream.stream_handle.stream_format {
             PCIe40DAQStreamFormat::RawFormat => locked_stream.set_meta_enabled_state(false)?,
@@ -360,9 +380,7 @@ impl<'a> PCIe40StreamGuard<'a> {
 
         let c_result = match enabled {
             true => unsafe { p40_stream_enable_mask(self.stream_handle.meta_stream_fd, meta_mask) },
-            false => unsafe {
-                p40_stream_disable_mask(self.stream_handle.meta_stream_fd, meta_mask)
-            },
+            false => unsafe { p40_stream_disable_mask(self.stream_handle.meta_stream_fd, meta_mask) },
         };
 
         if c_result == 0 {
