@@ -1,5 +1,7 @@
 use crate::bindings::*;
 use crate::pcie40_id::{PCIe40IdManager, PCIe40IdManagerError};
+use std::ptr::slice_from_raw_parts;
+use std::slice;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -89,11 +91,7 @@ impl PCIe40StreamManager {
         stream_type: PCIe40DAQStreamType,
         stream_format: PCIe40DAQStreamFormat,
     ) -> Result<PCIe40Stream, PCIe40StreamManagerError> {
-        let c_result = unsafe { p40_stream_exists(device_id, stream_type.into()) };
-
-        if c_result < 0 {
-            Err(PCIe40StreamManagerError::DriverReadError)?;
-        } else if c_result != 0 {
+        if !Self::stream_exists(device_id, stream_type)? {
             Err(PCIe40StreamManagerError::DeviceNotFoundById { device_id })?;
         }
 
@@ -173,6 +171,18 @@ pub enum PCIe40StreamError {
 
     #[error("Failed to unlock stream {stream_type:?} on device {device_id}")]
     FailedToUnlockStream {
+        device_id: i32,
+        stream_type: PCIe40DAQStreamType,
+    },
+
+    #[error("Failed to map buffer of stream {stream_type:?} on device {device_id}")]
+    FailedToMapBuffer {
+        device_id: i32,
+        stream_type: PCIe40DAQStreamType,
+    },
+
+    #[error("Failed to unmap buffer of stream {stream_type:?} on device {device_id}")]
+    FailedToUnmapBuffer {
         device_id: i32,
         stream_type: PCIe40DAQStreamType,
     },
@@ -391,5 +401,64 @@ impl<'a> PCIe40StreamGuard<'a> {
                 stream_type: self.stream_handle.stream_type,
             })
         }
+    }
+}
+
+impl<'a> PCIe40StreamGuard<'a> {
+    pub fn map_buffer<'buf>(&'buf mut self) -> Result<PCIe40MappedBuffer<'a, 'buf>, PCIe40StreamError> {
+        let buff_ptr = unsafe { p40_stream_map(self.stream_handle.stream_fd) };
+        if buff_ptr.is_null() {
+            Err(PCIe40StreamError::FailedToMapBuffer {
+                device_id: self.stream_handle.device_id,
+                stream_type: self.stream_handle.stream_type,
+            })?
+        }
+
+        let buff_size = unsafe { p40_stream_get_host_buf_bytes(self.stream_handle.stream_fd) };
+        if buff_size <= 0 {
+            Err(PCIe40StreamError::FailedToMapBuffer {
+                device_id: self.stream_handle.device_id,
+                stream_type: self.stream_handle.stream_type,
+            })?
+        }
+
+        Ok(PCIe40MappedBuffer::new(self, unsafe {
+            slice::from_raw_parts(buff_ptr as *const u8, buff_size as usize)
+        }))
+    }
+}
+
+pub struct PCIe40MappedBuffer<'guard, 'buf> {
+    stream_guard: &'buf mut PCIe40StreamGuard<'guard>,
+    buffer: &'buf [u8],
+}
+
+impl<'guard, 'buf> Drop for PCIe40MappedBuffer<'guard, 'buf> {
+    fn drop(&mut self) {
+        self.unmap_buffer();
+    }
+}
+
+impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
+    fn new(stream_guard: &'buf mut PCIe40StreamGuard<'guard>, buffer: &'buf [u8]) -> Self {
+        Self {
+            stream_guard,
+            buffer,
+        }
+    }
+
+    fn unmap_buffer(&mut self) {
+        unsafe {
+            p40_stream_unmap(
+                self.stream_guard.stream_handle.stream_fd,
+                self.buffer.as_ptr() as *mut std::os::raw::c_void,
+            )
+        }
+    }
+}
+
+impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
+    pub fn buffer(&self) -> &[u8] {
+        self.buffer
     }
 }
