@@ -299,12 +299,23 @@ pub enum PCIe40LockedStreamError {
     FailedToUnlock,
 }
 
+impl Drop for PCIe40LockedStream {
+    fn drop(&mut self) {
+        let _ = self.ref_unlock();
+    }
+}
+
 impl PCIe40LockedStream {
-    pub fn unlock(self) -> Result<PCIe40EnabledStream, PCIe40LockedStreamError> {
+    pub fn unlock(mut self) -> Result<PCIe40EnabledStream, PCIe40LockedStreamError> {
+        self.ref_unlock()?;
+        Ok(self.enabled_stream)
+    }
+
+    fn ref_unlock(&mut self) -> Result<(), PCIe40LockedStreamError> {
         let c_result = unsafe { p40_stream_unlock(self.enabled_stream.stream_handle.stream_fd) };
 
         if c_result == 0 {
-            Ok(self.enabled_stream)
+            Ok(())
         } else if c_result > 0 {
             Err(PCIe40LockedStreamError::FailedToUnlock)
         } else {
