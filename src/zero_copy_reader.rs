@@ -11,8 +11,7 @@
 //!
 //! ## Core Components
 //!
-//! - `ZeroCopyReaderImpl`: Trait defining the core behavior implementers must provide
-//! - `ZeroCopyRingBufferReader`: Safe wrapper that enforces the access safety contract
+//! - `ZeroCopyRingBufferReader`: Safe trait that enforces the access safety contract
 //! - `DataGuard`: Handle that protects data references from invalidation
 //!
 //! ## Safety Guarantees
@@ -41,7 +40,8 @@ pub trait ZeroCopyRingBufferReader {
     /// the data reference remains valid for its entire lifetime.
     fn data(&self) -> DataGuard<Self>;
 
-    /// Advances the write pointer, marking new data as available.
+    /// Advances the loaded data pointer num_bytes or until the write pointer if reached,
+    /// marking new data as available.
     ///
     /// Typically called after DMA hardware writes to the buffer.
     /// Cannot be called while a `DataGuard` from this reader exists.
@@ -50,6 +50,16 @@ pub trait ZeroCopyRingBufferReader {
     ///
     /// The number of bytes that were newly added
     fn load_data(&mut self, num_bytes: usize) -> usize;
+
+    /// Advances the loaded data pointer until the write pointer, marking new data as available.
+    ///
+    /// Typically called after DMA hardware writes to the buffer.
+    /// Cannot be called while a `DataGuard` from this reader exists.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes that were newly added
+    fn load_all_data(&self) -> usize;
 
     /// Advances the read pointer, marking data as processed.
     ///
