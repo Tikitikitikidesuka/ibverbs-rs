@@ -26,6 +26,13 @@
 //! TODO: ADD EXAMPLE USAGE
 
 use std::ops::Deref;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ZeroCopyRingBufferReaderError {
+    #[error("Connection to the ring buffer failed: {0}")]
+    ConnectionError(String),
+}
 
 /// Safe wrapper around a zero-copy ring buffer reader implementation.
 ///
@@ -49,7 +56,7 @@ pub trait ZeroCopyRingBufferReader {
     /// # Returns
     ///
     /// The number of bytes that were newly added
-    fn load_data(&mut self, num_bytes: usize) -> usize;
+    fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError>;
 
     /// Advances the loaded data pointer until the write pointer, marking new data as available.
     ///
@@ -59,16 +66,25 @@ pub trait ZeroCopyRingBufferReader {
     /// # Returns
     ///
     /// The number of bytes that were newly added
-    fn load_all_data(&self) -> usize;
+    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
 
-    /// Advances the read pointer, marking data as processed.
+    /// Advances the read pointer num_bytes or until write pointer, marking data as processed.
     ///
     /// Cannot be called while a `DataGuard` from this reader exists.
     ///
     /// # Returns
     ///
     /// The number of bytes that were discarded
-    fn discard_data(&mut self, num_bytes: usize) -> usize;
+    fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError>;
+
+    /// Advances the read pointer until the write pointer, marking data as processed.
+    ///
+    /// Cannot be called while a `DataGuard` from this reader exists.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes that were discarded
+    fn discard_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
 }
 
 /// A guard that provides safe access to data from a `ZeroCopyRingBufferReader`.
