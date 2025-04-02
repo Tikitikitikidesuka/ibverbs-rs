@@ -88,7 +88,10 @@ impl PCIe40StreamManager {
             "Checking if stream {} exists for device {}",
             stream_type, device_id
         );
+
+        trace!("Calling p40_stream_exists({}, {:?})", device_id, stream_type);
         let c_result = unsafe { p40_stream_exists(device_id, stream_type.into()) };
+        trace!("p40_stream_exists returned {}", c_result);
 
         if c_result < 0 {
             error!(
@@ -117,12 +120,15 @@ impl PCIe40StreamManager {
             "Opening stream {} with format {} by device name '{}'",
             stream_type, stream_format, device_name
         );
+
+        trace!("Calling PCIe40IdManager::find_id_by_name(\"{}\")", device_name);
         let device_id = PCIe40IdManager::find_id_by_name(device_name).or_else(|_| {
             error!("Device with name '{}' not found", device_name);
             Err(PCIe40StreamManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
             })
         })?;
+        trace!("PCIe40IdManager::find_id_by_name returned {}", device_id);
 
         Self::open_by_device_id(device_id, stream_type, stream_format)
     }
@@ -142,7 +148,10 @@ impl PCIe40StreamManager {
             return Err(PCIe40StreamManagerError::DeviceNotFoundById { device_id });
         }
 
+        trace!("Calling p40_stream_open({}, {:?})", device_id, stream_type);
         let stream_fd = unsafe { p40_stream_open(device_id, stream_type.into()) };
+        trace!("p40_stream_open returned {}", stream_fd);
+
         if stream_fd < 0 {
             error!(
                 "Failed to open stream {} for device {}",
@@ -155,7 +164,10 @@ impl PCIe40StreamManager {
         }
         debug!("Opened {} stream with fd {}", stream_type, stream_fd);
 
+        trace!("Calling p40_stream_open({}, {:?}) for meta stream", device_id, stream_type);
         let meta_stream_fd = unsafe { p40_stream_open(device_id, stream_type.into()) };
+        trace!("p40_stream_open for meta stream returned {}", meta_stream_fd);
+
         if meta_stream_fd < 0 {
             error!(
                 "Failed to open meta stream {} for device {}",
@@ -188,6 +200,8 @@ impl PCIe40StreamManager {
             "Closing stream {} for device {}",
             stream_endpoint.stream_type, stream_endpoint.device_id
         );
+
+        trace!("Calling p40_ctrl_close({})", stream_endpoint.stream_fd);
         unsafe {
             p40_ctrl_close(stream_endpoint.stream_fd);
         }
@@ -301,7 +315,7 @@ impl PCIe40Stream {
             stream_type,
             stream_format,
             enable_state_action_on_close:
-                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+            PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
         }
     }
 
@@ -310,7 +324,10 @@ impl PCIe40Stream {
             "Checking if stream {} on device {} is enabled",
             self.stream_type, self.device_id
         );
+
+        trace!("Calling p40_stream_enabled({})", self.stream_fd);
         let c_result = unsafe { p40_stream_enabled(self.stream_fd) };
+        trace!("p40_stream_enabled returned {}", c_result);
 
         if c_result < 0 {
             error!(
@@ -369,7 +386,10 @@ impl PCIe40Stream {
             "Checking locking process for stream {} on device {}",
             self.stream_type, self.device_id
         );
+
+        trace!("Calling p40_stream_get_locker({})", self.stream_fd);
         let c_result = unsafe { p40_stream_get_locker(self.stream_fd) };
+        trace!("p40_stream_get_locker returned {}", c_result);
 
         if c_result == 0 {
             trace!(
@@ -403,7 +423,9 @@ impl PCIe40Stream {
         );
         self.enable()?;
 
+        trace!("Calling p40_stream_lock({})", self.stream_fd);
         let c_result = unsafe { p40_stream_lock(self.stream_fd) };
+        trace!("p40_stream_lock returned {}", c_result);
 
         if c_result == 0 {
             info!(
@@ -445,7 +467,10 @@ impl PCIe40Stream {
             );
             Ok(())
         } else {
+            trace!("Calling p40_stream_enable({})", self.stream_fd);
             let c_result = unsafe { p40_stream_enable(self.stream_fd) };
+            trace!("p40_stream_enable returned {}", c_result);
+
             if c_result == 0 {
                 info!(
                     "Successfully enabled stream {} on device {}",
@@ -477,7 +502,10 @@ impl PCIe40Stream {
             );
             Ok(())
         } else {
+            trace!("Calling p40_stream_disable({})", self.stream_fd);
             let c_result = unsafe { p40_stream_disable(self.stream_fd) };
+            trace!("p40_stream_disable returned {}", c_result);
+
             if c_result != 0 {
                 error!(
                     "Failed to disable stream {} on device {}",
@@ -581,18 +609,37 @@ impl<'a> PCIe40StreamGuard<'a> {
             self.stream_handle.device_id
         );
 
+        trace!("Calling p40_stream_id_to_meta_mask({}, {:?})",
+            self.stream_handle.device_id,
+            self.stream_handle.stream_type
+        );
         let meta_mask = unsafe {
             p40_stream_id_to_meta_mask(
                 self.stream_handle.device_id,
                 self.stream_handle.stream_type.into(),
             )
         };
+        trace!("p40_stream_id_to_meta_mask returned {:#x}", meta_mask);
         trace!("Meta mask: {:#x}", meta_mask);
 
         let c_result = match enabled {
-            true => unsafe { p40_stream_enable_mask(self.stream_handle.meta_stream_fd, meta_mask) },
-            false => unsafe {
-                p40_stream_disable_mask(self.stream_handle.meta_stream_fd, meta_mask)
+            true => {
+                trace!("Calling p40_stream_enable_mask({}, {:#x})",
+                    self.stream_handle.meta_stream_fd,
+                    meta_mask
+                );
+                let result = unsafe { p40_stream_enable_mask(self.stream_handle.meta_stream_fd, meta_mask) };
+                trace!("p40_stream_enable_mask returned {}", result);
+                result
+            },
+            false => {
+                trace!("Calling p40_stream_disable_mask({}, {:#x})",
+                    self.stream_handle.meta_stream_fd,
+                    meta_mask
+                );
+                let result = unsafe { p40_stream_disable_mask(self.stream_handle.meta_stream_fd, meta_mask) };
+                trace!("p40_stream_disable_mask returned {}", result);
+                result
             },
         };
 
@@ -625,7 +672,9 @@ impl<'a> PCIe40StreamGuard<'a> {
             self.stream_handle.stream_type, self.stream_handle.device_id
         );
 
+        trace!("Calling p40_stream_unlock({})", self.stream_handle.stream_fd);
         let c_result = unsafe { p40_stream_unlock(self.stream_handle.stream_fd) };
+        trace!("p40_stream_unlock returned {}", c_result);
 
         if c_result == 0 {
             info!(
@@ -665,7 +714,10 @@ impl<'a> PCIe40StreamGuard<'a> {
             self.stream_handle.stream_type, self.stream_handle.device_id
         );
 
+        trace!("Calling p40_stream_map({})", self.stream_handle.stream_fd);
         let buff_ptr = unsafe { p40_stream_map(self.stream_handle.stream_fd) };
+        trace!("p40_stream_map returned {:p}", buff_ptr);
+
         if buff_ptr.is_null() {
             error!(
                 "Failed to map buffer for stream {} on device {}: null pointer",
@@ -677,7 +729,10 @@ impl<'a> PCIe40StreamGuard<'a> {
             });
         }
 
+        trace!("Calling p40_stream_get_host_buf_bytes({})", self.stream_handle.stream_fd);
         let buff_size = unsafe { p40_stream_get_host_buf_bytes(self.stream_handle.stream_fd) };
+        trace!("p40_stream_get_host_buf_bytes returned {}", buff_size);
+
         if buff_size <= 0 {
             error!(
                 "Failed to map buffer for stream {} on device {}: invalid buffer size {}",
@@ -738,6 +793,12 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             "Unmapping buffer for stream {} on device {}",
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
+
+        trace!(
+            "Calling p40_stream_unmap({}, {:p})",
+            self.stream_guard.stream_handle.stream_fd,
+            self.buffer.as_ptr() as *mut std::os::raw::c_void
+        );
         unsafe {
             p40_stream_unmap(
                 self.stream_guard.stream_handle.stream_fd,
@@ -768,9 +829,11 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
+        trace!("Calling p40_stream_get_host_buf_read_off({})", self.stream_guard.stream_handle.stream_fd);
         let offset = unsafe {
             p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd)
         };
+        trace!("p40_stream_get_host_buf_read_off returned {}", offset);
 
         if offset < 0 {
             error!(
@@ -800,9 +863,11 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
+        trace!("Calling p40_stream_get_host_buf_write_off({})", self.stream_guard.stream_handle.stream_fd);
         let offset = unsafe {
             p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd)
         };
+        trace!("p40_stream_get_host_buf_write_off returned {}", offset);
 
         if offset < 0 {
             error!(
@@ -832,7 +897,15 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
-        let offset = unsafe { p40_stream_free_host_buf_bytes(self.stream_guard.stream_handle.stream_fd, offset) };
+        trace!(
+            "Calling p40_stream_free_host_buf_bytes({}, {})",
+            self.stream_guard.stream_handle.stream_fd,
+            offset
+        );
+        let offset = unsafe {
+            p40_stream_free_host_buf_bytes(self.stream_guard.stream_handle.stream_fd, offset)
+        };
+        trace!("p40_stream_free_host_buf_bytes returned {}", offset);
 
         if offset < 0 {
             error!(
