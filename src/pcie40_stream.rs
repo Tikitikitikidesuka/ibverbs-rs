@@ -121,14 +121,12 @@ impl PCIe40StreamManager {
             stream_type, stream_format, device_name
         );
 
-        trace!("Calling PCIe40IdManager::find_id_by_name(\"{}\")", device_name);
         let device_id = PCIe40IdManager::find_id_by_name(device_name).or_else(|_| {
             error!("Device with name '{}' not found", device_name);
             Err(PCIe40StreamManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
             })
         })?;
-        trace!("PCIe40IdManager::find_id_by_name returned {}", device_id);
 
         Self::open_by_device_id(device_id, stream_type, stream_format)
     }

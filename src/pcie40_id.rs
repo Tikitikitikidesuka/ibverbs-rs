@@ -1,5 +1,6 @@
 use crate::bindings::*;
 use std::ffi::CString;
+use log::{debug, error, info, trace};
 use thiserror::Error;
 
 pub struct PCIe40IdManager {}
@@ -24,54 +25,91 @@ pub enum PCIe40IdManagerError {
 
 impl PCIe40IdManager {
     pub fn id_endpoint_exists(device_id: i32) -> Result<bool, PCIe40IdManagerError> {
+        debug!("Checking if device with ID {} exists", device_id);
+
+        trace!("Calling p40_id_exists({})", device_id);
         let c_result = unsafe { p40_id_exists(device_id) };
+        trace!("p40_id_exists returned {}", c_result);
 
         if c_result < 0 {
+            error!("Driver read error while checking if device with ID {} exists", device_id);
             Err(PCIe40IdManagerError::DriverReadError)
         } else if c_result == 0 {
+            debug!("Device with ID {} exists", device_id);
             Ok(true)
         } else {
+            debug!("Device with ID {} does not exist", device_id);
             Ok(false)
         }
     }
 
     pub fn find_id_by_name(device_name: &str) -> Result<i32, PCIe40IdManagerError> {
+        debug!("Looking up device ID for device named '{}'", device_name);
+
         let c_str_device_name =
-            CString::new(device_name).map_err(|_| PCIe40IdManagerError::InvalidDeviceName {
-                device_name: device_name.to_string(),
+            CString::new(device_name).map_err(|_| {
+                error!("Invalid device name: '{}'", device_name);
+                PCIe40IdManagerError::InvalidDeviceName {
+                    device_name: device_name.to_string(),
+                }
             })?;
+
+        trace!("Calling p40_id_find(\"{}\")", device_name);
         let device_id = unsafe { p40_id_find(c_str_device_name.as_ptr()) };
+        trace!("p40_id_find returned {}", device_id);
 
         if device_id < 0 {
+            error!("Device with name '{}' not found", device_name);
             Err(PCIe40IdManagerError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             })
         } else {
+            debug!("Found device '{}' with ID {}", device_name, device_id);
             Ok(device_id)
         }
     }
 
     pub fn find_all_ids_by_name(device_name: &str) -> Result<Vec<i32>, PCIe40IdManagerError> {
-        let c_str_device_name =
-            CString::new(device_name).map_err(|_| PCIe40IdManagerError::InvalidDeviceName {
-                device_name: device_name.to_string(),
-            })?;
-        let mask = unsafe { p40_id_find_all(c_str_device_name.as_ptr()) };
+        debug!("Looking up all device IDs for devices named '{}'", device_name);
 
-        Ok((0..32)
+        let c_str_device_name =
+            CString::new(device_name).map_err(|_| {
+                error!("Invalid device name: '{}'", device_name);
+                PCIe40IdManagerError::InvalidDeviceName {
+                    device_name: device_name.to_string(),
+                }
+            })?;
+
+        trace!("Calling p40_id_find_all(\"{}\")", device_name);
+        let mask = unsafe { p40_id_find_all(c_str_device_name.as_ptr()) };
+        trace!("p40_id_find_all returned {:#x}", mask);
+
+        let device_ids: Vec<i32> = (0..32)
             .filter(|&device_id| (mask & (1 << device_id)) != 0)
             .map(|device_id| device_id as i32)
-            .collect())
+            .collect();
+
+        debug!("Found {} devices named '{}': {:?}", device_ids.len(), device_name, device_ids);
+        Ok(device_ids)
     }
 
     pub fn open_by_device_name(device_name: &str) -> Result<PCIe40IdEndpoint, PCIe40IdManagerError> {
+        info!("Opening ID endpoint for device named '{}'", device_name);
+
         let c_str_device_name =
-            CString::new(device_name).or(Err(PCIe40IdManagerError::DeviceNotFoundByName {
-                device_name: device_name.to_string(),
+            CString::new(device_name).or(Err({
+                error!("Invalid device name: '{}'", device_name);
+                PCIe40IdManagerError::DeviceNotFoundByName {
+                    device_name: device_name.to_string(),
+                }
             }))?;
 
+        trace!("Calling p40_id_find(\"{}\")", device_name);
         let device_id = unsafe { p40_id_find(c_str_device_name.as_ptr()) };
+        trace!("p40_id_find returned {}", device_id);
+
         if device_id < 0 {
+            error!("Device with name '{}' not found", device_name);
             Err(PCIe40IdManagerError::DeviceNotFoundByName {
                 device_name: device_name.to_string(),
             })?;
@@ -81,21 +119,38 @@ impl PCIe40IdManager {
     }
 
     pub fn open_by_device_id(device_id: i32) -> Result<PCIe40IdEndpoint, PCIe40IdManagerError> {
-        if unsafe { p40_id_exists(device_id) } != 0 {
+        info!("Opening ID endpoint for device with ID {}", device_id);
+
+        trace!("Calling p40_id_exists({})", device_id);
+        let exists = unsafe { p40_id_exists(device_id) };
+        trace!("p40_id_exists returned {}", exists);
+
+        if exists != 0 {
+            error!("Device with ID {} not found", device_id);
             Err(PCIe40IdManagerError::DeviceNotFoundById { device_id })?;
         }
 
+        trace!("Calling p40_id_open({})", device_id);
         let id_fd = unsafe { p40_id_open(device_id) };
+        trace!("p40_id_open returned {}", id_fd);
+
         if id_fd < 0 {
+            error!("Failed to open device with ID {}", device_id);
             Err(PCIe40IdManagerError::DeviceOpenFail { device_id })?;
         }
 
+        debug!("Successfully opened ID endpoint for device {} with fd {}", device_id, id_fd);
         Ok(PCIe40IdEndpoint { device_id, id_fd })
     }
 
     // Private function. Will be called by drop on PCIe40DeviceId
     fn close(id_endpoint: &PCIe40IdEndpoint) {
+        debug!("Closing ID endpoint for device {}", id_endpoint.device_id);
+
+        trace!("Calling p40_id_close({})", id_endpoint.id_fd);
         unsafe { p40_id_close(id_endpoint.id_fd) };
+
+        debug!("Closed ID endpoint for device {} with fd {}", id_endpoint.device_id, id_endpoint.id_fd);
     }
 }
 
@@ -118,25 +173,36 @@ pub enum PCIe40IdEndpointError {
 
 impl Drop for PCIe40IdEndpoint {
     fn drop(&mut self) {
+        trace!("Drop called on PCIe40IdEndpoint for device {}", self.device_id);
         PCIe40IdManager::close(self);
     }
 }
 
 impl PCIe40IdEndpoint {
     pub fn fpga_serial_number(&self) -> Result<i64, PCIe40IdEndpointError> {
+        debug!("Getting FPGA serial number for device {}", self.device_id);
+
+        trace!("Calling p40_id_get_fpga({})", self.id_fd);
         let c_result = unsafe { p40_id_get_fpga(self.id_fd) };
+        trace!("p40_id_get_fpga returned {}", c_result);
+
         if c_result < 0 {
+            error!("Failed to get FPGA serial number for device {}", self.device_id);
             Err(PCIe40IdEndpointError::DeviceReadError {
                 device_id: self.device_id,
             })?;
         }
 
+        debug!("FPGA serial number for device {}: {}", self.device_id, c_result);
         Ok(c_result)
     }
 
     pub fn device_name(&mut self) -> Result<String, PCIe40IdEndpointError> {
+        debug!("Getting device name for device {}", self.device_id);
+
         let mut buffer = vec![0u8; 9];
 
+        trace!("Calling p40_id_get_name({}, buffer, {})", self.id_fd, buffer.len());
         let c_result = unsafe {
             p40_id_get_name(
                 self.id_fd,
@@ -144,21 +210,27 @@ impl PCIe40IdEndpoint {
                 buffer.len(),
             )
         };
+        trace!("p40_id_get_name returned {}", c_result);
 
         if c_result < 0 {
+            error!("Failed to get device name for device {}", self.device_id);
             return Err(PCIe40IdEndpointError::DeviceReadError {
                 device_id: self.device_id,
             });
         }
 
         let device_name = self.c_buffer_to_string(&buffer)?;
+        debug!("Device name for device {}: '{}'", self.device_id, device_name);
 
         Ok(device_name)
     }
 
     pub fn unique_device_name(&mut self) -> Result<String, PCIe40IdEndpointError> {
+        debug!("Getting unique device name for device {}", self.device_id);
+
         let mut buffer = vec![0u8; 9];
 
+        trace!("Calling p40_id_get_name_unique({}, buffer, {})", self.id_fd, buffer.len());
         let c_result = unsafe {
             p40_id_get_name_unique(
                 self.id_fd,
@@ -166,32 +238,44 @@ impl PCIe40IdEndpoint {
                 buffer.len(),
             )
         };
+        trace!("p40_id_get_name_unique returned {}", c_result);
 
         if c_result < 0 {
+            error!("Failed to get unique device name for device {}", self.device_id);
             return Err(PCIe40IdEndpointError::DeviceReadError {
                 device_id: self.device_id,
             });
         }
 
         let unique_device_name = self.c_buffer_to_string(&buffer)?;
+        debug!("Unique device name for device {}: '{}'", self.device_id, unique_device_name);
 
         Ok(unique_device_name)
     }
 
     pub fn set_name(&mut self, device_name: &str) -> Result<(), PCIe40IdEndpointError> {
+        debug!("Setting device name for device {} to '{}'", self.device_id, device_name);
+
         let c_str_name =
-            CString::new(device_name).or(Err(PCIe40IdEndpointError::InvalidDeviceName {
-                device_name: device_name.to_string(),
+            CString::new(device_name).or(Err({
+                error!("Invalid device name: '{}'", device_name);
+                PCIe40IdEndpointError::InvalidDeviceName {
+                    device_name: device_name.to_string(),
+                }
             }))?;
 
+        trace!("Calling p40_id_set_name({}, \"{}\")", self.id_fd, device_name);
         let c_result = unsafe { p40_id_set_name(self.id_fd, c_str_name.as_ptr()) };
+        trace!("p40_id_set_name returned {}", c_result);
 
         if c_result < 0 {
+            error!("Failed to set device name for device {} to '{}'", self.device_id, device_name);
             return Err(PCIe40IdEndpointError::DeviceWriteError {
                 device_id: self.device_id,
             });
         }
 
+        info!("Successfully set device name for device {} to '{}'", self.device_id, device_name);
         Ok(())
     }
 
@@ -208,14 +292,22 @@ impl PCIe40IdEndpoint {
 
 impl PCIe40IdEndpoint {
     fn c_buffer_to_string(&self, buffer: &[u8]) -> Result<String, PCIe40IdEndpointError> {
+        trace!("Converting C buffer to string");
+
         let null_pos =
             buffer
                 .iter()
                 .position(|&c| c == 0)
-                .ok_or(PCIe40IdEndpointError::DeviceReadError {
-                    device_id: self.device_id,
+                .ok_or({
+                    error!("Failed to find null terminator in buffer for device {}", self.device_id);
+                    PCIe40IdEndpointError::DeviceReadError {
+                        device_id: self.device_id,
+                    }
                 })?;
 
-        Ok(String::from_utf8_lossy(&buffer[0..null_pos]).to_string())
+        let result = String::from_utf8_lossy(&buffer[0..null_pos]).to_string();
+        trace!("Converted buffer to string: '{}'", result);
+
+        Ok(result)
     }
 }
