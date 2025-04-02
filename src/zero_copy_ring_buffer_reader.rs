@@ -110,11 +110,15 @@ pub trait ZeroCopyRingBufferReader {
 
     /*
     // TODO: DOCUMENT
-    fn read_multiple<T: ZeroCopyRingBufferReadable>(
+    fn typed_multiple_read<T: ZeroCopyRingBufferReadable<Self>>(
         &mut self,
         num: usize,
-    ) -> Result<TypedDataGuard<Self, Vec<T>>, ZeroCopyRingBufferReaderError> {
-        Ok((0..num).into_iter().map(|_| self.read()).collect())
+    ) -> Result<TypedDataGuard<Self, [&T]>, ZeroCopyRingBufferReaderError> {
+        let
+        Ok(TypedDataGuard::new(
+            self,
+            &(0..num).into_iter().map(|_| self.typed_read()).collect(),
+        ))
     }
     */
 }
