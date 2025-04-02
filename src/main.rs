@@ -5,6 +5,7 @@ use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use env_logger::{Env, Builder};
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40_rs::test_readable::TestReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
@@ -23,9 +24,15 @@ fn main() {
 
     let buffer = stream_guard.map_buffer().unwrap();
     let mut reader = PCIe40Reader::new(buffer).unwrap();
+
+    /*
     println!("Reader data: {:x?}", &*reader.data());
     println!("Loaded {} bytes", reader.load_data(64).unwrap());
     println!("Reader data: {:x?}", &*reader.data());
     println!("Discarded {} bytes", reader.discard_data(32).unwrap());
     println!("Reader data: {:x?}", &*reader.data());
+    */
+
+    let test_data = reader.typed_read::<TestReadable>().unwrap();
+    println!("Read TestReadable: {:?}", &*test_data);
 }

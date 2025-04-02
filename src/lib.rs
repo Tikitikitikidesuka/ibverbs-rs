@@ -11,3 +11,5 @@ pub mod pcie40_stream;
 
 pub mod zero_copy_ring_buffer_reader;
 pub mod pcie40_reader;
+
+pub mod test_readable;
