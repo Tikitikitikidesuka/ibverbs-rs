@@ -774,10 +774,9 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
 
         if offset < 0 {
             error!(
-                "Failed to get buffer read offset for stream {} on device {}: invalid offset {}",
+                "Failed to get buffer read offset for stream {} on device {}",
                 self.stream_guard.stream_handle.stream_type,
                 self.stream_guard.stream_handle.device_id,
-                offset
             );
             Err(PCIe40StreamError::StreamReadError {
                 device_id: self.stream_guard.stream_handle.device_id,
@@ -807,10 +806,9 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
 
         if offset < 0 {
             error!(
-                "Failed to get buffer write offset for stream {} on device {}: invalid offset {}",
+                "Failed to get buffer write offset for stream {} on device {}",
                 self.stream_guard.stream_handle.stream_type,
                 self.stream_guard.stream_handle.device_id,
-                offset
             );
             Err(PCIe40StreamError::StreamReadError {
                 device_id: self.stream_guard.stream_handle.device_id,
@@ -820,6 +818,36 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
         } else {
             debug!(
                 "Buffer write offset for stream {:?} on device {}: {}",
+                self.stream_guard.stream_handle.stream_type,
+                self.stream_guard.stream_handle.device_id,
+                offset
+            );
+            Ok(offset as usize)
+        }
+    }
+
+    pub fn move_read_offset(&mut self, offset: usize) -> Result<usize, PCIe40StreamError> {
+        trace!(
+            "Moving buffer read offset for stream {} on device {}",
+            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
+        );
+
+        let offset = unsafe { p40_stream_free_host_buf_bytes(self.stream_guard.stream_handle.stream_fd, offset) };
+
+        if offset < 0 {
+            error!(
+                "Failed to move buffer read offset for stream {} on device {}",
+                self.stream_guard.stream_handle.stream_type,
+                self.stream_guard.stream_handle.device_id,
+            );
+            Err(PCIe40StreamError::StreamWriteError {
+                device_id: self.stream_guard.stream_handle.device_id,
+                stream_type: self.stream_guard.stream_handle.stream_type,
+                info: "Unable to move buffer read offset".to_string(),
+            })
+        } else {
+            debug!(
+                "Buffer read offset for stream {} on device {} moved {} bytes",
                 self.stream_guard.stream_handle.stream_type,
                 self.stream_guard.stream_handle.device_id,
                 offset
