@@ -1,9 +1,7 @@
 use crate::bindings::*;
-use crate::pcie40_id::{PCIe40IdManager, PCIe40IdManagerError};
-use crate::zero_copy_reader::{DataGuard, ZeroCopyRingBufferReader};
-use log::{debug, error, info, trace, warn};
+use crate::pcie40_id::PCIe40IdManager;
+use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
-use std::ptr::slice_from_raw_parts;
 use std::slice;
 use thiserror::Error;
 
@@ -729,12 +727,10 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             stream_guard.stream_handle.device_id
         );
 
-        let mut mapped_buffer = Self {
+        Ok(Self {
             stream_guard,
             buffer,
-        };
-
-        Ok(mapped_buffer)
+        })
     }
 
     fn unmap_buffer(&mut self) {
@@ -773,7 +769,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
         );
 
         let offset = unsafe {
-            p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd) as usize
+            p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd)
         };
 
         if offset < 0 {
@@ -795,7 +791,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
                 self.stream_guard.stream_handle.device_id,
                 offset
             );
-            Ok(offset)
+            Ok(offset as usize)
         }
     }
 
@@ -806,7 +802,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
         );
 
         let offset = unsafe {
-            p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd) as usize
+            p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd)
         };
 
         if offset < 0 {
@@ -828,7 +824,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
                 self.stream_guard.stream_handle.device_id,
                 offset
             );
-            Ok(offset)
+            Ok(offset as usize)
         }
     }
 }

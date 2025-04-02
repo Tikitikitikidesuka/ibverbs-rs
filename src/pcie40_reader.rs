@@ -21,6 +21,10 @@ impl<'a> ZeroCopyRingBufferReader for PCIe40Reader<'a> {
         todo!()
     }
 
+    fn load_all_data(&self) -> usize {
+        todo!()
+    }
+
     fn discard_data(&mut self, num_bytes: usize) -> usize {
         todo!()
     }

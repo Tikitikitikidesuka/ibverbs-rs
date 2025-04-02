@@ -1,5 +1,5 @@
 use crate::bindings::*;
-use crate::pcie40_id::{PCIe40IdManager, PCIe40IdManagerError};
+use crate::pcie40_id::PCIe40IdManager;
 use thiserror::Error;
 
 pub struct PCIe40ControllerManager {}
