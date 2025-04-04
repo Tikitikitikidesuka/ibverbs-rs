@@ -102,6 +102,14 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> DataGuard<'a, R> {
     pub fn new(reader: &'a R, data: &'a [u8]) -> Self {
         DataGuard { data, reader }
     }
+
+    pub fn data_ref(&self) -> &'a [u8] {
+        self.data
+    }
+
+    pub fn reader_ref(&self) -> &'a R {
+        self.reader
+    }
 }
 
 // TODO: DOCUMENT

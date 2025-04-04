@@ -34,7 +34,12 @@ fn main() {
     println!("Reader data: {:x?}", &*reader.data());
     */
 
+    /*
     let i32_list_guard = I32List::load(&mut reader).unwrap();
     let i32_list = I32List::cast(&i32_list_guard).unwrap();
     println!("Read TestReadable: {:?}", i32_list);
+    */
+
+    let i32_list = I32List::read(&mut reader).unwrap();
+    println!("Read TestReadable: {:?}", &*i32_list);
 }

@@ -84,7 +84,10 @@ impl<'buf, R> ZeroCopyRingBufferReadable<'buf, R> for I32List<'buf>
 where
     R: ZeroCopyRingBufferReader,
 {
-    fn load(reader: &'buf mut R) -> Result<DataGuard<'buf, R>, ZeroCopyRingBufferReadableError> {
+    fn load(
+        reader: &'buf mut R,
+        offset: usize,
+    ) -> Result<(DataGuard<'buf, R>, usize), ZeroCopyRingBufferReadableError> {
         // Check if there is enough data for the header
         const HEADER_SIZE: usize = size_of::<I32ListHeader>();
         let available_data = reader.data().len();
@@ -116,7 +119,7 @@ where
         let total_size = HEADER_SIZE + element_count * size_of::<i32>();
 
         // Drop the temporary data access before potentially loading more
-        drop(temp_data);
+        //drop(temp_data);
 
         // Ensure we have enough data for the entire list
         let available_data = reader.data().len();
@@ -138,12 +141,12 @@ where
         }
 
         // Get the final data guard with all required data
-        Ok(reader.data())
+        Ok((reader.data(), total_size))
     }
 
-    fn cast(data_guard: &'buf DataGuard<'buf, R>) -> Result<I32List<'buf>, ZeroCopyRingBufferReadableError> {
+    fn cast(data: &'buf [u8], offset: usize) -> Result<Self, ZeroCopyRingBufferReadableError> {
         // Unwrap not good >:(
-        Ok(Self::new(data_guard).unwrap())
+        Ok(Self::new(data).unwrap())
     }
 
     /*
