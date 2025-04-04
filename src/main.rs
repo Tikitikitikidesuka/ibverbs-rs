@@ -3,6 +3,7 @@ use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use env_logger::{Env, Builder};
+use pcie40_rs::demo_reader::DemoReader;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::test_readable::I32List;
@@ -23,8 +24,17 @@ fn main() {
     println!("Stream configured... Press any key to proceed");
     stdin().read(&mut [0]).unwrap();
 
+    /*
     let buffer = stream_guard.map_buffer().unwrap();
     let mut reader = PCIe40Reader::new(buffer).unwrap();
+    */
+
+    let demo_data: Vec<u8> = [0, 4, 0, 1, 2, 3, 1, 5, 4, 5, 6, 7, 8]
+        .iter()
+        .flat_map(|value: &i32| value.to_le_bytes())
+        .collect();
+
+    let mut reader = DemoReader::new(demo_data);
 
     /*
     println!("Reader data: {:x?}", &*reader.data());
@@ -40,6 +50,7 @@ fn main() {
     println!("Read TestReadable: {:?}", i32_list);
     */
 
-    let i32_list = I32List::read(&mut reader).unwrap();
-    println!("Read TestReadable: {:?}", &*i32_list);
+    let i32_list = I32List::read_multiple(&mut reader, 2).unwrap();
+    println!("Read TestReadable 0: {}", i32_list[0]);
+    println!("Read TestReadable 1: {}", i32_list[1]);
 }

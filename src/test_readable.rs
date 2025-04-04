@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use crate::typed_zero_copy_ring_buffer_reader::{
     TypedDataGuard, TypedMultiDataGuard, ZeroCopyRingBufferReadable,
     ZeroCopyRingBufferReadableError, ensure_available_bytes,
@@ -22,6 +23,12 @@ pub struct I32List<'a> {
 struct I32ListHeader {
     list_id: i32,
     element_count: i32,
+}
+
+impl Display for I32List<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[ Id: {}, Count: {}, Elements: {:?} ]", self.list_id(), self.element_count(), self.elements())
+    }
 }
 
 impl<'a> I32List<'a> {
