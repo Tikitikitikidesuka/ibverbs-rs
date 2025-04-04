@@ -34,20 +34,6 @@ pub enum ZeroCopyRingBufferReaderError {
     ConnectionError(String),
 }
 
-#[derive(Debug, Error)]
-pub enum ZeroCopyRingBufferReaderTypedReadError {
-    #[error("{0}")]
-    ZeroCopyRingBufferReaderError(ZeroCopyRingBufferReaderError),
-
-    #[error(
-        "Missing data: Type is {type_size} bytes long. Only {available_data} bytes available in the buffer"
-    )]
-    MissingData {
-        type_size: usize,
-        available_data: usize,
-    },
-}
-
 /// Safe wrapper around a zero-copy ring buffer reader implementation.
 ///
 /// This struct enforces the safety contract that data references cannot
@@ -99,28 +85,6 @@ pub trait ZeroCopyRingBufferReader {
     ///
     /// The number of bytes that were discarded
     fn discard_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
-
-    // TODO: DOCUMENT
-    fn typed_read<T: ZeroCopyRingBufferReadable<Self>>(
-        &mut self,
-    ) -> Result<TypedDataGuard<Self, T>, ZeroCopyRingBufferReaderTypedReadError> {
-        let typed_data = T::read(self)?;
-        Ok(TypedDataGuard::new(self, typed_data))
-    }
-
-    /*
-    // TODO: DOCUMENT
-    fn typed_multiple_read<T: ZeroCopyRingBufferReadable<Self>>(
-        &mut self,
-        num: usize,
-    ) -> Result<TypedDataGuard<Self, [&T]>, ZeroCopyRingBufferReaderError> {
-        let
-        Ok(TypedDataGuard::new(
-            self,
-            &(0..num).into_iter().map(|_| self.typed_read()).collect(),
-        ))
-    }
-    */
 }
 
 /// A guard that provides safe access to data from a `ZeroCopyRingBufferReader`.
@@ -148,32 +112,4 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
     fn deref(&self) -> &Self::Target {
         self.data
     }
-}
-
-// TODO: DOCUMENT
-pub struct TypedDataGuard<'a, R: ZeroCopyRingBufferReader + ?Sized, T: 'a> {
-    typed_data: &'a T,
-    reader: &'a R,
-}
-
-// TODO: DOCUMENT
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T: 'a> TypedDataGuard<'a, R, T> {
-    pub fn new(reader: &'a R, typed_data: &'a T) -> Self {
-        TypedDataGuard { typed_data, reader }
-    }
-}
-
-// TODO: DOCUMENT
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T: 'a> Deref for TypedDataGuard<'a, R, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.typed_data
-    }
-}
-
-// TODO: DOCUMENT
-pub trait ZeroCopyRingBufferReadable<R: ZeroCopyRingBufferReader + ?Sized> {
-    // TODO: DOCUMENT
-    fn read<'a>(buffer: &mut R) -> Result<&'a Self, ZeroCopyRingBufferReaderTypedReadError>;
 }

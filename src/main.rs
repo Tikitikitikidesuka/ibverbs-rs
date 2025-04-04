@@ -5,7 +5,8 @@ use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use env_logger::{Env, Builder};
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::test_readable::TestReadable;
+use pcie40_rs::test_readable::I32List;
+use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
@@ -33,6 +34,7 @@ fn main() {
     println!("Reader data: {:x?}", &*reader.data());
     */
 
-    let test_data = reader.typed_read::<TestReadable>().unwrap();
-    println!("Read TestReadable: {:?}", &*test_data);
+    let i32_list_guard = I32List::load(&mut reader).unwrap();
+    let i32_list = I32List::cast(&i32_list_guard).unwrap();
+    println!("Read TestReadable: {:?}", i32_list);
 }
