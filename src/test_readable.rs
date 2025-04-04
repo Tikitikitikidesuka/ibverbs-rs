@@ -1,6 +1,6 @@
 use crate::typed_zero_copy_ring_buffer_reader::{
     TypedDataGuard, TypedMultiDataGuard, ZeroCopyRingBufferReadable,
-    ZeroCopyRingBufferReadableError,
+    ZeroCopyRingBufferReadableError, ensure_available_bytes,
 };
 use crate::zero_copy_ring_buffer_reader::{DataGuard, ZeroCopyRingBufferReader};
 use std::mem::size_of;
@@ -85,136 +85,39 @@ where
     R: ZeroCopyRingBufferReader,
 {
     fn load(
-        reader: &'buf mut R,
+        reader: &mut R,
         offset: usize,
-    ) -> Result<(DataGuard<'buf, R>, usize), ZeroCopyRingBufferReadableError> {
+    ) -> Result<(DataGuard<R>, usize), ZeroCopyRingBufferReadableError> {
         // Check if there is enough data for the header
         const HEADER_SIZE: usize = size_of::<I32ListHeader>();
-        let available_data = reader.data().len();
 
-        if available_data < HEADER_SIZE {
-            // Try to load more data
-            let loaded_data = reader
-                .load_data(HEADER_SIZE - available_data)
-                .map_err(|error| {
-                    ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-                })?;
-
-            // Check if we have enough data now
-            if available_data + loaded_data < HEADER_SIZE {
-                return Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                    required_data: HEADER_SIZE,
-                    available_data: available_data + loaded_data,
-                });
-            }
-        }
+        // Ensure there are enough bytes available starting from the offset
+        ensure_available_bytes(reader, offset + HEADER_SIZE)?;
 
         // Get temporary access to data to read the header
         let temp_data = reader.data();
-        let header_data = &temp_data[..HEADER_SIZE];
+        let header_data = &temp_data[offset..(offset + HEADER_SIZE)];
         let header = unsafe { &*(header_data.as_ptr() as *const I32ListHeader) };
 
         // Calculate the total size needed based on header information
         let element_count = header.element_count as usize;
         let total_size = HEADER_SIZE + element_count * size_of::<i32>();
 
-        // Drop the temporary data access before potentially loading more
-        //drop(temp_data);
-
-        // Ensure we have enough data for the entire list
-        let available_data = reader.data().len();
-        if available_data < total_size {
-            // Try to load more data
-            let loaded_data = reader
-                .load_data(total_size - available_data)
-                .map_err(|error| {
-                    ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-                })?;
-
-            // Check if we have enough data now
-            if available_data + loaded_data < total_size {
-                return Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                    required_data: total_size,
-                    available_data: available_data + loaded_data,
-                });
-            }
-        }
+        // Ensure enough data for the entire list starting from the offset
+        ensure_available_bytes(reader, offset + total_size)?;
 
         // Get the final data guard with all required data
         Ok((reader.data(), total_size))
     }
 
-    fn cast(data: &'buf [u8], offset: usize) -> Result<Self, ZeroCopyRingBufferReadableError> {
-        // Unwrap not good >:(
-        Ok(Self::new(data).unwrap())
+    fn cast(data: &'buf [u8]) -> Result<Self, ZeroCopyRingBufferReadableError> {
+        Self::new(data).ok_or(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
+            required_data: size_of::<I32ListHeader>(),
+            available_data: data.len(),
+        })
     }
 
     /*
-    fn read(
-        reader: &'buf mut R,
-    ) -> Result<(DataGuard<'buf, R>, Self), ZeroCopyRingBufferReadableError> {
-        // Check if there is enough data for the header
-        const HEADER_SIZE: usize = size_of::<I32ListHeader>();
-        let available_data = reader.data().len();
-
-        if available_data < HEADER_SIZE {
-            // Try to load more data
-            let loaded_data = reader
-                .load_data(HEADER_SIZE - available_data)
-                .map_err(|error| {
-                    ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-                })?;
-
-            // Check if we have enough data now
-            if available_data + loaded_data < HEADER_SIZE {
-                return Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                    required_data: HEADER_SIZE,
-                    available_data: available_data + loaded_data,
-                });
-            }
-        }
-
-        // Get temporary access to data to read the header
-        let temp_data = reader.data();
-        let header_data = &temp_data[..HEADER_SIZE];
-        let header = unsafe { &*(header_data.as_ptr() as *const I32ListHeader) };
-
-        // Calculate the total size needed based on header information
-        let element_count = header.element_count as usize;
-        let total_size = HEADER_SIZE + element_count * size_of::<i32>();
-
-        // Drop the temporary data access before potentially loading more
-        drop(temp_data);
-
-        // Ensure we have enough data for the entire list
-        let available_data = reader.data().len();
-        if available_data < total_size {
-            // Try to load more data
-            let loaded_data = reader
-                .load_data(total_size - available_data)
-                .map_err(|error| {
-                    ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-                })?;
-
-            // Check if we have enough data now
-            if available_data + loaded_data < total_size {
-                return Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                    required_data: total_size,
-                    available_data: available_data + loaded_data,
-                });
-            }
-        }
-
-        // Get the final data guard with all required data
-        let data_guard = reader.data();
-
-        // Create the I32List that references the buffer data
-        let list = I32List { data: &data_guard[..total_size] };
-
-        // Return the TypedDataGuard that owns the I32List wrapper
-        Ok((data_guard, list))
-    }
-
     fn read_multiple(
         reader: &'buf mut R,
         count: usize,

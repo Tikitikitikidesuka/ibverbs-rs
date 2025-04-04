@@ -36,26 +36,51 @@ fn read(reader) {
 }
  */
 
-pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>:
-    Sized
-{
+/// Helper function to guarantee the buffer has at least `required_bytes` available
+/// Useful for many `ZeroCopyRingBufferReadable` implementations
+pub fn ensure_available_bytes<R: ZeroCopyRingBufferReader + ?Sized>(
+    reader: &mut R,
+    required_bytes: usize,
+) -> Result<(), ZeroCopyRingBufferReadableError> {
+    let available_data = reader.data().len();
+
+    if available_data < required_bytes {
+        // Try to load more data
+        let loaded_data = reader
+            .load_data(required_bytes - available_data)
+            .map_err(|error| {
+                ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+            })?;
+
+        // Check if we have enough data now
+        if available_data + loaded_data < required_bytes {
+            Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
+                required_data: required_bytes,
+                available_data: available_data + loaded_data,
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>: Sized {
     /// Finds a T typed struct's data in the reader's buffer.
     /// It assumes the first byte of the struct is at offset on the buffer from the read_pointer.
     /// Loads more data if necessary. Returns the size of the loaded struct.
     fn load(
-        reader: &'buf mut R,
+        reader: &mut R,
         offset: usize,
-    ) -> Result<(DataGuard<'buf, R>, usize), ZeroCopyRingBufferReadableError>;
+    ) -> Result<(DataGuard<R>, usize), ZeroCopyRingBufferReadableError>;
 
-    /// Returns a reference to a T typed struct interpreting the data on the input DataGuard
-    /// starting from the byte at offset from the start of the DataGuard.
-    fn cast(data: &'buf [u8], offset: usize) -> Result<Self, ZeroCopyRingBufferReadableError>;
+    /// Returns a reference to a T typed struct interpreting the data
+    fn cast(data: &'buf [u8]) -> Result<Self, ZeroCopyRingBufferReadableError>;
 
     fn read(
         reader: &'buf mut R,
     ) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
         let (data_guard, data_length) = Self::load(reader, 0)?;
-        let typed_data = Self::cast(&data_guard.data_ref()[..data_length], 0)?;
+        let typed_data = Self::cast(&data_guard.data_ref()[..data_length])?;
         Ok(TypedDataGuard::new(data_guard, typed_data))
     }
 
@@ -73,7 +98,8 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
                     if let ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
                         required_data,
                         available_data,
-                    } = error {
+                    } = error
+                    {
                         ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
                             required_data: total_size + required_data,
                             available_data: available_data + available_data,
@@ -97,10 +123,8 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
         let mut current_offset = 0;
 
         for size in sizes {
-            let element = Self::cast(
-                &data_guard.data_ref()[current_offset..current_offset + size],
-                0,
-            )?;
+            let element =
+                Self::cast(&data_guard.data_ref()[current_offset..current_offset + size])?;
             elements.push(element);
             current_offset += size;
         }
