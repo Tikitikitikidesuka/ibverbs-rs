@@ -1,3 +1,4 @@
+use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadableError::NotEnoughDataAvailable;
 use crate::zero_copy_ring_buffer_reader::{
     DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
@@ -76,6 +77,9 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
     /// Returns a reference to a T typed struct interpreting the data
     fn cast(data: &'buf [u8]) -> Result<Self, ZeroCopyRingBufferReadableError>;
 
+    /// Returns the byte length of the struct. Mainly used to know how much data to discard from the reader.
+    fn byte_len(&self) -> usize;
+
     fn read(
         reader: &'buf mut R,
     ) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
@@ -131,6 +135,48 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
 
         // Create and return the TypedMultiDataGuard
         Ok(TypedMultiDataGuard::new(data_guard, elements))
+    }
+
+    fn discard(
+        reader: &'buf mut R,
+        data: TypedDataGuard<'buf, R, Self>,
+    ) -> Result<(), ZeroCopyRingBufferReadableError> {
+        let data_length = data.byte_len();
+        drop(data); // Release the guard on the reader
+
+        let discarded_data_length = reader.discard_data(data_length).map_err(|error| {
+            ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+        })?;
+
+        if discarded_data_length != data_length {
+            Err(NotEnoughDataAvailable {
+                required_data: data_length,
+                available_data: discarded_data_length,
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn discard_multiple(
+        reader: &'buf mut R,
+        data: TypedMultiDataGuard<'buf, R, Self>,
+    ) -> Result<(), ZeroCopyRingBufferReadableError> {
+        let data_length = data.iter().fold(0, |acc, item| acc + item.byte_len());
+        drop(data); // Release the guard on the reader
+
+        let discarded_data_length = reader.discard_data(data_length).map_err(|error| {
+            ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+        })?;
+
+        if discarded_data_length != data_length {
+            Err(NotEnoughDataAvailable {
+                required_data: data_length,
+                available_data: discarded_data_length,
+            })?;
+        }
+
+        Ok(())
     }
 }
 

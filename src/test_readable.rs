@@ -32,8 +32,7 @@ impl Display for I32List<'_> {
 }
 
 impl<'a> I32List<'a> {
-    // Change to return an owned I32List instead of a reference
-    pub fn new(data: &'a [u8]) -> Option<Self> {
+    pub fn from_data(data: &'a [u8]) -> Option<Self> {
         // Check if there's enough data for at least the header
         if data.len() < size_of::<I32ListHeader>() {
             return None;
@@ -118,87 +117,13 @@ where
     }
 
     fn cast(data: &'buf [u8]) -> Result<Self, ZeroCopyRingBufferReadableError> {
-        Self::new(data).ok_or(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
+        Self::from_data(data).ok_or(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
             required_data: size_of::<I32ListHeader>(),
             available_data: data.len(),
         })
     }
 
-    /*
-    fn read_multiple(
-        reader: &'buf mut R,
-        count: usize,
-    ) -> Result<TypedMultiDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
-        todo!()
-    }
-
-    fn extend_read_multiple(
-        reader: &'buf mut R,
-        total_count: usize,
-        existing_guard: TypedMultiDataGuard<'buf, R, Self>,
-    ) -> Result<TypedMultiDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
-        todo!()
-    }
-    */
-}
-
-/*
-impl<'a, R: ZeroCopyRingBufferReader> ZeroCopyRingBufferReadable<'a, R> for TestReadable<'a> {
-    fn read(buffer: &'a mut R) -> Result<(Self, DataGuard<'a, R>), ZeroCopyRingBufferReaderTypedReadError>
-    where
-        Self: 'a
-    {
-        let available_data = buffer.data().len();
-
-        if available_data < size_of::<TestReadableHeader>() {
-            let missing_data = size_of::<Self>() - available_data;
-            buffer.load_data(missing_data).map_err(|error| {
-                ZeroCopyRingBufferReaderTypedReadError::ZeroCopyRingBufferReaderError(error)
-            })?;
-        }
-
-        let available_data = buffer.data().len();
-
-        if available_data < size_of::<TestReadableHeader>() {
-            Err(ZeroCopyRingBufferReaderTypedReadError::MissingData {
-                type_size: size_of::<TestReadableHeader>(),
-                available_data,
-            })?;
-        }
-
-        let header_data = &buffer.data()[..size_of::<Self>()];
-        let test_header = unsafe { &*(header_data.as_ptr() as *const TestReadableHeader) };
-
-        // Since the pcie40 produces non TestReadable data the data size will be assumed to be 4
-        let body_data_len = 4_usize;
-
-        let available_data = buffer.data().len() - size_of::<TestReadableHeader>();
-
-        if available_data < body_data_len {
-            let missing_data = size_of::<Self>() - available_data;
-            buffer.load_data(missing_data).map_err(|error| {
-                ZeroCopyRingBufferReaderTypedReadError::ZeroCopyRingBufferReaderError(error)
-            })?;
-        }
-
-        let available_data = buffer.data().len() - size_of::<TestReadableHeader>();
-
-        if available_data < body_data_len {
-            Err(ZeroCopyRingBufferReaderTypedReadError::MissingData {
-                type_size: body_data_len,
-                available_data,
-            })?;
-        }
-
-        let data_guard = buffer.data();
-        let body_data = &data_guard[size_of::<TestReadableHeader>()..];
-
-        let test_readable = TestReadable {
-            header: test_header,
-            data: body_data,
-        };
-
-        Ok((test_readable, data_guard))
+    fn byte_len(&self) -> usize {
+        self.data.len()
     }
 }
-*/
