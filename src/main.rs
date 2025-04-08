@@ -3,11 +3,11 @@ use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use env_logger::{Env, Builder};
-use pcie40_rs::demo_reader::DemoReader;
+use pcie40_rs::demo_reader::{DemoZeroCopyRingBufferReader};
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::test_readable::I32List;
-use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
+//use pcie40_rs::test_readable::I32List;
+//use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
@@ -29,20 +29,28 @@ fn main() {
     let mut reader = PCIe40Reader::new(buffer).unwrap();
     */
 
+    /*
+    let demo_data: Vec<u8> = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    let mut reader = DemoZeroCopyRingBufferReader::new(demo_data);
+
+    println!("Reader data: {:?}", &*reader.data());
+    println!("Loaded {} bytes", reader.load_data(4).unwrap());
+    println!("Reader data: {:?}", &*reader.data());
+    //println!("Discarded {} bytes", reader.discard_data(32).unwrap());
+    println!("Discarding loaded data...");
+    reader.data().discard().unwrap();
+    println!("Reader data: {:?}", &*reader.data());
+    println!("Loaded {} bytes", reader.load_data(4).unwrap());
+    println!("Reader data: {:?}", &*reader.data());
+    */
+
     let demo_data: Vec<u8> = [0, 4, 0, 1, 2, 3, 1, 5, 4, 5, 6, 7, 8]
         .iter()
         .flat_map(|value: &i32| value.to_le_bytes())
         .collect();
 
-    let mut reader = DemoReader::new(demo_data);
-
-    /*
-    println!("Reader data: {:x?}", &*reader.data());
-    println!("Loaded {} bytes", reader.load_data(64).unwrap());
-    println!("Reader data: {:x?}", &*reader.data());
-    println!("Discarded {} bytes", reader.discard_data(32).unwrap());
-    println!("Reader data: {:x?}", &*reader.data());
-    */
+    let mut reader = DemoZeroCopyRingBufferReader::new(demo_data);
 
     /*
     let i32_list_guard = I32List::load(&mut reader).unwrap();

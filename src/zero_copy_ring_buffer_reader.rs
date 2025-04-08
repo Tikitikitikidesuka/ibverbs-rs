@@ -40,12 +40,23 @@ pub enum ZeroCopyRingBufferReaderError {
 /// be invalidated while in use. It achieves this by returning a `DataGuard`
 /// that ties the data lifetime to the reader's borrow.
 pub trait ZeroCopyRingBufferReader {
+    // TODO: DOCUMENT
+    // This is here to make users implement a method to access the data since a reference to it cannot be
+    // held inside of the guard. That was done before but then the guard cannot hold a mutable to the reader
+    // easily. CHECK THIS COMMIT AND THE PREVIOUS ONE OUT BECAUSE BIG CHANGES DUE TO THE MUT REQUIREMENT FOR
+    // THE GUARD DISCARD METHOD
+    // This is unsafe because the reader is not locked while the data reference exists, data of this reference could
+    // be discarded while holding the reference and therefore be invalid. When guarded by a DataGuard this is solved.
+    unsafe fn unsafe_data(&self) -> &[u8];
+
     /// Returns a guarded reference to the current valid data.
     ///
     /// The returned `DataGuard` must borrow the reader, preventing any
     /// modification operations until the guard is dropped. This ensures
     /// the data reference remains valid for its entire lifetime.
-    fn data(&self) -> DataGuard<Self>;
+    fn data(&mut self) -> DataGuard<Self> {
+        DataGuard::new(self)
+    }
 
     /// Advances the loaded data pointer num_bytes or until the write pointer if reached,
     /// marking new data as available.
@@ -93,21 +104,36 @@ pub trait ZeroCopyRingBufferReader {
 /// and a reference to the valid data. This ensures that the data reference
 /// remains valid for the entire lifetime of the guard.
 pub struct DataGuard<'a, R: ZeroCopyRingBufferReader + ?Sized> {
-    data: &'a [u8],
-    reader: &'a R,
+    reader: &'a mut R,
 }
 
 // TODO: DOCUMENT
 impl<'a, R: ZeroCopyRingBufferReader + ?Sized> DataGuard<'a, R> {
-    pub fn new(reader: &'a R, data: &'a [u8]) -> Self {
-        DataGuard { data, reader }
+    pub fn new(reader: &'a mut R) -> Self {
+        DataGuard { reader }
     }
 
-    pub fn data_ref(&self) -> &'a [u8] {
-        self.data
+    pub fn discard(self) -> Result<(), ZeroCopyRingBufferReaderError> {
+        let data_length = unsafe { self.reader.unsafe_data().len() };
+        let discarded_length = self.reader.discard_data(data_length)?;
+
+        if data_length != discarded_length {
+            unreachable!(
+                "When calling `discard` on a DataGuard its data is supposed to be guaranteed on the buffer...\n\
+                This error implies an erroneous implementation of the reader because {data_length}\
+                were supposed to be discarded but only {discarded_length} were available to discard.\n\
+                Please contact the developers for further assistance."
+            );
+        }
+
+        Ok(())
     }
 
-    pub fn reader_ref(&self) -> &'a R {
+    pub fn data_ref(&self) -> &[u8] {
+        unsafe { self.reader.unsafe_data() }
+    }
+
+    pub fn reader_ref(&self) -> &R {
         self.reader
     }
 }
@@ -118,6 +144,6 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.data
+        unsafe { self.reader.unsafe_data() }
     }
 }

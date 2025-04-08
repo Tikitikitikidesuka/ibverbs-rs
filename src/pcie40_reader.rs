@@ -24,13 +24,11 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
 }
 
 impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
-    fn data(&self) -> DataGuard<Self> {
+    unsafe fn unsafe_data(&self) -> &[u8] {
         trace!("Accessing data with read offset {} and loaded data offset {}",
                self.read_offset, self.loaded_data_offset);
 
-        let data = unsafe { self.mapped_buffer.data() };
-
-        DataGuard::new(self, &data[self.read_offset..self.loaded_data_offset])
+        &self.mapped_buffer.data()[self.read_offset..self.loaded_data_offset]
     }
 
     fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
