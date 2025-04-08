@@ -122,8 +122,4 @@ where
             available_data: data.len(),
         })
     }
-
-    fn byte_len(&self) -> usize {
-        self.data.len()
-    }
 }

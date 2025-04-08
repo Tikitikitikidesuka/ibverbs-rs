@@ -18,24 +18,14 @@ pub enum ZeroCopyRingBufferReadableError {
         required_data: usize,
         available_data: usize,
     },
+
+    #[error(
+        "Improperly formatted data: {message}"
+    )]
+    ImproperlyFormattedData {
+        message: String,
+    }
 }
-
-/* The read method failed because I was returning a struct with a dataguard and an attribute referencing it.
-Rust does not allow self referencing structs. A solution to it would be decomposing the DataGuard and having its components raw
-This might be the next best solution:
-
-TypedDataGuard:
-- reader reference
-- typed data struct
-
-Then I can keep the load and cast methods for the user to implement and a defualt read one that uses them both and combines their output:
-fn read(reader) {
-    let data_guard = load(reader);
-    ... actually I think this will also count as self referencing
-    ... or as in dropping the data_guard. I should try and see
-    ... Gonna have lunch now hehe
-}
- */
 
 /// Helper function to guarantee the buffer has at least `required_bytes` available
 /// Useful for many `ZeroCopyRingBufferReadable` implementations
@@ -70,24 +60,21 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
     /// It assumes the first byte of the struct is at offset on the buffer from the read_pointer.
     /// Loads more data if necessary. Returns the size of the loaded struct.
     fn load(
-        reader: &mut R,
+        reader: &'buf mut R,
         offset: usize,
-    ) -> Result<(DataGuard<R>, usize), ZeroCopyRingBufferReadableError>;
+    ) -> Result<(DataGuard<'buf, R>, usize), ZeroCopyRingBufferReadableError>;
 
     /// Returns a reference to a T typed struct interpreting the data
     fn cast(data: &'buf [u8]) -> Result<Self, ZeroCopyRingBufferReadableError>;
-
-    /// Returns the byte length of the struct. Mainly used to know how much data to discard from the reader.
-    fn byte_len(&self) -> usize;
 
     fn read(
         reader: &'buf mut R,
     ) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
         let (data_guard, data_length) = Self::load(reader, 0)?;
-        let typed_data = Self::cast(&data_guard.data_ref()[..data_length])?;
-        Ok(TypedDataGuard::new(data_guard, typed_data))
+        Ok(TypedDataGuard::new(data_guard)?)
     }
 
+    /*
     fn read_multiple(
         reader: &'buf mut R,
         count: usize,
@@ -136,7 +123,9 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
         // Create and return the TypedMultiDataGuard
         Ok(TypedMultiDataGuard::new(data_guard, elements))
     }
+    */
 
+    /*
     fn discard(
         reader: &'buf mut R,
         data: TypedDataGuard<'buf, R, Self>,
@@ -178,27 +167,58 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
 
         Ok(())
     }
+    */
 }
 
-pub struct TypedDataGuard<'a, R: ZeroCopyRingBufferReader + ?Sized, T> {
+pub struct TypedDataGuard<'a, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<R>> {
     data_guard: DataGuard<'a, R>,
-    typed_data: T,
+    _phantom_type: PhantomData<T>,
 }
 
+/*
 pub struct TypedMultiDataGuard<'a, R: ZeroCopyRingBufferReader + ?Sized, T> {
     data_guard: DataGuard<'a, R>,
     typed_data: Vec<T>,
 }
+*/
 
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> TypedDataGuard<'a, R, T> {
-    pub fn new(data_guard: DataGuard<'a, R>, typed_data: T) -> Self {
-        Self {
+impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<R>> TypedDataGuard<'a, R, T> {
+    pub fn new(data_guard: DataGuard<'a, R>) -> Result<Self, ZeroCopyRingBufferReadableError> {
+        T::cast(data_guard.data_ref())?; // Ensure data is properly formated
+
+        Ok(Self {
             data_guard,
-            typed_data,
+            _phantom_type: PhantomData,
+        })
+    }
+
+    pub fn data_ref(&self) -> &T {
+        // Data is ensured to be properly formated on the `new` constructor but
+        // A reference to the cast version cannot be held since multiple references would
+        // be held to the data, one by the `DataGuard` and another from the cast data.
+        // This cannot be since the `DataGuard` holds a mutable reference.
+        // No need to check again, however. It should be impossible for it to not be correctly
+        // formated here so an `unreachable` block will be used.
+
+        match &T::cast(self.data_guard.data_ref()) {
+            Ok(typed_data) => {typed_data}
+            Err(_) => {
+                unreachable!("\
+                    Data should be guaranteed to be properly formatted when a `TypedDataGuard` is created.\n\
+                    It should be impossible to reach an error on impropper format here since it was checked previously \
+                    and the data is guaranteed not to change or be invalidated thanks to the `DataGuard`.\n\
+                    This is therefore an implementation error, please contact the developers.
+                ")
+            }
         }
+    }
+
+    pub fn reader_ref(&self) -> &R {
+        self.data_guard.reader_ref()
     }
 }
 
+/*
 impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> TypedMultiDataGuard<'a, R, T> {
     pub fn new(data_guard: DataGuard<'a, R>, typed_data: Vec<T>) -> Self {
         Self {
@@ -207,15 +227,17 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> TypedMultiDataGuard<'a, R, T> 
         }
     }
 }
+*/
 
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> Deref for TypedDataGuard<'a, R, T> {
+impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<R>> Deref for TypedDataGuard<'a, R, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.typed_data
+        self.data_ref()
     }
 }
 
+/*
 impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> Deref for TypedMultiDataGuard<'a, R, T> {
     type Target = [T];
 
@@ -223,3 +245,4 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized, T> Deref for TypedMultiDataGuard<
         self.typed_data.as_slice()
     }
 }
+*/

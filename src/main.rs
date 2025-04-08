@@ -6,6 +6,8 @@ use env_logger::{Env, Builder};
 use pcie40_rs::demo_reader::{DemoZeroCopyRingBufferReader};
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40_rs::test_readable::I32List;
+use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 //use pcie40_rs::test_readable::I32List;
 //use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
@@ -52,13 +54,13 @@ fn main() {
 
     let mut reader = DemoZeroCopyRingBufferReader::new(demo_data);
 
-    /*
     let i32_list_guard = I32List::load(&mut reader).unwrap();
-    let i32_list = I32List::cast(&i32_list_guard).unwrap();
+    let i32_list = I32List::cast(&*i32_list_guard).unwrap();
     println!("Read TestReadable: {:?}", i32_list);
-    */
 
+    /*
     let i32_list = I32List::read_multiple(&mut reader, 2).unwrap();
     println!("Read TestReadable 0: {}", i32_list[0]);
     println!("Read TestReadable 1: {}", i32_list[1]);
+    */
 }
