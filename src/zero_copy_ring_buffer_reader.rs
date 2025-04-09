@@ -25,6 +25,7 @@
 //! ## Example Usage
 //! TODO: ADD EXAMPLE USAGE
 
+use std::fmt::Debug;
 use std::ops::Deref;
 use thiserror::Error;
 
@@ -145,5 +146,13 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
 
     fn deref(&self) -> &Self::Target {
         self.data_ref()
+    }
+}
+
+impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Debug for DataGuard<'a, R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("DataGuard")
+            .field(&self.data_ref())
+            .finish()
     }
 }

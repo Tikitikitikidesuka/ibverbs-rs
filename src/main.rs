@@ -83,6 +83,7 @@ fn main() {
     let i32_list = I32ListRef::read_multiple(&mut reader, 2).unwrap();
     println!("Read TestReadable 0: {}", i32_list[0]);
     println!("Read TestReadable 1: {}", i32_list[1]);
+    println!("Read TestReadables: {:?}", i32_list.iter());
     println!("Discarding...");
     i32_list.discard().unwrap();
     println!("Loading 2 I32Lists...");
