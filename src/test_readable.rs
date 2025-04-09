@@ -1,9 +1,9 @@
-use std::fmt::Display;
 use crate::typed_zero_copy_ring_buffer_reader::{
-    TypedDataGuard, ZeroCopyRingBufferReadable,
-    ZeroCopyRingBufferReadableError, ensure_available_bytes,
+    TypedDataGuard, ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError,
+    ensure_available_bytes,
 };
 use crate::zero_copy_ring_buffer_reader::{DataGuard, ZeroCopyRingBufferReader};
+use std::fmt::{Debug, Display, Formatter};
 use std::mem::size_of;
 
 /*
@@ -13,7 +13,6 @@ TestReadable structure:
 - elements: [i32; element_count],
  */
 
-#[derive(Debug)]
 #[repr(C, packed)]
 pub struct I32ListRef<'a> {
     list_id: i32,
@@ -21,12 +20,6 @@ pub struct I32ListRef<'a> {
     // The elements field is not explicitly defined here
     // It will be accessed via pointer arithmetic
     _phantom: std::marker::PhantomData<&'a [u8]>,
-}
-
-impl<'a> Display for I32ListRef<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[ Id: {}, Count: {}, Elements: {:?} ]", self.list_id(), self.element_count(), self.elements())
-    }
 }
 
 impl<'a> I32ListRef<'a> {
@@ -72,10 +65,7 @@ impl<'buf, R> ZeroCopyRingBufferReadable<'buf, R> for I32ListRef<'buf>
 where
     R: ZeroCopyRingBufferReader,
 {
-    fn load(
-        reader: &mut R,
-        offset: usize,
-    ) -> Result<usize, ZeroCopyRingBufferReadableError> {
+    fn load(reader: &mut R, offset: usize) -> Result<usize, ZeroCopyRingBufferReadableError> {
         // Check if there is enough data for at least the header
         const HEADER_SIZE: usize = size_of::<I32ListRef<'_>>();
         ensure_available_bytes(reader, offset + HEADER_SIZE)?;
@@ -101,5 +91,33 @@ where
             required_data: size_of::<I32ListRef<'_>>(),
             available_data: data.len(),
         })
+    }
+}
+
+impl Debug for I32ListRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[Id: {}, Count: {}, Elements: {:?}]",
+            self.list_id(),
+            self.element_count(),
+            self.elements()
+        )
+    }
+}
+
+impl Display for I32ListRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "I32List(id={}, count={}, elements=[{}])",
+            self.list_id(),
+            self.element_count(),
+            self.elements()
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
     }
 }

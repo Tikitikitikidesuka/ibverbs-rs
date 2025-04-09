@@ -1,8 +1,7 @@
-use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadableError::NotEnoughDataAvailable;
 use crate::zero_copy_ring_buffer_reader::{
     DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, Index};
 use thiserror::Error;
@@ -199,7 +198,10 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
         })
     }
 
-    pub fn iter(&'buf self) -> TypedMultiDataGuardIter<'buf, R, T> {
+    pub fn iter<'a>(&'a self) -> TypedMultiDataGuardIter<'a, 'buf, R, T>
+    where
+        'buf: 'a, // 'buf outlives 'a
+    {
         TypedMultiDataGuardIter::new(self)
     }
 }
@@ -225,18 +227,19 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
 }
 
 pub struct TypedMultiDataGuardIter<
-    'buf,
+    'a,   // Lifetime of the reference to TypedMultiDataGuard
+    'buf, // Original 'buf lifetime
     R: ZeroCopyRingBufferReader + ?Sized,
     T: ZeroCopyRingBufferReadable<'buf, R>,
 > {
-    typed_multi_data_guard: &'buf TypedMultiDataGuard<'buf, R, T>,
+    typed_multi_data_guard: &'a TypedMultiDataGuard<'buf, R, T>,
     index: usize,
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
-    TypedMultiDataGuardIter<'buf, R, T>
+impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
+    TypedMultiDataGuardIter<'a, 'buf, R, T>
 {
-    pub fn new(typed_multi_data_guard: &'buf TypedMultiDataGuard<'buf, R, T>) -> Self {
+    pub fn new(typed_multi_data_guard: &'a TypedMultiDataGuard<'buf, R, T>) -> Self {
         Self {
             typed_multi_data_guard,
             index: 0,
@@ -244,14 +247,19 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>> Iterator
-    for TypedMultiDataGuardIter<'buf, R, T>
+impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
+    Iterator for TypedMultiDataGuardIter<'a, 'buf, R, T>
+where
+    'buf: 'a,
 {
-    type Item = &'buf T;
+    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.typed_multi_data_guard.data_guard.len() {
-            Some(self.typed_multi_data_guard.data_ref(self.index))
+        if self.index < self.typed_multi_data_guard.offsets.len() {
+            // Fixed this from data_guard.len()
+            let result = self.typed_multi_data_guard.data_ref(self.index);
+            self.index += 1;
+            Some(result)
         } else {
             None
         }
@@ -269,26 +277,86 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>> Debug
-    for TypedMultiDataGuard<'buf, R, T>
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Debug>
+    Debug for TypedMultiDataGuard<'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let formated_data = self.iter().collect::<Vec<_>>();
+
         f.debug_struct("TypedMultiDataGuard")
             .field("type", &std::any::type_name::<T>())
             .field("data_guard", &self.data_guard)
             .field("offsets", &self.offsets)
+            .field("typed_data", &formated_data.as_slice())
             .finish()
     }
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>> Debug
-    for TypedMultiDataGuardIter<'buf, R, T>
+impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Debug>
+    Debug for TypedMultiDataGuardIter<'a, 'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedMultiDataGuardIter")
             .field("type", &std::any::type_name::<T>())
             .field("index", &self.index)
             .field("typed_multi_data_guard", &self.typed_multi_data_guard)
+            .field("total_items", &self.typed_multi_data_guard.offsets.len())
             .finish()
     }
 }
+
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Display>
+    Display for TypedDataGuard<'buf, R, T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TypedDataGuard<{}>({})",
+            std::any::type_name::<T>(),
+            self.data_ref()
+        )
+    }
+}
+
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Display>
+    Display for TypedMultiDataGuard<'buf, R, T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Create a formatted string for all elements
+        let elements_str = self
+            .iter()
+            .map(|item| format!("{}", item))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        write!(
+            f,
+            "TypedMultiDataGuard<{}>[{}]([{}])",
+            std::any::type_name::<T>(),
+            self.offsets.len(),
+            elements_str
+        )
+    }
+}
+
+impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Display> Display
+for TypedMultiDataGuardIter<'a, 'buf, R, T>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let current_item = if self.index < self.typed_multi_data_guard.offsets.len() {
+            format!("{}", self.typed_multi_data_guard.data_ref(self.index))
+        } else {
+            "end".to_string()
+        };
+
+        write!(
+            f,
+            "TypedMultiDataGuardIter<{}>[{}/{}]({})",
+            std::any::type_name::<T>(),
+            self.index,
+            self.typed_multi_data_guard.offsets.len(),
+            current_item
+        )
+    }
+}
+

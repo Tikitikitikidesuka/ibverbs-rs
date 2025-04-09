@@ -1,5 +1,7 @@
 use crate::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
-use crate::zero_copy_ring_buffer_reader::{DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError};
+use crate::zero_copy_ring_buffer_reader::{
+    DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
+};
 use log::{debug, error, info, trace};
 
 pub struct PCIe40Reader<'guard, 'buf> {
@@ -25,8 +27,10 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
 
 impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
     unsafe fn unsafe_data(&self) -> &[u8] {
-        trace!("Accessing data with read offset {} and loaded data offset {}",
-               self.read_offset, self.loaded_data_offset);
+        trace!(
+            "Accessing data with read offset {} and loaded data offset {}",
+            self.read_offset, self.loaded_data_offset
+        );
 
         unsafe { &self.mapped_buffer.data()[self.read_offset..self.loaded_data_offset] }
     }
@@ -40,8 +44,10 @@ impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
 
         self.loaded_data_offset += loaded_bytes;
 
-        debug!("Loaded {} bytes, new loaded data offset: {}",
-               loaded_bytes, self.loaded_data_offset);
+        debug!(
+            "Loaded {} bytes, new loaded data offset: {}",
+            loaded_bytes, self.loaded_data_offset
+        );
 
         Ok(loaded_bytes)
     }
@@ -53,8 +59,10 @@ impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
 
         self.loaded_data_offset += available_bytes;
 
-        debug!("Loaded {} bytes, new loaded data offset: {}",
-               available_bytes, self.loaded_data_offset);
+        debug!(
+            "Loaded {} bytes, new loaded data offset: {}",
+            available_bytes, self.loaded_data_offset
+        );
 
         Ok(available_bytes)
     }
@@ -96,9 +104,15 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
             ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
         })?;
 
-        let available = write_offset - read_offset;
-        trace!("Available bytes: {} (write offset: {}, read offset: {})",
-               available, write_offset, read_offset);
+        let available = if write_offset < read_offset {
+            0
+        } else {
+            write_offset - read_offset
+        };
+        trace!(
+            "Available bytes: {} (write offset: {}, read offset: {})",
+            available, write_offset, read_offset
+        );
 
         Ok(available)
     }
@@ -132,7 +146,10 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
         self.loaded_data_offset = std::cmp::max(self.read_offset, self.loaded_data_offset);
         trace!("Updated loaded data offset: {}", self.loaded_data_offset);
 
-        debug!("Successfully moved read offset by {} bytes", discarded_bytes);
+        debug!(
+            "Successfully moved read offset by {} bytes",
+            discarded_bytes
+        );
 
         Ok(discarded_bytes)
     }
