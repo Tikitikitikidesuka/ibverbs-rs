@@ -144,6 +144,6 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.reader.unsafe_data() }
+        self.data_ref()
     }
 }

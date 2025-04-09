@@ -1,13 +1,14 @@
-use std::io::{stdin, Read};
+use env_logger::{Builder, Env};
+use pcie40_rs::demo_reader::DemoZeroCopyRingBufferReader;
+use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40_stream::PCIe40StreamManager;
-use env_logger::{Env, Builder};
-use pcie40_rs::demo_reader::{DemoZeroCopyRingBufferReader};
-use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::test_readable::I32List;
+use pcie40_rs::pcie40_stream::PCIe40StreamManager;
+use pcie40_rs::test_readable::I32ListRef;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
+use std::io::{Read, stdin};
+use std::ops::Deref;
 //use pcie40_rs::test_readable::I32List;
 //use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
@@ -19,7 +20,9 @@ fn main() {
 
     let mut stream =
         PCIe40StreamManager::open_by_device_name("tdtel203_0", MainStream, MetaFormat).unwrap();
-    stream.set_raii_enable_state_close_mode(PreserveEnableState).unwrap();
+    stream
+        .set_raii_enable_state_close_mode(PreserveEnableState)
+        .unwrap();
 
     let mut stream_guard = stream.lock().unwrap();
 
@@ -47,20 +50,43 @@ fn main() {
     println!("Reader data: {:?}", &*reader.data());
     */
 
-    let demo_data: Vec<u8> = [0, 4, 0, 1, 2, 3, 1, 5, 4, 5, 6, 7, 8]
-        .iter()
-        .flat_map(|value: &i32| value.to_le_bytes())
-        .collect();
+    let demo_data: Vec<u8> = [
+        vec![0, 4, 0, 1, 2, 3],
+        vec![1, 5, 4, 5, 6, 7, 8],
+        vec![2, 3, 9, 10, 11],
+        vec![3, 9, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+    ]
+    .concat()
+    .iter()
+    .flat_map(|value: &i32| value.to_le_bytes())
+    .collect();
 
     let mut reader = DemoZeroCopyRingBufferReader::new(demo_data);
 
-    let i32_list_guard = I32List::load(&mut reader).unwrap();
-    let i32_list = I32List::cast(&*i32_list_guard).unwrap();
-    println!("Read TestReadable: {:?}", i32_list);
+    /*
+    let i32_list_guard = I32ListRef::load(&mut reader).unwrap();
+    let i32_list = I32ListRef::cast(&*i32_list_guard).unwrap();
+    */
 
     /*
-    let i32_list = I32List::read_multiple(&mut reader, 2).unwrap();
+    let i32_list = I32ListRef::read(&mut reader).unwrap();
+    println!("Read TestReadable: {:?}", i32_list.deref());
+    let i32_list = I32ListRef::read(&mut reader).unwrap();
+    println!("Read TestReadable: {:?}", i32_list.deref());
+    println!("Discarding...");
+    i32_list.discard().unwrap();
+    let i32_list = I32ListRef::read(&mut reader).unwrap();
+    println!("Read TestReadable: {:?}", i32_list.deref());
+    */
+
+    println!("Loading 2 I32Lists...");
+    let i32_list = I32ListRef::read_multiple(&mut reader, 2).unwrap();
     println!("Read TestReadable 0: {}", i32_list[0]);
     println!("Read TestReadable 1: {}", i32_list[1]);
-    */
+    println!("Discarding...");
+    i32_list.discard().unwrap();
+    println!("Loading 2 I32Lists...");
+    let i32_list = I32ListRef::read_multiple(&mut reader, 2).unwrap();
+    println!("Read TestReadable 0: {}", i32_list[0]);
+    println!("Read TestReadable 1: {}", i32_list[1]);
 }
