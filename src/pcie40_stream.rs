@@ -421,6 +421,17 @@ impl PCIe40Stream {
         );
         self.enable()?;
 
+        match self.stream_format {
+            PCIe40DAQStreamFormat::RawFormat => {
+                debug!("Setting meta enabled state to false");
+                self.set_meta_enabled_state(false)?
+            }
+            PCIe40DAQStreamFormat::MetaFormat => {
+                debug!("Setting meta enabled state to true");
+                self.set_meta_enabled_state(true)?
+            }
+        };
+
         trace!("Calling p40_stream_lock({})", self.stream_fd);
         let c_result = unsafe { p40_stream_lock(self.stream_fd) };
         trace!("p40_stream_lock returned {}", c_result);
@@ -450,6 +461,71 @@ impl PCIe40Stream {
                 stream_type: self.stream_type,
                 info: "Could not write lock".to_string(),
             })
+        }
+    }
+
+    fn set_meta_enabled_state(&mut self, enabled: bool) -> Result<(), PCIe40StreamError> {
+        debug!(
+            "{} meta sub-stream for stream {} on device {}",
+            if enabled { "Enabling" } else { "Disabling" },
+            self.stream_type,
+            self.device_id
+        );
+
+        trace!("Calling p40_stream_id_to_meta_mask({}, {:?})",
+            self.device_id,
+            self.stream_type
+        );
+        let meta_mask = unsafe {
+            p40_stream_id_to_meta_mask(
+                self.device_id,
+                self.stream_type.into(),
+            )
+        };
+        trace!("p40_stream_id_to_meta_mask returned {:#x}", meta_mask);
+        trace!("Meta mask: {:#x}", meta_mask);
+
+        let c_result = match enabled {
+            true => {
+                trace!("Calling p40_stream_enable_mask({}, {:#x})",
+                    self.meta_stream_fd,
+                    meta_mask
+                );
+                let result = unsafe { p40_stream_enable_mask(self.meta_stream_fd, meta_mask) };
+                trace!("p40_stream_enable_mask returned {}", result);
+                result
+            },
+            false => {
+                trace!("Calling p40_stream_disable_mask({}, {:#x})",
+                    self.meta_stream_fd,
+                    meta_mask
+                );
+                let result = unsafe { p40_stream_disable_mask(self.meta_stream_fd, meta_mask) };
+                trace!("p40_stream_disable_mask returned {}", result);
+                result
+            },
+        };
+
+        if c_result != 0 {
+            error!(
+                "Failed to {} meta bits for stream {} on device {}",
+                if enabled { "enable" } else { "disable" },
+                self.stream_type,
+                self.device_id
+            );
+            Err(PCIe40StreamError::StreamWriteError {
+                device_id: self.device_id,
+                stream_type: self.stream_type,
+                info: "Unable to write meta bits".to_string(),
+            })
+        } else {
+            debug!(
+                "Successfully {} meta bits for stream {} on device {}",
+                if enabled { "enabled" } else { "disabled" },
+                self.stream_type,
+                self.device_id
+            );
+            Ok(())
         }
     }
 
@@ -583,85 +659,10 @@ impl<'a> PCIe40StreamGuard<'a> {
             "Creating new PCIe40StreamGuard for stream {} on device {}",
             stream_handle.stream_type, stream_handle.device_id
         );
+
         let mut locked_stream = PCIe40StreamGuard { stream_handle };
 
-        match locked_stream.stream_handle.stream_format {
-            PCIe40DAQStreamFormat::RawFormat => {
-                debug!("Setting meta enabled state to false");
-                locked_stream.set_meta_enabled_state(false)?
-            }
-            PCIe40DAQStreamFormat::MetaFormat => {
-                debug!("Setting meta enabled state to true");
-                locked_stream.set_meta_enabled_state(true)?
-            }
-        };
-
         Ok(locked_stream)
-    }
-
-    fn set_meta_enabled_state(&mut self, enabled: bool) -> Result<(), PCIe40StreamError> {
-        debug!(
-            "{} meta sub-stream for stream {} on device {}",
-            if enabled { "Enabling" } else { "Disabling" },
-            self.stream_handle.stream_type,
-            self.stream_handle.device_id
-        );
-
-        trace!("Calling p40_stream_id_to_meta_mask({}, {:?})",
-            self.stream_handle.device_id,
-            self.stream_handle.stream_type
-        );
-        let meta_mask = unsafe {
-            p40_stream_id_to_meta_mask(
-                self.stream_handle.device_id,
-                self.stream_handle.stream_type.into(),
-            )
-        };
-        trace!("p40_stream_id_to_meta_mask returned {:#x}", meta_mask);
-        trace!("Meta mask: {:#x}", meta_mask);
-
-        let c_result = match enabled {
-            true => {
-                trace!("Calling p40_stream_enable_mask({}, {:#x})",
-                    self.stream_handle.meta_stream_fd,
-                    meta_mask
-                );
-                let result = unsafe { p40_stream_enable_mask(self.stream_handle.meta_stream_fd, meta_mask) };
-                trace!("p40_stream_enable_mask returned {}", result);
-                result
-            },
-            false => {
-                trace!("Calling p40_stream_disable_mask({}, {:#x})",
-                    self.stream_handle.meta_stream_fd,
-                    meta_mask
-                );
-                let result = unsafe { p40_stream_disable_mask(self.stream_handle.meta_stream_fd, meta_mask) };
-                trace!("p40_stream_disable_mask returned {}", result);
-                result
-            },
-        };
-
-        if c_result != 0 {
-            error!(
-                "Failed to {} meta bits for stream {} on device {}",
-                if enabled { "enable" } else { "disable" },
-                self.stream_handle.stream_type,
-                self.stream_handle.device_id
-            );
-            Err(PCIe40StreamError::StreamWriteError {
-                device_id: self.stream_handle.device_id,
-                stream_type: self.stream_handle.stream_type,
-                info: "Unable to write meta bits".to_string(),
-            })
-        } else {
-            debug!(
-                "Successfully {} meta bits for stream {} on device {}",
-                if enabled { "enabled" } else { "disabled" },
-                self.stream_handle.stream_type,
-                self.stream_handle.device_id
-            );
-            Ok(())
-        }
     }
 
     fn ref_unlock(&mut self) -> Result<(), PCIe40StreamError> {

@@ -15,7 +15,7 @@ use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
-    const DEVICE_NAME: &str = "tdtel201_0";
+    const DEVICE_NAME: &str = "tdtel202_0";
 
     Builder::from_env(Env::default().default_filter_or("trace"))
         .format_timestamp_secs()
