@@ -15,16 +15,19 @@ use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
+    const DEVICE_NAME: &str = "tdtel201_0";
+
     Builder::from_env(Env::default().default_filter_or("trace"))
         .format_timestamp_secs()
+        .format_file(true)
         .format_line_number(true)
         .init();
 
-    let mut controller = PCIe40ControllerManager::open_by_device_name("tdtel203_0").unwrap();
+    let mut controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
     println!("Meta alignment: {}", controller.meta_alignment().unwrap());
 
     let mut stream =
-        PCIe40StreamManager::open_by_device_name("tdtel203_0", MainStream, MetaFormat).unwrap();
+        PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
     stream
         .set_raii_enable_state_close_mode(PreserveEnableState)
         .unwrap();
@@ -104,7 +107,7 @@ fn main() {
     println!("Read TestReadable 1: {}", i32_list[1]);
     */
 
-    reader.load_data(1024).unwrap();
+    reader.load_data(32).unwrap();
     let data_guard = reader.data();
     println!("Loaded data: {:x?}", data_guard);
 }

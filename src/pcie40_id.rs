@@ -97,7 +97,7 @@ impl PCIe40IdManager {
         info!("Opening ID endpoint for device named '{}'", device_name);
 
         let c_str_device_name =
-            CString::new(device_name).or(Err({
+            CString::new(device_name).or_else(|_| Err({
                 error!("Invalid device name: '{}'", device_name);
                 PCIe40IdManagerError::DeviceNotFoundByName {
                     device_name: device_name.to_string(),
@@ -257,7 +257,7 @@ impl PCIe40IdEndpoint {
         debug!("Setting device name for device {} to '{}'", self.device_id, device_name);
 
         let c_str_name =
-            CString::new(device_name).or(Err({
+            CString::new(device_name).or_else(|_| Err({
                 error!("Invalid device name: '{}'", device_name);
                 PCIe40IdEndpointError::InvalidDeviceName {
                     device_name: device_name.to_string(),
