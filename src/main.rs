@@ -111,5 +111,5 @@ fn main() {
 
     println!("Loading an MFP...");
     let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
-    println!("Read MFP: {:?}", mfp);
+    println!("Read MFP: {:?}", mfp.data_ref());
 }
