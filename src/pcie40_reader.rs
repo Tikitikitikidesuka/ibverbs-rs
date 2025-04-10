@@ -1,3 +1,4 @@
+use crate::bindings::p40_stream_get_host_buf_bytes_used;
 use crate::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
 use crate::zero_copy_ring_buffer_reader::{
     DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
@@ -92,27 +93,11 @@ impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
 
 impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
     fn available_bytes(&self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        trace!("Calculating available bytes");
+        trace!("Getting available bytes");
 
-        let write_offset = self.mapped_buffer.get_write_offset().map_err(|error| {
-            error!("Failed to get write offset: {}", error);
+        let available = self.mapped_buffer.available_bytes().map_err(|error| {
             ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
         })?;
-
-        let read_offset = self.mapped_buffer.get_read_offset().map_err(|error| {
-            error!("Failed to get read offset: {}", error);
-            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
-        })?;
-
-        let available = if write_offset < read_offset {
-            0
-        } else {
-            write_offset - read_offset
-        };
-        trace!(
-            "Available bytes: {} (write offset: {}, read offset: {})",
-            available, write_offset, read_offset
-        );
 
         Ok(available)
     }
@@ -121,26 +106,20 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
         &mut self,
         num_bytes: usize,
     ) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        trace!("Moving read offset by {} bytes", num_bytes);
-
-        let write_offset = self.mapped_buffer.get_write_offset().map_err(|error| {
-            error!("Failed to get write offset: {}", error);
-            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
-        })?;
-
-        let move_bytes = std::cmp::min(write_offset, num_bytes);
-        debug!("Attempting to move read offset by {} bytes", move_bytes);
+        debug!("Attempting to move read offset by {} bytes", num_bytes);
 
         let discarded_bytes = self
             .mapped_buffer
-            .move_read_offset(move_bytes)
+            .move_read_offset(num_bytes)
             .map_err(|error| {
                 error!("Failed to move read offset: {}", error);
                 ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
             })?;
 
         trace!("Read offset before update: {}", self.read_offset);
-        self.read_offset += discarded_bytes;
+        self.read_offset = self.mapped_buffer.get_read_offset().map_err(|error| {
+            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
+        })?;
         trace!("Read offset after update: {}", self.read_offset);
 
         self.loaded_data_offset = std::cmp::max(self.read_offset, self.loaded_data_offset);

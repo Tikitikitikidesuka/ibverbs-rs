@@ -823,7 +823,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
 
     pub fn get_read_offset(&self) -> Result<usize, PCIe40StreamError> {
         trace!(
-            "Getting buffer read offset for stream {:?} on device {}",
+            "Getting buffer read offset for stream {} on device {}",
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
@@ -855,6 +855,38 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
         }
     }
 
+    pub fn available_bytes(&self) -> Result<usize, PCIe40StreamError> {
+        trace!(
+            "Getting available bytes of mapped buffer for stream {} on device {}",
+            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
+        );
+
+        trace!("Calling p40_stream_get_host_buf_read_off({})", self.stream_guard.stream_handle.stream_fd);
+        let available = unsafe { p40_stream_get_host_buf_bytes_used(self.stream_guard.stream_handle.stream_fd) };
+        trace!("p40_stream_get_host_buf_bytes_used returned {}", available);
+
+        if available < 0 {
+            error!(
+                "Failed to get available bytes on buffer for stream {} on device {}",
+                self.stream_guard.stream_handle.stream_type,
+                self.stream_guard.stream_handle.device_id
+            );
+            Err(PCIe40StreamError::StreamReadError {
+                device_id: self.stream_guard.stream_handle.device_id,
+                stream_type: self.stream_guard.stream_handle.stream_type,
+                info: "Unable to get available bytes on buffer".to_string(),
+            })
+        } else {
+            debug!(
+                "Available bytes for stream {} on device {}: {}",
+                self.stream_guard.stream_handle.stream_type,
+                self.stream_guard.stream_handle.device_id,
+                available
+            );
+            Ok(available as usize)
+        }
+    }
+
     pub fn get_write_offset(&self) -> Result<usize, PCIe40StreamError> {
         trace!(
             "Getting buffer write offset for stream {} on device {}",
@@ -880,7 +912,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
             })
         } else {
             debug!(
-                "Buffer write offset for stream {:?} on device {}: {}",
+                "Buffer write offset for stream {} on device {}: {}",
                 self.stream_guard.stream_handle.stream_type,
                 self.stream_guard.stream_handle.device_id,
                 offset
