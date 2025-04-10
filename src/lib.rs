@@ -1,9 +1,12 @@
-// Suppress warnings about non-standard naming in imported C bindings
-#[allow(non_camel_case_types)]
-#[allow(non_snake_case)]
-#[allow(non_upper_case_globals)]
+mod bindings {
+    // Suppress warnings about non-standard naming in imported C bindings and unused code
+    #![allow(non_camel_case_types)]
+    #![allow(non_snake_case)]
+    #![allow(non_upper_case_globals)]
+    #![allow(dead_code)]
 
-mod bindings;
+    include!("bindings.rs");
+}
 
 pub mod pcie40_id;
 pub mod pcie40_ctrl;
