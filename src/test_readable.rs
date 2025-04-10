@@ -23,7 +23,7 @@ pub struct I32ListRef<'a> {
 }
 
 impl<'a> I32ListRef<'a> {
-    pub fn from_data(data: &[u8]) -> Option<&Self> {
+    pub fn from_raw_bytes(data: &[u8]) -> Option<&Self> {
         // Check if there's enough data for at least the header
         if data.len() < size_of::<I32ListRef<'_>>() {
             return None;
@@ -87,7 +87,7 @@ where
     }
 
     fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
-        I32ListRef::from_data(data).ok_or(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
+        I32ListRef::from_raw_bytes(data).ok_or_else(|| ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
             required_data: size_of::<I32ListRef<'_>>(),
             available_data: data.len(),
         })

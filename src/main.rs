@@ -1,17 +1,13 @@
 use env_logger::{Builder, Env};
-use pcie40_rs::demo_reader::DemoZeroCopyRingBufferReader;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
-use pcie40_rs::test_readable::I32ListRef;
-use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use std::io::{Read, stdin};
-use std::ops::Deref;
+use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
-//use pcie40_rs::test_readable::I32List;
-//use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
+use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
@@ -34,10 +30,10 @@ fn main() {
 
     let mut stream_guard = stream.lock().unwrap();
     let mut reader = PCIe40Reader::new(stream_guard.map_buffer().unwrap()).unwrap();
-    println!("Discarding all data on the stream...");
-    reader.discard_all_data().unwrap();
+    //println!("\n\nDiscarding all data on the stream...\n\n");
+    //reader.discard_all_data().unwrap();
 
-    println!("Stream configured and flushed... Press any key to proceed");
+    println!("\n\nStream configured... Press any key to proceed\n");
     stdin().read(&mut [0]).unwrap();
 
     /*
@@ -107,7 +103,13 @@ fn main() {
     println!("Read TestReadable 1: {}", i32_list[1]);
     */
 
+    /*
     reader.load_data(32).unwrap();
     let data_guard = reader.data();
     println!("Loaded data: {:x?}", data_guard);
+    */
+
+    println!("Loading an MFP...");
+    let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
+    println!("Read MFP: {:?}", mfp);
 }
