@@ -2,8 +2,9 @@ use crate::bindings::*;
 use crate::pcie40_id::PCIe40IdManager;
 use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
-use std::slice;
+use std::{ptr, slice};
 use thiserror::Error;
+use crate::pcie40_stream::PCIe40DAQStreamType::MainStream;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PCIe40DAQStreamType {
@@ -163,7 +164,7 @@ impl PCIe40StreamManager {
         debug!("Opened {} stream with fd {}", stream_type, stream_fd);
 
         trace!("Calling p40_stream_open({}, {:?}) for meta stream", device_id, stream_type);
-        let meta_stream_fd = unsafe { p40_stream_open(device_id, stream_type.into()) };
+        let meta_stream_fd = unsafe { p40_stream_open(device_id, P40_DAQ_STREAM_P40_DAQ_STREAM_META) };
         trace!("p40_stream_open for meta stream returned {}", meta_stream_fd);
 
         if meta_stream_fd < 0 {
@@ -199,10 +200,16 @@ impl PCIe40StreamManager {
             stream_endpoint.stream_type, stream_endpoint.device_id
         );
 
-        trace!("Calling p40_ctrl_close({})", stream_endpoint.stream_fd);
+        trace!("Calling p40_stream_close({}, MetaStream)", stream_endpoint.stream_fd);
         unsafe {
-            p40_ctrl_close(stream_endpoint.stream_fd);
+            p40_stream_close(stream_endpoint.stream_fd, ptr::null_mut());
         }
+
+        trace!("Calling p40_stream_close({}, {:?})", stream_endpoint.stream_fd, stream_endpoint.stream_type);
+        unsafe {
+            p40_stream_close(stream_endpoint.stream_fd, ptr::null_mut());
+        }
+
         debug!("Closed stream fd {}", stream_endpoint.stream_fd);
     }
 }
