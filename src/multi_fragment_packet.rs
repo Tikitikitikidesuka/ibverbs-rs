@@ -3,7 +3,7 @@ use crate::typed_zero_copy_ring_buffer_reader::{
 };
 use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
-use std::ops::Index;
+use std::slice;
 use thiserror::Error;
 
 const HEADER_SIZE: usize = size_of::<MultiFragmentPacketRef<'_>>();
@@ -13,8 +13,8 @@ const MAGIC_BYTES: u16 = 0x40CE;
 pub struct MultiFragmentPacketRef<'a> {
     magic: u16,
     fragment_count: u16,
-    packet_size: u16,
-    event_id: u32,
+    packet_size: u32,
+    event_id: u64,
     source_id: u16,
     align: u8,
     fragment_version: u8,
@@ -27,6 +27,7 @@ pub struct MultiFragmentPacketRef<'a> {
 type FragmentType = u8;
 type FragmentSize = u16;
 
+#[derive(PartialEq, Eq)]
 pub struct Fragment<'a> {
     fragment_type: FragmentType,
     fragment_size: FragmentSize,
@@ -97,11 +98,11 @@ impl<'a> MultiFragmentPacketRef<'a> {
         self.fragment_count
     }
 
-    pub fn packet_size(&self) -> u16 {
+    pub fn packet_size(&self) -> u32 {
         self.packet_size
     }
 
-    pub fn event_id(&self) -> u32 {
+    pub fn event_id(&self) -> u64 {
         self.event_id
     }
 
@@ -137,62 +138,86 @@ impl<'a> MultiFragmentPacketRef<'a> {
         }
     }
 
+    /// No random access, O(n)
     pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
-        // TODO: FRAGMENTS ARE NOT OF THE SAME SIZE, DUMMY!
-        // TODO: YOU GET TO REDO THIS PART TOMORROW >:(
-        // TODO: FROM ME TO MYSELF <3
-        todo!()
-        if index < self.fragment_count() as usize {
-            let fragment_data_ptr = unsafe { self.fragment_data_ptr().add(index) };
-            let fragment_size = self.fragment_size(index)?;
-            Some(unsafe { std::slice::from_raw_parts(fragment_data_ptr, fragment_size as usize) })
-        } else {
-            None
-        }
+        Some(self.iter().nth(index)?.data)
     }
 
+    /// No random access, O(n)
     pub fn fragment(&self, index: usize) -> Option<Fragment> {
-        if index < self.fragment_count() as usize {
-            Some(Fragment {
-                fragment_type: self.fragment_type(index)?,
-                fragment_size: self.fragment_size(index)?,
-                data: self.fragment_data(index)?,
-            })
-        } else {
-            None
-        }
+        self.iter().nth(index)
     }
 
-    pub fn fragment_iter(&self) -> MultiFragmentPacketRefIter {
+    pub fn iter(&self) -> MultiFragmentPacketRefIter {
         MultiFragmentPacketRefIter {
             packet: self,
+            offset: 0,
             index: 0,
         }
     }
 
+    pub fn raw_packet_data(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(
+                (self as *const Self) as *const u8,
+                self.packet_size as usize,
+            )
+        }
+    }
+
     unsafe fn fragment_type_ptr(&self) -> *const FragmentType {
-        unsafe { (self as *const Self).add(HEADER_SIZE) as *const FragmentType }
+        unsafe { ((self as *const Self) as *const u8).add(HEADER_SIZE) as *const FragmentType }
     }
 
     unsafe fn fragment_size_ptr(&self) -> *const FragmentSize {
         let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
+        let aligned_fragment_types_size = Self::round_up_to_pow2_exp(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe {
-            (self as *const Self).add(HEADER_SIZE + fragment_types_size) as *const FragmentSize
+            (self.fragment_type_ptr() as *const u8).add(aligned_fragment_types_size)
+                as *const FragmentSize
         }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
-        let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<FragmentSize>();
-        unsafe {
-            (self as *const Self).add(HEADER_SIZE + fragment_types_size + fragment_sizes_size)
-                as *const u8
-        }
+        let aligned_fragment_sizes_size = Self::round_up_to_pow2_exp(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
+    }
+
+    fn round_up_to_pow2_exp(size: usize, exponent: u8) -> usize {
+        // Step 1: Calculate alignment value (2^exponent)
+        // Example: for exponent=3, alignment=8 (binary 1000)
+        let alignment = 1 << exponent;
+
+        // Step 2: Create a bit mask with all bits below the alignment bit set to 1
+        // Example: for alignment=8, mask=7 (binary 0111)
+        let mask = alignment - 1;
+
+        // Step 3: Add the mask to the size to ensure we reach at least the next multiple
+        // - If size is already aligned: we'll exceed it slightly but not reach next multiple
+        // - If size is not aligned: this pushes us to at least the next multiple
+        // Example: for size=10, mask=3 (alignment=4), size+mask=13
+        let size_plus_mask = size + mask;
+
+        // Step 4: Create an inverted mask that has 1s in all positions where
+        // we want to keep bits (alignment bit and higher)
+        // Example: for mask=3 (binary 0011), inverted_mask=~3 (binary ...1111100)
+        let inverted_mask = !mask;
+
+        // Step 5: Apply the inverted mask to zero out all bits below the alignment bit
+        // This effectively rounds down to the nearest multiple of alignment
+        // But since we added the mask in step 3, we're actually rounding up
+        // Example: for size_plus_mask=13 (binary 1101), inverted_mask=...1111100
+        //          13 & ...1111100 = 12 (binary 1100)
+        let rounded_up = size_plus_mask & inverted_mask;
+
+        rounded_up
     }
 }
 
 struct MultiFragmentPacketRefIter<'a> {
     packet: &'a MultiFragmentPacketRef<'a>,
+    offset: usize,
     index: usize,
 }
 
@@ -200,7 +225,29 @@ impl<'a> Iterator for MultiFragmentPacketRefIter<'a> {
     type Item = Fragment<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.packet.fragment(self.index)
+        let fragment_type = self.packet.fragment_type(self.index)?;
+        let fragment_size = self.packet.fragment_size(self.index)?;
+
+        let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
+        let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
+
+        self.offset += MultiFragmentPacketRef::round_up_to_pow2_exp(
+            fragment_size as usize,
+            self.packet.align(),
+        );
+        self.index += 1;
+
+        Some(Fragment {
+            fragment_type,
+            fragment_size,
+            data,
+        })
+    }
+}
+
+impl<'a> ExactSizeIterator for MultiFragmentPacketRefIter<'a> {
+    fn len(&self) -> usize {
+        self.packet.fragment_count() as usize
     }
 }
 
@@ -307,5 +354,234 @@ impl<'a> Display for Fragment<'a> {
             "Fragment[type={}, size={}]",
             self.fragment_type, self.fragment_size
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn demo_multi_fragment_packet_data() -> Vec<u8> {
+        [
+            vec![0xCE, 0x40],                           // Magic (0xCE40)
+            vec![5, 0],                                 // Fragment count (5)
+            vec![64, 0, 0, 0],                          // Packet size (64)
+            vec![1, 0, 0, 0, 0, 0, 0, 0],               //Event id (1)
+            vec![1, 0],                                 // Source id (1)
+            vec![3],                                    // Align (2^3)
+            vec![1],                                    // Fragment version (1)
+            vec![0, 1, 2, 3, 4],                        // Fragment types [0, 1, 2, 3, 4]
+            vec![0, 0, 0],                              // Padding to 32 bits
+            vec![4, 0, 5, 0, 8, 0, 9, 0, 12, 0],        // Fragment sizes [4, 5, 8, 9, 12]
+            vec![0, 0],                                 // Padding to 32 bits
+            vec![0, 1, 2, 3],                           // Fragment 0
+            vec![0, 0, 0, 0],                           // Padding to 2^3
+            vec![0, 1, 2, 3, 4],                        // Fragment 1
+            vec![0, 0, 0],                              // Padding to 2^3
+            vec![0, 1, 2, 3, 4, 5, 6, 7],               // Fragment 2
+            vec![],                                     // Padding to 2^3
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8],            // Fragment 3
+            vec![0, 0, 0, 0, 0, 0, 0],                  // Padding to 2^3
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Fragment 4
+            vec![0, 0, 0, 0],                           // Padding to 2^3
+        ]
+        .concat()
+    }
+
+    #[test]
+    fn test_mfp_magic_packet_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.magic(), 0x40CE);
+    }
+
+    #[test]
+    fn test_mfp_fragment_count_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.fragment_count(), 5);
+    }
+
+    #[test]
+    fn test_mfp_packet_size_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.packet_size(), 64);
+    }
+
+    #[test]
+    fn test_mfp_event_id_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.event_id(), 1);
+    }
+
+    #[test]
+    fn test_mfp_source_id_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.source_id(), 1);
+    }
+
+    #[test]
+    fn test_mfp_align_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.align(), 3);
+    }
+
+    #[test]
+    fn test_mfp_fragment_version_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.fragment_version(), 1);
+    }
+
+    #[test]
+    fn test_mfp_fragment_type_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        // Check all fragment types
+        assert_eq!(mfp.fragment_type(0), Some(0));
+        assert_eq!(mfp.fragment_type(1), Some(1));
+        assert_eq!(mfp.fragment_type(2), Some(2));
+        assert_eq!(mfp.fragment_type(3), Some(3));
+        assert_eq!(mfp.fragment_type(4), Some(4));
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment_type(5), None);
+    }
+
+    #[test]
+    fn test_mfp_fragment_size_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        // Check all fragment sizes
+        assert_eq!(mfp.fragment_size(0), Some(4));
+        assert_eq!(mfp.fragment_size(1), Some(5));
+        assert_eq!(mfp.fragment_size(2), Some(8));
+        assert_eq!(mfp.fragment_size(3), Some(9));
+        assert_eq!(mfp.fragment_size(4), Some(12));
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment_size(5), None);
+    }
+
+    #[test]
+    fn test_mfp_fragment_data_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        // Check all fragment data
+        assert_eq!(mfp.fragment_data(0), Some(&[0, 1, 2, 3][..]));
+        assert_eq!(mfp.fragment_data(1), Some(&[0, 1, 2, 3, 4][..]));
+        assert_eq!(mfp.fragment_data(2), Some(&[0, 1, 2, 3, 4, 5, 6, 7][..]));
+        assert_eq!(mfp.fragment_data(3), Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8][..]));
+        assert_eq!(
+            mfp.fragment_data(4),
+            Some(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..])
+        );
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment_data(5), None);
+    }
+
+    #[test]
+    fn test_mfp_fragment_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        // Check first fragment using direct comparison
+        let expected_fragment0 = Fragment {
+            fragment_type: 0,
+            fragment_size: 4,
+            data: &[0, 1, 2, 3][..],
+        };
+        assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
+
+        // Check last fragment using direct comparison
+        let expected_fragment4 = Fragment {
+            fragment_type: 4,
+            fragment_size: 12,
+            data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+        };
+        assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment(5), None);
+    }
+
+    #[test]
+    fn test_mfp_iter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        let expected_fragments = vec![
+            Fragment {
+                fragment_type: 0,
+                fragment_size: 4,
+                data: &[0, 1, 2, 3][..],
+            },
+            Fragment {
+                fragment_type: 1,
+                fragment_size: 5,
+                data: &[0, 1, 2, 3, 4][..],
+            },
+            Fragment {
+                fragment_type: 2,
+                fragment_size: 8,
+                data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
+            },
+            Fragment {
+                fragment_type: 3,
+                fragment_size: 9,
+                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+            },
+            Fragment {
+                fragment_type: 4,
+                fragment_size: 12,
+                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            },
+        ];
+
+        let fragments: Vec<Fragment> = mfp.iter().collect();
+        assert_eq!(fragments, expected_fragments);
+    }
+
+    #[test]
+    fn test_exact_size_iterator() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        let iter = mfp.iter();
+        assert_eq!(iter.len(), 5);
+
+        // After consuming some elements, len() should still report total length
+        let mut iter = mfp.iter();
+        iter.next();
+        iter.next();
+        assert_eq!(iter.len(), 5);
+
+        // Confirm we can iterate through all elements
+        let mut count = 0;
+        let mut iter = mfp.iter();
+        while let Some(_) = iter.next() {
+            count += 1;
+        }
+        assert_eq!(count, 5);
+    }
+
+    #[test]
+    fn test_mfp_raw_packet_data() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacketRef::from_raw_bytes(&data).unwrap();
+
+        let raw_data = mfp.raw_packet_data();
+
+        // The raw packet data should be the same as the input data up to packet_size
+        assert_eq!(raw_data.len(), 64);
+        assert_eq!(raw_data, &data[0..64]);
     }
 }
