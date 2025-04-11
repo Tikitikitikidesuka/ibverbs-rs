@@ -97,6 +97,12 @@ pub trait ZeroCopyRingBufferReader {
     ///
     /// The number of bytes that were discarded
     fn discard_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
+
+    /// Returns the alignment of the ring buffer if there is Some(alignment_bytes)
+    /// Defaults to having no alignment
+    fn alignment(&mut self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
+        Ok(None)
+    }
 }
 
 /// A guard that provides safe access to data from a `ZeroCopyRingBufferReader`.
