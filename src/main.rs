@@ -123,14 +123,14 @@ fn main() {
 
     println!("Loading 2 MFPs...");
     let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
-    println!("Read MFPs: {}", mfps);
+    println!("Read MFPs: {:?}", mfps);
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
     println!("Discarding MFPs...");
     mfps.discard().unwrap();
     println!("Loading 2 MFPs...");
     let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
-    println!("Read MFPs: {}", mfps);
+    println!("Read MFPs: {:?}", mfps);
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
 }

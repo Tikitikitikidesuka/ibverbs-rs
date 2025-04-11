@@ -157,8 +157,30 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
 
 impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Debug for DataGuard<'a, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("DataGuard")
-            .field(&self.data_ref())
-            .finish()
+        const MAX_PREVIEW_BYTES: usize = 16;
+
+        let data = self.data_ref();
+        let data_len = data.len();
+
+        let preview_data = if data_len <= MAX_PREVIEW_BYTES {
+            data
+        } else {
+            &data[..MAX_PREVIEW_BYTES]
+        };
+
+        write!(f, "DataGuard {{ data: [")?;
+
+        for (i, byte) in preview_data.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{:#04x}", byte)?;
+        }
+
+        if data_len > MAX_PREVIEW_BYTES {
+            write!(f, ", ... ({} more bytes)", data_len - MAX_PREVIEW_BYTES)?;
+        }
+
+        write!(f, "] }}")
     }
 }
