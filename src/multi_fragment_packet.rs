@@ -1,11 +1,11 @@
 use crate::typed_zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes,
 };
+use crate::utils;
 use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
 use std::slice;
 use thiserror::Error;
-use crate::utils;
 
 const HEADER_SIZE: usize = size_of::<MultiFragmentPacketRef<'_>>();
 const MAGIC_BYTES: u16 = 0x40CE;
@@ -172,7 +172,7 @@ impl<'a> MultiFragmentPacketRef<'a> {
 
     unsafe fn fragment_size_ptr(&self) -> *const FragmentSize {
         let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
-        let aligned_fragment_types_size = utils::round_up_to_pow2_exp(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = utils::align_up_2pow(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe {
             (self.fragment_type_ptr() as *const u8).add(aligned_fragment_types_size)
                 as *const FragmentSize
@@ -181,7 +181,7 @@ impl<'a> MultiFragmentPacketRef<'a> {
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<FragmentSize>();
-        let aligned_fragment_sizes_size = utils::round_up_to_pow2_exp(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = utils::align_up_2pow(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
 }
@@ -202,10 +202,7 @@ impl<'a> Iterator for MultiFragmentPacketRefIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
-        self.offset += utils::round_up_to_pow2_exp(
-            fragment_size as usize,
-            self.packet.align(),
-        );
+        self.offset += utils::align_up_2pow(fragment_size as usize, self.packet.align());
         self.index += 1;
 
         Some(Fragment {
@@ -238,10 +235,22 @@ where
         // Get the total packet size from the header
         let packet_size = mfp.packet_size() as usize;
 
-        // Ensure enough data for the whole mfp
-        ensure_available_bytes(reader, offset + packet_size)?;
+        let (aligned_size, aligned_load) = if let Some(alignment) =
+            reader.alignment().map_err(|error| {
+                ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+            })? {
+            (
+                utils::align_up(packet_size, alignment),
+                utils::align_up(offset + packet_size, alignment),
+            )
+        } else {
+            (packet_size, offset + packet_size)
+        };
 
-        Ok(packet_size)
+        // Ensure enough data for the whole mfp
+        ensure_available_bytes(reader, aligned_load)?;
+
+        Ok(aligned_size)
     }
 
     fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {

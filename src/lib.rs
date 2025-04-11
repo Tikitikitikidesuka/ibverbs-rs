@@ -1,3 +1,5 @@
+extern crate core;
+
 mod bindings {
     // Suppress warnings about non-standard naming in imported C bindings and unused code
     #![allow(non_camel_case_types)]

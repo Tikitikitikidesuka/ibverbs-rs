@@ -22,7 +22,6 @@ fn main() {
 
     let mut controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
     let meta_alignment = controller.meta_alignment().unwrap();
-    let meta_alignment_exp = utils::alignment_exponent(meta_alignment).unwrap();
 
     let mut stream =
         PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
@@ -32,7 +31,7 @@ fn main() {
 
     let mut stream_guard = stream.lock().unwrap();
     let mut reader =
-        PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment_exp).unwrap();
+        PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment).unwrap();
     //println!("\n\nDiscarding all data on the stream...\n\n");
     //reader.discard_all_data().unwrap();
 
@@ -111,6 +110,7 @@ fn main() {
     println!("Loaded data: {:x?}", data_guard);
     */
 
+    /*
     println!("Loading an MFP...");
     let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
     println!("Read MFP: {:?}", mfp.data_ref());
@@ -119,4 +119,18 @@ fn main() {
     println!("Loading an MFP...");
     let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
     println!("Read MFP: {:?}", mfp.data_ref());
+    */
+
+    println!("Loading 2 MFPs...");
+    let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
+    println!("Read MFPs: {}", mfps);
+    println!("Read MFP[0]: {:?}", mfps[0]);
+    println!("Read MFP[1]: {:?}", mfps[1]);
+    println!("Discarding MFPs...");
+    mfps.discard().unwrap();
+    println!("Loading 2 MFPs...");
+    let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
+    println!("Read MFPs: {}", mfps);
+    println!("Read MFP[0]: {:?}", mfps[0]);
+    println!("Read MFP[1]: {:?}", mfps[1]);
 }
