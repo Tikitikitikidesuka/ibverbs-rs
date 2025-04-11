@@ -1,5 +1,6 @@
 use crate::bindings::p40_stream_get_host_buf_bytes_used;
 use crate::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
+use crate::utils;
 use crate::zero_copy_ring_buffer_reader::{
     DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
@@ -9,10 +10,14 @@ pub struct PCIe40Reader<'guard, 'buf> {
     mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
     loaded_data_offset: usize,
     read_offset: usize,
+    page_alignment_exp: u8,
 }
 
 impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
-    pub fn new(mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>) -> Result<Self, PCIe40StreamError> {
+    pub fn new(
+        mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
+        page_alignment_exp: u8,
+    ) -> Result<Self, PCIe40StreamError> {
         debug!("Creating new PCIe40Reader");
         let read_offset = mapped_buffer.get_read_offset()?;
 
@@ -22,6 +27,7 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
             mapped_buffer,
             loaded_data_offset: read_offset,
             read_offset,
+            page_alignment_exp,
         })
     }
 }
@@ -37,55 +43,104 @@ impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
     }
 
     fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading {} bytes of data", num_bytes);
+        let aligned_num_bytes = utils::round_up_to_pow2_exp(num_bytes, self.page_alignment_exp);
+
+        debug!(
+            "Loading {} bytes of data (requesting {} bytes aligned to 2^{})",
+            aligned_num_bytes, num_bytes, self.page_alignment_exp
+        );
 
         let available_bytes = self.available_bytes()?;
+        trace!("Total available bytes: {}", available_bytes);
 
-        let loaded_bytes = std::cmp::min(available_bytes, num_bytes);
+        let aligned_available_bytes =
+            utils::round_down_to_pow2_exp(available_bytes, self.page_alignment_exp);
+        debug!(
+            "Available aligned bytes: {} (aligned down to 2^{})",
+            aligned_available_bytes, self.page_alignment_exp
+        );
+
+        let loaded_bytes = std::cmp::min(aligned_available_bytes, aligned_num_bytes);
+        debug!(
+            "Will load {} bytes (min of available aligned and requested aligned)",
+            loaded_bytes
+        );
 
         self.loaded_data_offset += loaded_bytes;
 
         debug!(
-            "Loaded {} bytes, new loaded data offset: {}",
-            loaded_bytes, self.loaded_data_offset
+            "Loaded {} bytes, new loaded data offset: {} (previous: {})",
+            loaded_bytes,
+            self.loaded_data_offset,
+            self.loaded_data_offset - loaded_bytes
         );
 
         Ok(loaded_bytes)
     }
 
     fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading all available data");
-
-        let available_bytes = self.available_bytes()?;
-
-        self.loaded_data_offset += available_bytes;
-
         debug!(
-            "Loaded {} bytes, new loaded data offset: {}",
-            available_bytes, self.loaded_data_offset
+            "Loading all available data (with alignment 2^{})",
+            self.page_alignment_exp
         );
 
-        Ok(available_bytes)
+        let available_bytes = self.available_bytes()?;
+        trace!("Total available bytes: {}", available_bytes);
+
+        let aligned_available_bytes =
+            utils::round_down_to_pow2_exp(available_bytes, self.page_alignment_exp);
+        debug!(
+            "Available aligned bytes: {} (aligned down to 2^{})",
+            aligned_available_bytes, self.page_alignment_exp
+        );
+
+        self.loaded_data_offset += aligned_available_bytes;
+
+        debug!(
+            "Loaded {} bytes, new loaded data offset: {} (previous: {})",
+            aligned_available_bytes,
+            self.loaded_data_offset,
+            self.loaded_data_offset - aligned_available_bytes
+        );
+
+        Ok(aligned_available_bytes)
     }
 
     fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Discarding {} bytes of data", num_bytes);
+        let aligned_num_bytes = utils::round_up_to_pow2_exp(num_bytes, self.page_alignment_exp);
 
-        let discarded_bytes = self.move_read_offset(num_bytes)?;
+        debug!("Discarding {} bytes of data (requesting {} bytes aligned to 2^{})",
+           aligned_num_bytes, num_bytes, self.page_alignment_exp);
 
-        debug!("Discarded {} bytes", discarded_bytes);
+        let available_bytes = self.available_bytes()?;
+        trace!("Total available bytes: {}", available_bytes);
+
+        let aligned_available_bytes = utils::round_down_to_pow2_exp(available_bytes, self.page_alignment_exp);
+        trace!("Available aligned bytes: {}", aligned_available_bytes);
+
+        let bytes_to_discard = std::cmp::min(aligned_available_bytes, aligned_num_bytes);
+        debug!("Will discard {} bytes (min of available aligned and requested aligned)", bytes_to_discard);
+
+        let discarded_bytes = self.move_read_offset(bytes_to_discard)?;
+
+        debug!("Successfully discarded {} bytes", discarded_bytes);
 
         Ok(discarded_bytes)
     }
 
     fn discard_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Discarding all data");
+        debug!("Discarding all data (with alignment 2^{})", self.page_alignment_exp);
 
         let available_bytes = self.available_bytes()?;
+        trace!("Total available bytes: {}", available_bytes);
 
-        let discarded_bytes = self.move_read_offset(available_bytes)?;
+        let aligned_available_bytes = utils::round_down_to_pow2_exp(available_bytes, self.page_alignment_exp);
+        debug!("Will discard {} bytes (aligned down to 2^{})",
+           aligned_available_bytes, self.page_alignment_exp);
 
-        debug!("Discarded {} bytes", discarded_bytes);
+        let discarded_bytes = self.move_read_offset(aligned_available_bytes)?;
+
+        debug!("Successfully discarded {} bytes", discarded_bytes);
 
         Ok(discarded_bytes)
     }

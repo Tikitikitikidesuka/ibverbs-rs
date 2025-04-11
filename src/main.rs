@@ -1,14 +1,15 @@
 use env_logger::{Builder, Env};
+use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
+use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
-use std::io::{Read, stdin};
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
-use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
+use pcie40_rs::utils;
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
+use std::io::{Read, stdin};
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel202_0";
@@ -20,7 +21,8 @@ fn main() {
         .init();
 
     let mut controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
-    println!("Meta alignment: {}", controller.meta_alignment().unwrap());
+    let meta_alignment = controller.meta_alignment().unwrap();
+    let meta_alignment_exp = utils::alignment_exponent(meta_alignment).unwrap();
 
     let mut stream =
         PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
@@ -29,7 +31,8 @@ fn main() {
         .unwrap();
 
     let mut stream_guard = stream.lock().unwrap();
-    let mut reader = PCIe40Reader::new(stream_guard.map_buffer().unwrap()).unwrap();
+    let mut reader =
+        PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment_exp).unwrap();
     //println!("\n\nDiscarding all data on the stream...\n\n");
     //reader.discard_all_data().unwrap();
 
@@ -88,7 +91,6 @@ fn main() {
     println!("Read TestReadable: {:?}", i32_list.deref());
     */
 
-
     /*
     println!("Loading 2 I32Lists...");
     let i32_list = I32ListRef::read_multiple(&mut reader, 2).unwrap();
@@ -109,6 +111,11 @@ fn main() {
     println!("Loaded data: {:x?}", data_guard);
     */
 
+    println!("Loading an MFP...");
+    let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
+    println!("Read MFP: {:?}", mfp.data_ref());
+    println!("Discarding the MFP...");
+    mfp.discard().unwrap();
     println!("Loading an MFP...");
     let mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
     println!("Read MFP: {:?}", mfp.data_ref());

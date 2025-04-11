@@ -5,6 +5,7 @@ use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
 use std::slice;
 use thiserror::Error;
+use crate::utils;
 
 const HEADER_SIZE: usize = size_of::<MultiFragmentPacketRef<'_>>();
 const MAGIC_BYTES: u16 = 0x40CE;
@@ -171,7 +172,7 @@ impl<'a> MultiFragmentPacketRef<'a> {
 
     unsafe fn fragment_size_ptr(&self) -> *const FragmentSize {
         let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
-        let aligned_fragment_types_size = Self::round_up_to_pow2_exp(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = utils::round_up_to_pow2_exp(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe {
             (self.fragment_type_ptr() as *const u8).add(aligned_fragment_types_size)
                 as *const FragmentSize
@@ -180,38 +181,8 @@ impl<'a> MultiFragmentPacketRef<'a> {
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<FragmentSize>();
-        let aligned_fragment_sizes_size = Self::round_up_to_pow2_exp(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = utils::round_up_to_pow2_exp(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
-    }
-
-    fn round_up_to_pow2_exp(size: usize, exponent: u8) -> usize {
-        // Step 1: Calculate alignment value (2^exponent)
-        // Example: for exponent=3, alignment=8 (binary 1000)
-        let alignment = 1 << exponent;
-
-        // Step 2: Create a bit mask with all bits below the alignment bit set to 1
-        // Example: for alignment=8, mask=7 (binary 0111)
-        let mask = alignment - 1;
-
-        // Step 3: Add the mask to the size to ensure we reach at least the next multiple
-        // - If size is already aligned: we'll exceed it slightly but not reach next multiple
-        // - If size is not aligned: this pushes us to at least the next multiple
-        // Example: for size=10, mask=3 (alignment=4), size+mask=13
-        let size_plus_mask = size + mask;
-
-        // Step 4: Create an inverted mask that has 1s in all positions where
-        // we want to keep bits (alignment bit and higher)
-        // Example: for mask=3 (binary 0011), inverted_mask=~3 (binary ...1111100)
-        let inverted_mask = !mask;
-
-        // Step 5: Apply the inverted mask to zero out all bits below the alignment bit
-        // This effectively rounds down to the nearest multiple of alignment
-        // But since we added the mask in step 3, we're actually rounding up
-        // Example: for size_plus_mask=13 (binary 1101), inverted_mask=...1111100
-        //          13 & ...1111100 = 12 (binary 1100)
-        let rounded_up = size_plus_mask & inverted_mask;
-
-        rounded_up
     }
 }
 
@@ -231,7 +202,7 @@ impl<'a> Iterator for MultiFragmentPacketRefIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
-        self.offset += MultiFragmentPacketRef::round_up_to_pow2_exp(
+        self.offset += utils::round_up_to_pow2_exp(
             fragment_size as usize,
             self.packet.align(),
         );
