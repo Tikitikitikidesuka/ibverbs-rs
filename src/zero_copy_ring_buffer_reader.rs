@@ -25,6 +25,7 @@
 //! ## Example Usage
 //! TODO: ADD EXAMPLE USAGE
 
+use std::cmp::min;
 use std::fmt::Debug;
 use std::ops::Deref;
 use thiserror::Error;
@@ -134,6 +135,24 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> DataGuard<'a, R> {
         }
 
         Ok(())
+    }
+
+    // Guarantees discarding at num_bytes if at least num_bytes are guarded or the whole data guard otherwise
+    pub fn discard_count(self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
+        let guarded_length = unsafe { self.reader.unsafe_data().len() };
+        let expected_discarded_length = min(guarded_length, num_bytes);
+        let discarded_length = self.reader.discard_data(expected_discarded_length)?;
+
+        if discarded_length != expected_discarded_length {
+            unreachable!(
+                "When calling `discard_count` on a DataGuard its data is supposed to be guaranteed on the buffer...\n\
+                This error implies an erroneous implementation of the reader because {expected_discarded_length} \
+                were supposed to be discarded but only {discarded_length} were available to discard.\n\
+                Please contact the developers for further assistance."
+            );
+        }
+
+        Ok(discarded_length)
     }
 
     pub fn data_ref(&self) -> &[u8] {

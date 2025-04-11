@@ -65,8 +65,8 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
     fn read(
         reader: &'buf mut R,
     ) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
-        Self::load(reader, 0)?;
-        TypedDataGuard::new(reader.data())
+        let data_length = Self::load(reader, 0)?;
+        TypedDataGuard::new(reader.data(), data_length)
     }
 
     fn read_multiple(
@@ -82,7 +82,7 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
             offset += data_length;
         }
 
-        TypedMultiDataGuard::new(reader.data(), offsets)
+        TypedMultiDataGuard::new(reader.data(), offsets, offset)
     }
 }
 
@@ -92,6 +92,7 @@ pub struct TypedDataGuard<
     T: ZeroCopyRingBufferReadable<'buf, R>,
 > {
     data_guard: DataGuard<'buf, R>,
+    data_length: usize,
     _phantom_type: PhantomData<&'buf T>,
 }
 
@@ -101,6 +102,7 @@ pub struct TypedMultiDataGuard<
     T: ZeroCopyRingBufferReadable<'buf, R>,
 > {
     data_guard: DataGuard<'buf, R>,
+    data_length: usize,
     offsets: Vec<usize>,
     _phantom_type: PhantomData<&'buf T>,
 }
@@ -108,19 +110,24 @@ pub struct TypedMultiDataGuard<
 impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
     TypedDataGuard<'buf, R, T>
 {
-    pub fn new(data_guard: DataGuard<'buf, R>) -> Result<Self, ZeroCopyRingBufferReadableError> {
+    pub fn new(
+        data_guard: DataGuard<'buf, R>,
+        data_length: usize,
+    ) -> Result<Self, ZeroCopyRingBufferReadableError> {
         // Ensure data is properly formatted
         T::cast(&data_guard.data_ref())?;
 
         Ok(Self {
             data_guard,
+            data_length,
             _phantom_type: PhantomData,
         })
     }
 
     pub fn discard(self) -> Result<(), ZeroCopyRingBufferReadableError> {
         self.data_guard
-            .discard()
+            .discard_count(self.data_length)
+            .map(|_| ())
             .map_err(ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError)
     }
 
@@ -153,6 +160,7 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     pub fn new(
         data_guard: DataGuard<'buf, R>,
         offsets: Vec<usize>,
+        data_length: usize,
     ) -> Result<Self, ZeroCopyRingBufferReadableError> {
         // Ensure data is properly formatted
         for index in 0..offsets.len() {
@@ -169,13 +177,15 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
         Ok(Self {
             data_guard,
             offsets,
+            data_length,
             _phantom_type: PhantomData,
         })
     }
 
     pub fn discard(self) -> Result<(), ZeroCopyRingBufferReadableError> {
         self.data_guard
-            .discard()
+            .discard_count(self.data_length)
+            .map(|_| ())
             .map_err(ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError)
     }
 
@@ -339,8 +349,12 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Display> Display
-for TypedMultiDataGuardIter<'a, 'buf, R, T>
+impl<
+    'a,
+    'buf,
+    R: ZeroCopyRingBufferReader + ?Sized,
+    T: ZeroCopyRingBufferReadable<'buf, R> + Display,
+> Display for TypedMultiDataGuardIter<'a, 'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let current_item = if self.index < self.typed_multi_data_guard.offsets.len() {
@@ -359,4 +373,3 @@ for TypedMultiDataGuardIter<'a, 'buf, R, T>
         )
     }
 }
-
