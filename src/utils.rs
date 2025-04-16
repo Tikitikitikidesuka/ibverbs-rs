@@ -53,9 +53,9 @@ pub fn align_up_2pow(n: usize, exponent: u8) -> usize {
     // But since we added the mask in step 3, we're actually rounding up
     // Example: for size_plus_mask=13 (binary 1101), inverted_mask=...1111100
     //          13 & ...1111100 = 12 (binary 1100)
-    let rounded_up = size_plus_mask & inverted_mask;
+    
 
-    rounded_up
+    size_plus_mask & inverted_mask
 }
 
 pub fn align_down_2pow(n: usize, exponent: u8) -> usize {
@@ -76,9 +76,9 @@ pub fn align_down_2pow(n: usize, exponent: u8) -> usize {
     // This effectively rounds down to the nearest multiple of alignment
     // Example: for size=10 (binary 1010), inverted_mask=...1111000
     //          10 & ...1111000 = 8 (binary 1000)
-    let rounded_down = n & inverted_mask;
+    
 
-    rounded_down
+    n & inverted_mask
 }
 
 pub fn check_alignment(n: usize, alignment: usize) -> bool {

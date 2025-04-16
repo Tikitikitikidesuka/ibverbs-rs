@@ -1,4 +1,4 @@
-use log::{debug, info, trace};
+use log::{debug, trace};
 use pcie40_rs::zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };

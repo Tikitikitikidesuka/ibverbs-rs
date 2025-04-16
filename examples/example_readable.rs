@@ -86,7 +86,7 @@ where
     }
 
     fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
-        I32ListRef::from_raw_bytes(data).ok_or_else(|| {
+        I32ListRef::from_raw_bytes(data).ok_or({
             ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
                 required_data: size_of::<I32ListRef<'_>>(),
                 available_data: data.len(),

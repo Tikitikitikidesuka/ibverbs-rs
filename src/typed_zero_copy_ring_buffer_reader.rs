@@ -115,7 +115,7 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
         data_length: usize,
     ) -> Result<Self, ZeroCopyRingBufferReadableError> {
         // Ensure data is properly formatted
-        T::cast(&data_guard.data_ref())?;
+        T::cast(data_guard.data_ref())?;
 
         Ok(Self {
             data_guard,
@@ -306,8 +306,8 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<'a, 'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Debug>
-    Debug for TypedMultiDataGuardIter<'a, 'buf, R, T>
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Debug>
+    Debug for TypedMultiDataGuardIter<'_, 'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedMultiDataGuardIter")
@@ -354,11 +354,10 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
 }
 
 impl<
-    'a,
     'buf,
     R: ZeroCopyRingBufferReader + ?Sized,
     T: ZeroCopyRingBufferReadable<'buf, R> + Display,
-> Display for TypedMultiDataGuardIter<'a, 'buf, R, T>
+> Display for TypedMultiDataGuardIter<'_, 'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let current_item = if self.index < self.typed_multi_data_guard.offsets.len() {

@@ -186,7 +186,7 @@ impl MultiFragmentPacket {
     }
 }
 
-struct MultiFragmentPacketIter<'a> {
+pub struct MultiFragmentPacketIter<'a> {
     packet: &'a MultiFragmentPacket,
     offset: usize,
     index: usize,
@@ -213,13 +213,13 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for MultiFragmentPacketIter<'a> {
+impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
     fn len(&self) -> usize {
         self.packet.fragment_count() as usize
     }
 }
 
-impl<'buf, R> ZeroCopyRingBufferReadable<'buf, R> for MultiFragmentPacket
+impl<R> ZeroCopyRingBufferReadable<'_, R> for MultiFragmentPacket
 where
     R: ZeroCopyRingBufferReader,
 {
@@ -311,7 +311,7 @@ struct FragmentDebugView {
     data_preview: String,
 }
 
-impl<'a> Debug for FragmentRef<'a> {
+impl Debug for FragmentRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data_preview = if self.data.len() > 16 {
             format!("{:02X?}... ({} bytes)", &self.data[0..16], self.data.len())
@@ -327,7 +327,7 @@ impl<'a> Debug for FragmentRef<'a> {
     }
 }
 
-impl<'a> Display for FragmentRef<'a> {
+impl Display for FragmentRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -547,7 +547,7 @@ mod tests {
         // Confirm we can iterate through all elements
         let mut count = 0;
         let mut iter = mfp.iter();
-        while let Some(_) = iter.next() {
+        for _ in iter {
             count += 1;
         }
         assert_eq!(count, 5);

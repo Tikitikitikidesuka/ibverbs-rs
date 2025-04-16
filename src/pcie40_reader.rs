@@ -1,9 +1,8 @@
-use crate::bindings::p40_stream_get_host_buf_bytes_used;
 use crate::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
 use crate::zero_copy_ring_buffer_reader::{
-    DataGuard, ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
+    ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
-use log::{debug, error, info, trace};
+use log::{debug, error, trace};
 
 pub struct PCIe40Reader<'guard, 'buf> {
     mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
@@ -28,7 +27,7 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
     }
 }
 
-impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
+impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
     unsafe fn unsafe_data(&self) -> &[u8] {
         trace!(
             "Accessing data with read offset {} and loaded data offset {}",
@@ -97,7 +96,7 @@ impl<'guard, 'buf> ZeroCopyRingBufferReader for PCIe40Reader<'guard, 'buf> {
     }
 }
 
-impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
+impl PCIe40Reader<'_, '_> {
     fn available_bytes(&self) -> Result<usize, ZeroCopyRingBufferReaderError> {
         trace!("Getting available bytes");
 

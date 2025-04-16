@@ -4,7 +4,6 @@ use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
 use std::{ptr, slice};
 use thiserror::Error;
-use crate::pcie40_stream::PCIe40DAQStreamType::MainStream;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PCIe40DAQStreamType {
@@ -122,11 +121,11 @@ impl PCIe40StreamManager {
             stream_type, stream_format, device_name
         );
 
-        let device_id = PCIe40IdManager::find_id_by_name(device_name).or_else(|_| {
+        let device_id = PCIe40IdManager::find_id_by_name(device_name).map_err(|_| {
             error!("Device with name '{}' not found", device_name);
-            Err(PCIe40StreamManagerError::DeviceNotFoundByName {
+            PCIe40StreamManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
-            })
+            }
         })?;
 
         Self::open_by_device_id(device_id, stream_type, stream_format)
@@ -648,7 +647,7 @@ pub struct PCIe40StreamGuard<'a> {
     stream_handle: &'a mut PCIe40Stream,
 }
 
-impl<'a> Drop for PCIe40StreamGuard<'a> {
+impl Drop for PCIe40StreamGuard<'_> {
     fn drop(&mut self) {
         trace!(
             "Drop called on PCIe40StreamGuard for device {} stream {}",
@@ -667,7 +666,7 @@ impl<'a> PCIe40StreamGuard<'a> {
             stream_handle.stream_type, stream_handle.device_id
         );
 
-        let mut locked_stream = PCIe40StreamGuard { stream_handle };
+        let locked_stream = PCIe40StreamGuard { stream_handle };
 
         Ok(locked_stream)
     }
@@ -766,7 +765,7 @@ pub struct PCIe40MappedBuffer<'guard, 'buf> {
     pub buffer: &'buf [u8],
 }
 
-impl<'guard, 'buf> Drop for PCIe40MappedBuffer<'guard, 'buf> {
+impl Drop for PCIe40MappedBuffer<'_, '_> {
     fn drop(&mut self) {
         trace!(
             "Drop called on PCIe40MappedBuffer for device {} stream {}",
@@ -818,7 +817,7 @@ impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
     }
 }
 
-impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
+impl PCIe40MappedBuffer<'_, '_> {
     pub unsafe fn data(&self) -> &[u8] {
         trace!(
             "Accessing buffer data of size {} for stream {} on device {}",

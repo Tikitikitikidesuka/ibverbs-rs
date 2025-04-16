@@ -55,12 +55,12 @@ impl PCIe40ControllerManager {
             "Calling PCIe40IdManager::find_id_by_name(\"{}\")",
             device_name
         );
-        let device_id = PCIe40IdManager::find_id_by_name(device_name).or_else(|_| Err({
+        let device_id = PCIe40IdManager::find_id_by_name(device_name).map_err(|_| {
             error!("Device with name '{}' not found", device_name);
             PCIe40ControllerManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
             }
-        }))?;
+        })?;
         trace!("PCIe40IdManager::find_id_by_name returned {}", device_id);
 
         Self::open_by_device_id(device_id)

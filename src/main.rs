@@ -2,7 +2,7 @@ use env_logger::{Builder, Env};
 use pcie40_rs::multi_fragment_packet::MultiFragmentPacket;
 use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
-use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::{MetaFormat, RawFormat};
+use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
@@ -18,7 +18,7 @@ fn main() {
         .format_line_number(true)
         .init();
 
-    let mut controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
+    let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
     let meta_alignment = controller.meta_alignment().unwrap();
 
     let mut stream =

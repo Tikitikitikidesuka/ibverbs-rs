@@ -167,7 +167,7 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> DataGuard<'a, R> {
 
 // TODO: DOCUMENT
 // Allow DataGuard to be used like a slice
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
+impl<R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'_, R> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -175,7 +175,7 @@ impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Deref for DataGuard<'a, R> {
     }
 }
 
-impl<'a, R: ZeroCopyRingBufferReader + ?Sized> Debug for DataGuard<'a, R> {
+impl<R: ZeroCopyRingBufferReader + ?Sized> Debug for DataGuard<'_, R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         const MAX_PREVIEW_BYTES: usize = 16;
 
