@@ -174,7 +174,7 @@ impl MultiFragmentPacket {
         let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
         let aligned_fragment_types_size = utils::align_up_2pow(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe {
-            (self.fragment_type_ptr() as *const u8).add(aligned_fragment_types_size)
+            self.fragment_type_ptr().add(aligned_fragment_types_size)
                 as *const FragmentSize
         }
     }
@@ -302,13 +302,6 @@ impl Display for MultiFragmentPacket {
             self.fragment_version()
         )
     }
-}
-
-#[derive(Debug)]
-struct FragmentDebugView {
-    fragment_type: FragmentType,
-    fragment_size: FragmentSize,
-    data_preview: String,
 }
 
 impl Debug for FragmentRef<'_> {
@@ -546,7 +539,7 @@ mod tests {
 
         // Confirm we can iterate through all elements
         let mut count = 0;
-        let mut iter = mfp.iter();
+        let iter = mfp.iter();
         for _ in iter {
             count += 1;
         }

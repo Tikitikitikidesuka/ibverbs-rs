@@ -89,25 +89,32 @@ impl PCIe40StreamManager {
             stream_type, device_id
         );
 
-        trace!("Calling p40_stream_exists({}, {:?})", device_id, stream_type);
+        trace!(
+            "Calling p40_stream_exists({}, {:?})",
+            device_id, stream_type
+        );
         let c_result = unsafe { p40_stream_exists(device_id, stream_type.into()) };
         trace!("p40_stream_exists returned {}", c_result);
 
-        if c_result < 0 {
-            error!(
-                "Driver read error while checking if stream {} exists for device {}",
-                stream_type, device_id
-            );
-            Err(PCIe40StreamManagerError::DriverReadError)
-        } else if c_result == 0 {
-            debug!("Stream {} exists for device {}", stream_type, device_id);
-            Ok(true)
-        } else {
-            debug!(
-                "Stream {} does not exist for device {}",
-                stream_type, device_id
-            );
-            Ok(false)
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                error!(
+                    "Driver read error while checking if stream {} exists for device {}",
+                    stream_type, device_id
+                );
+                Err(PCIe40StreamManagerError::DriverReadError)
+            }
+            std::cmp::Ordering::Equal => {
+                debug!("Stream {} exists for device {}", stream_type, device_id);
+                Ok(true)
+            }
+            std::cmp::Ordering::Greater => {
+                debug!(
+                    "Stream {} does not exist for device {}",
+                    stream_type, device_id
+                );
+                Ok(false)
+            }
         }
     }
 
@@ -162,9 +169,16 @@ impl PCIe40StreamManager {
         }
         debug!("Opened {} stream with fd {}", stream_type, stream_fd);
 
-        trace!("Calling p40_stream_open({}, {:?}) for meta stream", device_id, stream_type);
-        let meta_stream_fd = unsafe { p40_stream_open(device_id, P40_DAQ_STREAM_P40_DAQ_STREAM_META) };
-        trace!("p40_stream_open for meta stream returned {}", meta_stream_fd);
+        trace!(
+            "Calling p40_stream_open({}, {:?}) for meta stream",
+            device_id, stream_type
+        );
+        let meta_stream_fd =
+            unsafe { p40_stream_open(device_id, P40_DAQ_STREAM_P40_DAQ_STREAM_META) };
+        trace!(
+            "p40_stream_open for meta stream returned {}",
+            meta_stream_fd
+        );
 
         if meta_stream_fd < 0 {
             error!(
@@ -199,12 +213,18 @@ impl PCIe40StreamManager {
             stream_endpoint.stream_type, stream_endpoint.device_id
         );
 
-        trace!("Calling p40_stream_close({}, MetaStream)", stream_endpoint.stream_fd);
+        trace!(
+            "Calling p40_stream_close({}, MetaStream)",
+            stream_endpoint.stream_fd
+        );
         unsafe {
             p40_stream_close(stream_endpoint.stream_fd, ptr::null_mut());
         }
 
-        trace!("Calling p40_stream_close({}, {:?})", stream_endpoint.stream_fd, stream_endpoint.stream_type);
+        trace!(
+            "Calling p40_stream_close({}, {:?})",
+            stream_endpoint.stream_fd, stream_endpoint.stream_type
+        );
         unsafe {
             p40_stream_close(stream_endpoint.stream_fd, ptr::null_mut());
         }
@@ -319,7 +339,7 @@ impl PCIe40Stream {
             stream_type,
             stream_format,
             enable_state_action_on_close:
-            PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
         }
     }
 
@@ -395,28 +415,32 @@ impl PCIe40Stream {
         let c_result = unsafe { p40_stream_get_locker(self.stream_fd) };
         trace!("p40_stream_get_locker returned {}", c_result);
 
-        if c_result == 0 {
-            trace!(
-                "Stream {} on device {} is not locked",
-                self.stream_type, self.device_id
-            );
-            Ok(None)
-        } else if c_result > 0 {
-            debug!(
-                "Stream {} on device {} is locked by process {}",
-                self.stream_type, self.device_id, c_result
-            );
-            Ok(Some(c_result))
-        } else {
-            error!(
-                "Unable to read locking process for stream {} on device {}",
-                self.stream_type, self.device_id
-            );
-            Err(PCIe40StreamError::StreamReadError {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
-                info: "Unable to read locking process".to_string(),
-            })
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Equal => {
+                trace!(
+                    "Stream {} on device {} is not locked",
+                    self.stream_type, self.device_id
+                );
+                Ok(None)
+            }
+            std::cmp::Ordering::Greater => {
+                debug!(
+                    "Stream {} on device {} is locked by process {}",
+                    self.stream_type, self.device_id, c_result
+                );
+                Ok(Some(c_result))
+            }
+            std::cmp::Ordering::Less => {
+                error!(
+                    "Unable to read locking process for stream {} on device {}",
+                    self.stream_type, self.device_id
+                );
+                Err(PCIe40StreamError::StreamReadError {
+                    device_id: self.device_id,
+                    stream_type: self.stream_type,
+                    info: "Unable to read locking process".to_string(),
+                })
+            }
         }
     }
 
@@ -442,31 +466,35 @@ impl PCIe40Stream {
         let c_result = unsafe { p40_stream_lock(self.stream_fd) };
         trace!("p40_stream_lock returned {}", c_result);
 
-        if c_result == 0 {
-            info!(
-                "Successfully locked stream {} on device {}",
-                self.stream_type, self.device_id
-            );
-            Ok(PCIe40StreamGuard::new(self)?)
-        } else if c_result > 0 {
-            error!(
-                "Failed to lock stream {} on device {} (already locked by process {})",
-                self.stream_type, self.device_id, c_result
-            );
-            Err(PCIe40StreamError::FailedToLockStream {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
-            })
-        } else {
-            error!(
-                "Error writing lock for stream {} on device {}",
-                self.stream_type, self.device_id
-            );
-            Err(PCIe40StreamError::StreamWriteError {
-                device_id: self.device_id,
-                stream_type: self.stream_type,
-                info: "Could not write lock".to_string(),
-            })
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Equal => {
+                info!(
+                    "Successfully locked stream {} on device {}",
+                    self.stream_type, self.device_id
+                );
+                Ok(PCIe40StreamGuard::new(self)?)
+            }
+            std::cmp::Ordering::Greater => {
+                error!(
+                    "Failed to lock stream {} on device {} (already locked by process {})",
+                    self.stream_type, self.device_id, c_result
+                );
+                Err(PCIe40StreamError::FailedToLockStream {
+                    device_id: self.device_id,
+                    stream_type: self.stream_type,
+                })
+            }
+            std::cmp::Ordering::Less => {
+                error!(
+                    "Error writing lock for stream {} on device {}",
+                    self.stream_type, self.device_id
+                );
+                Err(PCIe40StreamError::StreamWriteError {
+                    device_id: self.device_id,
+                    stream_type: self.stream_type,
+                    info: "Could not write lock".to_string(),
+                })
+            }
         }
     }
 
@@ -478,38 +506,34 @@ impl PCIe40Stream {
             self.device_id
         );
 
-        trace!("Calling p40_stream_id_to_meta_mask({}, {:?})",
-            self.device_id,
-            self.stream_type
+        trace!(
+            "Calling p40_stream_id_to_meta_mask({}, {:?})",
+            self.device_id, self.stream_type
         );
-        let meta_mask = unsafe {
-            p40_stream_id_to_meta_mask(
-                self.device_id,
-                self.stream_type.into(),
-            )
-        };
+        let meta_mask =
+            unsafe { p40_stream_id_to_meta_mask(self.device_id, self.stream_type.into()) };
         trace!("p40_stream_id_to_meta_mask returned {:#x}", meta_mask);
         trace!("Meta mask: {:#x}", meta_mask);
 
         let c_result = match enabled {
             true => {
-                trace!("Calling p40_stream_enable_mask({}, {:#x})",
-                    self.meta_stream_fd,
-                    meta_mask
+                trace!(
+                    "Calling p40_stream_enable_mask({}, {:#x})",
+                    self.meta_stream_fd, meta_mask
                 );
                 let result = unsafe { p40_stream_enable_mask(self.meta_stream_fd, meta_mask) };
                 trace!("p40_stream_enable_mask returned {}", result);
                 result
-            },
+            }
             false => {
-                trace!("Calling p40_stream_disable_mask({}, {:#x})",
-                    self.meta_stream_fd,
-                    meta_mask
+                trace!(
+                    "Calling p40_stream_disable_mask({}, {:#x})",
+                    self.meta_stream_fd, meta_mask
                 );
                 let result = unsafe { p40_stream_disable_mask(self.meta_stream_fd, meta_mask) };
                 trace!("p40_stream_disable_mask returned {}", result);
                 result
-            },
+            }
         };
 
         if c_result != 0 {
@@ -677,35 +701,42 @@ impl<'a> PCIe40StreamGuard<'a> {
             self.stream_handle.stream_type, self.stream_handle.device_id
         );
 
-        trace!("Calling p40_stream_unlock({})", self.stream_handle.stream_fd);
+        trace!(
+            "Calling p40_stream_unlock({})",
+            self.stream_handle.stream_fd
+        );
         let c_result = unsafe { p40_stream_unlock(self.stream_handle.stream_fd) };
         trace!("p40_stream_unlock returned {}", c_result);
 
-        if c_result == 0 {
-            info!(
-                "Successfully unlocked stream {} on device {}",
-                self.stream_handle.stream_type, self.stream_handle.device_id
-            );
-            Ok(())
-        } else if c_result > 0 {
-            error!(
-                "Failed to unlock stream {} on device {} (locked by process {})",
-                self.stream_handle.stream_type, self.stream_handle.device_id, c_result
-            );
-            Err(PCIe40StreamError::FailedToUnlockStream {
-                device_id: self.stream_handle.device_id,
-                stream_type: self.stream_handle.stream_type,
-            })
-        } else {
-            error!(
-                "Error writing unlock for stream {} on device {}",
-                self.stream_handle.stream_type, self.stream_handle.device_id
-            );
-            Err(PCIe40StreamError::StreamWriteError {
-                device_id: self.stream_handle.device_id,
-                stream_type: self.stream_handle.stream_type,
-                info: "Unable to write unlock".to_string(),
-            })
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Equal => {
+                info!(
+                    "Successfully unlocked stream {} on device {}",
+                    self.stream_handle.stream_type, self.stream_handle.device_id
+                );
+                Ok(())
+            }
+            std::cmp::Ordering::Greater => {
+                error!(
+                    "Failed to unlock stream {} on device {} (locked by process {})",
+                    self.stream_handle.stream_type, self.stream_handle.device_id, c_result
+                );
+                Err(PCIe40StreamError::FailedToUnlockStream {
+                    device_id: self.stream_handle.device_id,
+                    stream_type: self.stream_handle.stream_type,
+                })
+            }
+            std::cmp::Ordering::Less => {
+                error!(
+                    "Error writing unlock for stream {} on device {}",
+                    self.stream_handle.stream_type, self.stream_handle.device_id
+                );
+                Err(PCIe40StreamError::StreamWriteError {
+                    device_id: self.stream_handle.device_id,
+                    stream_type: self.stream_handle.stream_type,
+                    info: "Unable to write unlock".to_string(),
+                })
+            }
         }
     }
 }
@@ -734,7 +765,10 @@ impl<'a> PCIe40StreamGuard<'a> {
             });
         }
 
-        trace!("Calling p40_stream_get_host_buf_bytes({})", self.stream_handle.stream_fd);
+        trace!(
+            "Calling p40_stream_get_host_buf_bytes({})",
+            self.stream_handle.stream_fd
+        );
         let buff_size = unsafe { p40_stream_get_host_buf_bytes(self.stream_handle.stream_fd) };
         trace!("p40_stream_get_host_buf_bytes returned {}", buff_size);
 
@@ -834,10 +868,12 @@ impl PCIe40MappedBuffer<'_, '_> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
-        trace!("Calling p40_stream_get_host_buf_read_off({})", self.stream_guard.stream_handle.stream_fd);
-        let offset = unsafe {
-            p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd)
-        };
+        trace!(
+            "Calling p40_stream_get_host_buf_read_off({})",
+            self.stream_guard.stream_handle.stream_fd
+        );
+        let offset =
+            unsafe { p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd) };
         trace!("p40_stream_get_host_buf_read_off returned {}", offset);
 
         if offset < 0 {
@@ -868,8 +904,13 @@ impl PCIe40MappedBuffer<'_, '_> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
-        trace!("Calling p40_stream_get_host_buf_read_off({})", self.stream_guard.stream_handle.stream_fd);
-        let available = unsafe { p40_stream_get_host_buf_bytes_used(self.stream_guard.stream_handle.stream_fd) };
+        trace!(
+            "Calling p40_stream_get_host_buf_read_off({})",
+            self.stream_guard.stream_handle.stream_fd
+        );
+        let available = unsafe {
+            p40_stream_get_host_buf_bytes_used(self.stream_guard.stream_handle.stream_fd)
+        };
         trace!("p40_stream_get_host_buf_bytes_used returned {}", available);
 
         if available < 0 {
@@ -900,10 +941,12 @@ impl PCIe40MappedBuffer<'_, '_> {
             self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
         );
 
-        trace!("Calling p40_stream_get_host_buf_write_off({})", self.stream_guard.stream_handle.stream_fd);
-        let offset = unsafe {
-            p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd)
-        };
+        trace!(
+            "Calling p40_stream_get_host_buf_write_off({})",
+            self.stream_guard.stream_handle.stream_fd
+        );
+        let offset =
+            unsafe { p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd) };
         trace!("p40_stream_get_host_buf_write_off returned {}", offset);
 
         if offset < 0 {
@@ -936,8 +979,7 @@ impl PCIe40MappedBuffer<'_, '_> {
 
         trace!(
             "Calling p40_stream_free_host_buf_bytes({}, {})",
-            self.stream_guard.stream_handle.stream_fd,
-            offset
+            self.stream_guard.stream_handle.stream_fd, offset
         );
         let offset = unsafe {
             p40_stream_free_host_buf_bytes(self.stream_guard.stream_handle.stream_fd, offset)

@@ -31,15 +31,19 @@ impl PCIe40IdManager {
         let c_result = unsafe { p40_id_exists(device_id) };
         trace!("p40_id_exists returned {}", c_result);
 
-        if c_result < 0 {
-            error!("Driver read error while checking if device with ID {} exists", device_id);
-            Err(PCIe40IdManagerError::DriverReadError)
-        } else if c_result == 0 {
-            debug!("Device with ID {} exists", device_id);
-            Ok(true)
-        } else {
-            debug!("Device with ID {} does not exist", device_id);
-            Ok(false)
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                error!("Driver read error while checking if device with ID {} exists", device_id);
+                Err(PCIe40IdManagerError::DriverReadError)
+            },
+            std::cmp::Ordering::Equal => {
+                debug!("Device with ID {} exists", device_id);
+                Ok(true)
+            },
+            std::cmp::Ordering::Greater => {
+                debug!("Device with ID {} does not exist", device_id);
+                Ok(false)
+            },
         }
     }
 

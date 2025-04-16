@@ -31,18 +31,22 @@ impl PCIe40ControllerManager {
         let c_result = unsafe { p40_ctrl_exists(device_id) };
         trace!("p40_ctrl_exists returned {}", c_result);
 
-        if c_result < 0 {
-            error!(
-                "Driver read error while checking if controller with ID {} exists",
-                device_id
-            );
-            Err(PCIe40ControllerManagerError::DriverReadError)
-        } else if c_result == 0 {
-            debug!("Controller with ID {} exists", device_id);
-            Ok(true)
-        } else {
-            debug!("Controller with ID {} does not exist", device_id);
-            Ok(false)
+        match c_result.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                error!(
+                    "Driver read error while checking if controller with ID {} exists",
+                    device_id
+                );
+                Err(PCIe40ControllerManagerError::DriverReadError)
+            }
+            std::cmp::Ordering::Equal => {
+                debug!("Controller with ID {} exists", device_id);
+                Ok(true)
+            }
+            std::cmp::Ordering::Greater => {
+                debug!("Controller with ID {} does not exist", device_id);
+                Ok(false)
+            }
         }
     }
 

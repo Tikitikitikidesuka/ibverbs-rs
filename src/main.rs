@@ -34,7 +34,7 @@ fn main() {
     //reader.discard_all_data().unwrap();
 
     println!("\n\nStream configured... Press any key to proceed\n");
-    stdin().read(&mut [0]).unwrap();
+    stdin().read_exact(&mut [0]).unwrap();
 
     // TODO: ADD FLUSH FUNCTION TO READER TO FLUSH THE WHOLE BUFFER
     println!("Loading 2 MFPs...");
