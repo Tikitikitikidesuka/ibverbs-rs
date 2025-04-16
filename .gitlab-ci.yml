@@ -1,26 +1,55 @@
 stages:
   - check
   - test
-  - docs
+  - pages
 
-rust-check:
-  stage: check
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
+  RUST_BACKTRACE: 1
+
+# Cache dependencies between jobs
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .cargo
+    - target/
+
+# Common configuration to be extended
+.rust_template:
   tags: [online_network, docker]
-  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
+  image: ${RUST_IMAGE}
+  before_script:
+    - rustc --version
+    - cargo --version
+
+# Syntax and code quality check
+rust-check:
+  extends: .rust_template
+  stage: check
   script:
     - cargo check --all-features
-    - cargo clippy --all-features
+    - cargo clippy --all-features --no-deps # -- -D warnings
+    - cargo fmt -- --check
 
+# Run tests
 rust-test:
+  extends: .rust_template
   stage: test
-  tags: [online_network, docker]
-  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
   script:
     - cargo test --all
 
-rust-docs:
-  stage: docs
-  tags: [online_network, docker]
-  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
+# Build and publish documentation to GitLab Pages
+pages:
+  extends: .rust_template
+  stage: pages
   script:
-    - cargo doc --no-deps
+    - cargo doc --no-deps --all-features
+    - mkdir -p public
+    - cp -r target/doc/* public/
+    - echo '<meta http-equiv="refresh" content="0; url=pcie40-rs/index.html">' > public/index.html
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
