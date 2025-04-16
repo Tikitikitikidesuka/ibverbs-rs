@@ -1,0 +1,9 @@
+stages:
+  - test
+
+rust-test:
+  stage: test
+  tags: [online_network, docker]
+  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
+  script:
+    - cargo test --all
