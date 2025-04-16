@@ -4,7 +4,6 @@ stages:
   - pages
 
 variables:
-  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
   RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
   RUST_BACKTRACE: 1
 
@@ -12,9 +11,6 @@ variables:
 .rust_template:
   tags: [online_network, docker]
   image: ${RUST_IMAGE}
-  before_script:
-    - rustc --version
-    - cargo --version
 
 # Syntax and code quality check
 rust-check:
