@@ -8,14 +8,6 @@ variables:
   RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
   RUST_BACKTRACE: 1
 
-# Cache dependencies between jobs
-cache:
-  key: "${CI_COMMIT_REF_SLUG}"
-  paths:
-    - .cargo/registry
-    - .cargo/git
-    - target/
-
 # Common configuration to be extended
 .rust_template:
   tags: [online_network, docker]
