@@ -12,7 +12,10 @@ pub struct PCIe40Reader<'guard, 'buf> {
 }
 
 impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
-    pub fn new(mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>, alignment: usize) -> Result<Self, PCIe40StreamError> {
+    pub fn new(
+        mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
+        alignment: usize,
+    ) -> Result<Self, PCIe40StreamError> {
         debug!("Creating new PCIe40Reader");
         let read_offset = mapped_buffer.get_read_offset()?;
 

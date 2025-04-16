@@ -10,13 +10,13 @@ mod bindings {
     include!("bindings.rs");
 }
 
-pub mod pcie40_id;
 pub mod pcie40_ctrl;
+pub mod pcie40_id;
 pub mod pcie40_stream;
 
-pub mod zero_copy_ring_buffer_reader;
 pub mod pcie40_reader;
+pub mod zero_copy_ring_buffer_reader;
 
-pub mod typed_zero_copy_ring_buffer_reader;
 pub mod multi_fragment_packet;
+pub mod typed_zero_copy_ring_buffer_reader;
 pub mod utils;

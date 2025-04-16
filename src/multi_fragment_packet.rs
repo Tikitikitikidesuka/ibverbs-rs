@@ -173,10 +173,7 @@ impl MultiFragmentPacket {
     unsafe fn fragment_size_ptr(&self) -> *const FragmentSize {
         let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
         let aligned_fragment_types_size = utils::align_up_2pow(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
-        unsafe {
-            self.fragment_type_ptr().add(aligned_fragment_types_size)
-                as *const FragmentSize
-        }
+        unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const FragmentSize }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {

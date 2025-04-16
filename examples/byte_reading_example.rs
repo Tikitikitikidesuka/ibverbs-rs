@@ -1,6 +1,6 @@
+use crate::example_reader::ExampleReader;
 use env_logger::{Builder, Env};
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
-use crate::example_reader::ExampleReader;
 
 #[path = "../examples/example_reader.rs"]
 mod example_reader;
@@ -53,7 +53,6 @@ fn main() {
     println!();
 
     println!("Discarding all loaded data...");
-    
 
     /*
     let first_i32list = I32ListRef::read(&mut reader).unwrap();

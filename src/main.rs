@@ -28,8 +28,7 @@ fn main() {
         .unwrap();
 
     let mut stream_guard = stream.lock().unwrap();
-    let mut reader =
-        PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment).unwrap();
+    let mut reader = PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment).unwrap();
     //println!("\n\nDiscarding all data on the stream...\n\n");
     //reader.discard_all_data().unwrap();
 

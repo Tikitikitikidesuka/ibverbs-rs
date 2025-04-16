@@ -353,11 +353,8 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<
-    'buf,
-    R: ZeroCopyRingBufferReader + ?Sized,
-    T: ZeroCopyRingBufferReadable<'buf, R> + Display,
-> Display for TypedMultiDataGuardIter<'_, 'buf, R, T>
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + Display>
+    Display for TypedMultiDataGuardIter<'_, 'buf, R, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let current_item = if self.index < self.typed_multi_data_guard.offsets.len() {
