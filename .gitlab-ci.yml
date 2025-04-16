@@ -1,7 +1,7 @@
 stages:
   - check
   - test
-  - pages
+  - docs
 
 variables:
   RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
@@ -13,10 +13,10 @@ variables:
   image: ${RUST_IMAGE}
 
 # Cache only compiled artifacts
-cache:
-  key: "${CI_COMMIT_REF_SLUG}"
-  paths:
-    - target/
+#cache:
+  #key: "${CI_COMMIT_REF_SLUG}"
+  #paths:
+    #- target/
 
 # Syntax and code quality check
 rust-check:
@@ -37,7 +37,7 @@ rust-test:
 # Build and publish documentation to GitLab Pages
 pages:
   extends: .rust_template
-  stage: pages
+  stage: docs
   script:
     - cargo doc --no-deps --all-features
     - mkdir -p public
