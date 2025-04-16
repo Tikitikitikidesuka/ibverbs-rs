@@ -12,6 +12,12 @@ variables:
   tags: [online_network, docker]
   image: ${RUST_IMAGE}
 
+# Cache only compiled artifacts
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - target/
+
 # Syntax and code quality check
 rust-check:
   extends: .rust_template
