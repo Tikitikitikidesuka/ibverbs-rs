@@ -208,6 +208,10 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
         })
     }
 
+    pub fn reader_ref(&self) -> &R {
+        self.data_guard.reader_ref()
+    }
+
     pub fn iter<'a>(&'a self) -> TypedMultiDataGuardIter<'a, 'buf, R, T>
     where
         'buf: 'a, // 'buf outlives 'a

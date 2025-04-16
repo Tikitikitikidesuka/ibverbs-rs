@@ -43,6 +43,7 @@ fn main() {
 
     println!("\nLoading three I32ListRefs...");
     // Expect to fail because of max 64 bytes loaded on the demo reader
+    // TODO: ADD A BLOCKING VERSION OF READ AND READ_MULTIPLE
     match I32ListRef::read_multiple(&mut reader, 3) {
         Err(error) => println!("Failed to read three I32ListRefs: {:?}", error),
         Ok(i32_list) => println!("Read: {}", i32_list),

@@ -1,5 +1,15 @@
 stages:
+  - check
   - test
+  - docs
+
+rust-check:
+  stage: check
+  tags: [online_network, docker]
+  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
+  script:
+    - cargo check --all-features
+    - cargo clippy --all-features
 
 rust-test:
   stage: test
@@ -7,3 +17,10 @@ rust-test:
   image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
   script:
     - cargo test --all
+
+rust-docs:
+  stage: docs
+  tags: [online_network, docker]
+  image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
+  script:
+    - cargo doc --no-deps
