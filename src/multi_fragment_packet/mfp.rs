@@ -7,8 +7,8 @@ use std::fmt::{Debug, Display};
 use std::slice;
 use thiserror::Error;
 
-const HEADER_SIZE: usize = size_of::<MultiFragmentPacket>();
-const MAGIC_BYTES: u16 = 0x40CE;
+pub const MAGIC_BYTES: u16 = 0x40CE;
+pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacket>();
 
 // TODO: ADD MUTABILITY TO THE MFP
 #[repr(C, packed)]
@@ -25,14 +25,25 @@ pub struct MultiFragmentPacket {
     // Array of fragments is dynamically sized [Fragment ([u8])]
 }
 
-type FragmentType = u8;
-type FragmentSize = u16;
-
 #[derive(PartialEq, Eq)]
 pub struct FragmentRef<'a> {
-    pub fragment_type: FragmentType,
-    pub fragment_size: FragmentSize,
-    pub data: &'a [u8],
+    fragment_type: u8,
+    fragment_size: u16,
+    data: &'a [u8],
+}
+
+impl FragmentRef<'_> {
+    pub fn fragment_type(&self) -> u8 {
+        self.fragment_type
+    }
+
+    pub fn fragment_size(&self) -> u16 {
+        self.fragment_size
+    }
+
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
 }
 
 #[derive(Debug, Error)]
@@ -119,7 +130,7 @@ impl MultiFragmentPacket {
         self.fragment_version
     }
 
-    pub fn fragment_type(&self, index: usize) -> Option<FragmentType> {
+    pub fn fragment_type(&self, index: usize) -> Option<u8> {
         if index < self.fragment_count() as usize {
             let fragment_type_ptr = unsafe { self.fragment_type_ptr().add(index) };
             let fragment_type = unsafe { *fragment_type_ptr };
@@ -129,7 +140,7 @@ impl MultiFragmentPacket {
         }
     }
 
-    pub fn fragment_size(&self, index: usize) -> Option<FragmentSize> {
+    pub fn fragment_size(&self, index: usize) -> Option<u16> {
         if index < self.fragment_count() as usize {
             let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
             let fragment_size = unsafe { *fragment_size_ptr };
@@ -166,18 +177,18 @@ impl MultiFragmentPacket {
         }
     }
 
-    unsafe fn fragment_type_ptr(&self) -> *const FragmentType {
-        unsafe { ((self as *const Self) as *const u8).add(HEADER_SIZE) as *const FragmentType }
+    unsafe fn fragment_type_ptr(&self) -> *const u8 {
+        unsafe { ((self as *const Self) as *const u8).add(HEADER_SIZE) }
     }
 
-    unsafe fn fragment_size_ptr(&self) -> *const FragmentSize {
-        let fragment_types_size = self.fragment_count() as usize * size_of::<FragmentType>();
+    unsafe fn fragment_size_ptr(&self) -> *const u16 {
+        let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
         let aligned_fragment_types_size = utils::align_up_2pow(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
-        unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const FragmentSize }
+        unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16 }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
-        let fragment_sizes_size = self.fragment_count() as usize * size_of::<FragmentSize>();
+        let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
         let aligned_fragment_sizes_size = utils::align_up_2pow(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
@@ -216,61 +227,6 @@ impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
     }
 }
 
-impl<R> ZeroCopyRingBufferReadable<'_, R> for MultiFragmentPacket
-where
-    R: ZeroCopyRingBufferReader,
-{
-    fn load(reader: &mut R, offset: usize) -> Result<usize, ZeroCopyRingBufferReadableError> {
-        // Ensure enough data for the header
-        ensure_available_bytes(reader, offset + HEADER_SIZE)?;
-
-        // Get temporary access to the data to read the header
-        let temp_data = reader.data();
-        let header_data = &temp_data[offset..(offset + HEADER_SIZE)];
-        let mfp = unsafe { &*(header_data.as_ptr() as *const MultiFragmentPacket) };
-
-        // Get the total packet size from the header
-        let packet_size = mfp.packet_size() as usize;
-
-        let (aligned_size, aligned_load) = if let Some(alignment) =
-            reader.alignment().map_err(|error| {
-                ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-            })? {
-            (
-                utils::align_up(packet_size, alignment),
-                utils::align_up(offset + packet_size, alignment),
-            )
-        } else {
-            (packet_size, offset + packet_size)
-        };
-
-        // Ensure enough data for the whole mfp
-        ensure_available_bytes(reader, aligned_load)?;
-
-        Ok(aligned_size)
-    }
-
-    fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
-        MultiFragmentPacket::ref_from_raw_bytes(data).map_err(|error| match error {
-            MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                required_data: required_bytes,
-                available_data: available_bytes,
-            } => ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                required_data: required_bytes,
-                available_data: available_bytes,
-            },
-            MultiFragmentPacketFromRawBytesError::CorruptedMagic {
-                read_magic,
-                expected_magic,
-            } => ZeroCopyRingBufferReadableError::ImproperlyFormattedData {
-                message: format!(
-                    "Expected magic bytes {:x?} but found {:x?}",
-                    expected_magic, read_magic
-                ),
-            },
-        })
-    }
-}
 
 impl Debug for MultiFragmentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -355,7 +311,7 @@ mod tests {
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Fragment 4
             vec![0, 0, 0, 0],                           // Padding to 2^3
         ]
-        .concat()
+            .concat()
     }
 
     #[test]

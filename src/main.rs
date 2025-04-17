@@ -1,5 +1,5 @@
 use env_logger::{Builder, Env};
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacket;
+use pcie40_rs::multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
@@ -11,6 +11,13 @@ use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::io::{Read, stdin};
 
 fn main() {
+    let builder = MultiFragmentPacketBuilder::new()
+        .with_align(2)
+        .with_event_id(0)
+        .with_fragment_version(0)
+        .with_source_id(2)
+        .lock_header();
+
     const DEVICE_NAME: &str = "tdtel202_0";
 
     Builder::from_env(Env::default().default_filter_or("trace"))
