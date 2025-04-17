@@ -1,5 +1,5 @@
-use crate::multi_fragment_packet::mfp::MAGIC_BYTES;
 use std::marker::PhantomData;
+use crate::multi_fragment_packet::{Fragment, FragmentRef, MultiFragmentPacketRef, MAGIC_BYTES};
 
 pub struct MagicDefault;
 pub struct MagicSet;
@@ -14,6 +14,8 @@ pub struct FragmentVersionSet;
 pub struct HeaderUnlocked;
 pub struct HeaderLocked;
 
+
+
 pub struct MultiFragmentPacketBuilder<
     MagicStatus,
     EventIdStatus,
@@ -27,6 +29,7 @@ pub struct MultiFragmentPacketBuilder<
     source_id: u16,
     align: u8,
     fragment_version: u8,
+    fragments: Vec<Fragment>,
     _typestate_phantom: PhantomData<(
         MagicStatus,
         EventIdStatus,
@@ -38,14 +41,14 @@ pub struct MultiFragmentPacketBuilder<
 }
 
 impl
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdNotSet,
-        SourceIdNotSet,
-        AlignNotSet,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicDefault,
+    EventIdNotSet,
+    SourceIdNotSet,
+    AlignNotSet,
+    FragmentVersionNotSet,
+    HeaderUnlocked,
+>
 {
     pub fn new() -> Self {
         Self {
@@ -54,20 +57,21 @@ impl
             source_id: 0,
             align: 0,
             fragment_version: 0,
+            fragments: Vec::new(),
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicDefault,
+    EventIdStatus,
+    SourceIdStatus,
+    AlignStatus,
+    FragmentVersionStatus,
+    HeaderUnlocked,
+>
 {
     pub fn with_magic(
         mut self,
@@ -86,20 +90,21 @@ impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
             source_id: self.source_id,
             align: self.align,
             fragment_version: self.fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdNotSet,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicStatus,
+    EventIdNotSet,
+    SourceIdStatus,
+    AlignStatus,
+    FragmentVersionStatus,
+    HeaderUnlocked,
+>
 {
     pub fn with_event_id(
         mut self,
@@ -118,20 +123,21 @@ impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
             source_id: self.source_id,
             align: self.align,
             fragment_version: self.fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<MagicStatus, EventIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdNotSet,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicStatus,
+    EventIdStatus,
+    SourceIdNotSet,
+    AlignStatus,
+    FragmentVersionStatus,
+    HeaderUnlocked,
+>
 {
     pub fn with_source_id(
         self,
@@ -150,20 +156,21 @@ impl<MagicStatus, EventIdStatus, AlignStatus, FragmentVersionStatus>
             source_id,
             align: self.align,
             fragment_version: self.fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<MagicStatus, EventIdStatus, SourceIdStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignNotSet,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicStatus,
+    EventIdStatus,
+    SourceIdStatus,
+    AlignNotSet,
+    FragmentVersionStatus,
+    HeaderUnlocked,
+>
 {
     pub fn with_align(
         self,
@@ -182,20 +189,21 @@ impl<MagicStatus, EventIdStatus, SourceIdStatus, FragmentVersionStatus>
             source_id: self.source_id,
             align,
             fragment_version: self.fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<MagicStatus, EventIdStatus, SourceIdStatus, AlignStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicStatus,
+    EventIdStatus,
+    SourceIdStatus,
+    AlignStatus,
+    FragmentVersionNotSet,
+    HeaderUnlocked,
+>
 {
     pub fn with_fragment_version(
         self,
@@ -214,25 +222,26 @@ impl<MagicStatus, EventIdStatus, SourceIdStatus, AlignStatus>
             source_id: self.source_id,
             align: self.align,
             fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
     }
 }
 
 impl<MagicStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderUnlocked,
-    >
+MultiFragmentPacketBuilder<
+    MagicStatus,
+    EventIdSet,
+    SourceIdSet,
+    AlignSet,
+    FragmentVersionSet,
+    HeaderUnlocked,
+>
 {
     pub fn lock_header(
         self,
     ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
+        MagicSet,
         EventIdSet,
         SourceIdSet,
         AlignSet,
@@ -245,7 +254,50 @@ impl<MagicStatus>
             source_id: self.source_id,
             align: self.align,
             fragment_version: self.fragment_version,
+            fragments: self.fragments,
             _typestate_phantom: PhantomData,
         }
+    }
+}
+
+impl
+MultiFragmentPacketBuilder<
+    MagicSet,
+    EventIdSet,
+    SourceIdSet,
+    AlignSet,
+    FragmentVersionSet,
+    HeaderLocked,
+>
+{
+    pub fn add_fragment(&mut self, fragment: Fragment) -> &mut Self {
+        self.fragments.push(fragment);
+        self
+    }
+
+    pub fn add_fragments<I>(&mut self, fragments: I) -> &mut Self
+    where
+        I: IntoIterator<Item=Fragment>,
+    {
+        self.fragments.extend(fragments);
+        self
+    }
+
+    pub fn build(self) {
+        let mut packet_size = 0;
+        todo!()
+
+        /*
+        MultiFragmentPacketRef {
+            magic: 0,
+            fragment_count: 0,
+            packet_size: 0,
+            event_id: 0,
+            source_id: 0,
+            align: 0,
+            fragment_version: 0,
+        };
+
+         */
     }
 }

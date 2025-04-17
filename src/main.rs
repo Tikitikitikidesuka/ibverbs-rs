@@ -1,5 +1,5 @@
 use env_logger::{Builder, Env};
-use pcie40_rs::multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
+use pcie40_rs::multi_fragment_packet::{MultiFragmentPacketRef, MultiFragmentPacketBuilder};
 use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
@@ -44,14 +44,14 @@ fn main() {
     stdin().read_exact(&mut [0]).unwrap();
 
     println!("Loading 2 MFPs...");
-    let mfps = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
+    let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
     println!("Read MFPs: {:?}", mfps);
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
     println!("Discarding MFPs...");
     mfps.discard().unwrap();
     println!("Loading 2 MFPs...");
-    let mfps = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
+    let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
     println!("Read MFPs: {:?}", mfps);
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
