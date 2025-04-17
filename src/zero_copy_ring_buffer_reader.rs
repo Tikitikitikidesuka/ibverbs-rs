@@ -101,8 +101,7 @@ pub trait ZeroCopyRingBufferReader {
 
     /// Returns the alignment of the ring buffer if there is Some(alignment_bytes)
     /// Defaults to having no alignment
-    // TODO: CHECK IF NECESSARY MUT (PROBABLY NOT)
-    fn alignment(&mut self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
+    fn alignment(&self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
         Ok(None)
     }
 }

@@ -94,7 +94,7 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
         Ok(discarded_bytes)
     }
 
-    fn alignment(&mut self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
+    fn alignment(&self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
         Ok(Some(self.alignment))
     }
 }
