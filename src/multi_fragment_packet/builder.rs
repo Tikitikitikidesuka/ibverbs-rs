@@ -1,5 +1,5 @@
-use std::marker::PhantomData;
 use crate::multi_fragment_packet::mfp::MAGIC_BYTES;
+use std::marker::PhantomData;
 
 pub struct MagicDefault;
 pub struct MagicSet;
