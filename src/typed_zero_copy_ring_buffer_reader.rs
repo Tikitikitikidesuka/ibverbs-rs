@@ -4,6 +4,7 @@ use crate::zero_copy_ring_buffer_reader::{
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, Index};
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -69,6 +70,14 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
         TypedDataGuard::new(reader.data(), data_length)
     }
 
+    // TODO: ADD READ_BLOCKING
+    //fn read_blocking(
+        //reader: &'buf mut R,
+        //timeout: Duration,
+    //) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
+        //
+    //}
+
     fn read_multiple(
         reader: &'buf mut R,
         count: usize,
@@ -84,6 +93,15 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
 
         TypedMultiDataGuard::new(reader.data(), offsets, offset)
     }
+
+    // TODO: ADD READ_MULTIPLE_BLOCKING
+    //fn read_multiple_blocking(
+        //reader: &'buf mut R,
+        //count: usize,
+        //timeout: Duration,
+    //) -> Result<TypedMultiDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
+        //
+    //}
 }
 
 pub struct TypedDataGuard<
