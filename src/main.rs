@@ -8,6 +8,7 @@ use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEn
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use std::io::{Read, stdin};
+use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel202_0";
@@ -35,7 +36,6 @@ fn main() {
     println!("\n\nStream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
-    // TODO: ADD FLUSH FUNCTION TO READER TO FLUSH THE WHOLE BUFFER
     println!("Loading 2 MFPs...");
     let mfps = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
     println!("Read MFPs: {:?}", mfps);
