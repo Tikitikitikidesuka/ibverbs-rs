@@ -7,8 +7,8 @@ use pcie40_rs::pcie40_stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40_stream::PCIe40StreamManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
-use std::io::{Read, stdin};
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
+use std::io::{Read, stdin};
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel202_0";

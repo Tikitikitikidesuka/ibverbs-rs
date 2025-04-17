@@ -72,10 +72,10 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
 
     // TODO: ADD READ_BLOCKING
     //fn read_blocking(
-        //reader: &'buf mut R,
-        //timeout: Duration,
+    //reader: &'buf mut R,
+    //timeout: Duration,
     //) -> Result<TypedDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
-        //
+    //
     //}
 
     fn read_multiple(
@@ -96,11 +96,11 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
 
     // TODO: ADD READ_MULTIPLE_BLOCKING
     //fn read_multiple_blocking(
-        //reader: &'buf mut R,
-        //count: usize,
-        //timeout: Duration,
+    //reader: &'buf mut R,
+    //count: usize,
+    //timeout: Duration,
     //) -> Result<TypedMultiDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
-        //
+    //
     //}
 }
 
