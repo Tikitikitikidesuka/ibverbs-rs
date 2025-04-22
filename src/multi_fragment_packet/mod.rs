@@ -4,7 +4,6 @@ mod readable;
 pub use builder::MultiFragmentPacketBuilder;
 
 use crate::utils;
-use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::slice;

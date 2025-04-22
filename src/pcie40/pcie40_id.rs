@@ -513,9 +513,7 @@ mod tests {
         assert!(result.is_err());
         match result.err().unwrap() {
             PCIe40IdManagerError::DeviceNotFoundByName { .. } => {}
-            _ => panic!(
-                "Unexpected error; Should have raised a DeviceNotFoundByName error"
-            ),
+            _ => panic!("Unexpected error; Should have raised a DeviceNotFoundByName error"),
         }
     }
 
@@ -535,9 +533,7 @@ mod tests {
         assert!(result.is_err());
         match result.err().unwrap() {
             PCIe40IdManagerError::DeviceNotFoundById { .. } => {}
-            _ => panic!(
-                "Unexpected error; Should have raised a DeviceNotFoundById error"
-            ),
+            _ => panic!("Unexpected error; Should have raised a DeviceNotFoundById error"),
         }
     }
 
@@ -560,7 +556,10 @@ mod tests {
 
         // No real way to test this unless the info can be known in an already tested way
         let unique_name = endpoint.unique_device_name().unwrap();
-        assert!(!unique_name.is_empty(), "Unique device name should not be empty");
+        assert!(
+            !unique_name.is_empty(),
+            "Unique device name should not be empty"
+        );
     }
 
     #[cfg(feature = "hardware-tests")]
@@ -571,7 +570,10 @@ mod tests {
 
         // No real way to test this unless the info can be known in an already tested way
         let unique_name = endpoint.unique_device_name().unwrap();
-        assert!(!unique_name.is_empty(), "Unique device name should not be empty");
+        assert!(
+            !unique_name.is_empty(),
+            "Unique device name should not be empty"
+        );
     }
 
     #[cfg(feature = "hardware-tests")]
@@ -591,14 +593,20 @@ mod tests {
 
         // Verify the name was changed
         let updated_name = endpoint.device_name().unwrap();
-        assert_eq!(updated_name, test_name, "Device name should have been updated");
+        assert_eq!(
+            updated_name, test_name,
+            "Device name should have been updated"
+        );
 
         // Restore the original name
         endpoint.set_name(&original_name).unwrap();
 
         // Verify the name was restored
         let restored_name = endpoint.device_name().unwrap();
-        assert_eq!(restored_name, original_name, "Device name should have been restored");
+        assert_eq!(
+            restored_name, original_name,
+            "Device name should have been restored"
+        );
     }
 
     #[cfg(feature = "hardware-tests")]
@@ -612,9 +620,7 @@ mod tests {
 
         match result.err().unwrap() {
             PCIe40IdEndpointError::InvalidDeviceName { .. } => {}
-            _ => panic!(
-                "Unexpected error; Should have raised an InvalidDeviceName error"
-            ),
+            _ => panic!("Unexpected error; Should have raised an InvalidDeviceName error"),
         }
     }
 }
