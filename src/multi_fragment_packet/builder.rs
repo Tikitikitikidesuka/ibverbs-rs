@@ -374,8 +374,8 @@ impl
 
 #[cfg(test)]
 mod tests {
-    use crate::multi_fragment_packet::FragmentRef;
     use super::*;
+    use crate::multi_fragment_packet::FragmentRef;
 
     fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
         MultiFragmentPacketBuilder::new()
