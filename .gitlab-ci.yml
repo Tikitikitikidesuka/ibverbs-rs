@@ -38,7 +38,7 @@ rust-test-hardware:
   tags:
     - online_network
     - docker
-    - hardware-available  # Add a specific tag for runners with the hardware
+    # - hardware-available  # Add a specific tag for runners with the hardware
 
 # Build and publish documentation to GitLab Pages
 pages:
