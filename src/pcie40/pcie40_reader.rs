@@ -1,4 +1,4 @@
-use crate::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
+use crate::pcie40::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
 use crate::zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
