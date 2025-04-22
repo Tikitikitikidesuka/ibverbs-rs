@@ -1,4 +1,6 @@
-use crate::multi_fragment_packet::{MultiFragmentPacketRef, MultiFragmentPacketFromRawBytesError, HEADER_SIZE};
+use crate::multi_fragment_packet::{
+    HEADER_SIZE, MultiFragmentPacketFromRawBytesError, MultiFragmentPacketRef,
+};
 use crate::typed_zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes,
 };

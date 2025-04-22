@@ -1,8 +1,8 @@
 mod builder;
 mod readable;
 
-use std::borrow::Borrow;
 pub use builder::MultiFragmentPacketBuilder;
+use std::borrow::Borrow;
 
 use crate::typed_zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes,
@@ -10,7 +10,6 @@ use crate::typed_zero_copy_ring_buffer_reader::{
 use crate::utils;
 use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
@@ -31,7 +30,6 @@ pub struct MultiFragmentPacketHeader {
 
 pub struct MultiFragmentPacket {
     data: Vec<u8>,
-
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
@@ -40,7 +38,6 @@ pub struct MultiFragmentPacket {
 #[repr(C, packed)]
 pub struct MultiFragmentPacketRef {
     header: MultiFragmentPacketHeader,
-
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
@@ -75,7 +72,11 @@ impl Fragment {
             None
         } else {
             let fragment_size = data.len() as u16;
-            Some(Fragment { fragment_type, fragment_size, data })
+            Some(Fragment {
+                fragment_type,
+                fragment_size,
+                data,
+            })
         }
     }
 
@@ -381,7 +382,7 @@ mod tests {
         [
             vec![0xCE, 0x40],                           // Magic (0xCE40)
             vec![5, 0],                                 // Fragment count (5)
-            vec![64, 0, 0, 0],                          // Packet size (64)
+            vec![96, 0, 0, 0],                          // Packet size (96)
             vec![1, 0, 0, 0, 0, 0, 0, 0],               //Event id (1)
             vec![1, 0],                                 // Source id (1)
             vec![3],                                    // Align (2^3)
@@ -401,7 +402,7 @@ mod tests {
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Fragment 4
             vec![0, 0, 0, 0],                           // Padding to 2^3
         ]
-            .concat()
+        .concat()
     }
 
     #[test]
@@ -422,7 +423,8 @@ mod tests {
     fn test_mfp_packet_size_getter() {
         let data = demo_multi_fragment_packet_data();
         let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-        assert_eq!(mfp.packet_size(), 64);
+        assert_eq!(mfp.raw_packet_data().len(), mfp.packet_size() as usize);
+        assert_eq!(mfp.packet_size(), 96);
     }
 
     #[test]
@@ -597,7 +599,7 @@ mod tests {
         let raw_data = mfp.raw_packet_data();
 
         // The raw packet data should be the same as the input data up to packet_size
-        assert_eq!(raw_data.len(), 64);
-        assert_eq!(raw_data, &data[0..64]);
+        assert_eq!(raw_data.len(), data.len());
+        assert_eq!(raw_data, &data);
     }
 }
