@@ -27,18 +27,18 @@ rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all-targets --no-default-features
+    - cargo test --all-targets
 
-# Hardware tests only
+# Run tests including hardware tests
 rust-test-hardware:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --test hardware_tests --features hardware-tests
+    - cargo test --features hardware-tests
   tags:
     - online_network
     - docker
-    # - hardware-available  # Add a specific tag for runners with the hardware
+    #- pcie40-hardware # Add a specific tag for runners with the hardware
 
 # Build and publish documentation to GitLab Pages
 pages:
