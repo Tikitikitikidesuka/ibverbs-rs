@@ -6,6 +6,7 @@ stages:
 variables:
   RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
   RUST_BACKTRACE: 1
+  HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
 # Common configuration to be extended
 .rust_template:
@@ -21,12 +22,23 @@ rust-check:
     - cargo clippy --all-features --no-deps # -- -D warnings
     - cargo fmt -- --check
 
-# Run tests
+# Run standard tests (excluding hardware tests)
 rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all-targets
+    - cargo test --all-targets --no-default-features
+
+# Hardware tests only
+rust-test-hardware:
+  extends: .rust_template
+  stage: test
+  script:
+    - cargo test --test hardware_tests --features hardware-tests
+  tags:
+    - online_network
+    - docker
+    - hardware-available  # Add a specific tag for runners with the hardware
 
 # Build and publish documentation to GitLab Pages
 pages:

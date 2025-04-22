@@ -366,3 +366,23 @@ impl PCIe40IdEndpoint {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pcie40_device_name() -> String {
+        std::env::var("HARDWARE_TESTS_DEVICE_NAME").unwrap_or_else(|_| {
+            panic!(
+                "Hardware test requires HARDWARE_TESTS_DEVICE_NAME environment variable.\n\
+                To run this test first set HARDWARE_TESTS_DEVICE_NAME=<device-name>"
+            )
+        })
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_find_id_by_name() {
+        let device_name = pcie40_device_name();
+    }
+}
