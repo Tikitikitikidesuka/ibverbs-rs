@@ -4,7 +4,6 @@ use crate::zero_copy_ring_buffer_reader::{
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::ops::{Deref, Index};
-use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

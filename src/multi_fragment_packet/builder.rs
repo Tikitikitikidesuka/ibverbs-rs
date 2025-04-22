@@ -1,6 +1,5 @@
 use crate::multi_fragment_packet::{
-    Fragment, FragmentRef, MAGIC_BYTES, MultiFragmentPacket, MultiFragmentPacketHeader,
-    MultiFragmentPacketRef,
+    Fragment, MAGIC_BYTES, MultiFragmentPacket, MultiFragmentPacketHeader,
 };
 use crate::utils;
 use std::marker::PhantomData;
@@ -91,7 +90,7 @@ impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
     >
 {
     pub fn with_magic(
-        mut self,
+        self,
         magic: u16,
     ) -> MultiFragmentPacketBuilder<
         MagicSet,
@@ -124,7 +123,7 @@ impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
     >
 {
     pub fn with_event_id(
-        mut self,
+        self,
         event_id: u64,
     ) -> MultiFragmentPacketBuilder<
         MagicStatus,
@@ -375,6 +374,7 @@ impl
 
 #[cfg(test)]
 mod tests {
+    use crate::multi_fragment_packet::FragmentRef;
     use super::*;
 
     fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {

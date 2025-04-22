@@ -2,11 +2,7 @@ mod builder;
 mod readable;
 
 pub use builder::MultiFragmentPacketBuilder;
-use std::borrow::Borrow;
 
-use crate::typed_zero_copy_ring_buffer_reader::{
-    ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes,
-};
 use crate::utils;
 use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display};
