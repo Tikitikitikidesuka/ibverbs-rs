@@ -65,6 +65,21 @@ impl
     }
 }
 
+impl Default
+    for MultiFragmentPacketBuilder<
+        MagicDefault,
+        EventIdNotSet,
+        SourceIdNotSet,
+        AlignNotSet,
+        FragmentVersionNotSet,
+        HeaderUnlocked,
+    >
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
     MultiFragmentPacketBuilder<
         MagicDefault,

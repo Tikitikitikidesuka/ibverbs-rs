@@ -92,7 +92,7 @@ impl Fragment {
         &self.data
     }
 
-    pub fn as_ref(&self) -> FragmentRef {
+    pub fn as_mfp_ref(&self) -> FragmentRef {
         FragmentRef {
             fragment_type: self.fragment_type,
             fragment_size: self.fragment_size,

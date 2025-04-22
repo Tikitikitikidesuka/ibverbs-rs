@@ -1,5 +1,5 @@
 use env_logger::{Builder, Env};
-use pcie40_rs::multi_fragment_packet::{MultiFragmentPacketRef, MultiFragmentPacketBuilder};
+use pcie40_rs::multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
 use pcie40_rs::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40_reader::PCIe40Reader;
 use pcie40_rs::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
