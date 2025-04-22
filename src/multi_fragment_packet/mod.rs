@@ -39,8 +39,8 @@ pub struct MultiFragmentPacketRef {
     // Array of fragments is dynamically sized [Fragment ([u8])]
 }
 
-impl MultiFragmentPacket {
-    pub fn as_ref(&self) -> &MultiFragmentPacketRef {
+impl AsRef<MultiFragmentPacketRef> for MultiFragmentPacket {
+    fn as_ref(&self) -> &MultiFragmentPacketRef {
         // MultiFragmentPacket must be guaranteed to be correct already. Since it can only
         // be built by the builder it is supposed to be guaranteed.
         unsafe { MultiFragmentPacketRef::unchecked_ref_from_raw_bytes(self.data.as_slice()) }
@@ -88,7 +88,7 @@ impl Fragment {
         &self.data
     }
 
-    pub fn as_mfp_ref(&self) -> FragmentRef {
+    pub fn as_fragment_ref(&self) -> FragmentRef {
         FragmentRef {
             fragment_type: self.fragment_type,
             fragment_size: self.fragment_size,
