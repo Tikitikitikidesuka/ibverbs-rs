@@ -1,6 +1,7 @@
 use crate::bindings::*;
 use log::{debug, error, info, trace};
 use std::ffi::CString;
+use std::ptr::null;
 use thiserror::Error;
 
 pub struct PCIe40IdManager {}
@@ -24,34 +25,18 @@ pub enum PCIe40IdManagerError {
 }
 
 impl PCIe40IdManager {
-    pub fn id_endpoint_exists(device_id: i32) -> Result<bool, PCIe40IdManagerError> {
+    pub fn id_endpoint_exists(device_id: i32) -> bool {
         debug!("Checking if device with ID {} exists", device_id);
 
         trace!("Calling p40_id_exists({})", device_id);
         let c_result = unsafe { p40_id_exists(device_id) };
         trace!("p40_id_exists returned {}", c_result);
 
-        match c_result.cmp(&0) {
-            std::cmp::Ordering::Less => {
-                error!(
-                    "Driver read error while checking if device with ID {} exists",
-                    device_id
-                );
-                Err(PCIe40IdManagerError::DriverReadError)
-            }
-            std::cmp::Ordering::Equal => {
-                debug!("Device with ID {} exists", device_id);
-                Ok(true)
-            }
-            std::cmp::Ordering::Greater => {
-                debug!("Device with ID {} does not exist", device_id);
-                Ok(false)
-            }
-        }
+        c_result == 0
     }
 
-    pub fn find_id_by_name<T: Into<&str>>(device_name: T) -> Result<i32, PCIe40IdManagerError> {
-        let device_name = device_name.into();
+    pub fn find_id_by_name<T: AsRef<str>>(device_name: T) -> Result<i32, PCIe40IdManagerError> {
+        let device_name = device_name.as_ref();
 
         debug!("Looking up device ID for device named '{}'", device_name);
 
@@ -77,8 +62,10 @@ impl PCIe40IdManager {
         }
     }
 
-    pub fn find_all_ids_by_name<T: Into<&str>>(device_name: T) -> Result<Vec<i32>, PCIe40IdManagerError> {
-        let device_name = device_name.into();
+    pub fn find_all_ids_by_name<T: AsRef<str>>(
+        device_name: T,
+    ) -> Result<Vec<i32>, PCIe40IdManagerError> {
+        let device_name = device_name.as_ref();
 
         debug!(
             "Looking up all device IDs for devices named '{}'",
@@ -106,13 +93,30 @@ impl PCIe40IdManager {
             device_name,
             device_ids
         );
+
         Ok(device_ids)
     }
 
-    pub fn open_by_device_name<T: Into<&str>>(
+    pub fn find_all_ids() -> Result<Vec<i32>, PCIe40IdManagerError> {
+        debug!("Looking up all device IDs",);
+
+        trace!("Calling p40_id_find_all(\"\")");
+        let mask = unsafe { p40_id_find_all(null()) };
+        trace!("p40_id_find_all returned {:#x}", mask);
+
+        let device_ids: Vec<i32> = (0..32)
+            .filter(|&device_id| (mask & (1 << device_id)) != 0)
+            .collect();
+
+        debug!("Found {} devices: {:?}", device_ids.len(), device_ids);
+
+        Ok(device_ids)
+    }
+
+    pub fn open_by_device_name<T: AsRef<str>>(
         device_name: T,
     ) -> Result<PCIe40IdEndpoint, PCIe40IdManagerError> {
-        let device_name = device_name.into();
+        let device_name = device_name.as_ref();
 
         info!("Opening ID endpoint for device named '{}'", device_name);
 
@@ -376,6 +380,8 @@ impl PCIe40IdEndpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    use std::time::SystemTime;
 
     fn pcie40_device_name() -> String {
         std::env::var("HARDWARE_TESTS_DEVICE_NAME").unwrap_or_else(|_| {
@@ -386,24 +392,52 @@ mod tests {
         })
     }
 
+    fn pcie40_device_name_non_existent() -> String {
+        const MAX_RETRIES: usize = 5;
+
+        for _ in 0..MAX_RETRIES {
+            let mut hasher = DefaultHasher::new();
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+                .hash(&mut hasher);
+            let non_existent_name = format!("NE_{:x}", hasher.finish());
+            non_existent_name[0..std::cmp::min(non_existent_name.len(), 16)].to_string();
+
+            if PCIe40IdManager::find_id_by_name(&non_existent_name).is_err() {
+                return non_existent_name;
+            }
+        }
+
+        panic!("Could not find a non-existent device name");
+    }
+
     fn pcie40_device_id() -> i32 {
         PCIe40IdManager::find_id_by_name(pcie40_device_name()).unwrap()
+    }
+
+    fn pcie40_device_id_non_existent() -> i32 {
+        match PCIe40IdManager::find_all_ids().unwrap().iter().max() {
+            Some(id) => id + 1,
+            None => 1,
+        }
     }
 
     #[cfg(feature = "hardware-tests")]
     #[test]
     fn test_with_hardware_id_endpoint_exists() {
         let device_id = pcie40_device_id();
-        let result = PCIe40IdManager::id_endpoint_exists(device_id).unwrap();
-        assert_eq!(result, true);
+        let result = PCIe40IdManager::id_endpoint_exists(device_id);
+        assert!(result);
     }
 
     #[cfg(feature = "hardware-tests")]
     #[test]
-    fn test_with_hardware_id_endpoint_exists_non_existing() {
-        let device_id = 891237;
-        let result = PCIe40IdManager::id_endpoint_exists(device_id).unwrap();
-        assert_eq!(result, false);
+    fn test_with_hardware_id_endpoint_exists_non_existent() {
+        let device_id = pcie40_device_id_non_existent();
+        let result = PCIe40IdManager::id_endpoint_exists(device_id);
+        assert!(!result);
     }
 
     #[cfg(feature = "hardware-tests")]
@@ -415,8 +449,8 @@ mod tests {
 
     #[cfg(feature = "hardware-tests")]
     #[test]
-    fn test_with_hardware_find_id_by_name_non_existing() {
-        let device_name = "oPm11Cc993DxE4vpnmOUeIt7cN8gkU28";
+    fn test_with_hardware_find_id_by_name_non_existent() {
+        let device_name = pcie40_device_name_non_existent();
         let result = PCIe40IdManager::find_id_by_name(&device_name);
         assert!(result.is_err());
         match result.err().unwrap() {
@@ -426,6 +460,160 @@ mod tests {
                 PCIe40IdManagerError::DeviceNotFoundByName {
                     device_name: device_name.to_string()
                 }
+            ),
+        }
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_find_all_ids_by_name() {
+        let device_name = pcie40_device_name();
+        let device_ids = PCIe40IdManager::find_all_ids_by_name(&device_name).unwrap();
+        assert!(!device_ids.is_empty());
+
+        // Verify each ID exists
+        for id in &device_ids {
+            assert!(PCIe40IdManager::id_endpoint_exists(*id));
+        }
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_find_all_ids_by_name_non_existent() {
+        let device_name = pcie40_device_name_non_existent();
+        let device_ids = PCIe40IdManager::find_all_ids_by_name(&device_name).unwrap();
+        assert!(device_ids.is_empty());
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_find_all_ids() {
+        let device_ids = PCIe40IdManager::find_all_ids().unwrap();
+
+        assert!(!device_ids.is_empty());
+
+        for id in &device_ids {
+            assert!(PCIe40IdManager::id_endpoint_exists(*id));
+        }
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_open_by_device_name() {
+        let device_name = pcie40_device_name();
+        let endpoint = PCIe40IdManager::open_by_device_name(&device_name).unwrap();
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_open_by_device_name_non_existent() {
+        let device_name = pcie40_device_name_non_existent();
+        let result = PCIe40IdManager::open_by_device_name(&device_name);
+
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            PCIe40IdManagerError::DeviceNotFoundByName { .. } => {}
+            _ => panic!(
+                "Unexpected error; Should have raised a DeviceNotFoundByName error"
+            ),
+        }
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_open_by_device_id() {
+        let device_id = pcie40_device_id();
+        let endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_open_by_device_id_non_existent() {
+        let device_id = pcie40_device_id_non_existent();
+        let result = PCIe40IdManager::open_by_device_id(device_id);
+
+        assert!(result.is_err());
+        match result.err().unwrap() {
+            PCIe40IdManagerError::DeviceNotFoundById { .. } => {}
+            _ => panic!(
+                "Unexpected error; Should have raised a DeviceNotFoundById error"
+            ),
+        }
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_fpga_serial_number() {
+        let device_id = pcie40_device_id();
+        let endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+
+        // No real way to test this unless the info can be known in an already tested way
+        let serial = endpoint.fpga_serial_number().unwrap();
+        assert!(serial >= 0, "FPGA serial number should be non-negative");
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_device_name() {
+        let device_id = pcie40_device_id();
+        let mut endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+
+        // No real way to test this unless the info can be known in an already tested way
+        let unique_name = endpoint.unique_device_name().unwrap();
+        assert!(!unique_name.is_empty(), "Unique device name should not be empty");
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_unique_device_name() {
+        let device_id = pcie40_device_id();
+        let mut endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+
+        // No real way to test this unless the info can be known in an already tested way
+        let unique_name = endpoint.unique_device_name().unwrap();
+        assert!(!unique_name.is_empty(), "Unique device name should not be empty");
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_set_name() {
+        let device_id = pcie40_device_id();
+        let mut endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+
+        // Get the original name so we can restore it later
+        let original_name = endpoint.device_name().unwrap();
+
+        // Create a test name
+        let test_name = "TEST_DEV";
+
+        // Set the new name
+        endpoint.set_name(test_name).unwrap();
+
+        // Verify the name was changed
+        let updated_name = endpoint.device_name().unwrap();
+        assert_eq!(updated_name, test_name, "Device name should have been updated");
+
+        // Restore the original name
+        endpoint.set_name(&original_name).unwrap();
+
+        // Verify the name was restored
+        let restored_name = endpoint.device_name().unwrap();
+        assert_eq!(restored_name, original_name, "Device name should have been restored");
+    }
+
+    #[cfg(feature = "hardware-tests")]
+    #[test]
+    fn test_with_hardware_set_name_invalid() {
+        let device_id = pcie40_device_id();
+        let mut endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
+
+        // Try to set an invalid name with a null byte
+        let result = endpoint.set_name("Test\0Name");
+
+        match result.err().unwrap() {
+            PCIe40IdEndpointError::InvalidDeviceName { .. } => {}
+            _ => panic!(
+                "Unexpected error; Should have raised an InvalidDeviceName error"
             ),
         }
     }
