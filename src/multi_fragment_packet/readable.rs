@@ -66,14 +66,17 @@ impl CastBytesRef for MultiFragmentPacketRef {
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
-    use crate::multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef, Fragment};
-    use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
-    use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
     use crate::mock_reader::MockReader;
+    use crate::multi_fragment_packet::{
+        Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef,
+    };
+    use crate::typed_zero_copy_ring_buffer_reader::{CastBytesRef, ZeroCopyRingBufferReadable};
+    use crate::utils;
+    use crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 
+    // Helper function to create a test MFP with predictable content
     fn create_test_mfp() -> Vec<u8> {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
@@ -89,24 +92,23 @@ mod tests {
             .to_vec()
     }
 
-    // Helper to extend the MockReader implementation with alignment support
-    impl MockReader {
-        fn with_alignment(data: Vec<u8>, write_offset: usize) -> Self {
-            // Only use the provided method from MockReader
-            MockReader::new(data, write_offset)
-        }
+    // Create a test MFP with proper alignment padding at the end
+    fn create_aligned_test_mfp(align_power: u8) -> Vec<u8> {
+        let mfp = create_test_mfp();
+        let alignment = 1 << align_power;
+        let aligned_size = utils::align_up(mfp.len(), alignment);
+        let mut aligned_data = mfp;
 
-        fn alignment(&self) -> Result<Option<usize>, crate::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReaderError> {
-            // Default to 4 byte alignment for tests
-            Ok(Some(4))
-        }
+        // Add padding to reach alignment boundary
+        aligned_data.resize(aligned_size, 0);
+        aligned_data
     }
 
     #[test]
     fn test_load_success() {
         let mfp_data = create_test_mfp();
-        // Use write_offset equal to length to make all data available immediately
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len());
+        // Use alignment = None for this basic test
+        let mut reader = MockReader::new(mfp_data.clone(), mfp_data.len());
 
         // Load all data to simulate what the real reader would do
         reader.load_all_data().unwrap();
@@ -116,9 +118,8 @@ mod tests {
         assert!(size_result.is_ok());
         let size = size_result.unwrap();
 
-        // Size should be aligned to 4 bytes
-        let expected_size = (mfp_data.len() + 3) & !3; // Align up to 4 bytes
-        assert_eq!(size, expected_size);
+        // Size should be exactly the packet size (no alignment)
+        assert_eq!(size, mfp_data.len());
     }
 
     #[test]
@@ -127,7 +128,7 @@ mod tests {
         let mfp_data = create_test_mfp();
         data.extend_from_slice(&mfp_data);
 
-        let mut reader = MockReader::with_alignment(data.clone(), data.len());
+        let mut reader = MockReader::new(data.clone(), data.len());
 
         // Load all data to simulate what the real reader would do
         reader.load_all_data().unwrap();
@@ -137,25 +138,23 @@ mod tests {
         assert!(size_result.is_ok());
 
         let size = size_result.unwrap();
-        // Size should be aligned to 4 bytes
-        let expected_size = (mfp_data.len() + 3) & !3; // Align up to 4 bytes
-        assert_eq!(size, expected_size);
+        // Size should be exactly the packet size (no alignment)
+        assert_eq!(size, mfp_data.len());
     }
 
     #[test]
     fn test_load_not_enough_data() {
-        // Create an MFP
         let mfp_data = create_test_mfp();
-
-        // Set write_offset to only half the data to simulate partial data availability
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len() / 2);
-
-        // Load all data available (which is only half)
+        let mut reader = MockReader::new(mfp_data.clone(), mfp_data.len() / 2);
         reader.load_all_data().unwrap();
 
-        // This should fail because there's not enough data
-        let result = MultiFragmentPacketRef::load(&mut reader, 0);
-        assert!(result.is_err());
+        // Verify it fails with NotEnoughDataAvailable error
+        use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadableError;
+        match MultiFragmentPacketRef::load(&mut reader, 0) {
+            Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable { .. }) => (),
+            Err(err) => panic!("Wrong error variant: {:?}", err),
+            Ok(_) => panic!("Expected error but got success"),
+        }
     }
 
     #[test]
@@ -176,51 +175,36 @@ mod tests {
     #[test]
     fn test_cast_corrupted_magic() {
         let mut mfp_data = create_test_mfp();
-
-        // Corrupt the magic bytes
         mfp_data[0] = 0xFF;
         mfp_data[1] = 0xFF;
 
-        // Cast should fail with corrupted magic
-        let result = MultiFragmentPacketRef::cast(&mfp_data);
-        assert!(result.is_err());
-
-        match result {
-            Err(err) => {
-                let error_message = format!("{}", err);
-                assert!(error_message.contains("Expected magic bytes"));
-            },
-            _ => panic!("Expected error but got success"),
+        // Verify it fails with ImproperlyFormattedData error
+        use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadableError;
+        match MultiFragmentPacketRef::cast(&mfp_data) {
+            Err(ZeroCopyRingBufferReadableError::ImproperlyFormattedData { .. }) => (),
+            Err(err) => panic!("Wrong error variant: {:?}", err),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
     #[test]
     fn test_cast_not_enough_data() {
         let mfp_data = create_test_mfp();
-
-        // Only use the first few bytes
         let partial_data = &mfp_data[0..10];
 
-        // Cast should fail with not enough data
-        let result = MultiFragmentPacketRef::cast(partial_data);
-        assert!(result.is_err());
-
-        match result {
-            Err(err) => {
-                let error_message = format!("{}", err);
-                assert!(error_message.contains("Not enough data available"));
-            },
-            _ => panic!("Expected error but got success"),
+        // Verify it fails with NotEnoughDataAvailable error
+        use crate::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadableError;
+        match MultiFragmentPacketRef::cast(partial_data) {
+            Err(ZeroCopyRingBufferReadableError::NotEnoughDataAvailable { .. }) => (),
+            Err(err) => panic!("Wrong error variant: {:?}", err),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
     #[test]
     fn test_read_integration() {
         let mfp_data = create_test_mfp();
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len());
-
-        // Load all data to simulate what the real reader would do
-        reader.load_all_data().unwrap();
+        let mut reader = MockReader::new(mfp_data.clone(), mfp_data.len());
 
         // Use the read method from ZeroCopyRingBufferReadable trait
         let result = MultiFragmentPacketRef::read(&mut reader);
@@ -242,18 +226,21 @@ mod tests {
 
     #[test]
     fn test_read_multiple_integration() {
-        // Create two MFPs back-to-back
-        let mfp1 = create_test_mfp();
-        let mfp2 = create_test_mfp(); // Same content but separate instance
+        // Create two MFPs back-to-back with proper alignment
+        let align_power = 2; // 2^2 = 4 byte alignment
+        let mfp1 = create_aligned_test_mfp(align_power);
+        let mfp2 = create_aligned_test_mfp(align_power);
 
         let mut combined_data = Vec::new();
         combined_data.extend_from_slice(&mfp1);
         combined_data.extend_from_slice(&mfp2);
 
-        let mut reader = MockReader::with_alignment(combined_data.clone(), combined_data.len());
-
-        // Load all data to simulate what the real reader would do
-        reader.load_all_data().unwrap();
+        // Use alignment in the reader to match the data alignment
+        let mut reader = MockReader::with_alignment(
+            combined_data.clone(),
+            combined_data.len(),
+            1 << align_power,
+        );
 
         // Use the read_multiple method
         let result = MultiFragmentPacketRef::read_multiple(&mut reader, 2);
@@ -270,53 +257,65 @@ mod tests {
     }
 
     #[test]
-    fn test_incremental_loading() {
-        let mfp_data = create_test_mfp();
+    fn test_multiple_read_and_discard() {
+        // Create three MFPs back-to-back with proper alignment
+        let align_power = 2; // 2^2 = 4 byte alignment
+        let mfp1 = create_aligned_test_mfp(align_power);
+        let mfp2 = create_aligned_test_mfp(align_power);
+        let mfp3 = create_aligned_test_mfp(align_power);
 
-        // Initially set the write offset to just cover the header
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), 20);
+        let mut combined_data = Vec::new();
+        combined_data.extend_from_slice(&mfp1);
+        combined_data.extend_from_slice(&mfp2);
+        combined_data.extend_from_slice(&mfp3);
 
-        // Load data up to the current write offset
+        // Use alignment in the reader to match data alignment
+        let mut reader = MockReader::with_alignment(combined_data.clone(), combined_data.len(), 1 << align_power);
         reader.load_all_data().unwrap();
 
-        // This should fail because we need the full packet
-        let result = MultiFragmentPacketRef::load(&mut reader, 0);
-        assert!(result.is_err());
+        // Read first two MFPs
+        let guard1 = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
 
-        // Now simulate more data arriving - increase the write offset
-        // We can't directly change the write offset, so we'll discard what we've seen
-        // and create a new reader with more data available
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len());
+        // Check both MFPs
+        assert_eq!(guard1.data_ref(0).magic(), 0x40CE);
+        assert_eq!(guard1.data_ref(1).magic(), 0x40CE);
 
-        // Load data up to the new write offset
-        reader.load_all_data().unwrap();
+        // Discard first two packets
+        guard1.discard().unwrap();
 
-        // Now we should be able to load the full packet
-        let result = MultiFragmentPacketRef::load(&mut reader, 0);
-        assert!(result.is_ok());
+        // Should now be able to read the third packet
+        let guard2 = MultiFragmentPacketRef::read(&mut reader).unwrap();
+        assert_eq!(guard2.data_ref().magic(), 0x40CE);
+
+        // Discard the third packet
+        guard2.discard().unwrap();
+
+        // All data should be consumed
+        assert_eq!(reader.data().len(), 0);
     }
 
     #[test]
-    fn test_discarding_data() {
-        let mfp_data = create_test_mfp();
-        let packet_size = mfp_data.len();
+    fn test_alignment_different_sizes() {
+        // Test with different alignment values
+        for align_power in 1..4 {
+            let alignment = 1 << align_power;
 
-        let mut reader = MockReader::with_alignment(mfp_data.clone(), packet_size);
-        reader.load_all_data().unwrap();
+            // Create a packet
+            let mfp_data = create_test_mfp();
 
-        // Read the packet
-        let guard = MultiFragmentPacketRef::read(&mut reader).unwrap();
+            // Calculate what the aligned size should be
+            let expected_aligned_size = utils::align_up(mfp_data.len(), alignment);
 
-        // Verify data is accessible
-        let mfp = guard.data_ref();
-        assert_eq!(mfp.magic(), 0x40CE);
+            // Create a reader with this alignment
+            let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len(), alignment);
+            reader.load_all_data().unwrap();
 
-        // Discard the packet
-        guard.discard().unwrap();
+            // Load the packet
+            let size = MultiFragmentPacketRef::load(&mut reader, 0).unwrap();
 
-        // After discarding, the reader's read pointer should have advanced
-        let data = reader.data();
-        assert_eq!(data.len(), 0); // All data has been discarded
+            // Size should match our calculation
+            assert_eq!(size, expected_aligned_size,
+                       "Alignment mismatch with 2^{} alignment", align_power);
+        }
     }
 }
- */
