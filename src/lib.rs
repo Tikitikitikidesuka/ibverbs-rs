@@ -10,9 +10,12 @@ mod bindings {
     include!("bindings.rs");
 }
 
+pub mod typed_zero_copy_ring_buffer_reader;
 pub mod zero_copy_ring_buffer_reader;
 
 pub mod multi_fragment_packet;
 pub mod pcie40;
-pub mod typed_zero_copy_ring_buffer_reader;
+
 pub mod utils;
+
+pub mod mock_reader;
