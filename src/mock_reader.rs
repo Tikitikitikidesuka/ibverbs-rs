@@ -9,6 +9,7 @@ pub struct MockReader {
     read_pointer: usize,
     loaded_pointer: usize,
     demo_write_offset: usize,
+    alignment: Option<usize>,
 }
 
 impl MockReader {
@@ -22,7 +23,18 @@ impl MockReader {
             read_pointer: 0,
             loaded_pointer: 0,
             demo_write_offset,
+            alignment: None,
         }
+    }
+
+    pub fn with_alignment(
+        demo_data: Vec<u8>,
+        demo_write_offset: usize,
+        alignment: usize,
+    ) -> MockReader {
+        let mut reader = Self::new(demo_data, demo_write_offset);
+        reader.alignment = Some(alignment);
+        reader
     }
 
     // Helper method to check available bytes in source
@@ -135,5 +147,9 @@ impl ZeroCopyRingBufferReader for MockReader {
         );
 
         Ok(available)
+    }
+
+    fn alignment(&self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
+        Ok(self.alignment)
     }
 }
