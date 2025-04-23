@@ -15,7 +15,9 @@ bindgen = "0.71.1"
 [features]
 pcie40 = []
 pcie40-hardware-tests = ["pcie40"]
-multi_fragment_packet = []
+multi-fragment-packet = []
+mock-reader = []
+utils = []
 
 [[example]]
 name = "byte_reading_example"
@@ -28,8 +30,9 @@ path = "examples/example_readable.rs"
 [[example]]
 name = "typed_reading_example"
 path = "examples/typed_reading_example.rs"
+required-features = ["utils"]
 
 [[example]]
 name = "temp_example"
 path = "examples/temp_example.rs"
-required-features = ["pcie40", "multi_fragment_packet"]
+required-features = ["pcie40", "multi-fragment-packet"]
