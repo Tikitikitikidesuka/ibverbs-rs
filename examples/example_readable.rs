@@ -1,6 +1,4 @@
-use pcie40_rs::typed_zero_copy_ring_buffer_reader::{
-    ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes,
-};
+use pcie40_rs::typed_zero_copy_ring_buffer_reader::{ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes, CastBytesRef};
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::size_of;
@@ -60,6 +58,17 @@ impl<'a> I32ListRef<'a> {
     }
 }
 
+impl<'buf> CastBytesRef for I32ListRef<'buf> {
+    fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
+        I32ListRef::from_raw_bytes(data).ok_or({
+            ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
+                required_data: size_of::<I32ListRef<'_>>(),
+                available_data: data.len(),
+            }
+        })
+    }
+}
+
 impl<'buf, R> ZeroCopyRingBufferReadable<'buf, R> for I32ListRef<'buf>
 where
     R: ZeroCopyRingBufferReader,
@@ -83,15 +92,6 @@ where
 
         // Get the final data guard with all required data
         Ok(total_size)
-    }
-
-    fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
-        I32ListRef::from_raw_bytes(data).ok_or({
-            ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {
-                required_data: size_of::<I32ListRef<'_>>(),
-                available_data: data.len(),
-            }
-        })
     }
 }
 

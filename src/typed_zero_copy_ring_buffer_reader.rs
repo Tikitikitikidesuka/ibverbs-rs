@@ -51,16 +51,18 @@ pub fn ensure_available_bytes<R: ZeroCopyRingBufferReader + ?Sized>(
     Ok(())
 }
 
-pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>: Sized {
+pub trait CastBytesRef {
+    /// Returns a reference to a T typed struct interpreting the data
+    fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError>;
+}
+
+pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>: Sized + CastBytesRef {
     /// Finds a T typed struct's data in the reader's buffer.
     /// It assumes the first byte of the struct is at offset on the buffer from the read_pointer.
     /// Loads more data if necessary. Returns the size of the loaded struct.
     /// It is used by read with offset zero to load one element. Also used by read_multiple with
     /// incrementing offsets to load multiple elements.
     fn load(reader: &mut R, offset: usize) -> Result<usize, ZeroCopyRingBufferReadableError>;
-
-    /// Returns a reference to a T typed struct interpreting the data
-    fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError>;
 
     fn read(
         reader: &'buf mut R,
@@ -124,7 +126,7 @@ pub struct TypedMultiDataGuard<
     _phantom_type: PhantomData<&'buf T>,
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + CastBytesRef>
     TypedDataGuard<'buf, R, T>
 {
     pub fn new(
@@ -171,7 +173,7 @@ impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'
     }
 }
 
-impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R>>
+impl<'buf, R: ZeroCopyRingBufferReader + ?Sized, T: ZeroCopyRingBufferReadable<'buf, R> + CastBytesRef>
     TypedMultiDataGuard<'buf, R, T>
 {
     pub fn new(
