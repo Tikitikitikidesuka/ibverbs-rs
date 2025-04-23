@@ -270,7 +270,11 @@ mod tests {
         combined_data.extend_from_slice(&mfp3);
 
         // Use alignment in the reader to match data alignment
-        let mut reader = MockReader::with_alignment(combined_data.clone(), combined_data.len(), 1 << align_power);
+        let mut reader = MockReader::with_alignment(
+            combined_data.clone(),
+            combined_data.len(),
+            1 << align_power,
+        );
         reader.load_all_data().unwrap();
 
         // Read first two MFPs
@@ -307,15 +311,19 @@ mod tests {
             let expected_aligned_size = utils::align_up(mfp_data.len(), alignment);
 
             // Create a reader with this alignment
-            let mut reader = MockReader::with_alignment(mfp_data.clone(), mfp_data.len(), alignment);
+            let mut reader =
+                MockReader::with_alignment(mfp_data.clone(), mfp_data.len(), alignment);
             reader.load_all_data().unwrap();
 
             // Load the packet
             let size = MultiFragmentPacketRef::load(&mut reader, 0).unwrap();
 
             // Size should match our calculation
-            assert_eq!(size, expected_aligned_size,
-                       "Alignment mismatch with 2^{} alignment", align_power);
+            assert_eq!(
+                size, expected_aligned_size,
+                "Alignment mismatch with 2^{} alignment",
+                align_power
+            );
         }
     }
 }
