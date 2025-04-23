@@ -2,31 +2,39 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+const PCIE40_WRAPPER_H: &str = "src/pcie40/wrapper.h";
+const PCIE40_BINDINGS: &str = "src/pcie40/bindings.rs";
+const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
+
 fn main() {
     // Tell cargo to re-run if the wrapper.h changes
-    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
 
     // Link to the p40 libraries
-    println!("cargo:rustc-link-lib=pcie40_daq");
-    println!("cargo:rustc-link-lib=pcie40_id");
+    for lib in PCIE40_LIBS {
+        println!("cargo:rustc-link-lib={lib}");
+    }
 
     // Generate bindings using the wrapper header
     let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
+        .header(PCIE40_WRAPPER_H)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
-        .expect("Unable to generate bindings");
+        .expect("Unable to generate pcie40 bindings");
 
-    // Write to src directory for IDE visibility
+    // Create the output directory structure if it doesn't exist
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let src_dir = manifest_dir.join("src");
+    let output_path = manifest_dir.join(PCIE40_BINDINGS);
 
-    // Make sure src directory exists
-    fs::create_dir_all(&src_dir).expect("Failed to create src directory");
+    // Ensure the parent directory exists
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent).expect("Failed to create pcie40 bindings output directory");
+    }
 
+    // Write the bindings to the file
     bindings
-        .write_to_file(src_dir.join("bindings.rs"))
-        .expect("Couldn't write bindings to src directory!");
+        .write_to_file(&output_path)
+        .unwrap_or_else(|_| panic!("Couldn't write pcie40 bindings to {PCIE40_BINDINGS}!"));
 
-    println!("cargo:warning=Wrote bindings to src/bindings.rs");
+    println!("cargo:warning=Generated pcie40 bindings at {PCIE40_BINDINGS}");
 }
