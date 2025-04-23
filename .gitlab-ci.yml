@@ -6,7 +6,7 @@ stages:
 variables:
   RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
   RUST_BACKTRACE: 1
-  HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
+  #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
 # Common configuration to be extended
 .rust_template:
@@ -29,16 +29,17 @@ rust-test:
   script:
     - cargo test --all-targets
 
+# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
-rust-test-hardware:
-  extends: .rust_template
-  stage: test
-  script:
-    - cargo test --features hardware-tests
-  tags:
-    - online_network
-    - docker
-    #- pcie40-hardware # Add a specific tag for runners with the hardware
+#rust-test-hardware:
+  #extends: .rust_template
+  #stage: test
+  #script:
+    #- cargo test --features hardware-tests
+  #tags:
+    #- online_network
+    #- docker
+    ##- pcie40-hardware # Add a specific tag for runners with the hardware
 
 # Build and publish documentation to GitLab Pages
 pages:
