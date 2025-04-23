@@ -1,6 +1,8 @@
+use crate::zero_copy_ring_buffer_reader::{
+    ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
+};
 use log::{debug, trace};
 use std::cmp::min;
-use crate::zero_copy_ring_buffer_reader::{ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError};
 
 pub struct MockReader {
     demo_data: Vec<u8>,

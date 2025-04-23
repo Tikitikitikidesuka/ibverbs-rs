@@ -1,4 +1,7 @@
-use pcie40_rs::typed_zero_copy_ring_buffer_reader::{ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError, ensure_available_bytes, CastBytesRef};
+use pcie40_rs::typed_zero_copy_ring_buffer_reader::{
+    CastBytesRef, ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError,
+    ensure_available_bytes,
+};
 use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::size_of;
