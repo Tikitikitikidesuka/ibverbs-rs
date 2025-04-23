@@ -27,7 +27,7 @@ rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all-targets
+    - cargo test --all-targets --all-features
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
