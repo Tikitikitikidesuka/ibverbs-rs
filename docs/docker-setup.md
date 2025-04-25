@@ -30,10 +30,10 @@ If you are working on an ARM-based system (e.g., Apple Silicon MacBook) and want
 
 ```sh
 # Create a dedicated Colima profile with QEMU x86_64 backend
-colima start --profile qemu_x86_64 --arch x86_64
+colima start --profile qemu_x86_64 --arch x86_64_v2
 
 # Build and push as normal
-docker build -t gitlab-registry.cern.ch/mhermoso/pcie40-rs .
+docker build --platform linux/amd64 -t gitlab-registry.cern.ch/mhermoso/pcie40-rs .
 docker push gitlab-registry.cern.ch/mhermoso/pcie40-rs
 ```
 
