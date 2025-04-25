@@ -2,6 +2,8 @@ use std::ffi::CString;
 use std::io::Error;
 use std::os::fd::RawFd;
 use thiserror::Error;
+use nix::sys::stat::Mode;
+
 
 struct SharedMemory {
     fd: RawFd,

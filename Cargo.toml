@@ -8,6 +8,8 @@ description = "Rust bindings for the PCIe40 drivers"
 thiserror = "2.0.12"
 log = "0.4.26"
 env_logger = "0.11.6"
+libc = "0.2.170"
+nix = { version = "0.29.0", features = ["fs"] }
 
 [build-dependencies]
 bindgen = { version = "0.71.1", optional = true }
