@@ -10,12 +10,13 @@ log = "0.4.26"
 env_logger = "0.11.6"
 
 [build-dependencies]
-bindgen = "0.71.1"
+bindgen = { version = "0.71.1", optional = true }
 
 [features]
-pcie40 = []
+pcie40 = ["bindgen"]
 pcie40-hardware-tests = ["pcie40"]
 multi-fragment-packet = []
+shared-memory = []
 mock-reader = []
 utils = []
 
