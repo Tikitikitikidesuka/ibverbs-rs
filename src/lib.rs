@@ -14,4 +14,4 @@ pub mod mock_reader;
 
 #[cfg(feature = "utils")]
 pub mod utils;
-mod shared_memory_buffer;
+//mod shared_memory_buffer;

@@ -51,4 +51,6 @@ fn benchmark(
         let read_mfps = MultiFragmentPacketRef::read_multiple(reader, nodes);
     }
     let end = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+    let duration = end - start;
+    duration
 }
