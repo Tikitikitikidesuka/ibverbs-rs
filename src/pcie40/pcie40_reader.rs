@@ -125,9 +125,7 @@ impl PCIe40Reader<'_, '_> {
             })?;
 
         trace!("Read offset before update: {}", self.read_offset);
-        self.read_offset = self.mapped_buffer.get_read_offset().map_err(|error| {
-            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
-        })?;
+        self.read_offset += discarded_bytes;
         trace!("Read offset after update: {}", self.read_offset);
 
         self.loaded_data_offset = std::cmp::max(self.read_offset, self.loaded_data_offset);
