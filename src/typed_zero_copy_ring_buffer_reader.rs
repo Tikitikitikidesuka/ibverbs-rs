@@ -88,6 +88,8 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
         let mut offset = 0;
         let mut offsets = Vec::with_capacity(count);
 
+        reader.load_all_data();
+
         for _ in 0..count {
             offsets.push(offset);
             let data_length = Self::load(reader, offset)?;
