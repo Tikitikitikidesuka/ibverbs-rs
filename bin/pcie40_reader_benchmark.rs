@@ -10,30 +10,31 @@ use pcie40_rs::pcie40::pcie40_stream::{PCIe40StreamManager, PCIe40Stream};
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 
 const DEVICE_NAME: &str = "tdtel203_1"; // Changed to match C++ example
-const NODES: usize = 500;
-const ITERATIONS: usize = 1;
+const NODES: &[usize] = &[16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256];
+const ITERATIONS: usize = 10;
 const PACKING_FACTOR: usize = 1000;
 const TEST_MEAN_ITERATIONS: u32 = 10;
 
 fn run_test(reader: &mut PCIe40Reader, iterations: usize, nodes: usize) -> Duration {
     let mut total_time = Duration::from_nanos(0);
 
+    let t0 = Instant::now();
+
     for _iter in 0..iterations {
         // Benchmark starts
-        let t0 = Instant::now();
 
         // Simple read_multiple call, as specified
         let mfps = MultiFragmentPacketRef::read_multiple(reader, nodes).unwrap();
 
         // Discard read MFPs
         mfps.discard().unwrap();
-
-        // Benchmark ends
-        let t1 = Instant::now();
-        total_time += t1.duration_since(t0);
     }
 
-    total_time
+    // Benchmark ends
+    let t1 = Instant::now();
+    total_time += t1.duration_since(t0);
+
+    total_time / iterations as u32
 }
 
 fn main() {
@@ -53,31 +54,38 @@ fn main() {
     println!("\n\nStream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
-    // Run the benchmark
-    let mut test_times = Vec::with_capacity(TEST_MEAN_ITERATIONS as usize);
-    let mut avg_test_time = Duration::from_nanos(0);
+    println!("Running tests for each node value...");
+    println!("Nodes\tAverage(ns)\tStdDev(ns)");
 
-    for _ in 0..TEST_MEAN_ITERATIONS {
-        let test_iter_time = run_test(&mut reader, ITERATIONS, NODES);
-        test_times.push(test_iter_time);
-        avg_test_time += test_iter_time;
+    // Run the benchmark for each node value
+    for &node_count in NODES {
+        let mut test_times = Vec::with_capacity(TEST_MEAN_ITERATIONS as usize);
+        let mut avg_test_time = Duration::from_nanos(0);
+
+        for _ in 0..TEST_MEAN_ITERATIONS {
+            let test_iter_time = run_test(&mut reader, ITERATIONS, node_count);
+            test_times.push(test_iter_time);
+            avg_test_time += test_iter_time;
+        }
+
+        avg_test_time /= TEST_MEAN_ITERATIONS;
+
+        // Calculate standard deviation
+        let avg_ns = avg_test_time.as_nanos() as f64;
+        let variance = test_times.iter()
+            .map(|duration| {
+                let diff = duration.as_nanos() as f64 - avg_ns;
+                diff * diff
+            })
+            .sum::<f64>() / TEST_MEAN_ITERATIONS as f64;
+
+        let std_dev = variance.sqrt();
+
+        println!(
+            "{}\t{:.2}\t{:.2}",
+            node_count, avg_ns, std_dev
+        );
     }
 
-    avg_test_time /= TEST_MEAN_ITERATIONS;
-
-    // Calculate standard deviation
-    let avg_ns = avg_test_time.as_nanos() as f64;
-    let variance = test_times.iter()
-        .map(|duration| {
-            let diff = duration.as_nanos() as f64 - avg_ns;
-            diff * diff
-        })
-        .sum::<f64>() / TEST_MEAN_ITERATIONS as f64;
-
-    let std_dev = variance.sqrt();
-
-    println!(
-        "Read-discard benchmark (iter={ITERATIONS}, nodes={NODES}): Avg={:.2}ns, Std={:.2}ns",
-        avg_ns, std_dev
-    );
+    println!("\nBenchmark complete!");
 }
