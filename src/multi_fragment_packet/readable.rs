@@ -1,5 +1,6 @@
 use crate::multi_fragment_packet::{
-    HEADER_SIZE, MultiFragmentPacketFromRawBytesError, MultiFragmentPacketRef,
+    HEADER_SIZE, MultiFragmentPacketFromRawBytesError, MultiFragmentPacketHeader,
+    MultiFragmentPacketRef,
 };
 use crate::typed_zero_copy_ring_buffer_reader::{
     CastBytesRef, ZeroCopyRingBufferReadable, ZeroCopyRingBufferReadableError,
@@ -19,27 +20,23 @@ where
         // Get temporary access to the data to read the header
         let temp_data = reader.data();
         let header_data = &temp_data[offset..(offset + HEADER_SIZE)];
-        let mfp = unsafe { &*(header_data.as_ptr() as *const MultiFragmentPacketRef) };
+        let mfp = unsafe { &*(header_data.as_ptr() as *const MultiFragmentPacketHeader) };
 
         // Get the total packet size from the header
-        let packet_size = mfp.packet_size() as usize;
+        let packet_size = mfp.packet_size as usize;
 
-        let (aligned_size, aligned_load) = if let Some(alignment) =
-            reader.alignment().map_err(|error| {
-                ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-            })? {
-            (
-                utils::align_up(packet_size, alignment),
-                utils::align_up(offset + packet_size, alignment),
-            )
+        let aligned_load = if let Some(alignment) = reader.alignment().map_err(|error| {
+            ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+        })? {
+            utils::align_up(offset + packet_size, alignment)
         } else {
-            (packet_size, offset + packet_size)
+            offset + packet_size
         };
 
         // Ensure enough data for the whole mfp
         ensure_available_bytes(reader, aligned_load)?;
 
-        Ok(aligned_size)
+        Ok(aligned_load - offset)
     }
 }
 
@@ -62,6 +59,14 @@ impl CastBytesRef for MultiFragmentPacketRef {
                     expected_magic, read_magic
                 ),
             },
+            MultiFragmentPacketFromRawBytesError::CorruptedPacketLength {
+                expected_length,
+                read_length,
+            } => ZeroCopyRingBufferReadableError::ImproperlyFormattedData {
+                message: format!(
+                    "Expected packet length {expected_length:?} but found {read_length:?}",
+                )
+            }
         })
     }
 }
