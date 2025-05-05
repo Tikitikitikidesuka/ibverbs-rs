@@ -62,7 +62,7 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
 
         let available_bytes = self.available_bytes()?;
 
-        self.loaded_data_offset += available_bytes;
+        self.loaded_data_offset = self.read_offset + available_bytes;
 
         debug!(
             "Loaded {} bytes, new loaded data offset: {}",
