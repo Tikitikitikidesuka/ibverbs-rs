@@ -24,10 +24,16 @@ fn run_test(reader: &mut PCIe40Reader, iterations: usize, nodes: usize) -> Durat
         // Benchmark starts
 
         // Simple read_multiple call, as specified
+        //let t0_read = Instant::now();
         let mfps = MultiFragmentPacketRef::read_multiple(reader, nodes).unwrap();
+        //let t1_read = Instant::now();
+        //println!("Read time: {:?}", t1_read.duration_since(t0_read));
 
         // Discard read MFPs
+        //let t0_discard = Instant::now();
         mfps.discard().unwrap();
+        //let t1_discard = Instant::now();
+        //println!("Discard time: {:?}", t1_discard.duration_since(t0_discard));
     }
 
     // Benchmark ends
