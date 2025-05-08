@@ -2,12 +2,12 @@ use env_logger::{Builder, Env};
 use pcie40_rs::multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
 use pcie40_rs::pcie40::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40::pcie40_reader::PCIe40Reader;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40StreamManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 use std::io::{Read, stdin};
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40DAQStreamFormat::MetaFormat;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40DAQStreamType::MainStream;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamManager;
 
 fn main() {
     let builder = MultiFragmentPacketBuilder::new()
@@ -17,7 +17,7 @@ fn main() {
         .with_source_id(2)
         .lock_header();
 
-    const DEVICE_NAME: &str = "tdtel202_0";
+    const DEVICE_NAME: &str = "tdtel203_1";
 
     Builder::from_env(Env::default().default_filter_or("trace"))
         .format_timestamp_secs()
@@ -34,8 +34,10 @@ fn main() {
         .set_raii_enable_state_close_mode(PreserveEnableState)
         .unwrap();
 
-    let mut stream_guard = stream.lock().unwrap();
-    let mut reader = PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment).unwrap();
+    let mapped_stream = stream.lock().unwrap().map_buffer().unwrap();
+
+    let mut reader = PCIe40Reader::new(mapped_stream, meta_alignment).unwrap();
+
     //println!("\n\nDiscarding all data on the stream...\n\n");
     //reader.discard_all_data().unwrap();
 
