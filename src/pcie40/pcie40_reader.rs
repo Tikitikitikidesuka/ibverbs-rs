@@ -1,19 +1,20 @@
-use crate::pcie40::pcie40_stream::{PCIe40MappedBuffer, PCIe40StreamError};
 use crate::zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
 use log::{debug, error, trace};
+use crate::pcie40::pcie40_stream::mapped_stream::PCIe40MappedStream;
+use crate::pcie40::pcie40_stream::stream::PCIe40StreamError;
 
-pub struct PCIe40Reader<'guard, 'buf> {
-    mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
+pub struct PCIe40Reader<'a> {
+    mapped_buffer: PCIe40MappedStream<'a>,
     loaded_data_offset: usize,
     read_offset: usize,
     alignment: usize,
 }
 
-impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
+impl<'a> PCIe40Reader<'a> {
     pub fn new(
-        mapped_buffer: PCIe40MappedBuffer<'guard, 'buf>,
+        mapped_buffer: PCIe40MappedStream<'a>,
         alignment: usize,
     ) -> Result<Self, PCIe40StreamError> {
         debug!("Creating new PCIe40Reader");
@@ -30,7 +31,7 @@ impl<'guard, 'buf> PCIe40Reader<'guard, 'buf> {
     }
 }
 
-impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
+impl ZeroCopyRingBufferReader for PCIe40Reader<'_> {
     unsafe fn unsafe_data(&self) -> &[u8] {
         trace!(
             "Accessing data with read offset {} and loaded data offset {}",
@@ -62,7 +63,7 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
 
         let available_bytes = self.available_bytes()?;
 
-        self.loaded_data_offset += available_bytes;
+        self.loaded_data_offset = self.read_offset + available_bytes;
 
         debug!(
             "Loaded {} bytes, new loaded data offset: {}",
@@ -99,7 +100,7 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_, '_> {
     }
 }
 
-impl PCIe40Reader<'_, '_> {
+impl PCIe40Reader<'_> {
     fn available_bytes(&self) -> Result<usize, ZeroCopyRingBufferReaderError> {
         trace!("Getting available bytes");
 
@@ -125,9 +126,7 @@ impl PCIe40Reader<'_, '_> {
             })?;
 
         trace!("Read offset before update: {}", self.read_offset);
-        self.read_offset = self.mapped_buffer.get_read_offset().map_err(|error| {
-            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
-        })?;
+        self.read_offset += discarded_bytes;
         trace!("Read offset after update: {}", self.read_offset);
 
         self.loaded_data_offset = std::cmp::max(self.read_offset, self.loaded_data_offset);

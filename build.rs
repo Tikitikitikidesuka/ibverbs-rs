@@ -8,7 +8,7 @@ const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
 
 fn main() {
     #[cfg(feature = "pcie40")]
-    build_pcie40_bindigns();
+    build_pcie40_bindings();
 }
 
 #[cfg(feature = "pcie40")]

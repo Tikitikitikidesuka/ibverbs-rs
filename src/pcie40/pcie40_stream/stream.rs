@@ -4,6 +4,7 @@ use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
 use std::{ptr, slice};
 use thiserror::Error;
+use crate::pcie40::pcie40_stream::locked_stream::PCIe40LockedStream;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PCIe40DAQStreamType {
@@ -234,12 +235,12 @@ impl PCIe40StreamManager {
 }
 
 pub struct PCIe40Stream {
-    device_id: i32,
-    stream_fd: i32,
-    meta_stream_fd: i32,
-    stream_type: PCIe40DAQStreamType,
-    stream_format: PCIe40DAQStreamFormat,
-    enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
+    pub(super) device_id: i32,
+    pub(super) stream_fd: i32,
+    pub(super) meta_stream_fd: i32,
+    pub(super) stream_type: PCIe40DAQStreamType,
+    pub(super) stream_format: PCIe40DAQStreamFormat,
+    pub(super) enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
 }
 
 #[derive(Debug, Error)]
@@ -321,6 +322,17 @@ impl Drop for PCIe40Stream {
 }
 
 impl PCIe40Stream {
+    pub(super) fn new_empty() -> Self{
+        Self {
+            device_id: 0,
+            stream_fd: 0,
+            meta_stream_fd: 0,
+            stream_type: PCIe40DAQStreamType::MainStream,
+            stream_format: PCIe40DAQStreamFormat::RawFormat,
+            enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+        }
+    }
+
     fn new(
         device_id: i32,
         stream_fd: i32,
@@ -339,8 +351,20 @@ impl PCIe40Stream {
             stream_type,
             stream_format,
             enable_state_action_on_close:
-                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+            PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
         }
+    }
+
+    pub fn device_id(&self) -> i32 {
+        self.device_id
+    }
+
+    pub fn stream_type(&self) -> PCIe40DAQStreamType {
+        self.stream_type
+    }
+
+    pub fn stream_format(&self) -> PCIe40DAQStreamFormat {
+        self.stream_format
     }
 
     pub fn enabled(&self) -> Result<bool, PCIe40StreamError> {
@@ -444,7 +468,7 @@ impl PCIe40Stream {
         }
     }
 
-    pub fn lock(&mut self) -> Result<PCIe40StreamGuard, PCIe40StreamError> {
+    pub fn lock(mut self) -> Result<PCIe40LockedStream, PCIe40StreamError> {
         debug!(
             "Attempting to lock stream {} on device {}",
             self.stream_type, self.device_id
@@ -472,7 +496,7 @@ impl PCIe40Stream {
                     "Successfully locked stream {} on device {}",
                     self.stream_type, self.device_id
                 );
-                Ok(PCIe40StreamGuard::new(self)?)
+                Ok(PCIe40LockedStream::new(self))
             }
             std::cmp::Ordering::Greater => {
                 error!(
@@ -667,344 +691,3 @@ impl PCIe40Stream {
     }
 }
 
-pub struct PCIe40StreamGuard<'a> {
-    stream_handle: &'a mut PCIe40Stream,
-}
-
-impl Drop for PCIe40StreamGuard<'_> {
-    fn drop(&mut self) {
-        trace!(
-            "Drop called on PCIe40StreamGuard for device {} stream {}",
-            self.stream_handle.device_id, self.stream_handle.stream_type
-        );
-        if let Err(e) = self.ref_unlock() {
-            error!("Failed to unlock stream during Drop: {}", e);
-        }
-    }
-}
-
-impl<'a> PCIe40StreamGuard<'a> {
-    fn new(stream_handle: &'a mut PCIe40Stream) -> Result<Self, PCIe40StreamError> {
-        debug!(
-            "Creating new PCIe40StreamGuard for stream {} on device {}",
-            stream_handle.stream_type, stream_handle.device_id
-        );
-
-        let locked_stream = PCIe40StreamGuard { stream_handle };
-
-        Ok(locked_stream)
-    }
-
-    fn ref_unlock(&mut self) -> Result<(), PCIe40StreamError> {
-        debug!(
-            "Unlocking stream {} on device {}",
-            self.stream_handle.stream_type, self.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_unlock({})",
-            self.stream_handle.stream_fd
-        );
-        let c_result = unsafe { p40_stream_unlock(self.stream_handle.stream_fd) };
-        trace!("p40_stream_unlock returned {}", c_result);
-
-        match c_result.cmp(&0) {
-            std::cmp::Ordering::Equal => {
-                info!(
-                    "Successfully unlocked stream {} on device {}",
-                    self.stream_handle.stream_type, self.stream_handle.device_id
-                );
-                Ok(())
-            }
-            std::cmp::Ordering::Greater => {
-                error!(
-                    "Failed to unlock stream {} on device {} (locked by process {})",
-                    self.stream_handle.stream_type, self.stream_handle.device_id, c_result
-                );
-                Err(PCIe40StreamError::FailedToUnlockStream {
-                    device_id: self.stream_handle.device_id,
-                    stream_type: self.stream_handle.stream_type,
-                })
-            }
-            std::cmp::Ordering::Less => {
-                error!(
-                    "Error writing unlock for stream {} on device {}",
-                    self.stream_handle.stream_type, self.stream_handle.device_id
-                );
-                Err(PCIe40StreamError::StreamWriteError {
-                    device_id: self.stream_handle.device_id,
-                    stream_type: self.stream_handle.stream_type,
-                    info: "Unable to write unlock".to_string(),
-                })
-            }
-        }
-    }
-}
-
-impl<'a> PCIe40StreamGuard<'a> {
-    pub fn map_buffer<'buf>(
-        &'buf mut self,
-    ) -> Result<PCIe40MappedBuffer<'a, 'buf>, PCIe40StreamError> {
-        debug!(
-            "Mapping buffer for stream {} on device {}",
-            self.stream_handle.stream_type, self.stream_handle.device_id
-        );
-
-        trace!("Calling p40_stream_map({})", self.stream_handle.stream_fd);
-        let buff_ptr = unsafe { p40_stream_map(self.stream_handle.stream_fd) };
-        trace!("p40_stream_map returned {:p}", buff_ptr);
-
-        if buff_ptr.is_null() {
-            error!(
-                "Failed to map buffer for stream {} on device {}: null pointer",
-                self.stream_handle.stream_type, self.stream_handle.device_id
-            );
-            return Err(PCIe40StreamError::FailedToMapBuffer {
-                device_id: self.stream_handle.device_id,
-                stream_type: self.stream_handle.stream_type,
-            });
-        }
-
-        trace!(
-            "Calling p40_stream_get_host_buf_bytes({})",
-            self.stream_handle.stream_fd
-        );
-        let buff_size = unsafe { p40_stream_get_host_buf_bytes(self.stream_handle.stream_fd) };
-        trace!("p40_stream_get_host_buf_bytes returned {}", buff_size);
-
-        if buff_size <= 0 {
-            error!(
-                "Failed to map buffer for stream {} on device {}: invalid buffer size {}",
-                self.stream_handle.stream_type, self.stream_handle.device_id, buff_size
-            );
-            return Err(PCIe40StreamError::FailedToMapBuffer {
-                device_id: self.stream_handle.device_id,
-                stream_type: self.stream_handle.stream_type,
-            });
-        }
-
-        debug!(
-            "Successfully mapped buffer of size {} bytes for stream {} on device {}",
-            buff_size, self.stream_handle.stream_type, self.stream_handle.device_id
-        );
-
-        PCIe40MappedBuffer::new(self, unsafe {
-            slice::from_raw_parts(buff_ptr as *const u8, buff_size as usize)
-        })
-    }
-}
-
-pub struct PCIe40MappedBuffer<'guard, 'buf> {
-    pub stream_guard: &'buf mut PCIe40StreamGuard<'guard>,
-    pub buffer: &'buf [u8],
-}
-
-impl Drop for PCIe40MappedBuffer<'_, '_> {
-    fn drop(&mut self) {
-        trace!(
-            "Drop called on PCIe40MappedBuffer for device {} stream {}",
-            self.stream_guard.stream_handle.device_id, self.stream_guard.stream_handle.stream_type
-        );
-        self.unmap_buffer();
-    }
-}
-
-impl<'guard, 'buf> PCIe40MappedBuffer<'guard, 'buf> {
-    fn new(
-        stream_guard: &'buf mut PCIe40StreamGuard<'guard>,
-        buffer: &'buf [u8],
-    ) -> Result<Self, PCIe40StreamError> {
-        debug!(
-            "Creating new PCIe40MappedBuffer with size {} for stream {} on device {}",
-            buffer.len(),
-            stream_guard.stream_handle.stream_type,
-            stream_guard.stream_handle.device_id
-        );
-
-        Ok(Self {
-            stream_guard,
-            buffer,
-        })
-    }
-
-    fn unmap_buffer(&mut self) {
-        debug!(
-            "Unmapping buffer for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_unmap({}, {:p})",
-            self.stream_guard.stream_handle.stream_fd,
-            self.buffer.as_ptr() as *mut std::os::raw::c_void
-        );
-        unsafe {
-            p40_stream_unmap(
-                self.stream_guard.stream_handle.stream_fd,
-                self.buffer.as_ptr() as *mut std::os::raw::c_void,
-            )
-        }
-        debug!(
-            "Successfully unmapped buffer for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-    }
-}
-
-impl PCIe40MappedBuffer<'_, '_> {
-    pub unsafe fn data(&self) -> &[u8] {
-        trace!(
-            "Accessing buffer data of size {} for stream {} on device {}",
-            self.buffer.len(),
-            self.stream_guard.stream_handle.stream_type,
-            self.stream_guard.stream_handle.device_id
-        );
-        self.buffer
-    }
-
-    pub fn get_read_offset(&self) -> Result<usize, PCIe40StreamError> {
-        trace!(
-            "Getting buffer read offset for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_get_host_buf_read_off({})",
-            self.stream_guard.stream_handle.stream_fd
-        );
-        let offset =
-            unsafe { p40_stream_get_host_buf_read_off(self.stream_guard.stream_handle.stream_fd) };
-        trace!("p40_stream_get_host_buf_read_off returned {}", offset);
-
-        if offset < 0 {
-            error!(
-                "Failed to get buffer read offset for stream {} on device {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-            );
-            Err(PCIe40StreamError::StreamReadError {
-                device_id: self.stream_guard.stream_handle.device_id,
-                stream_type: self.stream_guard.stream_handle.stream_type,
-                info: "Unable to get buffer read offset".to_string(),
-            })
-        } else {
-            debug!(
-                "Buffer read offset for stream {} on device {}: {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-                offset
-            );
-            Ok(offset as usize)
-        }
-    }
-
-    pub fn available_bytes(&self) -> Result<usize, PCIe40StreamError> {
-        trace!(
-            "Getting available bytes of mapped buffer for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_get_host_buf_read_off({})",
-            self.stream_guard.stream_handle.stream_fd
-        );
-        let available = unsafe {
-            p40_stream_get_host_buf_bytes_used(self.stream_guard.stream_handle.stream_fd)
-        };
-        trace!("p40_stream_get_host_buf_bytes_used returned {}", available);
-
-        if available < 0 {
-            error!(
-                "Failed to get available bytes on buffer for stream {} on device {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id
-            );
-            Err(PCIe40StreamError::StreamReadError {
-                device_id: self.stream_guard.stream_handle.device_id,
-                stream_type: self.stream_guard.stream_handle.stream_type,
-                info: "Unable to get available bytes on buffer".to_string(),
-            })
-        } else {
-            debug!(
-                "Available bytes for stream {} on device {}: {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-                available
-            );
-            Ok(available as usize)
-        }
-    }
-
-    pub fn get_write_offset(&self) -> Result<usize, PCIe40StreamError> {
-        trace!(
-            "Getting buffer write offset for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_get_host_buf_write_off({})",
-            self.stream_guard.stream_handle.stream_fd
-        );
-        let offset =
-            unsafe { p40_stream_get_host_buf_write_off(self.stream_guard.stream_handle.stream_fd) };
-        trace!("p40_stream_get_host_buf_write_off returned {}", offset);
-
-        if offset < 0 {
-            error!(
-                "Failed to get buffer write offset for stream {} on device {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-            );
-            Err(PCIe40StreamError::StreamReadError {
-                device_id: self.stream_guard.stream_handle.device_id,
-                stream_type: self.stream_guard.stream_handle.stream_type,
-                info: "Unable to get buffer write offset".to_string(),
-            })
-        } else {
-            debug!(
-                "Buffer write offset for stream {} on device {}: {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-                offset
-            );
-            Ok(offset as usize)
-        }
-    }
-
-    pub fn move_read_offset(&mut self, offset: usize) -> Result<usize, PCIe40StreamError> {
-        trace!(
-            "Moving buffer read offset for stream {} on device {}",
-            self.stream_guard.stream_handle.stream_type, self.stream_guard.stream_handle.device_id
-        );
-
-        trace!(
-            "Calling p40_stream_free_host_buf_bytes({}, {})",
-            self.stream_guard.stream_handle.stream_fd, offset
-        );
-        let offset = unsafe {
-            p40_stream_free_host_buf_bytes(self.stream_guard.stream_handle.stream_fd, offset)
-        };
-        trace!("p40_stream_free_host_buf_bytes returned {}", offset);
-
-        if offset < 0 {
-            error!(
-                "Failed to move buffer read offset for stream {} on device {}",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-            );
-            Err(PCIe40StreamError::StreamWriteError {
-                device_id: self.stream_guard.stream_handle.device_id,
-                stream_type: self.stream_guard.stream_handle.stream_type,
-                info: "Unable to move buffer read offset".to_string(),
-            })
-        } else {
-            debug!(
-                "Buffer read offset for stream {} on device {} moved {} bytes",
-                self.stream_guard.stream_handle.stream_type,
-                self.stream_guard.stream_handle.device_id,
-                offset
-            );
-            Ok(offset as usize)
-        }
-    }
-}
