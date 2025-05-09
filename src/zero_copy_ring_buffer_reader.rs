@@ -60,27 +60,6 @@ pub trait ZeroCopyRingBufferReader {
         DataGuard::new(self)
     }
 
-    /// Advances the loaded data pointer num_bytes or until the write pointer if reached,
-    /// marking new data as available.
-    ///
-    /// Typically called after DMA hardware writes to the buffer.
-    /// Cannot be called while a `DataGuard` from this reader exists.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes that were newly added
-    fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError>;
-
-    /// Advances the loaded data pointer until the write pointer, marking new data as available.
-    ///
-    /// Typically called after DMA hardware writes to the buffer.
-    /// Cannot be called while a `DataGuard` from this reader exists.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes that were newly added
-    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
-
     /// Advances the read pointer num_bytes or until write pointer, marking data as processed.
     ///
     /// Cannot be called while a `DataGuard` from this reader exists.
