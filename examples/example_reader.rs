@@ -1,14 +1,13 @@
 use log::{debug, trace};
-use pcie40_rs::zero_copy_ring_buffer_reader::{
-    ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
-};
 use std::cmp::min;
+use pcie40_rs::zero_copy_ring_buffer_reader::{ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError};
 
 pub struct ExampleReader {
     demo_data: Vec<u8>,
     read_pointer: usize,
-    loaded_pointer: usize,
+    write_pointer: usize,
     demo_write_offset: usize,
+    alignment: Option<usize>,
 }
 
 impl ExampleReader {
@@ -20,9 +19,20 @@ impl ExampleReader {
         ExampleReader {
             demo_data,
             read_pointer: 0,
-            loaded_pointer: 0,
+            write_pointer: 0,
             demo_write_offset,
+            alignment: None,
         }
+    }
+
+    pub fn with_alignment(
+        demo_data: Vec<u8>,
+        demo_write_offset: usize,
+        alignment: usize,
+    ) -> ExampleReader {
+        let mut reader = Self::new(demo_data, demo_write_offset);
+        reader.alignment = Some(alignment);
+        reader
     }
 
     // Helper method to check available bytes in source
@@ -31,20 +41,20 @@ impl ExampleReader {
 
         // Only return data up to the simulated write pointer
         // or the end of the demo data, whichever is smaller
-        let available = min(self.demo_data.len(), write_pointer) - self.loaded_pointer;
+        let available = min(self.demo_data.len(), write_pointer) - self.write_pointer;
         trace!(
             "Available in source: {} bytes (write_pointer: {}, loaded_pointer: {})",
-            available, write_pointer, self.loaded_pointer
+            available, write_pointer, self.write_pointer
         );
         available
     }
 
     // Helper method to check available bytes in buffer
     fn available_in_buffer(&self) -> usize {
-        let available = self.loaded_pointer - self.read_pointer;
+        let available = self.write_pointer - self.read_pointer;
         trace!(
             "Available in buffer: {} bytes (loaded_pointer: {}, read_pointer: {})",
-            available, self.loaded_pointer, self.read_pointer
+            available, self.write_pointer, self.read_pointer
         );
         available
     }
@@ -64,43 +74,9 @@ impl ZeroCopyRingBufferReader for ExampleReader {
     unsafe fn unsafe_data(&self) -> &[u8] {
         trace!(
             "Accessing data with read pointer {} and loaded pointer {}",
-            self.read_pointer, self.loaded_pointer
+            self.read_pointer, self.write_pointer
         );
-        &self.demo_data[self.read_pointer..self.loaded_pointer]
-    }
-
-    fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading {} bytes of data", num_bytes);
-
-        // Calculate how many bytes we can actually load, respecting the write pointer
-        let can_load = min(num_bytes, self.available_in_source());
-
-        // Update the loaded pointer
-        self.loaded_pointer += can_load;
-
-        debug!(
-            "Loaded {} bytes, new loaded pointer: {}",
-            can_load, self.loaded_pointer
-        );
-
-        Ok(can_load)
-    }
-
-    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading all available data");
-
-        // Load all remaining data from the source, up to the write pointer
-        let available = self.available_in_source();
-
-        // Update the loaded pointer
-        self.loaded_pointer += available;
-
-        debug!(
-            "Loaded {} bytes, new loaded pointer: {}",
-            available, self.loaded_pointer
-        );
-
-        Ok(available)
+        &self.demo_data[self.read_pointer..self.write_pointer]
     }
 
     fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
@@ -127,7 +103,7 @@ impl ZeroCopyRingBufferReader for ExampleReader {
         let available = self.available_in_buffer();
 
         // Move read pointer to catch up with loaded pointer
-        self.read_pointer = self.loaded_pointer;
+        self.read_pointer = self.write_pointer;
 
         debug!(
             "Discarded {} bytes, read pointer now matches loaded pointer: {}",
@@ -135,6 +111,10 @@ impl ZeroCopyRingBufferReader for ExampleReader {
         );
 
         Ok(available)
+    }
+
+    fn alignment(&self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
+        Ok(self.alignment)
     }
 }
 

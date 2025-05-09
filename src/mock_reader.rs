@@ -7,7 +7,7 @@ use std::cmp::min;
 pub struct MockReader {
     demo_data: Vec<u8>,
     read_pointer: usize,
-    loaded_pointer: usize,
+    write_pointer: usize,
     demo_write_offset: usize,
     alignment: Option<usize>,
 }
@@ -21,7 +21,7 @@ impl MockReader {
         MockReader {
             demo_data,
             read_pointer: 0,
-            loaded_pointer: 0,
+            write_pointer: 0,
             demo_write_offset,
             alignment: None,
         }
@@ -43,20 +43,20 @@ impl MockReader {
 
         // Only return data up to the simulated write pointer
         // or the end of the demo data, whichever is smaller
-        let available = min(self.demo_data.len(), write_pointer) - self.loaded_pointer;
+        let available = min(self.demo_data.len(), write_pointer) - self.write_pointer;
         trace!(
             "Available in source: {} bytes (write_pointer: {}, loaded_pointer: {})",
-            available, write_pointer, self.loaded_pointer
+            available, write_pointer, self.write_pointer
         );
         available
     }
 
     // Helper method to check available bytes in buffer
     fn available_in_buffer(&self) -> usize {
-        let available = self.loaded_pointer - self.read_pointer;
+        let available = self.write_pointer - self.read_pointer;
         trace!(
             "Available in buffer: {} bytes (loaded_pointer: {}, read_pointer: {})",
-            available, self.loaded_pointer, self.read_pointer
+            available, self.write_pointer, self.read_pointer
         );
         available
     }
@@ -76,43 +76,9 @@ impl ZeroCopyRingBufferReader for MockReader {
     unsafe fn unsafe_data(&self) -> &[u8] {
         trace!(
             "Accessing data with read pointer {} and loaded pointer {}",
-            self.read_pointer, self.loaded_pointer
+            self.read_pointer, self.write_pointer
         );
-        &self.demo_data[self.read_pointer..self.loaded_pointer]
-    }
-
-    fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading {} bytes of data", num_bytes);
-
-        // Calculate how many bytes we can actually load, respecting the write pointer
-        let can_load = min(num_bytes, self.available_in_source());
-
-        // Update the loaded pointer
-        self.loaded_pointer += can_load;
-
-        debug!(
-            "Loaded {} bytes, new loaded pointer: {}",
-            can_load, self.loaded_pointer
-        );
-
-        Ok(can_load)
-    }
-
-    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading all available data");
-
-        // Load all remaining data from the source, up to the write pointer
-        let available = self.available_in_source();
-
-        // Update the loaded pointer
-        self.loaded_pointer += available;
-
-        debug!(
-            "Loaded {} bytes, new loaded pointer: {}",
-            available, self.loaded_pointer
-        );
-
-        Ok(available)
+        &self.demo_data[self.read_pointer..self.write_pointer]
     }
 
     fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
@@ -139,7 +105,7 @@ impl ZeroCopyRingBufferReader for MockReader {
         let available = self.available_in_buffer();
 
         // Move read pointer to catch up with loaded pointer
-        self.read_pointer = self.loaded_pointer;
+        self.read_pointer = self.write_pointer;
 
         debug!(
             "Discarded {} bytes, read pointer now matches loaded pointer: {}",
