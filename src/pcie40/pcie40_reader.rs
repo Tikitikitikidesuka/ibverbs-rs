@@ -1,14 +1,14 @@
+use crate::pcie40::pcie40_stream::mapped_stream::PCIe40MappedStream;
+use crate::pcie40::pcie40_stream::stream::PCIe40StreamError;
 use crate::zero_copy_ring_buffer_reader::{
     ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
 };
 use log::{debug, error, trace};
-use crate::pcie40::pcie40_stream::mapped_stream::PCIe40MappedStream;
-use crate::pcie40::pcie40_stream::stream::PCIe40StreamError;
 
 pub struct PCIe40Reader<'a> {
     mapped_buffer: PCIe40MappedStream<'a>,
-    loaded_data_offset: usize,
     read_offset: usize,
+    write_offset: usize,
     alignment: usize,
 }
 
@@ -19,13 +19,14 @@ impl<'a> PCIe40Reader<'a> {
     ) -> Result<Self, PCIe40StreamError> {
         debug!("Creating new PCIe40Reader");
         let read_offset = mapped_buffer.get_read_offset()?;
+        let write_offset = mapped_buffer.get_write_offset()?;
 
         debug!("Initial read offset: {}", read_offset);
 
         Ok(Self {
             mapped_buffer,
-            loaded_data_offset: read_offset,
             read_offset,
+            write_offset,
             alignment,
         })
     }
@@ -34,43 +35,30 @@ impl<'a> PCIe40Reader<'a> {
 impl ZeroCopyRingBufferReader for PCIe40Reader<'_> {
     unsafe fn unsafe_data(&self) -> &[u8] {
         trace!(
-            "Accessing data with read offset {} and loaded data offset {}",
-            self.read_offset, self.loaded_data_offset
+            "Accessing data with read offset {} and write offset {}",
+            self.read_offset, self.write_offset
         );
 
-        unsafe { &self.mapped_buffer.data()[self.read_offset..self.loaded_data_offset] }
-    }
-
-    fn load_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Loading {} bytes of data", num_bytes);
-
-        let available_bytes = self.available_bytes()?;
-
-        let loaded_bytes = std::cmp::min(available_bytes, num_bytes);
-
-        self.loaded_data_offset += loaded_bytes;
-
-        debug!(
-            "Loaded {} bytes, new loaded data offset: {}",
-            loaded_bytes, self.loaded_data_offset
-        );
-
-        Ok(loaded_bytes)
+        unsafe { &self.mapped_buffer.data()[self.read_offset..self.write_offset] }
     }
 
     fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
         debug!("Loading all available data");
 
-        let available_bytes = self.available_bytes()?;
+        let new_write_offset = self.mapped_buffer.get_write_offset().map_err(|error| {
+            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
+        })?;
 
-        self.loaded_data_offset = self.read_offset + available_bytes;
+        let loaded_bytes = new_write_offset - self.write_offset;
+
+        self.write_offset = new_write_offset;
 
         debug!(
             "Loaded {} bytes, new loaded data offset: {}",
-            available_bytes, self.loaded_data_offset
+            loaded_bytes, self.write_offset
         );
 
-        Ok(available_bytes)
+        Ok(loaded_bytes)
     }
 
     fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
@@ -84,9 +72,9 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_> {
     }
 
     fn discard_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        debug!("Discarding all data");
+        debug!("Discarding all loaded data");
 
-        let available_bytes = self.available_bytes()?;
+        let available_bytes = self.write_offset - self.read_offset;
 
         let discarded_bytes = self.move_read_offset(available_bytes)?;
 
@@ -101,16 +89,6 @@ impl ZeroCopyRingBufferReader for PCIe40Reader<'_> {
 }
 
 impl PCIe40Reader<'_> {
-    fn available_bytes(&self) -> Result<usize, ZeroCopyRingBufferReaderError> {
-        trace!("Getting available bytes");
-
-        let available = self.mapped_buffer.available_bytes().map_err(|error| {
-            ZeroCopyRingBufferReaderError::ConnectionError(format!("{}", error))
-        })?;
-
-        Ok(available)
-    }
-
     fn move_read_offset(
         &mut self,
         num_bytes: usize,
@@ -128,9 +106,6 @@ impl PCIe40Reader<'_> {
         trace!("Read offset before update: {}", self.read_offset);
         self.read_offset += discarded_bytes;
         trace!("Read offset after update: {}", self.read_offset);
-
-        self.loaded_data_offset = std::cmp::max(self.read_offset, self.loaded_data_offset);
-        trace!("Updated loaded data offset: {}", self.loaded_data_offset);
 
         debug!(
             "Successfully moved read offset by {} bytes",
