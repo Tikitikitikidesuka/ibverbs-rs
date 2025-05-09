@@ -34,7 +34,7 @@ pub fn ensure_available_bytes<R: ZeroCopyRingBufferReader + ?Sized>(
     if available_data < required_bytes {
         // Try to load more data
         let loaded_data = reader
-            .load_data(required_bytes - available_data)
+            .load_all_data()
             .map_err(|error| {
                 ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
             })?;
@@ -87,8 +87,6 @@ pub trait ZeroCopyRingBufferReadable<'buf, R: ZeroCopyRingBufferReader + ?Sized>
     ) -> Result<TypedMultiDataGuard<'buf, R, Self>, ZeroCopyRingBufferReadableError> {
         let mut offset = 0;
         let mut offsets = Vec::with_capacity(count);
-
-        reader.load_all_data();
 
         for _ in 0..count {
             offsets.push(offset);

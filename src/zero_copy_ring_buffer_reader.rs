@@ -60,6 +60,15 @@ pub trait ZeroCopyRingBufferReader {
         DataGuard::new(self)
     }
 
+    /// Reads the write pointer, updating the available data to read.
+    ///
+    /// Cannot be called while a `DataGuard` from this reader exists.
+    ///
+    /// # Returns
+    ///
+    /// The number of extra bytes loaded (write pointer - previous write pointer)
+    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError>;
+
     /// Advances the read pointer num_bytes or until write pointer, marking data as processed.
     ///
     /// Cannot be called while a `DataGuard` from this reader exists.
