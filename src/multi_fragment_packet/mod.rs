@@ -142,14 +142,6 @@ pub enum MultiFragmentPacketFromRawBytesError {
         read_magic: u16,
         expected_magic: u16,
     },
-
-    #[error(
-        "Packet length on the header do not match data length: Expected {expected_length:x?} bytes, found {read_length:x?} bytes"
-    )]
-    CorruptedPacketLength {
-        read_length: usize,
-        expected_length: usize,
-    }
 }
 
 impl MultiFragmentPacketRef {
@@ -172,17 +164,6 @@ impl MultiFragmentPacketRef {
                 read_magic: mfp.magic(),
                 expected_magic: MAGIC_BYTES,
             })?
-        }
-
-        // Check if there is enough data for the whole packet
-        let packet_size = mfp.packet_size() as usize;
-        if data.len() == packet_size {
-            Err(
-                MultiFragmentPacketFromRawBytesError::CorruptedPacketLength {
-                    expected_length: data.len(),
-                    read_length: packet_size,
-                },
-            )?;
         }
 
         Ok(mfp)

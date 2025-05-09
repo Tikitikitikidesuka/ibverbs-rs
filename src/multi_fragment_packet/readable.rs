@@ -59,14 +59,6 @@ impl CastBytesRef for MultiFragmentPacketRef {
                     expected_magic, read_magic
                 ),
             },
-            MultiFragmentPacketFromRawBytesError::CorruptedPacketLength {
-                expected_length,
-                read_length,
-            } => ZeroCopyRingBufferReadableError::ImproperlyFormattedData {
-                message: format!(
-                    "Expected packet length {expected_length:?} but found {read_length:?}",
-                )
-            }
         })
     }
 }
@@ -280,7 +272,6 @@ mod tests {
             combined_data.len(),
             1 << align_power,
         );
-        reader.load_all_data().unwrap();
 
         // Read first two MFPs
         let guard1 = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
