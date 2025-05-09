@@ -79,6 +79,23 @@ impl ZeroCopyRingBufferReader for ExampleReader {
         &self.demo_data[self.read_pointer..self.write_pointer]
     }
 
+    fn load_all_data(&mut self) -> Result<usize, ZeroCopyRingBufferReaderError> {
+        debug!("Loading all available data");
+
+        // Load all remaining data from the source, up to the write pointer
+        let available = self.available_in_source();
+
+        // Update the loaded pointer
+        self.write_pointer += available;
+
+        debug!(
+            "Loaded {} bytes, new loaded pointer: {}",
+            available, self.write_pointer
+        );
+
+        Ok(available)
+    }
+
     fn discard_data(&mut self, num_bytes: usize) -> Result<usize, ZeroCopyRingBufferReaderError> {
         debug!("Discarding {} bytes of data", num_bytes);
 
