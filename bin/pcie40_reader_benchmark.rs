@@ -3,10 +3,10 @@ use std::time::{Duration, Instant};
 use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::pcie40::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40::pcie40_reader::PCIe40Reader;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40DAQStreamFormat::MetaFormat;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40::pcie40_stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::pcie40::pcie40_stream::{PCIe40StreamManager, PCIe40Stream};
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40DAQStreamFormat::MetaFormat;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40DAQStreamType::MainStream;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
 
 const DEVICE_NAME: &str = "tdtel203_1"; // Changed to match C++ example
