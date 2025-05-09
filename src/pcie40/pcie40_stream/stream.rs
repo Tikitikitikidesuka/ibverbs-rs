@@ -240,7 +240,7 @@ pub struct PCIe40Stream {
     pub(super) meta_stream_fd: i32,
     pub(super) stream_type: PCIe40DAQStreamType,
     pub(super) stream_format: PCIe40DAQStreamFormat,
-    pub enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
+    enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
 }
 
 #[derive(Debug, Error)]
