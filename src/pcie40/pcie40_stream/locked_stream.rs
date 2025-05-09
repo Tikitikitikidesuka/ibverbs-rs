@@ -1,9 +1,9 @@
-use std::mem::ManuallyDrop;
-use std::slice;
-use log::{debug, error, info, trace};
 use crate::pcie40::bindings::*;
 use crate::pcie40::pcie40_stream::mapped_stream::PCIe40MappedStream;
 use crate::pcie40::pcie40_stream::stream::{PCIe40Stream, PCIe40StreamError};
+use log::{debug, error, info, trace};
+use std::mem::ManuallyDrop;
+use std::slice;
 
 pub struct PCIe40LockedStream {
     pub(super) stream: ManuallyDrop<PCIe40Stream>,
@@ -13,7 +13,8 @@ impl Drop for PCIe40LockedStream {
     fn drop(&mut self) {
         trace!(
             "Drop called on PCIe40LockedStream for device {} stream {}",
-            self.stream.device_id(), self.stream.stream_type()
+            self.stream.device_id(),
+            self.stream.stream_type()
         );
         if let Err(e) = self.ref_unlock() {
             error!("Failed to unlock stream during Drop: {}", e);
@@ -25,8 +26,10 @@ impl Drop for PCIe40LockedStream {
 }
 
 impl PCIe40LockedStream {
-    pub(super) fn new(stream: PCIe40Stream) ->  Self {
-        Self { stream: ManuallyDrop::new(stream) }
+    pub(super) fn new(stream: PCIe40Stream) -> Self {
+        Self {
+            stream: ManuallyDrop::new(stream),
+        }
     }
 
     pub fn unlock(mut self) -> Result<PCIe40Stream, PCIe40StreamError> {
@@ -43,7 +46,8 @@ impl PCIe40LockedStream {
     fn ref_unlock(&mut self) -> Result<(), PCIe40StreamError> {
         debug!(
             "Unlocking stream {} on device {}",
-            self.stream.stream_type(), self.stream.device_id()
+            self.stream.stream_type(),
+            self.stream.device_id()
         );
 
         trace!("Calling p40_stream_unlock({})", self.stream.stream_fd);
@@ -54,14 +58,17 @@ impl PCIe40LockedStream {
             std::cmp::Ordering::Equal => {
                 info!(
                     "Successfully unlocked stream {} on device {}",
-                    self.stream.stream_type(), self.stream.device_id()
+                    self.stream.stream_type(),
+                    self.stream.device_id()
                 );
                 Ok(())
             }
             std::cmp::Ordering::Greater => {
                 error!(
                     "Failed to unlock stream {} on device {} (locked by process {})",
-                    self.stream.stream_type(), self.stream.device_id(), c_result
+                    self.stream.stream_type(),
+                    self.stream.device_id(),
+                    c_result
                 );
                 Err(PCIe40StreamError::FailedToUnlockStream {
                     device_id: self.stream.device_id(),
@@ -71,7 +78,8 @@ impl PCIe40LockedStream {
             std::cmp::Ordering::Less => {
                 error!(
                     "Error writing unlock for stream {} on device {}",
-                    self.stream.stream_type(), self.stream.device_id()
+                    self.stream.stream_type(),
+                    self.stream.device_id()
                 );
                 Err(PCIe40StreamError::StreamWriteError {
                     device_id: self.stream.device_id(),
@@ -85,7 +93,8 @@ impl PCIe40LockedStream {
     pub fn map_buffer<'a>(self) -> Result<PCIe40MappedStream<'a>, PCIe40StreamError> {
         debug!(
             "Mapping buffer for stream {} on device {}",
-            self.stream.stream_type(), self.stream.device_id()
+            self.stream.stream_type(),
+            self.stream.device_id()
         );
 
         trace!("Calling p40_stream_map({})", self.stream.stream_fd);
@@ -95,7 +104,8 @@ impl PCIe40LockedStream {
         if buff_ptr.is_null() {
             error!(
                 "Failed to map buffer for stream {} on device {}: null pointer",
-                self.stream.stream_type(), self.stream.device_id()
+                self.stream.stream_type(),
+                self.stream.device_id()
             );
             return Err(PCIe40StreamError::FailedToMapBuffer {
                 device_id: self.stream.device_id(),
@@ -113,7 +123,9 @@ impl PCIe40LockedStream {
         if buff_size <= 0 {
             error!(
                 "Failed to map buffer for stream {} on device {}: invalid buffer size {}",
-                self.stream.stream_type(), self.stream.device_id(), buff_size
+                self.stream.stream_type(),
+                self.stream.device_id(),
+                buff_size
             );
             return Err(PCIe40StreamError::FailedToMapBuffer {
                 device_id: self.stream.device_id(),
@@ -123,7 +135,9 @@ impl PCIe40LockedStream {
 
         debug!(
             "Successfully mapped buffer of size {} bytes for stream {} on device {}",
-            buff_size, self.stream.stream_type(), self.stream.device_id()
+            buff_size,
+            self.stream.stream_type(),
+            self.stream.device_id()
         );
 
         Ok(PCIe40MappedStream::new(self, unsafe {

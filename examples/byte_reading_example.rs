@@ -6,8 +6,6 @@ use pcie40_rs::zero_copy_ring_buffer_reader::ZeroCopyRingBufferReader;
 mod example_reader;
 
 fn main() {
-    // TODO: RETHINK THIS EXAMPLE FOR THE LOADLESS API
-
     // Set filter to "trace" for maximum logging detail
     Builder::from_env(Env::default().default_filter_or("warn"))
         .format_timestamp_secs()

@@ -57,7 +57,8 @@ impl<'a> PCIe40MappedStream<'a> {
         self.ref_unmap_buffer();
 
         // Take ownership of the locked stream avoiding Drop impl restriction
-        let locked_stream = unsafe { ManuallyDrop::into_inner(std::ptr::read(&self.locked_stream)) };
+        let locked_stream =
+            unsafe { ManuallyDrop::into_inner(std::ptr::read(&self.locked_stream)) };
         // Forget self to prevent Drop from running
         std::mem::forget(self);
 

@@ -1,6 +1,8 @@
 use log::{debug, trace};
+use pcie40_rs::zero_copy_ring_buffer_reader::{
+    ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError,
+};
 use std::cmp::min;
-use pcie40_rs::zero_copy_ring_buffer_reader::{ZeroCopyRingBufferReader, ZeroCopyRingBufferReaderError};
 
 pub struct ExampleReader {
     demo_data: Vec<u8>,

@@ -1,5 +1,3 @@
-use std::io::{stdin, Read};
-use std::time::{Duration, Instant};
 use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::pcie40::pcie40_ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40::pcie40_reader::PCIe40Reader;
@@ -8,9 +6,13 @@ use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40::pcie40_stream::stream::PCIe40StreamManager;
 use pcie40_rs::typed_zero_copy_ring_buffer_reader::ZeroCopyRingBufferReadable;
+use std::io::{Read, stdin};
+use std::time::{Duration, Instant};
 
 const DEVICE_NAME: &str = "tdtel203_1"; // Changed to match C++ example
-const NODES: &[usize] = &[16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256];
+const NODES: &[usize] = &[
+    16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256,
+];
 const ITERATIONS: usize = 10;
 const PACKING_FACTOR: usize = 1000;
 const TEST_MEAN_ITERATIONS: u32 = 10;
@@ -45,8 +47,11 @@ fn run_test(reader: &mut PCIe40Reader, iterations: usize, nodes: usize) -> Durat
 
 fn main() {
     // Create stream
-    let mut stream = PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
-    stream.set_raii_enable_state_close_mode(PreserveEnableState).unwrap();
+    let mut stream =
+        PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
+    stream
+        .set_raii_enable_state_close_mode(PreserveEnableState)
+        .unwrap();
 
     // Create controller and get meta alignment
     let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
@@ -78,19 +83,18 @@ fn main() {
 
         // Calculate standard deviation
         let avg_ns = avg_test_time.as_nanos() as f64;
-        let variance = test_times.iter()
+        let variance = test_times
+            .iter()
             .map(|duration| {
                 let diff = duration.as_nanos() as f64 - avg_ns;
                 diff * diff
             })
-            .sum::<f64>() / TEST_MEAN_ITERATIONS as f64;
+            .sum::<f64>()
+            / TEST_MEAN_ITERATIONS as f64;
 
         let std_dev = variance.sqrt();
 
-        println!(
-            "{}\t{:.2}\t{:.2}",
-            node_count, avg_ns, std_dev
-        );
+        println!("{}\t{:.2}\t{:.2}", node_count, avg_ns, std_dev);
     }
 
     println!("\nBenchmark complete!");

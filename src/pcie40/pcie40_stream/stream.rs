@@ -1,10 +1,10 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::pcie40_id::PCIe40IdManager;
+use crate::pcie40::pcie40_stream::locked_stream::PCIe40LockedStream;
 use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
 use std::{ptr, slice};
 use thiserror::Error;
-use crate::pcie40::pcie40_stream::locked_stream::PCIe40LockedStream;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PCIe40DAQStreamType {
@@ -322,14 +322,15 @@ impl Drop for PCIe40Stream {
 }
 
 impl PCIe40Stream {
-    pub(super) fn new_empty() -> Self{
+    pub(super) fn new_empty() -> Self {
         Self {
             device_id: 0,
             stream_fd: 0,
             meta_stream_fd: 0,
             stream_type: PCIe40DAQStreamType::MainStream,
             stream_format: PCIe40DAQStreamFormat::RawFormat,
-            enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+            enable_state_action_on_close:
+                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
         }
     }
 
@@ -351,7 +352,7 @@ impl PCIe40Stream {
             stream_type,
             stream_format,
             enable_state_action_on_close:
-            PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
+                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
         }
     }
 
@@ -690,4 +691,3 @@ impl PCIe40Stream {
         }
     }
 }
-

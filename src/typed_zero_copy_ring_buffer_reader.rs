@@ -33,11 +33,9 @@ pub fn ensure_available_bytes<R: ZeroCopyRingBufferReader + ?Sized>(
 
     if available_data < required_bytes {
         // Try to load more data
-        let loaded_data = reader
-            .load_all_data()
-            .map_err(|error| {
-                ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
-            })?;
+        let loaded_data = reader.load_all_data().map_err(|error| {
+            ZeroCopyRingBufferReadableError::ZeroCopyRingBufferReaderError(error)
+        })?;
 
         // Check if we have enough data now
         if available_data + loaded_data < required_bytes {
