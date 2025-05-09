@@ -3,7 +3,7 @@ use crate::pcie40::pcie40_id::PCIe40IdManager;
 use crate::pcie40::pcie40_stream::locked_stream::PCIe40LockedStream;
 use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
-use std::{ptr, slice};
+use std::ptr;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -240,7 +240,7 @@ pub struct PCIe40Stream {
     pub(super) meta_stream_fd: i32,
     pub(super) stream_type: PCIe40DAQStreamType,
     pub(super) stream_format: PCIe40DAQStreamFormat,
-    pub(super) enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
+    pub enable_state_action_on_close: PCIe40StreamHandleEnableStateActionOnClose,
 }
 
 #[derive(Debug, Error)]
@@ -322,18 +322,6 @@ impl Drop for PCIe40Stream {
 }
 
 impl PCIe40Stream {
-    pub(super) fn new_empty() -> Self {
-        Self {
-            device_id: 0,
-            stream_fd: 0,
-            meta_stream_fd: 0,
-            stream_type: PCIe40DAQStreamType::MainStream,
-            stream_format: PCIe40DAQStreamFormat::RawFormat,
-            enable_state_action_on_close:
-                PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose,
-        }
-    }
-
     fn new(
         device_id: i32,
         stream_fd: i32,

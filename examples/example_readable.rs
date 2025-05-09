@@ -61,7 +61,7 @@ impl<'a> I32ListRef<'a> {
     }
 }
 
-impl<'buf> CastBytesRef for I32ListRef<'buf> {
+impl CastBytesRef for I32ListRef<'_> {
     fn cast(data: &[u8]) -> Result<&Self, ZeroCopyRingBufferReadableError> {
         I32ListRef::from_raw_bytes(data).ok_or({
             ZeroCopyRingBufferReadableError::NotEnoughDataAvailable {

@@ -58,7 +58,7 @@ fn main() {
     let meta_alignment = controller.meta_alignment().unwrap();
 
     // Lock the stream and create reader
-    let mut stream_guard = stream.lock().unwrap();
+    let stream_guard = stream.lock().unwrap();
     let mut reader = PCIe40Reader::new(stream_guard.map_buffer().unwrap(), meta_alignment).unwrap();
 
     // Wait for user input

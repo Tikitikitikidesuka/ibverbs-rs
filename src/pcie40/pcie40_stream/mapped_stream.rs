@@ -1,6 +1,6 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::pcie40_stream::locked_stream::PCIe40LockedStream;
-use crate::pcie40::pcie40_stream::stream::{PCIe40Stream, PCIe40StreamError};
+use crate::pcie40::pcie40_stream::stream::PCIe40StreamError;
 use log::{debug, error, trace};
 use std::mem::ManuallyDrop;
 

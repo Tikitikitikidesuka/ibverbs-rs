@@ -424,7 +424,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_id_endpoint_exists() {
         let device_id = pcie40_device_id();
@@ -432,7 +432,7 @@ mod tests {
         assert!(result);
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_id_endpoint_exists_non_existent() {
         let device_id = pcie40_device_id_non_existent();
@@ -440,14 +440,14 @@ mod tests {
         assert!(!result);
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_find_id_by_name() {
         let device_name = pcie40_device_name();
         PCIe40IdManager::find_id_by_name(&device_name).unwrap();
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_find_id_by_name_non_existent() {
         let device_name = pcie40_device_name_non_existent();
@@ -464,7 +464,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_find_all_ids_by_name() {
         let device_name = pcie40_device_name();
@@ -477,7 +477,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_find_all_ids_by_name_non_existent() {
         let device_name = pcie40_device_name_non_existent();
@@ -485,7 +485,7 @@ mod tests {
         assert!(device_ids.is_empty());
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_find_all_ids() {
         let device_ids = PCIe40IdManager::find_all_ids().unwrap();
@@ -497,14 +497,14 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_open_by_device_name() {
         let device_name = pcie40_device_name();
         let endpoint = PCIe40IdManager::open_by_device_name(&device_name).unwrap();
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_open_by_device_name_non_existent() {
         let device_name = pcie40_device_name_non_existent();
@@ -517,14 +517,14 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_open_by_device_id() {
         let device_id = pcie40_device_id();
         let endpoint = PCIe40IdManager::open_by_device_id(device_id).unwrap();
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_open_by_device_id_non_existent() {
         let device_id = pcie40_device_id_non_existent();
@@ -537,7 +537,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_fpga_serial_number() {
         let device_id = pcie40_device_id();
@@ -548,7 +548,7 @@ mod tests {
         assert!(serial >= 0, "FPGA serial number should be non-negative");
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_device_name() {
         let device_id = pcie40_device_id();
@@ -562,7 +562,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_unique_device_name() {
         let device_id = pcie40_device_id();
@@ -576,7 +576,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_set_name() {
         let device_id = pcie40_device_id();
@@ -609,7 +609,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "hardware-tests")]
+    #[cfg(feature = "pcie40-hardware-tests")]
     #[test]
     fn test_with_hardware_set_name_invalid() {
         let device_id = pcie40_device_id();
