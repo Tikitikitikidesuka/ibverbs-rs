@@ -25,8 +25,7 @@ impl CircularBufferStatus {
 
     pub fn is_empty(&self) -> bool {
         // Buffer is empty when read and write positions are equal and on the same page
-        //self.write_ptr() == self.read_ptr() && self.same_page()
-        self.write_status == self.read_status
+        self.write_ptr() == self.read_ptr() && self.same_page()
     }
 
     pub fn is_full(&self) -> bool {
@@ -77,11 +76,5 @@ impl CircularBufferStatus {
         } else {
             0
         }
-    }
-}
-
-impl Default for CircularBufferStatus {
-    fn default() -> Self {
-        Self::new()
     }
 }
