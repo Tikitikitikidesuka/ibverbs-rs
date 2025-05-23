@@ -82,3 +82,4 @@ mod buffer_status;
 pub mod file_lock;
 pub mod reader;
 pub mod shared_memory;
+pub mod writer;

@@ -76,6 +76,7 @@ impl FileLock {
 
         let file = match OpenOptions::new()
             .read(true)
+            .write(true)
             .create(true)
             .open(path_ref)
         {
