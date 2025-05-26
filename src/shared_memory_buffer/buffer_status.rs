@@ -207,4 +207,12 @@ impl CircularBufferStatus {
     pub fn size(&self) -> usize {
         self.size
     }
+
+    pub fn id(&self) -> c_int {
+        self.id
+    }
+
+    pub fn alignment_2pow(&self) -> usize {
+        self.alignment_2pow
+    }
 }

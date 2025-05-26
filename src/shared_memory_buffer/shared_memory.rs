@@ -83,6 +83,40 @@ impl SharedMemory {
         self.size
     }
 
+    pub fn exists(path: impl Into<PathBuf>) -> bool {
+        let path = path.into();
+        trace!("Checking if shared memory exists at path: {:?}", path);
+
+        let c_name = match CString::new(path.to_str().unwrap_or("")) {
+            Ok(c_name) => c_name,
+            Err(_) => {
+                trace!(
+                    "Invalid shared memory path (contains null bytes): {:?}",
+                    path
+                );
+                return false;
+            }
+        };
+
+        // Try to open the shared memory in read-only mode without creating it
+        trace!("Calling shm_open with O_RDONLY to check existence");
+        let file_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDONLY, 0) };
+        trace!("shm_open returned file descriptor: {}", file_descriptor);
+
+        if file_descriptor < 0 {
+            trace!("Shared memory does not exist at {:?}", path);
+            false
+        } else {
+            trace!("Calling close({})", file_descriptor);
+            unsafe {
+                libc::close(file_descriptor);
+            }
+            trace!("close({}) completed", file_descriptor);
+            debug!("Shared memory exists at {:?}", path);
+            true
+        }
+    }
+
     // Create a new shared memory segment
     pub fn create(
         path: impl Into<PathBuf>,
@@ -149,7 +183,9 @@ impl SharedMemory {
     }
 
     // Open an existing shared memory segment
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self, SharedMemoryOpenError> {
+    pub fn open(
+        path: impl Into<PathBuf>,
+    ) -> Result<Self, SharedMemoryOpenError> {
         let path = path.into();
         info!("Opening shared memory at path: {:?}", path);
 
@@ -160,7 +196,13 @@ impl SharedMemory {
 
         // Open shared memory
         trace!("Calling shm_open with O_RDWR");
-        let file_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDWR, 0) };
+        let file_descriptor = unsafe {
+            libc::shm_open(
+                c_name.as_ptr(),
+                libc::O_RDWR,
+                0
+            )
+        };
         trace!("shm_open returned file descriptor: {}", file_descriptor);
 
         if file_descriptor < 0 {
@@ -630,12 +672,14 @@ mod tests {
             match err {
                 SharedMemoryOpenError::InvalidSegmentName { path: _ } => {
                     // Expected error
-                },
-                _ => panic!("Expected InvalidSegmentName error for null byte, got: {:?}", err),
+                }
+                _ => panic!(
+                    "Expected InvalidSegmentName error for null byte, got: {:?}",
+                    err
+                ),
             }
         }
     }
-
 
     #[test]
     fn test_close_success() {
@@ -651,14 +695,22 @@ mod tests {
         let close_result = shm.close();
 
         // Check the close operation succeeded
-        assert!(close_result.is_ok(), "Close operation failed: {:?}", close_result.err());
+        assert!(
+            close_result.is_ok(),
+            "Close operation failed: {:?}",
+            close_result.err()
+        );
 
         // At this point, shm is consumed (moved) by the close method,
         // so we can't directly check its state
 
         // Verify we can still open the shared memory (close shouldn't delete it)
         let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_ok(), "Failed to open shared memory after close: {:?}", open_result.err());
+        assert!(
+            open_result.is_ok(),
+            "Failed to open shared memory after close: {:?}",
+            open_result.err()
+        );
 
         // Clean up
         if let Ok(reopened_shm) = open_result {
@@ -677,11 +729,18 @@ mod tests {
 
         // Use close_and_delete method
         let result = shm.close_and_delete();
-        assert!(result.is_ok(), "close_and_delete failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "close_and_delete failed: {:?}",
+            result.err()
+        );
 
         // Verify the segment is gone by trying to open it
         let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_err(), "Segment still exists after close_and_delete");
+        assert!(
+            open_result.is_err(),
+            "Segment still exists after close_and_delete"
+        );
     }
 
     #[test]
@@ -699,11 +758,18 @@ mod tests {
 
         // Delete the shared memory segment
         let delete_result = SharedMemory::delete(&path);
-        assert!(delete_result.is_ok(), "Delete operation failed: {:?}", delete_result.err());
+        assert!(
+            delete_result.is_ok(),
+            "Delete operation failed: {:?}",
+            delete_result.err()
+        );
 
         // Verify the segment is actually deleted by trying to open it
         let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_err(), "Shared memory still exists after delete");
+        assert!(
+            open_result.is_err(),
+            "Shared memory still exists after delete"
+        );
     }
 
     #[test]
@@ -714,14 +780,17 @@ mod tests {
         let result = SharedMemory::delete(&nonexistent_path);
 
         // Should fail with an IO error
-        assert!(result.is_err(), "Deleting non-existent shared memory should fail");
+        assert!(
+            result.is_err(),
+            "Deleting non-existent shared memory should fail"
+        );
 
         if let Err(err) = result {
             match err {
                 SharedMemoryDeleteError::Io(_) => {
                     // Expected error - this is the correct error type
                     // Specific error message could vary by platform
-                },
+                }
                 _ => panic!("Expected IO error, got: {:?}", err),
             }
         }
@@ -741,7 +810,7 @@ mod tests {
             match err {
                 SharedMemoryDeleteError::InvalidSegmentName { path: _ } => {
                     // Expected error
-                },
+                }
                 _ => panic!("Expected InvalidSegmentName error, got: {:?}", err),
             }
         }
@@ -759,31 +828,50 @@ mod tests {
             .expect("Failed to create shared memory for delete test");
 
         // Open a second handle to the same segment
-        let shm2 = SharedMemory::open(&path)
-            .expect("Failed to open second handle to shared memory");
+        let shm2 =
+            SharedMemory::open(&path).expect("Failed to open second handle to shared memory");
 
         // Delete the shared memory segment while handles are still open
         let delete_result = SharedMemory::delete(&path);
-        assert!(delete_result.is_ok(), "Failed to delete shared memory with open handles: {:?}", delete_result.err());
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete shared memory with open handles: {:?}",
+            delete_result.err()
+        );
 
         // Verify the segment is deleted by name (can't open it again)
         let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_err(), "Shared memory still exists by name after delete");
+        assert!(
+            open_result.is_err(),
+            "Shared memory still exists by name after delete"
+        );
 
         // But existing handles should still be valid and usable
         // Check if file descriptors are still valid
-        assert!(shm1.file_descriptor >= 0, "First file descriptor should still be valid");
-        assert!(shm2.file_descriptor >= 0, "Second file descriptor should still be valid");
+        assert!(
+            shm1.file_descriptor >= 0,
+            "First file descriptor should still be valid"
+        );
+        assert!(
+            shm2.file_descriptor >= 0,
+            "Second file descriptor should still be valid"
+        );
 
         // Try to write to the segment using one handle and read from the other
         // to verify they're still usable and connected to the same memory
 
         // First, map both handles
         let mapped1_result = shm1.map();
-        assert!(mapped1_result.is_ok(), "Failed to map first handle after delete");
+        assert!(
+            mapped1_result.is_ok(),
+            "Failed to map first handle after delete"
+        );
 
         let mapped2_result = shm2.map();
-        assert!(mapped2_result.is_ok(), "Failed to map second handle after delete");
+        assert!(
+            mapped2_result.is_ok(),
+            "Failed to map second handle after delete"
+        );
 
         // Write data using first mapping
         if let (Ok(mut mapped1), Ok(mapped2)) = (mapped1_result, mapped2_result) {
@@ -799,14 +887,28 @@ mod tests {
                     // Read it back from the second mapping to verify they share memory
                     let slice2 = mapped2.as_slice();
                     if !slice2.is_empty() {
-                        println!("Values after delete: {:02X} {:02X} {:02X} {:02X}",
-                                 slice2[0], slice2[1], slice2[2], slice2[3]);
+                        println!(
+                            "Values after delete: {:02X} {:02X} {:02X} {:02X}",
+                            slice2[0], slice2[1], slice2[2], slice2[3]
+                        );
 
                         // Verify the values match
-                        assert_eq!(slice2[0], 0xAA, "Memory not shared between handles after delete");
-                        assert_eq!(slice2[1], 0xBB, "Memory not shared between handles after delete");
-                        assert_eq!(slice2[2], 0xCC, "Memory not shared between handles after delete");
-                        assert_eq!(slice2[3], 0xDD, "Memory not shared between handles after delete");
+                        assert_eq!(
+                            slice2[0], 0xAA,
+                            "Memory not shared between handles after delete"
+                        );
+                        assert_eq!(
+                            slice2[1], 0xBB,
+                            "Memory not shared between handles after delete"
+                        );
+                        assert_eq!(
+                            slice2[2], 0xCC,
+                            "Memory not shared between handles after delete"
+                        );
+                        assert_eq!(
+                            slice2[3], 0xDD,
+                            "Memory not shared between handles after delete"
+                        );
                     }
                 }
             }
@@ -831,7 +933,10 @@ mod tests {
 
         // Create the shared memory segment
         let create_result = SharedMemory::create(&path, size, mode);
-        assert!(create_result.is_ok(), "Failed to create shared memory for double delete test");
+        assert!(
+            create_result.is_ok(),
+            "Failed to create shared memory for double delete test"
+        );
 
         // Close it to ensure we can delete it cleanly
         if let Ok(shm) = create_result {
@@ -840,11 +945,18 @@ mod tests {
 
         // First delete - should succeed
         let delete_result1 = SharedMemory::delete(&path);
-        assert!(delete_result1.is_ok(), "First delete operation failed: {:?}", delete_result1.err());
+        assert!(
+            delete_result1.is_ok(),
+            "First delete operation failed: {:?}",
+            delete_result1.err()
+        );
 
         // Second delete - should fail with an appropriate error
         let delete_result2 = SharedMemory::delete(&path);
-        assert!(delete_result2.is_err(), "Second delete unexpectedly succeeded when it should fail");
+        assert!(
+            delete_result2.is_err(),
+            "Second delete unexpectedly succeeded when it should fail"
+        );
 
         // Verify the error type is appropriate (should be an IO error)
         if let Err(err) = delete_result2 {
@@ -855,7 +967,7 @@ mod tests {
 
                     // On most systems, this should be "No such file or directory" (ENOENT)
                     // But we don't assert on the specific error message as it might vary by platform
-                },
+                }
                 _ => {
                     // Other error types are acceptable as long as it fails
                     println!("Second delete failed with error: {:?}", err);
@@ -865,7 +977,10 @@ mod tests {
 
         // Verify we can't open it anymore
         let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_err(), "Shared memory still exists after deleting twice");
+        assert!(
+            open_result.is_err(),
+            "Shared memory still exists after deleting twice"
+        );
     }
 
     #[test]
@@ -877,23 +992,34 @@ mod tests {
         let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
         // Create first shared memory segment
-        let shm1 = SharedMemory::create(&path, size1, mode)
-            .expect("Failed to create first shared memory");
+        let shm1 =
+            SharedMemory::create(&path, size1, mode).expect("Failed to create first shared memory");
 
         // Close and delete it
         let _ = shm1.close();
         let delete_result = SharedMemory::delete(&path);
-        assert!(delete_result.is_ok(), "Failed to delete shared memory: {:?}", delete_result.err());
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete shared memory: {:?}",
+            delete_result.err()
+        );
 
         // Create a new segment with the same path but different size
         let create_result2 = SharedMemory::create(&path, size2, mode);
-        assert!(create_result2.is_ok(), "Failed to recreate shared memory after delete: {:?}", create_result2.err());
+        assert!(
+            create_result2.is_ok(),
+            "Failed to recreate shared memory after delete: {:?}",
+            create_result2.err()
+        );
 
         if let Ok(shm2) = create_result2 {
             // Verify it has the new size, proving it's a fresh segment
-            assert!(shm2.size() >= size2,
-                    "Recreated segment size ({}) should be at least the new requested size ({})",
-                    shm2.size(), size2);
+            assert!(
+                shm2.size() >= size2,
+                "Recreated segment size ({}) should be at least the new requested size ({})",
+                shm2.size(),
+                size2
+            );
 
             // Clean up
             let _ = shm2.close_and_delete();
@@ -919,11 +1045,17 @@ mod tests {
 
         // Delete the segment by path (not using the handle)
         let delete_result = SharedMemory::delete(&path);
-        assert!(delete_result.is_ok(), "Failed to delete shared memory by path");
+        assert!(
+            delete_result.is_ok(),
+            "Failed to delete shared memory by path"
+        );
 
         // Verify it's deleted by trying to open it again
         let reopen_result = SharedMemory::open(&path);
-        assert!(reopen_result.is_err(), "Shared memory still exists after delete");
+        assert!(
+            reopen_result.is_err(),
+            "Shared memory still exists after delete"
+        );
 
         // Now try to close_and_delete on the original handle
         // This is the key test - what happens when we try to delete something
@@ -934,7 +1066,10 @@ mod tests {
         // 1. It might succeed fully if close_and_delete is resilient to non-existent segments
         // 2. It might return an error if close_and_delete requires the segment to still exist
 
-        println!("close_and_delete after delete result: {:?}", close_and_delete_result);
+        println!(
+            "close_and_delete after delete result: {:?}",
+            close_and_delete_result
+        );
 
         // Test both possible outcomes:
 
@@ -951,17 +1086,20 @@ mod tests {
                         SharedMemoryDeleteError::Io(_) => {
                             // This is the expected error type
                             println!("close_and_delete failed with DeleteError/Io as expected");
-                        },
+                        }
                         _ => {
                             // Other error types are acceptable but unexpected
-                            println!("close_and_delete failed with unexpected DeleteError: {:?}", delete_err);
+                            println!(
+                                "close_and_delete failed with unexpected DeleteError: {:?}",
+                                delete_err
+                            );
                         }
                     }
-                },
+                }
                 // Some implementations might return a CloseError, which is also acceptable
                 SharedMemoryCloseAndDeleteError::CloseError(_) => {
                     println!("close_and_delete failed with CloseError");
-                },
+                }
                 _ => {
                     // Any other error is unexpected
                     panic!("close_and_delete failed with unexpected error: {:?}", err);
@@ -971,6 +1109,9 @@ mod tests {
 
         // Try one more open to be absolutely sure the segment is gone
         let final_open_result = SharedMemory::open(&path);
-        assert!(final_open_result.is_err(), "Shared memory somehow exists after multiple delete attempts");
+        assert!(
+            final_open_result.is_err(),
+            "Shared memory somehow exists after multiple delete attempts"
+        );
     }
 }
