@@ -199,8 +199,7 @@ impl ZeroCopyRingBufferReader for SharedMemoryBufferReader {
     }
 
     fn alignment(&self) -> Result<Option<usize>, ZeroCopyRingBufferReaderError> {
-        trace!("Alignment query - not yet implemented");
-        todo!()
+        Ok(Some(1 << self.buffer.alignment_2pow()))
     }
 }
 

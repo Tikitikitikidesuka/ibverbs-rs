@@ -292,12 +292,16 @@ impl SharedMemoryReadBuffer {
         self.shmem_buffer.as_slice()
     }
 
-    pub fn read_status(&self) -> PtrStatus {
-        self.shmem_buffer.read_status()
-    }
-
     pub fn size(&self) -> usize {
         self.shmem_buffer.size
+    }
+
+    pub fn alignment_2pow(&self) -> u8 {
+        self.shmem_buffer.alignment_2pow
+    }
+
+    pub fn read_status(&self) -> PtrStatus {
+        self.shmem_buffer.read_status()
     }
 
     pub fn write_status(&self) -> PtrStatus {
@@ -341,6 +345,10 @@ impl SharedMemoryWriteBuffer {
 
     pub fn size(&self) -> usize {
         self.shmem_buffer.size
+    }
+
+    pub fn alignment_2pow(&self) -> u8 {
+        self.shmem_buffer.alignment_2pow
     }
 
     pub fn read_status(&self) -> PtrStatus {
