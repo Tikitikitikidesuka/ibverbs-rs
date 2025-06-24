@@ -1,10 +1,12 @@
 use crate::shared_memory_buffer::buffer_backend::SharedMemoryWriteBuffer;
-use crate::shared_memory_buffer::buffer_status::CircularBufferStatus;
-use log::{debug, error, info, trace};
+use crate::shared_memory_buffer::buffer_element::BufferElement;
+use crate::shared_memory_buffer::buffer_status::{CircularBufferStatus, PtrStatus};
+use crate::utils;
 use thiserror::Error;
 
 pub struct SharedMemoryBufferWriter {
     buffer: SharedMemoryWriteBuffer,
+    local_write_status: PtrStatus,
 }
 
 #[derive(Debug, Error)]
@@ -13,6 +15,7 @@ pub enum WriteError {
         "Insufficient space on buffer. Available: {available} bytes; Requested: {requested} bytes"
     )]
     InsufficientSpace { available: usize, requested: usize },
+
     #[error(
         "Write would wraparound: Available contiguous: {available_contiguous} bytes; Requested: {requested} bytes"
     )]
@@ -20,171 +23,276 @@ pub enum WriteError {
         available_contiguous: usize,
         requested: usize,
     },
+
     #[error(
         "Due to the pointer representation on this buffer, the minimum addressable amount of data is two bytes. Data written must have a length divisible by 2 bytes."
     )]
     Not2ByteAligned,
+
+    #[error("Data is not aligned to 2^{alignment_2pow} bytes")]
+    NotAligned { alignment_2pow: u8 },
 }
 
 impl SharedMemoryBufferWriter {
-    pub fn new(write_buffer: SharedMemoryWriteBuffer) -> Self {
-        info!("Creating new SharedMemoryBufferWriter for buffer of size {} bytes",
-              write_buffer.size());
-
-        debug!("Writer initialized with buffer size: {} bytes", write_buffer.size());
+    pub fn new(buffer: SharedMemoryWriteBuffer) -> Self {
+        let local_write_status = buffer.write_status();
 
         Self {
-            buffer: write_buffer,
+            buffer,
+            local_write_status,
         }
     }
 
-    pub fn write(&mut self, buf: &[u8]) -> Result<usize, WriteError> {
-        let data_len = buf.len();
-        debug!("Write operation requested: {} bytes", data_len);
-
-        if data_len == 0 {
-            trace!("Empty write request, returning immediately");
-            return Ok(0);
-        }
-
-        trace!("Validating alignment requirement for write of {} bytes", data_len);
-        if data_len % 2 != 0 {
-            error!("Write rejected: {} bytes is not 2-byte aligned", data_len);
-            return Err(WriteError::Not2ByteAligned);
-        }
-        trace!("Alignment validation passed for {} bytes", data_len);
-
-        // Read statuses ONCE
-        debug!("Reading buffer status for write operation");
-        let write_status = self.buffer.write_status();
+    // Writes an element to the ring buffer
+    // It adds the necessary padding initialized to zero
+    pub fn write_element<T: BufferElement>(&mut self, mut element: T) -> Result<(), WriteError> {
+        // Read status *ONCE* to keep a stable state since they
+        // might change during execution of the function.
+        let write_status = self.local_write_status;
         let read_status = self.buffer.read_status();
         let buffer_size = self.buffer.size();
 
-        trace!("Buffer status snapshot: write_ptr={}, write_wrap={}, read_ptr={}, read_wrap={}, buffer_size={}",
-               write_status.ptr(), write_status.wrap(),
-               read_status.ptr(), read_status.wrap(), buffer_size);
-
-        // Calculate spaces using the captured statuses
-        trace!("Calculating available space to write");
-        let available =
-            CircularBufferStatus::buffer_available_to_write(write_status, read_status, buffer_size);
-        debug!("Available space to write: {} bytes (requested: {} bytes)", available, data_len);
-
-        if data_len > available {
-            error!("Insufficient space for write: available={} bytes, requested={} bytes",
-                   available, data_len);
-            return Err(WriteError::InsufficientSpace {
-                available,
-                requested: data_len,
-            });
-        }
-
-        trace!("Calculating tail free space for potential wrapping");
         let tail_space =
             CircularBufferStatus::buffer_tail_free_space(write_status, read_status, buffer_size);
-        debug!("Tail free space: {} bytes", tail_space);
 
-        // Use the consistent write position from our snapshot
-        let write_pos = write_status.ptr() as usize;
-        trace!("Write will begin at position: {} (0x{:x})", write_pos, write_pos);
-
-        let buffer_slice = unsafe { self.buffer.as_slice_mut() };
-        trace!("Got mutable buffer slice for write operation");
-
-        if data_len <= tail_space {
-            // Simple case: fits without wrapping
-            debug!("Write fits without wrapping: {} bytes at position {}", data_len, write_pos);
-            trace!("Copying {} bytes to buffer[{}..{}]", data_len, write_pos, write_pos + data_len);
-
-            buffer_slice[write_pos..write_pos + data_len].copy_from_slice(buf);
-
-            debug!("Successfully wrote {} bytes at position {} without wrapping", data_len, write_pos);
-        } else {
-            // Write and wrap
-            debug!("Write requires wrapping: {} bytes total, {} bytes at tail, {} bytes at head",
-                   data_len, tail_space, data_len - tail_space);
-
-            trace!("Writing {} bytes to tail: buffer[{}..{}]", tail_space, write_pos, write_pos + tail_space);
-            buffer_slice[write_pos..write_pos + tail_space].copy_from_slice(&buf[..tail_space]);
-
-            let remaining = data_len - tail_space;
-            trace!("Writing remaining {} bytes to head: buffer[0..{}]", remaining, remaining);
-            buffer_slice[..remaining].copy_from_slice(&buf[tail_space..]);
-
-            debug!("Successfully wrote {} bytes with wrapping: {} at tail + {} at head",
-                   data_len, tail_space, remaining);
+        if element.size() > tail_space {
+            element.set_wrap()
         }
 
-        // Update write pointer based on our snapshot
-        trace!("Updating write pointer from current position");
-        let new_write_status = write_status.add(data_len, buffer_size);
-        trace!("New write status: ptr={}, wrap={} (added {} bytes)",
-               new_write_status.ptr(), new_write_status.wrap(), data_len);
-
-        self.buffer.set_write_status(new_write_status);
-        debug!("Updated write pointer: new_pos={}, wrap_bit={}",
-               new_write_status.ptr(), new_write_status.wrap());
-
-        info!("Write operation completed successfully: {} bytes written", data_len);
-        Ok(data_len)
+        unsafe { self.write_with_unsafe_padding(element.data()) }
     }
 
-    pub fn write_no_wrapping(&mut self, buf: &[u8]) -> Result<usize, WriteError> {
-        let data_len = buf.len();
-        debug!("No-wrap write operation requested: {} bytes", data_len);
+    // Writes an element to the ring buffer
+    // SAFETY: When adding padding, it does not initialize it, just moves the write pointer
+    pub unsafe fn unsafe_write_element<T: BufferElement>(
+        &mut self,
+        element: T,
+    ) -> Result<(), WriteError> {
+        unsafe { self.write_with_unsafe_padding(element.data()) }
+    }
 
-        if data_len == 0 {
-            trace!("Empty no-wrap write request, returning immediately");
-            return Ok(0);
-        }
+    // Writes data to the ring buffer.
+    // The data must be aligned meaning it must have a length divisible by the alignment.
+    pub fn write(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        self.check_alignment(data.len())?;
+        self.unaligned_write(data)
+    }
 
-        // Read statuses ONCE
-        debug!("Reading buffer status for no-wrap write operation");
-        let write_status = self.buffer.write_status();
+    // Writes data to the ring buffer with added padding to align it.
+    fn write_with_padding(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        let aligned_length = utils::align_up_2pow(data.len(), self.buffer.alignment_2pow());
+        let padding = aligned_length - data.len();
+        self.check_2byte_alignment(aligned_length)?;
+
+        self.unaligned_write(data)?;
+        self.padding_write(0, padding)
+    }
+
+    // Writes data to the ring buffer with added padding to align it.
+    // The padding is not writen, the write pointer is moved but the data remains the same.
+    // SAFETY: The data marked as readable is uninitialized.
+    unsafe fn write_with_unsafe_padding(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        let aligned_length = utils::align_up_2pow(data.len(), self.buffer.alignment_2pow());
+        let padding = aligned_length - data.len();
+        self.check_2byte_alignment(aligned_length)?;
+
+        self.unaligned_write(data)?;
+        unsafe { self.unsafe_padding_write(padding) }
+    }
+
+    // Writes data to the ring buffer contiguously.
+    // The data must be aligned meaning it must have a length divisible by the alignment.
+    // If there is still space on the ring buffer but not enough for the contiguous write,
+    // it will fail and a `WriteError::WouldWrap` error will be returned.
+    pub fn write_contiguous(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        self.check_alignment(data.len())?;
+
+        // Read status *ONCE* to keep a stable state since they
+        // might change during execution of the function.
+        let write_status = self.local_write_status;
         let read_status = self.buffer.read_status();
         let buffer_size = self.buffer.size();
 
-        trace!("Buffer status snapshot for no-wrap: write_ptr={}, write_wrap={}, read_ptr={}, read_wrap={}, buffer_size={}",
-               write_status.ptr(), write_status.wrap(),
-               read_status.ptr(), read_status.wrap(), buffer_size);
-
-        // Calculate tail space with our snapshot
-        trace!("Calculating tail free space for no-wrap write");
         let tail_space =
             CircularBufferStatus::buffer_tail_free_space(write_status, read_status, buffer_size);
-        debug!("Tail free space: {} bytes (requested: {} bytes)", tail_space, data_len);
 
-        if data_len > tail_space {
-            error!("No-wrap write would require wrapping: available_contiguous={} bytes, requested={} bytes",
-                   tail_space, data_len);
+        if data.len() > tail_space {
             return Err(WriteError::WouldWrap {
                 available_contiguous: tail_space,
-                requested: data_len,
+                requested: data.len(),
             });
         }
 
-        // Use consistent write position
-        let write_pos = write_status.ptr() as usize;
-        trace!("No-wrap write will begin at position: {} (0x{:x})", write_pos, write_pos);
+        self.unaligned_write(data)
+    }
+
+    // Writes data to the ring buffer contiguously with added padding to align it.
+    // If there is still space on the ring buffer but not enough for the contiguous write,
+    // it will fail and a `WriteError::WouldWrap` error will be returned.
+    pub fn write_contiguous_with_padding(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        todo!()
+    }
+
+    // Writes data to the ring buffer contiguously with added padding to align it.
+    // The padding is not writen, the write pointer is moved but the data remains the same.
+    // If there is still space on the ring buffer but not enough for the contiguous write,
+    // it will fail and a `WriteError::WouldWrap` error will be returned.
+    // SAFETY: The data marked as readable is uninitialized.
+    pub unsafe fn write_contiguous_with_unsafe_padding(
+        &mut self,
+        data: &[u8],
+    ) -> Result<(), WriteError> {
+        todo!()
+    }
+
+    fn check_alignment(&self, length: usize) -> Result<(), WriteError> {
+        if !utils::check_alignment_2pow(length, self.buffer.alignment_2pow()) {
+            Err(WriteError::NotAligned {
+                alignment_2pow: self.buffer.alignment_2pow(),
+            })
+        } else {
+            self.check_2byte_alignment(length)
+        }
+    }
+
+    // Check shared memory buffer's designed 2 byte alignment
+    fn check_2byte_alignment(&self, length: usize) -> Result<(), WriteError> {
+        if length % 2 != 0 {
+            Err(WriteError::Not2ByteAligned)
+        } else {
+            Ok(())
+        }
+    }
+
+    // Writes to the buffer without checking alignment.
+    // Still checks the shared memory buffer restriction of 2 byte alignment.
+    // Does not update the write pointer, this must be done explicitly with `update_write_status`.
+    // This allows adding follow up write operations before making the writes visible to the consumers.
+    fn unaligned_write(&mut self, data: &[u8]) -> Result<(), WriteError> {
+        // Read status *ONCE* to keep a stable state since they
+        // might change during execution of the function.
+        let write_status = self.local_write_status;
+        let read_status = self.buffer.read_status();
+        let buffer_size = self.buffer.size();
+
+        let available =
+            CircularBufferStatus::buffer_available_to_write(write_status, read_status, buffer_size);
+
+        if data.len() > available {
+            return Err(WriteError::InsufficientSpace {
+                available,
+                requested: data.len(),
+            });
+        }
+
+        let tail_space =
+            CircularBufferStatus::buffer_tail_free_space(write_status, read_status, buffer_size);
 
         let buffer_slice = unsafe { self.buffer.as_slice_mut() };
-        trace!("Got mutable buffer slice for no-wrap write operation");
 
-        trace!("Copying {} bytes to buffer[{}..{}] (no wrapping)", data_len, write_pos, write_pos + data_len);
-        buffer_slice[write_pos..write_pos + data_len].copy_from_slice(buf);
-        debug!("Successfully wrote {} bytes at position {} without wrapping", data_len, write_pos);
+        if data.len() <= tail_space {
+            // Simple case: data fits without wrapping
+            buffer_slice[(write_status.ptr() as usize)..(write_status.ptr() as usize + data.len())]
+                .copy_from_slice(data);
+        } else {
+            // Write with wrapping
+            buffer_slice[(write_status.ptr() as usize)..(write_status.ptr() as usize + tail_space)]
+                .copy_from_slice(&data[..tail_space]);
 
-        // Update based on snapshot
-        trace!("Updating write pointer from current position (no-wrap)");
-        let new_write_status = write_status.add(data_len, buffer_size);
-        trace!("New write status (no-wrap): ptr={}, wrap={} (added {} bytes)",
-               new_write_status.ptr(), new_write_status.wrap(), data_len);
+            let remaining = data.len() - tail_space;
+            buffer_slice[..remaining].copy_from_slice(&data[tail_space..]);
+        }
 
-        self.buffer.set_write_status(new_write_status);
-        debug!("Updated write pointer (no-wrap): new_pos={}, wrap_bit={}",
-               new_write_status.ptr(), new_write_status.wrap());
+        // Update the local write status
+        let new_write_status = write_status.add(data.len(), buffer_size);
+        self.local_write_status = new_write_status;
 
-        info!("No-wrap write operation completed successfully: {} bytes written", data_len);
-        Ok(data_len)
+        Ok(())
+    }
+
+    // Writes padding of the given value and length to the buffer.
+    // Does not update the write pointer, this must be done explicitly with `update_write_status`.
+    // This allows adding follow up write operations before making the writes visible to the consumers.
+    fn padding_write(&mut self, value: u8, length: usize) -> Result<(), WriteError> {
+        // Read status *ONCE* to keep a stable state since they
+        // might change during execution of the function.
+        let write_status = self.local_write_status;
+        let read_status = self.buffer.read_status();
+        let buffer_size = self.buffer.size();
+
+        let available =
+            CircularBufferStatus::buffer_available_to_write(write_status, read_status, buffer_size);
+
+        if length > available {
+            return Err(WriteError::InsufficientSpace {
+                available,
+                requested: length,
+            });
+        }
+
+        let tail_space =
+            CircularBufferStatus::buffer_tail_free_space(write_status, read_status, buffer_size);
+
+        let buffer_slice = unsafe { self.buffer.as_slice_mut() };
+
+        if length <= tail_space {
+            // Simple case: padding fits without wrapping
+            buffer_slice[(write_status.ptr() as usize)..(write_status.ptr() as usize + length)]
+                .fill(value);
+        } else {
+            // Write with wrapping
+            buffer_slice[(write_status.ptr() as usize)..(write_status.ptr() as usize + tail_space)]
+                .fill(value);
+
+            let remaining = length - tail_space;
+            buffer_slice[..remaining].fill(value);
+        }
+
+        // Update the local write status
+        let new_write_status = write_status.add(length, buffer_size);
+        self.local_write_status = new_write_status;
+
+        Ok(())
+    }
+
+    // Moves the local write pointer but does not fill the buffer with actual data
+    // Does not update the write pointer, this must be done explicitly with `update_write_status`.
+    // This allows adding follow up write operations before making the writes visible to the consumers.
+    // SAFETY: Leaves uninitialized data in the buffer
+    unsafe fn unsafe_padding_write(&mut self, length: usize) -> Result<(), WriteError> {
+        // Read status *ONCE* to keep a stable state since they
+        // might change during execution of the function.
+        let write_status = self.local_write_status;
+        let read_status = self.buffer.read_status();
+        let buffer_size = self.buffer.size();
+
+        let available =
+            CircularBufferStatus::buffer_available_to_write(write_status, read_status, buffer_size);
+
+        if length > available {
+            return Err(WriteError::InsufficientSpace {
+                available,
+                requested: length,
+            });
+        }
+
+        // No actual buffer writes - just advance the write pointer
+        // This leaves uninitialized/existing data in the buffer positions
+
+        // Update the local write status
+        let new_write_status = write_status.add(length, buffer_size);
+        self.local_write_status = new_write_status;
+
+        Ok(())
+    }
+
+    // Writes the local write pointer to the buffer, making all the previous writes visible to the consumers.
+    fn commit_writes(&mut self) {
+        self.buffer.set_write_status(self.local_write_status);
+    }
+
+    // Resets the previous uncommited write calls
+    fn cancel_writes(&mut self) {
+        self.local_write_status = self.buffer.write_status();
     }
 }
