@@ -1,7 +1,7 @@
-pub mod ctrl;
-pub mod id;
-pub mod stream;
-pub mod reader;
+pub mod pcie40_ctrl;
+pub mod pcie40_id;
+pub mod pcie40_stream;
+pub mod pcie40_reader;
 
 mod bindings {
     // Suppress warnings about non-standard naming in imported C bindings and unused code

@@ -1,7 +1,7 @@
 extern crate core;
 
-pub mod typed_zero_copy_ring_buffer_reader;
-pub mod zero_copy_ring_buffer_reader;
+pub mod circular_buffer;
+pub mod typed_circular_buffer;
 
 #[cfg(feature = "multi-fragment-packet")]
 pub mod multi_fragment_packet;

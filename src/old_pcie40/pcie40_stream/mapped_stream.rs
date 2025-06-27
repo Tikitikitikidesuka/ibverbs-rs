@@ -178,7 +178,8 @@ impl PCIe40MappedStream<'_> {
         }
     }
 
-    pub fn move_read_offset(&mut self, offset: usize) -> Result<usize, PCIe40StreamError> {
+    /// Only moves if enough space
+    pub fn move_read_offset(&mut self, offset: usize) -> Result<(), PCIe40StreamError> {
         trace!(
             "Moving buffer read offset for stream {} on device {}",
             self.locked_stream.stream.stream_type, self.locked_stream.stream.device_id
@@ -188,8 +189,9 @@ impl PCIe40MappedStream<'_> {
             "Calling p40_stream_free_host_buf_bytes({}, {})",
             self.locked_stream.stream.stream_fd, offset
         );
-        let offset =
-            unsafe { p40_stream_free_host_buf_bytes(self.locked_stream.stream.stream_fd, offset) };
+        if offset > unsafe { p40_stream_free_host_buf_bytes(self.locked_stream.stream.stream_fd, offset) } {
+            // Do not move offset
+        }
         trace!("p40_stream_free_host_buf_bytes returned {}", offset);
 
         if offset < 0 {
