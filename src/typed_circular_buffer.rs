@@ -3,7 +3,7 @@ use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
 pub trait CircularBufferReadable<R: CircularBufferReader> {
     type ReadResult<'a> where R: 'a;
 
-    fn read(buffer_reader: &mut R) -> Self::ReadResult<'_>;
+    fn read(reader: &mut R) -> Self::ReadResult<'_>;
 }
 
 pub trait CircularBufferMultiReadable<R: CircularBufferReader> {
