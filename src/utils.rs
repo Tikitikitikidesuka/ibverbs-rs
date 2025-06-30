@@ -3,8 +3,8 @@ pub fn align_up(n: usize, alignment: usize) -> usize {
         return n;
     }
 
-    if is_power_of_two(alignment) {
-        align_up_2pow(n, alignment.trailing_zeros() as u8)
+    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+        align_up_pow2(n, alignment.trailing_zeros() as u8)
     } else {
         let remainder = n % alignment;
         if remainder == 0 {
@@ -20,15 +20,15 @@ pub fn align_down(n: usize, alignment: usize) -> usize {
         return n;
     }
 
-    if is_power_of_two(alignment) {
-        align_down_2pow(n, alignment.trailing_zeros() as u8)
+    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+        align_down_pow2(n, alignment.trailing_zeros() as u8)
     } else {
         // Integer division naturally rounds down
         (n / alignment) * alignment
     }
 }
 
-pub fn align_up_2pow(n: usize, exponent: u8) -> usize {
+pub fn align_up_pow2(n: usize, exponent: u8) -> usize {
     // Step 1: Calculate alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
     let alignment = 1 << exponent;
@@ -38,7 +38,7 @@ pub fn align_up_2pow(n: usize, exponent: u8) -> usize {
     let mask = alignment - 1;
 
     // Step 3: Add the mask to the size to ensure we reach at least the next multiple
-    // - If size is already aligned: we'll exceed it slightly but not reach next multiple
+    // - If size is already aligned: we'll exceed it slightly but not reach the next multiple
     // - If size is not aligned: this pushes us to at least the next multiple
     // Example: for size=10, mask=3 (alignment=4), size+mask=13
     let size_plus_mask = n + mask;
@@ -57,7 +57,7 @@ pub fn align_up_2pow(n: usize, exponent: u8) -> usize {
     size_plus_mask & inverted_mask
 }
 
-pub fn align_down_2pow(n: usize, exponent: u8) -> usize {
+pub fn align_down_pow2(n: usize, exponent: u8) -> usize {
     // Calculate the alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
     let alignment = 1 << exponent;
@@ -84,14 +84,14 @@ pub fn check_alignment(n: usize, alignment: usize) -> bool {
         return true;
     }
 
-    if is_power_of_two(alignment) {
-        check_alignment_2pow(n, alignment.trailing_zeros() as u8)
+    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+        check_alignment_pow2(n, alignment.trailing_zeros() as u8)
     } else {
         n % alignment == 0
     }
 }
 
-pub fn check_alignment_2pow(size: usize, exponent: u8) -> bool {
+pub fn check_alignment_pow2(size: usize, exponent: u8) -> bool {
     // Calculate the alignment value (2^exponent)
     let alignment = 1 << exponent;
 
@@ -104,8 +104,49 @@ pub fn check_alignment_2pow(size: usize, exponent: u8) -> bool {
     (size & mask) == 0
 }
 
-pub fn is_power_of_two(n: usize) -> bool {
-    n != 0 && (n & (n - 1)) == 0
+pub fn wrap_around(n: usize, wrap: usize) -> usize {
+    if wrap == 0 {
+        return n;
+    }
+
+    if let IsPow2Result::Yes(_) = is_pow2(wrap) {
+        wrap_around_pow2(n, wrap.trailing_zeros() as u8)
+    } else {
+        n % wrap
+    }
+}
+
+pub fn wrap_around_pow2(n: usize, wrap_pow2: u8) -> usize {
+    // Calculate the wrap value (2^exponent)
+    // Example: for exponent=3, alignment=8 (binary 1000)
+    let wrap = 1 << wrap_pow2;
+
+    // Create a mask with all bits below the wrap bit set to 1
+    // Example: for wrap=8, mask=7 (binary 0111)
+    let mask = wrap - 1;
+
+    // Apply the mask to keep only the lower bits, effectively wrapping around
+    // Example: for n=10 (binary 1010), wrap=8, mask=7 (binary 0111)
+    //          10 & 7 = 2 (binary 0010)
+    //          This wraps 10 around the range [0, 8) to get 2
+    n & mask
+}
+
+pub fn pow2(exponent: u8) -> usize {
+    1 << exponent
+}
+
+
+pub enum IsPow2Result {
+    Yes(u8),
+    No,
+}
+pub fn is_pow2(n: usize) -> IsPow2Result {
+    if n != 0 && (n & (n - 1)) == 0 {
+        IsPow2Result::Yes(n.trailing_zeros() as u8)
+    } else {
+        IsPow2Result::No
+    }
 }
 
 #[cfg(test)]
@@ -114,26 +155,26 @@ mod tests {
 
     #[test]
     fn test_is_power_of_two() {
-        assert!(is_power_of_two(1));
-        assert!(is_power_of_two(2));
-        assert!(is_power_of_two(4));
-        assert!(is_power_of_two(8));
-        assert!(is_power_of_two(16));
-        assert!(is_power_of_two(32));
-        assert!(is_power_of_two(64));
-        assert!(is_power_of_two(128));
-        assert!(is_power_of_two(256));
-        assert!(is_power_of_two(1 << 30));
+        assert!(is_pow2(1));
+        assert!(is_pow2(2));
+        assert!(is_pow2(4));
+        assert!(is_pow2(8));
+        assert!(is_pow2(16));
+        assert!(is_pow2(32));
+        assert!(is_pow2(64));
+        assert!(is_pow2(128));
+        assert!(is_pow2(256));
+        assert!(is_pow2(1 << 30));
 
-        assert!(!is_power_of_two(0));
-        assert!(!is_power_of_two(3));
-        assert!(!is_power_of_two(5));
-        assert!(!is_power_of_two(6));
-        assert!(!is_power_of_two(7));
-        assert!(!is_power_of_two(9));
-        assert!(!is_power_of_two(10));
-        assert!(!is_power_of_two(15));
-        assert!(!is_power_of_two(127));
+        assert!(!is_pow2(0));
+        assert!(!is_pow2(3));
+        assert!(!is_pow2(5));
+        assert!(!is_pow2(6));
+        assert!(!is_pow2(7));
+        assert!(!is_pow2(9));
+        assert!(!is_pow2(10));
+        assert!(!is_pow2(15));
+        assert!(!is_pow2(127));
     }
 
     #[test]
@@ -191,39 +232,39 @@ mod tests {
     }
 
     #[test]
-    fn test_align_up_2pow() {
-        assert_eq!(align_up_2pow(0, 2), 0);
-        assert_eq!(align_up_2pow(1, 2), 4);
-        assert_eq!(align_up_2pow(2, 2), 4);
-        assert_eq!(align_up_2pow(3, 2), 4);
-        assert_eq!(align_up_2pow(4, 2), 4);
-        assert_eq!(align_up_2pow(5, 2), 8);
+    fn test_align_up_pow2() {
+        assert_eq!(align_up_pow2(0, 2), 0);
+        assert_eq!(align_up_pow2(1, 2), 4);
+        assert_eq!(align_up_pow2(2, 2), 4);
+        assert_eq!(align_up_pow2(3, 2), 4);
+        assert_eq!(align_up_pow2(4, 2), 4);
+        assert_eq!(align_up_pow2(5, 2), 8);
 
-        assert_eq!(align_up_2pow(4, 3), 8);
-        assert_eq!(align_up_2pow(8, 3), 8);
-        assert_eq!(align_up_2pow(9, 3), 16);
+        assert_eq!(align_up_pow2(4, 3), 8);
+        assert_eq!(align_up_pow2(8, 3), 8);
+        assert_eq!(align_up_pow2(9, 3), 16);
 
-        assert_eq!(align_up_2pow(4095, 12), 4096);
-        assert_eq!(align_up_2pow(4096, 12), 4096);
-        assert_eq!(align_up_2pow(4097, 12), 8192);
+        assert_eq!(align_up_pow2(4095, 12), 4096);
+        assert_eq!(align_up_pow2(4096, 12), 4096);
+        assert_eq!(align_up_pow2(4097, 12), 8192);
     }
 
     #[test]
-    fn test_align_down_2pow() {
-        assert_eq!(align_down_2pow(0, 2), 0);
-        assert_eq!(align_down_2pow(1, 2), 0);
-        assert_eq!(align_down_2pow(2, 2), 0);
-        assert_eq!(align_down_2pow(3, 2), 0);
-        assert_eq!(align_down_2pow(4, 2), 4);
-        assert_eq!(align_down_2pow(5, 2), 4);
+    fn test_align_down_pow2() {
+        assert_eq!(align_down_pow2(0, 2), 0);
+        assert_eq!(align_down_pow2(1, 2), 0);
+        assert_eq!(align_down_pow2(2, 2), 0);
+        assert_eq!(align_down_pow2(3, 2), 0);
+        assert_eq!(align_down_pow2(4, 2), 4);
+        assert_eq!(align_down_pow2(5, 2), 4);
 
-        assert_eq!(align_down_2pow(7, 3), 0);
-        assert_eq!(align_down_2pow(8, 3), 8);
-        assert_eq!(align_down_2pow(15, 3), 8);
+        assert_eq!(align_down_pow2(7, 3), 0);
+        assert_eq!(align_down_pow2(8, 3), 8);
+        assert_eq!(align_down_pow2(15, 3), 8);
 
-        assert_eq!(align_down_2pow(4095, 12), 0);
-        assert_eq!(align_down_2pow(4096, 12), 4096);
-        assert_eq!(align_down_2pow(8191, 12), 4096);
+        assert_eq!(align_down_pow2(4095, 12), 0);
+        assert_eq!(align_down_pow2(4096, 12), 4096);
+        assert_eq!(align_down_pow2(8191, 12), 4096);
     }
 
     #[test]
@@ -255,20 +296,20 @@ mod tests {
     }
 
     #[test]
-    fn test_check_alignment_2pow() {
-        assert!(check_alignment_2pow(0, 2));
-        assert!(!check_alignment_2pow(1, 2));
-        assert!(!check_alignment_2pow(2, 2));
-        assert!(!check_alignment_2pow(3, 2));
-        assert!(check_alignment_2pow(4, 2));
-        assert!(!check_alignment_2pow(5, 2));
+    fn test_check_alignment_pow2() {
+        assert!(check_alignment_pow2(0, 2));
+        assert!(!check_alignment_pow2(1, 2));
+        assert!(!check_alignment_pow2(2, 2));
+        assert!(!check_alignment_pow2(3, 2));
+        assert!(check_alignment_pow2(4, 2));
+        assert!(!check_alignment_pow2(5, 2));
 
-        assert!(!check_alignment_2pow(7, 3));
-        assert!(check_alignment_2pow(8, 3));
-        assert!(!check_alignment_2pow(9, 3));
+        assert!(!check_alignment_pow2(7, 3));
+        assert!(check_alignment_pow2(8, 3));
+        assert!(!check_alignment_pow2(9, 3));
 
-        assert!(!check_alignment_2pow(4095, 12));
-        assert!(check_alignment_2pow(4096, 12));
-        assert!(!check_alignment_2pow(4097, 12));
+        assert!(!check_alignment_pow2(4095, 12));
+        assert!(check_alignment_pow2(4096, 12));
+        assert!(!check_alignment_pow2(4097, 12));
     }
 }
