@@ -9,8 +9,10 @@ use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
 
-pub const MAGIC_BYTES: u16 = 0x40CE;
-pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+impl MultiFragmentPacketRef {
+    pub const VALID_MAGIC: u16 = 0x40CE;
+    pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+}
 
 #[repr(C, packed)]
 pub struct MultiFragmentPacketHeader {
@@ -41,7 +43,7 @@ pub struct MultiFragmentPacketRef {
 impl AsRef<MultiFragmentPacketRef> for MultiFragmentPacket {
     fn as_ref(&self) -> &MultiFragmentPacketRef {
         // MultiFragmentPacket must be guaranteed to be correct already. Since it can only
-        // be built by the builder it is supposed to be guaranteed.
+        // be built by the builder, it is supposed to be guaranteed.
         unsafe { MultiFragmentPacketRef::unchecked_ref_from_raw_bytes(self.data.as_slice()) }
     }
 }
@@ -147,10 +149,10 @@ pub enum MultiFragmentPacketFromRawBytesError {
 impl MultiFragmentPacketRef {
     pub fn ref_from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
         // Check if there is enough data for the header
-        if data.len() < HEADER_SIZE {
+        if data.len() < Self::HEADER_SIZE {
             Err(
                 MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                    required_data: HEADER_SIZE,
+                    required_data: Self::HEADER_SIZE,
                     available_data: data.len(),
                 },
             )?;
@@ -159,10 +161,10 @@ impl MultiFragmentPacketRef {
         let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
 
         // Check the magic bytes are not corrupt
-        if mfp.magic() != MAGIC_BYTES {
+        if mfp.magic() != Self::VALID_MAGIC {
             Err(MultiFragmentPacketFromRawBytesError::CorruptedMagic {
                 read_magic: mfp.magic(),
-                expected_magic: MAGIC_BYTES,
+                expected_magic: Self::VALID_MAGIC,
             })?
         }
 
@@ -254,18 +256,18 @@ impl MultiFragmentPacketRef {
     }
 
     unsafe fn fragment_type_ptr(&self) -> *const u8 {
-        unsafe { ((self as *const Self) as *const u8).add(HEADER_SIZE) }
+        unsafe { ((self as *const Self) as *const u8).add(Self::HEADER_SIZE) }
     }
 
     unsafe fn fragment_size_ptr(&self) -> *const u16 {
         let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
-        let aligned_fragment_types_size = utils::align_up_2pow(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = utils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16 }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
-        let aligned_fragment_sizes_size = utils::align_up_2pow(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
 }
@@ -286,7 +288,7 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
-        self.offset += utils::align_up_2pow(fragment_size as usize, self.packet.align());
+        self.offset += utils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
         Some(FragmentRef {
