@@ -355,7 +355,7 @@ impl PCIe40Stream {
     pub fn set_raii_enable_state_close_mode(
         &mut self,
         preserve_mode: PCIe40StreamHandleEnableStateCloseMode,
-    ) {
+    ) -> Result<(), PCIe40StreamError> {
         debug!(
             "Setting RAII enable state close mode to {:?} for stream {} on device {}",
             preserve_mode, self.stream_type, self.device_id
@@ -378,6 +378,8 @@ impl PCIe40Stream {
                 PCIe40StreamHandleEnableStateActionOnClose::PreserveEnableState { enabled }
             }
         };
+
+        Ok(())
     }
 
     pub fn locking_process(&self) -> Result<Option<i32>, PCIe40StreamError> {

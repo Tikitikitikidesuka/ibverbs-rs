@@ -1,7 +1,7 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::stream::locked_stream::PCIe40LockedStream;
 use crate::pcie40::stream::stream::PCIe40StreamError;
-use log::{debug, error, trace};
+use log::{debug, trace};
 use std::mem::ManuallyDrop;
 
 pub struct PCIe40MappedStream<'a> {

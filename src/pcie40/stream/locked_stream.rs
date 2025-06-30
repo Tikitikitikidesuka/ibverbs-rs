@@ -70,9 +70,10 @@ impl PCIe40LockedStream {
                     self.stream.device_id(),
                     c_result
                 );
-                Err(PCIe40StreamError::FailedToUnlockStream {
+                Err(PCIe40StreamError::StreamWriteError {
                     device_id: self.stream.device_id(),
                     stream_type: self.stream.stream_type(),
+                    info: format!("Failed to unlock stream. It is locked by another process (pid: {c_result})"),
                 })
             }
             std::cmp::Ordering::Less => {
@@ -107,9 +108,10 @@ impl PCIe40LockedStream {
                 self.stream.stream_type(),
                 self.stream.device_id()
             );
-            return Err(PCIe40StreamError::FailedToMapBuffer {
+            return Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.stream.device_id(),
                 stream_type: self.stream.stream_type(),
+                info: "Failed to map buffer. Null pointer".to_string(),
             });
         }
 
@@ -127,9 +129,10 @@ impl PCIe40LockedStream {
                 self.stream.device_id(),
                 buff_size
             );
-            return Err(PCIe40StreamError::FailedToMapBuffer {
+            return Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.stream.device_id(),
                 stream_type: self.stream.stream_type(),
+                info: format!("Failed to map buffer. Invalid buffer size: {}", buff_size),
             });
         }
 

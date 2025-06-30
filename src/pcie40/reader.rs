@@ -26,7 +26,7 @@ pub enum PCIe40ReaderInstanceError {
         alignment: usize,
     },
 
-    #[error("Unable to communicate with the stream {stream_error:?}")]
+    #[error("Unable to communicate with the stream: {0:?}")]
     StreamError(#[from] PCIe40StreamError),
 }
 
@@ -38,9 +38,9 @@ pub enum PCIe40AdvanceError {
     NotAligned,
 }
 
-impl PCIe40Reader {
+impl<'a> PCIe40Reader<'a> {
     pub fn new(
-        mapped_buffer: PCIe40MappedStream,
+        mapped_buffer: PCIe40MappedStream<'a>,
         alignment_2pow: u8,
     ) -> Result<Self, PCIe40ReaderInstanceError> {
         // Size has to be aligned for advance alignment check to work properly
@@ -67,11 +67,15 @@ impl PCIe40Reader {
             alignment_2pow,
         })
     }
+
+    pub fn alignment_pow2(&self) -> u8 {
+        self.alignment_2pow
+    }
 }
 
-impl<'a> CircularBufferReader for PCIe40Reader<'a> {
+impl<'r> CircularBufferReader for PCIe40Reader<'r> {
     type AdvanceResult = Result<(), PCIe40AdvanceError>;
-    type ReadableRegionResult = Result<&'a [u8], PCIe40StreamError>;
+    type ReadableRegionResult<'a> = Result<&'a [u8], PCIe40StreamError> where Self: 'a, 'r: 'a;
 
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
         if !utils::check_alignment_pow2(self.read_offset + bytes, self.alignment_2pow) {
@@ -89,8 +93,8 @@ impl<'a> CircularBufferReader for PCIe40Reader<'a> {
         Ok(())
     }
 
-    fn readable_region(&self) -> Self::ReadableRegionResult {
-        let write_offset = self.mapped_buffer.get_write_offset()?;
-        Ok(&unsafe { self.mapped_buffer.data() }[self.read_offset..write_offset])
+    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
+        let available_bytes = self.mapped_buffer.available_bytes()?;
+        Ok(&unsafe { self.mapped_buffer.data() }[self.read_offset..(self.read_offset + available_bytes)])
     }
 }
