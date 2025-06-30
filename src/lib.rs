@@ -17,3 +17,4 @@ pub mod utils;
 
 #[cfg(feature = "shared-memory")]
 pub mod shared_memory_buffer;
+mod typed_circular_buffer_read_guard;
