@@ -1,50 +1,38 @@
 use pcie40_rs::circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use pcie40_rs::shared_memory_buffer::reader::SharedMemoryBufferReader;
-use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
+use pcie40_rs::mock_buffers::non_aliased_buffer::{MockNonAliasedBuffer, MockNonAliasedBufferReader, MockNonAliasedBufferWriter};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
-    let write_buffer = SharedMemoryBuffer::new_write_buffer("maredshemory33", 16, 1).unwrap();
-    let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
+    let mut demo_buffer = MockNonAliasedBuffer::new(16, 1).unwrap();
 
     // Create reader and writer
-    let mut reader = SharedMemoryBufferReader::new(read_buffer);
-    let mut writer = SharedMemoryBufferWriter::new(write_buffer);
+    let mut reader = MockNonAliasedBufferReader::new(&mut demo_buffer);
+    let mut writer = MockNonAliasedBufferWriter::new(&mut demo_buffer);
 
-    write_to_buffer(&mut writer, b"0123456789ABCD").unwrap();
+    write_to_non_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_non_contiguous_buffer(&reader);
 
     reader.advance_read_pointer(2).unwrap();
     print_non_contiguous_buffer(&reader);
 
-    write_to_buffer(&mut writer, b"EFGH").unwrap();
+    write_to_non_contiguous_buffer(&mut writer, b"EFGH").unwrap();
     print_non_contiguous_buffer(&reader);
 
     reader.advance_read_pointer(10).unwrap();
     print_non_contiguous_buffer(&reader);
 
-    write_to_buffer(&mut writer, b"IJKLMN").unwrap();
+    write_to_non_contiguous_buffer(&mut writer, b"IJKLMN").unwrap();
     print_non_contiguous_buffer(&reader);
 
     reader.advance_read_pointer(4).unwrap();
     print_non_contiguous_buffer(&reader);
 }
 
-fn print_non_contiguous_buffer(reader: &SharedMemoryBufferReader) {
-    let (primary_region, secondary_region) = reader.readable_region();
-
-    println!("\nREAD: ");
-    println!("Primary: {:?}", primary_region);
-    println!("Secondary: {:?}", secondary_region);
-}
-
-fn write_to_buffer(
-    writer: &mut SharedMemoryBufferWriter,
+fn write_to_non_contiguous_buffer(
+    writer: &mut MockNonAliasedBufferWriter,
     data: &[u8],
 ) -> Result<(), ()> {
     let (primary_region, secondary_region) = writer.writable_region();
-    println!("Primary: {primary_region:?}, Secondary: {secondary_region:?}");
 
     if data.len() > primary_region.len() + secondary_region.len() {
         Err(())
@@ -64,4 +52,12 @@ fn write_to_buffer(
 
         Ok(())
     }
+}
+
+fn print_non_contiguous_buffer(reader: &MockNonAliasedBufferReader) {
+    let (primary_region, secondary_region) = reader.readable_region();
+
+    println!("\nREAD: ");
+    println!("Primary: {:?}", primary_region);
+    println!("Secondary: {:?}", secondary_region);
 }
