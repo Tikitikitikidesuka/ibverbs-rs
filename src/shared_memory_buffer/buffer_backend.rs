@@ -32,7 +32,7 @@ pub struct SharedMemoryBuffer {
     shared_memory: MappedSharedMemory,
     file_lock: FileLock,
     size: usize,
-    alignment_2pow: u8,
+    alignment_pow2: u8,
     buffer_ptr: usize,
 }
 
@@ -65,17 +65,27 @@ impl SharedMemoryBuffer {
         // Open and map shared memory
         debug!("Opening and mapping shared memory for buffer '{}'", name);
         let mut shared_memory = Self::open_mapped_shared_memory(&name)?;
-        debug!("Successfully mapped shared memory for buffer '{}', size: {} bytes",
-               name, shared_memory.size());
+        debug!(
+            "Successfully mapped shared memory for buffer '{}', size: {} bytes",
+            name,
+            shared_memory.size()
+        );
 
         // Check it has enough data for the status
         let required_size = size_of::<CircularBufferStatus>();
-        trace!("Validating shared memory size: {} bytes, required: {} bytes",
-               shared_memory.size(), required_size);
+        trace!(
+            "Validating shared memory size: {} bytes, required: {} bytes",
+            shared_memory.size(),
+            required_size
+        );
 
         if shared_memory.size() < required_size {
-            error!("Shared memory for buffer '{}' too small: {} bytes < {} bytes required",
-                   name, shared_memory.size(), required_size);
+            error!(
+                "Shared memory for buffer '{}' too small: {} bytes < {} bytes required",
+                name,
+                shared_memory.size(),
+                required_size
+            );
             return Err(SharedMemoryBufferNewError::MemoryNotBigEnough {
                 minimum_size: required_size,
                 size: shared_memory.size(),
@@ -83,7 +93,10 @@ impl SharedMemoryBuffer {
         }
 
         // Get buffer usable size from the header
-        trace!("Reading buffer metadata from shared memory header for '{}'", name);
+        trace!(
+            "Reading buffer metadata from shared memory header for '{}'",
+            name
+        );
         let size = unsafe {
             let status_ptr = shared_memory.as_slice().as_ptr() as *const CircularBufferStatus;
             let size = (&*status_ptr).size();
@@ -91,30 +104,42 @@ impl SharedMemoryBuffer {
             size
         };
 
-        // Get buffer alignment 2pow from the header
-        let alignment_2pow = unsafe {
+        // Get buffer alignment pow2 from the header
+        let alignment_pow2 = unsafe {
             let status_ptr = shared_memory.as_slice().as_ptr() as *const CircularBufferStatus;
-            let alignment = (&*status_ptr).alignment_2pow();
-            trace!("Buffer '{}' alignment from header: 2^{} bytes", name, alignment);
+            let alignment = (&*status_ptr).alignment_pow2();
+            trace!(
+                "Buffer '{}' alignment from header: 2^{} bytes",
+                name, alignment
+            );
             alignment
-        };
+        } as u8;
 
         // Get buffer offset taking header and alignment into account
         let start_address = unsafe { shared_memory.as_slice().as_ptr() as usize };
-        trace!("Calculating buffer pointer for '{}': start_address={:#x}, header_size={}, alignment=2^{}",
-               name, start_address, size_of::<CircularBufferStatus>(), alignment_2pow);
-
-        let buffer_ptr = utils::align_up_2pow(
-            start_address + size_of::<CircularBufferStatus>(),
-            alignment_2pow as u8,
+        trace!(
+            "Calculating buffer pointer for '{}': start_address={:#x}, header_size={}, alignment=2^{}",
+            name,
+            start_address,
+            size_of::<CircularBufferStatus>(),
+            alignment_pow2
         );
 
-        debug!("Buffer '{}' data region at address {:#x}, size {} bytes",
-               name, buffer_ptr, size);
+        let buffer_ptr = utils::align_up_pow2(
+            start_address + size_of::<CircularBufferStatus>(),
+            alignment_pow2,
+        );
+
+        debug!(
+            "Buffer '{}' data region at address {:#x}, size {} bytes",
+            name, buffer_ptr, size
+        );
 
         // Create unsized buffer
-        info!("Successfully created read buffer for '{}' (size: {} bytes, alignment: 2^{})",
-              name, size, alignment_2pow);
+        info!(
+            "Successfully created read buffer for '{}' (size: {} bytes, alignment: 2^{})",
+            name, size, alignment_pow2
+        );
 
         Ok(SharedMemoryReadBuffer {
             shmem_buffer: SharedMemoryBuffer {
@@ -122,7 +147,7 @@ impl SharedMemoryBuffer {
                 shared_memory,
                 file_lock,
                 size,
-                alignment_2pow: alignment_2pow as u8,
+                alignment_pow2,
                 buffer_ptr,
             },
         })
@@ -131,11 +156,13 @@ impl SharedMemoryBuffer {
     pub fn new_write_buffer<T: Into<String>>(
         name: T,
         size: usize,
-        alignment_2pow: u8,
+        alignment_pow2: u8,
     ) -> Result<SharedMemoryWriteBuffer, SharedMemoryBufferNewError> {
         let name = name.into();
-        info!("Creating new write buffer for '{}' (size: {} bytes, alignment: 2^{})",
-              name, size, alignment_2pow);
+        info!(
+            "Creating new write buffer for '{}' (size: {} bytes, alignment: 2^{})",
+            name, size, alignment_pow2
+        );
 
         // Lock the writer
         debug!("Acquiring writer and reader locks for buffer '{}'", name);
@@ -153,28 +180,46 @@ impl SharedMemoryBuffer {
         // Delete any existing shared memory (in case of unclean shutdown)
         trace!("Checking if shared memory exists for buffer '{}'", name);
         if SharedMemory::exists(&name) {
-            debug!("Existing shared memory found for buffer '{}', deleting", name);
+            debug!(
+                "Existing shared memory found for buffer '{}', deleting",
+                name
+            );
             SharedMemory::delete(&name).map_err(|e| {
-                error!("Failed to delete existing shared memory for buffer '{}': {:?}", name, e);
+                error!(
+                    "Failed to delete existing shared memory for buffer '{}': {:?}",
+                    name, e
+                );
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
                     shared_memory_path: name.clone().into(),
                 }
             })?;
-            debug!("Successfully deleted existing shared memory for buffer '{}'", name);
+            debug!(
+                "Successfully deleted existing shared memory for buffer '{}'",
+                name
+            );
         } else {
             trace!("No existing shared memory found for buffer '{}'", name);
         }
 
         // Create and map shared memory
-        debug!("Creating and mapping new shared memory for buffer '{}'", name);
-        let mut shared_memory = Self::create_mapped_shared_memory(&name, size, alignment_2pow)?;
-        debug!("Successfully created and mapped shared memory for buffer '{}', total size: {} bytes",
-               name, shared_memory.size());
+        debug!(
+            "Creating and mapping new shared memory for buffer '{}'",
+            name
+        );
+        let mut shared_memory = Self::create_mapped_shared_memory(&name, size, alignment_pow2)?;
+        debug!(
+            "Successfully created and mapped shared memory for buffer '{}', total size: {} bytes",
+            name,
+            shared_memory.size()
+        );
 
         // Initialize the shared memory
         debug!("Initializing shared memory header for buffer '{}'", name);
-        Self::initialize_shared_memory(&mut shared_memory, alignment_2pow, size)?;
-        debug!("Successfully initialized shared memory for buffer '{}'", name);
+        Self::initialize_shared_memory(&mut shared_memory, alignment_pow2, size)?;
+        debug!(
+            "Successfully initialized shared memory for buffer '{}'",
+            name
+        );
 
         // Release reader lock when initialized
         trace!("Releasing reader lock for buffer '{}'", name);
@@ -183,19 +228,28 @@ impl SharedMemoryBuffer {
 
         // Get buffer offset taking header and alignment into account
         let start_address = unsafe { shared_memory.as_slice().as_ptr() as usize };
-        trace!("Calculating buffer pointer for '{}': start_address={:#x}, header_size={}, alignment=2^{}",
-               name, start_address, size_of::<CircularBufferStatus>(), alignment_2pow);
-
-        let buffer_ptr = utils::align_up_2pow(
-            start_address + size_of::<CircularBufferStatus>(),
-            alignment_2pow as u8,
+        trace!(
+            "Calculating buffer pointer for '{}': start_address={:#x}, header_size={}, alignment=2^{}",
+            name,
+            start_address,
+            size_of::<CircularBufferStatus>(),
+            alignment_pow2
         );
 
-        debug!("Buffer '{}' data region at address {:#x}, size {} bytes",
-               name, buffer_ptr, size);
+        let buffer_ptr = utils::align_up_pow2(
+            start_address + size_of::<CircularBufferStatus>(),
+            alignment_pow2 as u8,
+        );
 
-        info!("Successfully created write buffer for '{}' (size: {} bytes, alignment: 2^{})",
-              name, size, alignment_2pow);
+        debug!(
+            "Buffer '{}' data region at address {:#x}, size {} bytes",
+            name, buffer_ptr, size
+        );
+
+        info!(
+            "Successfully created write buffer for '{}' (size: {} bytes, alignment: 2^{})",
+            name, size, alignment_pow2
+        );
 
         Ok(SharedMemoryWriteBuffer {
             shmem_buffer: SharedMemoryBuffer {
@@ -203,7 +257,7 @@ impl SharedMemoryBuffer {
                 shared_memory,
                 file_lock: writer_lock,
                 size,
-                alignment_2pow,
+                alignment_pow2,
                 buffer_ptr,
             },
         })
@@ -212,77 +266,123 @@ impl SharedMemoryBuffer {
 
 impl Drop for SharedMemoryWriteBuffer {
     fn drop(&mut self) {
-        trace!("Drop called on SharedMemoryWriteBuffer for '{}'", self.shmem_buffer.name);
+        trace!(
+            "Drop called on SharedMemoryWriteBuffer for '{}'",
+            self.shmem_buffer.name
+        );
 
         // Unlink the shared memory - this removes it from the filesystem
         // Existing mappings remain valid until unmapped
-        debug!("Deleting shared memory for buffer '{}'", self.shmem_buffer.name);
+        debug!(
+            "Deleting shared memory for buffer '{}'",
+            self.shmem_buffer.name
+        );
         match SharedMemory::delete(&self.shmem_buffer.name) {
             Ok(()) => {
-                debug!("Successfully deleted shared memory for buffer '{}'", self.shmem_buffer.name);
+                debug!(
+                    "Successfully deleted shared memory for buffer '{}'",
+                    self.shmem_buffer.name
+                );
             }
             Err(e) => {
-                error!("Failed to delete shared memory for buffer '{}': {:?}",
-                       self.shmem_buffer.name, e);
+                error!(
+                    "Failed to delete shared memory for buffer '{}': {:?}",
+                    self.shmem_buffer.name, e
+                );
             }
         }
 
         // The writer lock will be released automatically when file_lock drops
         // The shared memory mapping will be unmapped when shared_memory drops
-        debug!("Completed cleanup for write buffer '{}'", self.shmem_buffer.name);
+        debug!(
+            "Completed cleanup for write buffer '{}'",
+            self.shmem_buffer.name
+        );
     }
 }
 
 impl SharedMemoryBuffer {
     pub unsafe fn as_slice(&self) -> &[u8] {
-        trace!("Getting immutable slice to buffer '{}' data region (size: {} bytes)",
-               self.name, self.size);
+        trace!(
+            "Getting immutable slice to buffer '{}' data region (size: {} bytes)",
+            self.name, self.size
+        );
         unsafe { std::slice::from_raw_parts(self.buffer_ptr as *const u8, self.size) }
     }
 
     pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
-        trace!("Getting mutable slice to buffer '{}' data region (size: {} bytes)",
-               self.name, self.size);
+        trace!(
+            "Getting mutable slice to buffer '{}' data region (size: {} bytes)",
+            self.name, self.size
+        );
         unsafe { std::slice::from_raw_parts_mut(self.buffer_ptr as *mut u8, self.size) }
     }
 
     pub fn read_status(&self) -> PtrStatus {
         trace!("Reading read status for buffer '{}'", self.name);
         let status = self.status_ref().read_status();
-        trace!("Buffer '{}' read status: ptr={}, wrap={}",
-               self.name, status.ptr(), status.wrap());
+        trace!(
+            "Buffer '{}' read status: ptr={}, wrap={}",
+            self.name,
+            status.ptr(),
+            status.wrap()
+        );
         status
     }
 
     pub fn write_status(&self) -> PtrStatus {
         trace!("Reading write status for buffer '{}'", self.name);
         let status = self.status_ref().write_status();
-        trace!("Buffer '{}' write status: ptr={}, wrap={}",
-               self.name, status.ptr(), status.wrap());
+        trace!(
+            "Buffer '{}' write status: ptr={}, wrap={}",
+            self.name,
+            status.ptr(),
+            status.wrap()
+        );
         status
     }
 
     pub fn set_read_status(&mut self, status: PtrStatus) {
-        debug!("Setting read status for buffer '{}': ptr={}, wrap={}",
-               self.name, status.ptr(), status.wrap());
+        debug!(
+            "Setting read status for buffer '{}': ptr={}, wrap={}",
+            self.name,
+            status.ptr(),
+            status.wrap()
+        );
         self.status_ref_mut().set_read_status(status);
-        trace!("Successfully updated read status for buffer '{}'", self.name);
+        trace!(
+            "Successfully updated read status for buffer '{}'",
+            self.name
+        );
     }
 
     pub fn set_write_status(&mut self, status: PtrStatus) {
-        debug!("Setting write status for buffer '{}': ptr={}, wrap={}",
-               self.name, status.ptr(), status.wrap());
+        debug!(
+            "Setting write status for buffer '{}': ptr={}, wrap={}",
+            self.name,
+            status.ptr(),
+            status.wrap()
+        );
         self.status_ref_mut().set_write_status(status);
-        trace!("Successfully updated write status for buffer '{}'", self.name);
+        trace!(
+            "Successfully updated write status for buffer '{}'",
+            self.name
+        );
     }
 
     fn status_ref(&self) -> &CircularBufferStatus {
-        trace!("Getting immutable reference to status header for buffer '{}'", self.name);
+        trace!(
+            "Getting immutable reference to status header for buffer '{}'",
+            self.name
+        );
         unsafe { &*(self.shared_memory.as_slice().as_ptr() as *const CircularBufferStatus) }
     }
 
     fn status_ref_mut(&mut self) -> &mut CircularBufferStatus {
-        trace!("Getting mutable reference to status header for buffer '{}'", self.name);
+        trace!(
+            "Getting mutable reference to status header for buffer '{}'",
+            self.name
+        );
         unsafe { &mut *(self.shared_memory.as_slice().as_ptr() as *mut _) }
     }
 }
@@ -296,8 +396,8 @@ impl SharedMemoryReadBuffer {
         self.shmem_buffer.size
     }
 
-    pub fn alignment_2pow(&self) -> u8 {
-        self.shmem_buffer.alignment_2pow
+    pub fn alignment_pow2(&self) -> u8 {
+        self.shmem_buffer.alignment_pow2
     }
 
     pub fn read_status(&self) -> PtrStatus {
@@ -313,23 +413,41 @@ impl SharedMemoryReadBuffer {
     }
 
     pub fn tail_free_space(&self) -> usize {
-        trace!("Calculating tail free space for read buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating tail free space for read buffer '{}'",
+            self.shmem_buffer.name
+        );
         let space = self.shmem_buffer.status_ref().tail_free_space();
-        trace!("Buffer '{}' tail free space: {} bytes", self.shmem_buffer.name, space);
+        trace!(
+            "Buffer '{}' tail free space: {} bytes",
+            self.shmem_buffer.name, space
+        );
         space
     }
 
     pub fn head_free_space(&self) -> usize {
-        trace!("Calculating head free space for read buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating head free space for read buffer '{}'",
+            self.shmem_buffer.name
+        );
         let space = self.shmem_buffer.status_ref().head_free_space();
-        trace!("Buffer '{}' head free space: {} bytes", self.shmem_buffer.name, space);
+        trace!(
+            "Buffer '{}' head free space: {} bytes",
+            self.shmem_buffer.name, space
+        );
         space
     }
 
     pub fn available_to_read(&self) -> usize {
-        trace!("Calculating available data to read for buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating available data to read for buffer '{}'",
+            self.shmem_buffer.name
+        );
         let available = self.shmem_buffer.status_ref().available_to_read();
-        trace!("Buffer '{}' available to read: {} bytes", self.shmem_buffer.name, available);
+        trace!(
+            "Buffer '{}' available to read: {} bytes",
+            self.shmem_buffer.name, available
+        );
         available
     }
 }
@@ -347,8 +465,8 @@ impl SharedMemoryWriteBuffer {
         self.shmem_buffer.size
     }
 
-    pub fn alignment_2pow(&self) -> u8 {
-        self.shmem_buffer.alignment_2pow
+    pub fn alignment_pow2(&self) -> u8 {
+        self.shmem_buffer.alignment_pow2
     }
 
     pub fn read_status(&self) -> PtrStatus {
@@ -364,23 +482,41 @@ impl SharedMemoryWriteBuffer {
     }
 
     pub fn tail_free_space(&self) -> usize {
-        trace!("Calculating tail free space for write buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating tail free space for write buffer '{}'",
+            self.shmem_buffer.name
+        );
         let space = self.shmem_buffer.status_ref().tail_free_space();
-        trace!("Buffer '{}' tail free space: {} bytes", self.shmem_buffer.name, space);
+        trace!(
+            "Buffer '{}' tail free space: {} bytes",
+            self.shmem_buffer.name, space
+        );
         space
     }
 
     pub fn head_free_space(&self) -> usize {
-        trace!("Calculating head free space for write buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating head free space for write buffer '{}'",
+            self.shmem_buffer.name
+        );
         let space = self.shmem_buffer.status_ref().head_free_space();
-        trace!("Buffer '{}' head free space: {} bytes", self.shmem_buffer.name, space);
+        trace!(
+            "Buffer '{}' head free space: {} bytes",
+            self.shmem_buffer.name, space
+        );
         space
     }
 
     pub fn available_to_write(&self) -> usize {
-        trace!("Calculating available space to write for buffer '{}'", self.shmem_buffer.name);
+        trace!(
+            "Calculating available space to write for buffer '{}'",
+            self.shmem_buffer.name
+        );
         let available = self.shmem_buffer.status_ref().available_to_write();
-        trace!("Buffer '{}' available to write: {} bytes", self.shmem_buffer.name, available);
+        trace!(
+            "Buffer '{}' available to write: {} bytes",
+            self.shmem_buffer.name, available
+        );
         available
     }
 }
@@ -393,31 +529,40 @@ impl SharedMemoryWriteBuffer {
 impl SharedMemoryBuffer {
     fn initialize_shared_memory(
         shared_memory: &mut MappedSharedMemory,
-        alignment_2pow: u8,
+        alignment_pow2: u8,
         size: usize,
     ) -> Result<(), SharedMemoryBufferNewError> {
-        debug!("Initializing shared memory header (alignment: 2^{}, buffer size: {} bytes)",
-               alignment_2pow, size);
+        debug!(
+            "Initializing shared memory header (alignment: 2^{}, buffer size: {} bytes)",
+            alignment_pow2, size
+        );
 
         // Use the same alignment calculations as create_mapped_shared_memory
-        let aligned_buffer_size = utils::align_up_2pow(size, alignment_2pow);
-        trace!("Aligned buffer size: {} bytes (requested: {}, alignment: 2^{})",
-               aligned_buffer_size, size, alignment_2pow);
+        let aligned_buffer_size = utils::align_up_pow2(size, alignment_pow2);
+        trace!(
+            "Aligned buffer size: {} bytes (requested: {}, alignment: 2^{})",
+            aligned_buffer_size, size, alignment_pow2
+        );
 
         // Create the initial status with the actual buffer size
         let initial_status = CircularBufferStatus::new(
             aligned_buffer_size,
-            alignment_2pow as usize,
+            alignment_pow2 as usize,
             0, // id - you might want to make this configurable
         );
 
-        trace!("Created initial status: size={}, alignment={}, id={}",
-               aligned_buffer_size, alignment_2pow, 0);
+        trace!(
+            "Created initial status: size={}, alignment={}, id={}",
+            aligned_buffer_size, alignment_pow2, 0
+        );
 
         // Write the status header at the beginning of shared memory
         unsafe {
             let status_ptr = shared_memory.as_slice_mut().as_mut_ptr() as *mut CircularBufferStatus;
-            trace!("Writing status header to shared memory at address: {:p}", status_ptr);
+            trace!(
+                "Writing status header to shared memory at address: {:p}",
+                status_ptr
+            );
             std::ptr::write(status_ptr, initial_status);
             trace!("Successfully wrote status header to shared memory");
         }
@@ -440,8 +585,11 @@ impl SharedMemoryBuffer {
             }
         })?;
 
-        debug!("Successfully opened shared memory '{}', size: {} bytes",
-               name, shared_memory.size());
+        debug!(
+            "Successfully opened shared memory '{}', size: {} bytes",
+            name,
+            shared_memory.size()
+        );
 
         trace!("Mapping shared memory '{}' to process address space", name);
         let mapped = shared_memory.map().map_err(|e| {
@@ -451,8 +599,11 @@ impl SharedMemoryBuffer {
             }
         })?;
 
-        debug!("Successfully mapped shared memory '{}' at address: {:p}",
-               name, unsafe { mapped.as_slice().as_ptr() });
+        debug!(
+            "Successfully mapped shared memory '{}' at address: {:p}",
+            name,
+            unsafe { mapped.as_slice().as_ptr() }
+        );
 
         Ok(mapped)
     }
@@ -460,32 +611,43 @@ impl SharedMemoryBuffer {
     fn create_mapped_shared_memory(
         name: impl Into<String>,
         size: usize,
-        alignment_2pow: u8, // Add this parameter
+        alignment_pow2: u8, // Add this parameter
     ) -> Result<MappedSharedMemory, SharedMemoryBufferNewError> {
         let name = name.into();
-        debug!("Creating and mapping new shared memory for '{}' (requested size: {} bytes, alignment: 2^{})",
-               name, size, alignment_2pow);
+        debug!(
+            "Creating and mapping new shared memory for '{}' (requested size: {} bytes, alignment: 2^{})",
+            name, size, alignment_pow2
+        );
 
         // Calculate total size needed (header + padding + buffer + padding)
         let header_size = size_of::<CircularBufferStatus>();
-        let aligned_header_size = utils::align_up_2pow(header_size, alignment_2pow);
-        let aligned_buffer_size = utils::align_up_2pow(size, alignment_2pow);
+        let aligned_header_size = utils::align_up_pow2(header_size, alignment_pow2);
+        let aligned_buffer_size = utils::align_up_pow2(size, alignment_pow2);
         let total_size = aligned_header_size + aligned_buffer_size;
 
-        debug!("Size calculations for '{}': header={} bytes, aligned_header={} bytes, \
+        debug!(
+            "Size calculations for '{}': header={} bytes, aligned_header={} bytes, \
                 aligned_buffer={} bytes, total={} bytes",
-               name, header_size, aligned_header_size, aligned_buffer_size, total_size);
+            name, header_size, aligned_header_size, aligned_buffer_size, total_size
+        );
 
-        trace!("Creating shared memory segment '{}' with size {} bytes", name, total_size);
-        let shared_memory = SharedMemory::create(&name, total_size, PERMISSION_MODE).map_err(|e| {
-            error!("Failed to create shared memory '{}': {:?}", name, e);
-            SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
-                shared_memory_path: name.clone().into(),
-            }
-        })?;
+        trace!(
+            "Creating shared memory segment '{}' with size {} bytes",
+            name, total_size
+        );
+        let shared_memory =
+            SharedMemory::create(&name, total_size, PERMISSION_MODE).map_err(|e| {
+                error!("Failed to create shared memory '{}': {:?}", name, e);
+                SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
+                    shared_memory_path: name.clone().into(),
+                }
+            })?;
 
-        debug!("Successfully created shared memory '{}', actual size: {} bytes",
-               name, shared_memory.size());
+        debug!(
+            "Successfully created shared memory '{}', actual size: {} bytes",
+            name,
+            shared_memory.size()
+        );
 
         trace!("Mapping shared memory '{}' to process address space", name);
         let mapped = shared_memory.map().map_err(|e| {
@@ -495,8 +657,11 @@ impl SharedMemoryBuffer {
             }
         })?;
 
-        debug!("Successfully mapped shared memory '{}' at address: {:p}",
-               name, unsafe { mapped.as_slice().as_ptr() });
+        debug!(
+            "Successfully mapped shared memory '{}' at address: {:p}",
+            name,
+            unsafe { mapped.as_slice().as_ptr() }
+        );
 
         Ok(mapped)
     }
@@ -525,12 +690,17 @@ impl SharedMemoryBuffer {
         trace!("Trying to open existing lock file: {:?}", lock_path_ref);
         match FileLock::open(&lock_path_ref) {
             Ok(lock) => {
-                debug!("Successfully opened existing lock file: {:?}", lock_path_ref);
+                debug!(
+                    "Successfully opened existing lock file: {:?}",
+                    lock_path_ref
+                );
                 Ok(lock)
             }
             Err(open_err) => {
-                trace!("Failed to open existing lock file: {:?}, trying to create: {:?}",
-                       open_err, lock_path_ref);
+                trace!(
+                    "Failed to open existing lock file: {:?}, trying to create: {:?}",
+                    open_err, lock_path_ref
+                );
 
                 match FileLock::create(&lock_path_ref) {
                     Ok(lock) => {
@@ -538,8 +708,10 @@ impl SharedMemoryBuffer {
                         Ok(lock)
                     }
                     Err(create_err) => {
-                        error!("Failed to open or create lock file {:?}: open={:?}, create={:?}",
-                               lock_path_ref, open_err, create_err);
+                        error!(
+                            "Failed to open or create lock file {:?}: open={:?}, create={:?}",
+                            lock_path_ref, open_err, create_err
+                        );
                         Err(SharedMemoryBufferNewError::UnableToLockSharedMemory {
                             read_lock_path: lock_path_ref.into(),
                         })
@@ -589,13 +761,21 @@ impl SharedMemoryBuffer {
 
     fn reader_lock_path(name: impl AsRef<str>) -> PathBuf {
         let path = format!("/tmp/{}_reader.lock", name.as_ref()).into();
-        trace!("Generated reader lock path for '{}': {:?}", name.as_ref(), path);
+        trace!(
+            "Generated reader lock path for '{}': {:?}",
+            name.as_ref(),
+            path
+        );
         path
     }
 
     fn writer_lock_path(name: impl AsRef<str>) -> PathBuf {
         let path = format!("/tmp/{}_writer.lock", name.as_ref()).into();
-        trace!("Generated writer lock path for '{}': {:?}", name.as_ref(), path);
+        trace!(
+            "Generated writer lock path for '{}': {:?}",
+            name.as_ref(),
+            path
+        );
         path
     }
 }

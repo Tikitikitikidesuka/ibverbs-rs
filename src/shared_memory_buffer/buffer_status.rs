@@ -5,7 +5,7 @@ pub struct CircularBufferStatus {
     write_status: u64,
     read_status: u64,
     size: usize,
-    alignment_2pow: usize,
+    alignment_pow2: usize,
     id: c_int,
 }
 
@@ -46,7 +46,7 @@ impl PtrStatus {
         self.status ^= WRAP_MASK;
     }
 
-    pub fn add(self, offset: usize, buffer_size: usize) -> Self {
+    pub fn plus(self, offset: usize, buffer_size: usize) -> Self {
         let current_ptr = self.ptr() as usize;
         let total_distance = current_ptr + offset;
 
@@ -85,12 +85,12 @@ impl PtrStatus {
 }
 
 impl CircularBufferStatus {
-    pub fn new(size: usize, alignment_2pow: usize, id: c_int) -> Self {
+    pub fn new(size: usize, alignment_pow2: usize, id: c_int) -> Self {
         Self {
             write_status: 0,
             read_status: 0,
             size,
-            alignment_2pow,
+            alignment_pow2,
             id,
         }
     }
@@ -212,7 +212,7 @@ impl CircularBufferStatus {
         self.id
     }
 
-    pub fn alignment_2pow(&self) -> usize {
-        self.alignment_2pow
+    pub fn alignment_pow2(&self) -> usize {
+        self.alignment_pow2
     }
 }

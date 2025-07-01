@@ -30,7 +30,7 @@
 //! | `write_status`    | `u64`    | Current write status     |
 //! | `read_status`     | `u64`    | Current read status      |
 //! | `size`            | `usize`  | Total buffer size        |
-//! | `alignment_2pow`  | `usize`  | Alignment as power of 2  |
+//! | `alignment_pow2`  | `usize`  | Alignment as power of 2  |
 //! | `id`              | `c_int`  | Buffer identifier        |
 //! ```
 //!
@@ -128,4 +128,3 @@ pub mod shared_memory;
 //pub mod old_writer;
 mod buffer_element;
 pub mod writer;
-mod new_interface;
