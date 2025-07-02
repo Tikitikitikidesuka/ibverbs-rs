@@ -39,7 +39,7 @@ fn main() {
 
     loop {
         println!("Loading 5 MFPs...");
-        match MultiFragmentPacketRef::read_multiple(&mut reader, 2) {
+        match MultiFragmentPacketRef::read_multiple(&mut reader, 5) {
             Ok(mfps) => {
                 println!("Read MFP[0]: {:?}", mfps[0]);
                 println!("Read MFP[1]: {:?}", mfps[1]);
