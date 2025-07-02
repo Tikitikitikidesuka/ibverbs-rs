@@ -27,7 +27,10 @@ fn main() {
         .set_raii_enable_state_close_mode(PreserveEnableState)
         .unwrap();
 
-    let mapped_stream = stream.lock().unwrap().map_buffer().unwrap();
+    let mut locked_stream = stream.lock().unwrap();
+    locked_stream.flush().unwrap();
+
+    let mapped_stream = locked_stream.map_buffer().unwrap();
 
     let mut reader = PCIe40Reader::new(mapped_stream, meta_alignment_pow2).unwrap();
 

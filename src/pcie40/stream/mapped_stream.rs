@@ -76,7 +76,7 @@ impl PCIe40MappedStream<'_> {
     pub unsafe fn data(&self) -> &[u8] {
         self.buffer
     }
-    
+
     pub fn size(&self) -> usize {
         self.buffer.len()
     }

@@ -93,6 +93,19 @@ impl PCIe40LockedStream {
         }
     }
 
+    pub fn flush(&mut self) -> Result<(), PCIe40StreamError> {
+        let result = unsafe { p40_stream_reset_flush(self.stream.stream_fd) };
+        if result != 0 {
+            Err(PCIe40StreamError::StreamWriteError {
+                device_id: self.stream.device_id,
+                stream_type: self.stream.stream_type,
+                info: "Could now flush stream".to_string(),
+            })
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn map_buffer<'a>(self) -> Result<PCIe40MappedStream<'a>, PCIe40StreamError> {
         debug!(
             "Mapping buffer for stream {} on device {}",
