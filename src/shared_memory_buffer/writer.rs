@@ -1,6 +1,6 @@
 use crate::circular_buffer::CircularBufferWriter;
 use crate::shared_memory_buffer::buffer_backend::SharedMemoryWriteBuffer;
-use crate::shared_memory_buffer::buffer_element::BufferElement;
+use crate::shared_memory_buffer::buffer_element::SharedMemoryBufferElement;
 use crate::shared_memory_buffer::buffer_status::{CircularBufferStatus, PtrStatus};
 use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
 use crate::utils;
@@ -18,6 +18,10 @@ impl SharedMemoryBufferWriter {
             buffer,
             write_status,
         }
+    }
+
+    pub fn alignment_pow2(&self) -> u8 {
+        self.buffer.alignment_pow2()
     }
 }
 

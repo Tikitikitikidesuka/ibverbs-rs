@@ -5,6 +5,18 @@
 //! required for proper buffer management and ensures compatibility between producers
 //! and consumers.
 
+use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use crate::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
+use crate::shared_memory_buffer::reader::SharedMemoryBufferReader;
+use crate::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
+use crate::shared_memory_buffer::writer::SharedMemoryBufferWriter;
+use crate::typed_circular_buffer::{
+    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
+};
+use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
+use crate::utils;
+use thiserror::Error;
+
 /// A trait for elements that can be stored in the shared memory ring buffer.
 ///
 /// Implementors must provide access to the three critical pieces of metadata:
@@ -18,31 +30,37 @@
 /// maintains minimum 2-byte alignment, placing the wrap flag in the first two bytes
 /// guarantees it will be written and readable even when an element crosses the
 /// wraparound boundary.
-pub trait BufferElement {
-    /// Returns the total size of the element in bytes.
-    ///
-    /// This includes all metadata and data that comprises the complete element.
-    /// The implementation must store this information in a way that remains
-    /// accessible even during partial writes.
-    fn size(&self) -> usize;
+pub trait SharedMemoryBufferElement {
+    /// Returns a reference to a `Self` if possible to cast from the provided raw data.
+    /// Otherwise, a `SharedMemoryTypedReadError` is raised.
+    fn cast_to_element(data: &[u8]) -> Result<&Self, SharedMemoryTypedReadError>;
 
-    /// Returns information about the element's wrap status.
-    ///
-    /// **Note**: The return type suggests this may indicate wrap position or size
-    /// rather than a simple boolean. Implementors should clarify the specific
-    /// meaning for their element type.
-    fn wrap(&self) -> usize;
+    /// Writes the element to memory as raw bytes.
+    fn cast_to_bytes(
+        element: &Self,
+        bytes: &mut [u8],
+    ) -> Result<(), SharedMemoryTypedWriteError>;
 
-    /// Marks the element as wrapping around the buffer boundary.
+    /// Returns the element's size in bytes.
+    fn length_in_bytes(&self) -> usize;
+
+    /// Returns the wrap flag state for this element. If the element wraps, meaning it would reach
+    /// the end of the buffer, and therefore it must be written to the beginning, the flag is true.
     ///
-    /// This method is called by the writer when an element cannot fit in the
+    /// As a parameter it should receive the byte slice with the beginning of the element.
+    /// If there are not enough bytes for the wrap flag or any other occurs, a `SharedMemoryTypedReadError`
+    /// should be returned.
+    ///
+    /// The fewer bytes we need for the wrap flag, the better.
+    /// It's desirable to store the wrap flag in the first two bytes since the
+    /// minimum alignment of the buffer is two bytes because of how it stores pointers. Meaning, if
+    /// the wrap flag is in the first two bytes, there will always be space for it.
+    fn check_wrap_flag(bytes: &[u8]) -> Result<bool, SharedMemoryTypedReadError>;
+
+    /// Sets the wrap flag for this element as if it started on the first byte of `bytes`.
+    ///
+    /// The writer calls this method when an element cannot fit in the
     /// remaining space at the end of the buffer. The wrap flag must be stored
     /// in the first two bytes to ensure durability.
-    fn set_wrap(&mut self);
-
-    /// Returns a byte slice containing the element's raw data.
-    ///
-    /// This provides access to the complete element as it appears in the buffer,
-    /// including both metadata and payload data.
-    fn data(&self) -> &[u8];
+    fn set_wrap_flag(bytes: &mut [u8]);
 }

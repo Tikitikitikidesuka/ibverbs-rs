@@ -121,10 +121,11 @@
 //! during wraparound scenarios.
 
 pub mod buffer_backend;
+pub mod buffer_element;
 mod buffer_status;
 pub mod file_lock;
+pub mod readable_buffer_element;
 pub mod reader;
 pub mod shared_memory;
-//pub mod old_writer;
-mod buffer_element;
+pub mod writable_buffer_element;
 pub mod writer;
