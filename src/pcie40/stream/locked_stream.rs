@@ -94,7 +94,7 @@ impl PCIe40LockedStream {
     }
 
     pub fn flush(&mut self) -> Result<(), PCIe40StreamError> {
-        let result = unsafe { p40_stream_reset_flush(self.stream.stream_fd) };
+        let result = unsafe { p40_stream_reset_logic(self.stream.stream_fd) };
         if result != 0 {
             Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.stream.device_id,
