@@ -2,7 +2,7 @@
 
 ## Authentication
 
-Before pushing images to the CERN GitLab Container Registry, you must authenticate:
+Before pushing or pulling images to the CERN GitLab Container Registry, you must authenticate:
 
 ```sh
 docker login gitlab-registry.cern.ch
