@@ -40,8 +40,11 @@ fn main() {
     println!("Read MFP[1]: {:?}", mfps[1]);
     println!("Discarding MFPs...");
     mfps.discard().expect("Error discarding");
+
     println!("Loading 2 MFPs...");
     let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
+    println!("Discarding MFPs...");
+    mfps.discard().expect("Error discarding");
 }
