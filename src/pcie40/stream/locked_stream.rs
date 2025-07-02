@@ -1,9 +1,9 @@
 use crate::pcie40::bindings::*;
+use crate::pcie40::stream::mapped_stream::PCIe40MappedStream;
+use crate::pcie40::stream::stream::{PCIe40Stream, PCIe40StreamError};
 use log::{debug, error, info, trace};
 use std::mem::ManuallyDrop;
 use std::slice;
-use crate::pcie40::stream::mapped_stream::PCIe40MappedStream;
-use crate::pcie40::stream::stream::{PCIe40Stream, PCIe40StreamError};
 
 pub struct PCIe40LockedStream {
     pub(super) stream: ManuallyDrop<PCIe40Stream>,
@@ -73,7 +73,9 @@ impl PCIe40LockedStream {
                 Err(PCIe40StreamError::StreamWriteError {
                     device_id: self.stream.device_id(),
                     stream_type: self.stream.stream_type(),
-                    info: format!("Failed to unlock stream. It is locked by another process (pid: {c_result})"),
+                    info: format!(
+                        "Failed to unlock stream. It is locked by another process (pid: {c_result})"
+                    ),
                 })
             }
             std::cmp::Ordering::Less => {

@@ -1,10 +1,10 @@
-use thiserror::Error;
 use crate::circular_buffer::CircularBufferWriter;
 use crate::mock_buffers::aliased_buffer::MockAliasedBufferWriter;
 use crate::mock_buffers::aliased_readable::VALID_MAGIC;
 use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry, MockWritable};
 use crate::typed_circular_buffer::CircularBufferWritable;
 use crate::utils;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WriteError {
@@ -26,8 +26,7 @@ impl<T: MockWritable + DiaryEntry> CircularBufferWritable<MockAliasedBufferWrite
         }
 
         // Cast writable memory to mutable ReadableDiaryEntryMem
-        let typed_memory =
-            unsafe { &mut *(writable_region.as_ptr() as *mut BufferedDiaryEntry) };
+        let typed_memory = unsafe { &mut *(writable_region.as_ptr() as *mut BufferedDiaryEntry) };
 
         // Fill in header data
         typed_memory.day = self.day();

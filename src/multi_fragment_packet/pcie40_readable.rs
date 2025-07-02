@@ -23,7 +23,11 @@ pub enum PCIe40TypedReadError {
 }
 
 impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
-    type ReadResult<'a> = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError> where Self: 'a, PCIe40Reader<'r>: 'a;
+    type ReadResult<'a>
+        = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
+    where
+        Self: 'a,
+        PCIe40Reader<'r>: 'a;
 
     fn read<'a>(reader: &'a mut PCIe40Reader<'r>) -> Self::ReadResult<'a> {
         let readable_region = reader.readable_region()?;
@@ -34,8 +38,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
         }
 
         // Cast to mfp
-        let mfp_mem =
-            unsafe { &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self) };
+        let mfp_mem = unsafe { &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self) };
 
         // Verify valid magic packet
         if mfp_mem.magic() != Self::VALID_MAGIC {
@@ -43,7 +46,8 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
         }
 
         // Verify enough data for the whole entry and alignment
-        let aligned_size = utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
+        let aligned_size =
+            utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
         if readable_region.len() < aligned_size {
             return Err(PCIe40TypedReadError::NotEnoughData);
         }
@@ -56,8 +60,11 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
 }
 
 impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
-    type MultiReadResult<'a> =
-    Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError> where Self: 'a, PCIe40Reader<'r>: 'a;
+    type MultiReadResult<'a>
+        = Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
+    where
+        Self: 'a,
+        PCIe40Reader<'r>: 'a;
 
     fn read_multiple<'a>(
         reader: &'a mut PCIe40Reader<'r>,
@@ -86,7 +93,8 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRe
             }
 
             // Verify enough data for the whole entry and alignment
-            let aligned_size = utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
+            let aligned_size =
+                utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
                 return Err(PCIe40TypedReadError::NotEnoughData);
             }

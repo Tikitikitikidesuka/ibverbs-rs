@@ -1,6 +1,6 @@
+use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
 use crate::utils;
 use thiserror::Error;
-use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
 
 pub struct MockNonAliasedBuffer {
     alignment_pow2: u8,

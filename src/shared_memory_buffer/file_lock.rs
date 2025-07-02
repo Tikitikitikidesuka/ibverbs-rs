@@ -1,10 +1,10 @@
+use log::{debug, error, trace};
+use nix::errno::Errno;
+use nix::fcntl::{Flock, FlockArg};
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
-use nix::fcntl::{Flock, FlockArg};
-use nix::errno::Errno;
 use thiserror::Error;
-use log::{debug, error, trace};
 
 #[derive(Error, Debug)]
 pub enum FileLockCreateError {
@@ -100,10 +100,7 @@ impl FileLock {
         let path_ref = path.as_ref();
         debug!("Opening file read-only at path: {:?}", path_ref);
 
-        let file = match OpenOptions::new()
-            .read(true)
-            .open(path_ref)
-        {
+        let file = match OpenOptions::new().read(true).open(path_ref) {
             Ok(f) => f,
             Err(e) => {
                 error!("Failed to open file read-only at {:?}: {}", path_ref, e);
@@ -138,11 +135,13 @@ impl FileLock {
                     debug!("Successfully locked file: {:?}", self.path);
                     self.flock = Some(locked_file);
                     Ok(())
-                },
+                }
                 Err((file, errno)) => {
                     self.file = Some(file);
                     error!("Failed to lock file {:?}: {}", self.path, errno);
-                    Err(FileLockLockError::Io(io::Error::from_raw_os_error(errno as i32)))
+                    Err(FileLockLockError::Io(io::Error::from_raw_os_error(
+                        errno as i32,
+                    )))
                 }
             }
         } else {
@@ -165,10 +164,13 @@ impl FileLock {
         if let Some(file) = self.file.take() {
             match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
                 Ok(locked_file) => {
-                    debug!("Successfully acquired non-blocking lock on file: {:?}", self.path);
+                    debug!(
+                        "Successfully acquired non-blocking lock on file: {:?}",
+                        self.path
+                    );
                     self.flock = Some(locked_file);
                     Ok(true)
-                },
+                }
                 Err((file, errno)) => {
                     self.file = Some(file);
                     if errno == Errno::EAGAIN {
@@ -176,7 +178,9 @@ impl FileLock {
                         Ok(false) // File is locked by someone else
                     } else {
                         error!("Failed to try_lock file {:?}: {}", self.path, errno);
-                        Err(FileLockTryLockError::Io(io::Error::from_raw_os_error(errno as i32)))
+                        Err(FileLockTryLockError::Io(io::Error::from_raw_os_error(
+                            errno as i32,
+                        )))
                     }
                 }
             }
@@ -200,11 +204,13 @@ impl FileLock {
                     debug!("Successfully unlocked file: {:?}", self.path);
                     self.file = Some(file);
                     Ok(())
-                },
+                }
                 Err((locked_file, errno)) => {
                     self.flock = Some(locked_file);
                     error!("Failed to unlock file {:?}: {}", self.path, errno);
-                    Err(FileLockUnlockError::Io(io::Error::from_raw_os_error(errno as i32)))
+                    Err(FileLockUnlockError::Io(io::Error::from_raw_os_error(
+                        errno as i32,
+                    )))
                 }
             }
         } else {
@@ -228,7 +234,7 @@ impl FileLock {
             Ok(_) => {
                 debug!("Successfully deleted file: {:?}", self.path);
                 Ok(())
-            },
+            }
             Err(e) => {
                 error!("Failed to delete file {:?}: {}", self.path, e);
                 Err(FileLockDeleteError::Io(e))

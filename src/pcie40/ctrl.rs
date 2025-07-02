@@ -1,7 +1,7 @@
 use crate::pcie40::bindings::*;
+use crate::pcie40::id::PCIe40IdManager;
 use log::{debug, error, info, trace};
 use thiserror::Error;
-use crate::pcie40::id::PCIe40IdManager;
 
 pub struct PCIe40ControllerManager {}
 

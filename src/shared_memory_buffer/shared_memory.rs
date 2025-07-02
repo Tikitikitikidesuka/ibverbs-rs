@@ -183,9 +183,7 @@ impl SharedMemory {
     }
 
     // Open an existing shared memory segment
-    pub fn open(
-        path: impl Into<PathBuf>,
-    ) -> Result<Self, SharedMemoryOpenError> {
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, SharedMemoryOpenError> {
         let path = path.into();
         info!("Opening shared memory at path: {:?}", path);
 
@@ -196,13 +194,7 @@ impl SharedMemory {
 
         // Open shared memory
         trace!("Calling shm_open with O_RDWR");
-        let file_descriptor = unsafe {
-            libc::shm_open(
-                c_name.as_ptr(),
-                libc::O_RDWR,
-                0
-            )
-        };
+        let file_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDWR, 0) };
         trace!("shm_open returned file descriptor: {}", file_descriptor);
 
         if file_descriptor < 0 {

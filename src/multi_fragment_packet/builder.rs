@@ -1,4 +1,6 @@
-use crate::multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
+use crate::multi_fragment_packet::{
+    Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef,
+};
 use crate::utils;
 use std::marker::PhantomData;
 

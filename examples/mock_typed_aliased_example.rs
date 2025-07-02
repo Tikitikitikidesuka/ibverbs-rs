@@ -1,6 +1,12 @@
-use pcie40_rs::mock_buffers::aliased_buffer::{MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter};
-use pcie40_rs::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, MockWritable, OwnedDiaryEntry};
-use pcie40_rs::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable};
+use pcie40_rs::mock_buffers::aliased_buffer::{
+    MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
+};
+use pcie40_rs::mock_buffers::dynamic_size_element::{
+    BufferedDiaryEntry, MockWritable, OwnedDiaryEntry,
+};
+use pcie40_rs::typed_circular_buffer::{
+    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
+};
 use pcie40_rs::utils;
 
 fn main() {

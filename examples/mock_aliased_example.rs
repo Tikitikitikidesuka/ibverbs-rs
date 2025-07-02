@@ -1,5 +1,7 @@
 use pcie40_rs::circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use pcie40_rs::mock_buffers::aliased_buffer::{MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter};
+use pcie40_rs::mock_buffers::aliased_buffer::{
+    MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
+};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
@@ -28,10 +30,7 @@ fn main() {
     print_contiguous_buffer(&reader);
 }
 
-fn write_to_contiguous_buffer(
-    writer: &mut MockAliasedBufferWriter,
-    data: &[u8],
-) -> Result<(), ()> {
+fn write_to_contiguous_buffer(writer: &mut MockAliasedBufferWriter, data: &[u8]) -> Result<(), ()> {
     let writable_region = writer.writable_region();
 
     if data.len() > writable_region.len() {

@@ -1,5 +1,5 @@
-use std::ops::Deref;
 use crate::circular_buffer::CircularBufferReader;
+use std::ops::Deref;
 
 pub struct ReadGuard<'a, R: CircularBufferReader, T> {
     reader: &'a mut R,

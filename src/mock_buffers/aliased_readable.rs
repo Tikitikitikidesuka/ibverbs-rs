@@ -1,10 +1,10 @@
-use thiserror::Error;
 use crate::circular_buffer::CircularBufferReader;
 use crate::mock_buffers::aliased_buffer::MockAliasedBufferReader;
 use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
 use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
 use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
 use crate::utils;
+use thiserror::Error;
 
 pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
 
@@ -55,8 +55,7 @@ impl CircularBufferReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
 }
 
 impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
-    type MultiReadResult<'a> =
-    Result<MultiReadGuard<'a, MockAliasedBufferReader, Self>, ReadError>;
+    type MultiReadResult<'a> = Result<MultiReadGuard<'a, MockAliasedBufferReader, Self>, ReadError>;
 
     fn read_multiple(
         reader: &mut MockAliasedBufferReader,

@@ -57,10 +57,7 @@ pub trait ReadableSharedMemoryBufferElement: SharedMemoryBufferElement {
 
 pub trait WritableSharedMemoryBufferElement: SharedMemoryBufferElement {
     /// Writes the element to memory as raw bytes.
-    fn write_to_buffer(
-        &self,
-        buffer: &mut [u8],
-    ) -> Result<(), SharedMemoryTypedWriteError>;
+    fn write_to_buffer(&self, buffer: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError>;
 
     /// Sets the wrap flag as if the element started on the first byte of `bytes`.
     ///
@@ -69,4 +66,3 @@ pub trait WritableSharedMemoryBufferElement: SharedMemoryBufferElement {
     /// in the first two bytes to ensure durability.
     fn set_wrap_flag(bytes: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError>;
 }
-

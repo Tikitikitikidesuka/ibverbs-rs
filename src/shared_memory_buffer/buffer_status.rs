@@ -134,7 +134,11 @@ impl CircularBufferStatus {
         self.read_status = new_status.status;
     }
 
-    pub fn buffer_tail_free_space(write_status: PtrStatus, read_status: PtrStatus, buffer_size: usize) -> usize {
+    pub fn buffer_tail_free_space(
+        write_status: PtrStatus,
+        read_status: PtrStatus,
+        buffer_size: usize,
+    ) -> usize {
         if write_status.wrap() == read_status.wrap() {
             buffer_size - write_status.ptr() as usize
         } else {
@@ -142,7 +146,7 @@ impl CircularBufferStatus {
             if read_status.ptr() > write_status.ptr() {
                 (read_status.ptr() - write_status.ptr()) as usize
             } else {
-                0  // Write caught up to read at position 0
+                0 // Write caught up to read at position 0
             }
         }
     }
@@ -155,7 +159,11 @@ impl CircularBufferStatus {
         }
     }
 
-    pub fn buffer_available_to_write(write_status: PtrStatus, read_status: PtrStatus, buffer_size: usize) -> usize {
+    pub fn buffer_available_to_write(
+        write_status: PtrStatus,
+        read_status: PtrStatus,
+        buffer_size: usize,
+    ) -> usize {
         if write_status.wrap() == read_status.wrap() {
             // Write hasn't wrapped ahead of read
             if write_status.ptr() >= read_status.ptr() {
@@ -172,7 +180,11 @@ impl CircularBufferStatus {
         }
     }
 
-    pub fn buffer_available_to_read(write_status: PtrStatus, read_status: PtrStatus, buffer_size: usize) -> usize {
+    pub fn buffer_available_to_read(
+        write_status: PtrStatus,
+        read_status: PtrStatus,
+        buffer_size: usize,
+    ) -> usize {
         if write_status.wrap() == read_status.wrap() {
             // No wrap difference
             (write_status.ptr() - read_status.ptr()) as usize

@@ -1,10 +1,10 @@
-use thiserror::Error;
 use crate::circular_buffer::CircularBufferWriter;
 use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry, MockWritable};
 use crate::mock_buffers::non_aliased_buffer::MockNonAliasedBufferWriter;
 use crate::mock_buffers::non_aliased_readable::{VALID_MAGIC, WRAP_MAGIC};
 use crate::typed_circular_buffer::CircularBufferWritable;
 use crate::utils;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WriteError {
@@ -48,11 +48,11 @@ impl<T: MockWritable + DiaryEntry> CircularBufferWritable<MockNonAliasedBufferWr
         // Note content
         let note_bytes = self.note().as_bytes();
         let note_offset = size_of::<BufferedDiaryEntry>();
-        writable_region[note_offset..note_offset + note_bytes.len()]
-            .copy_from_slice(note_bytes);
+        writable_region[note_offset..note_offset + note_bytes.len()].copy_from_slice(note_bytes);
 
         // Commit the write
-        writer.advance_write_pointer(advance_size)
+        writer
+            .advance_write_pointer(advance_size)
             .map_err(|_| WriteError::NotEnoughSpace)
     }
 }

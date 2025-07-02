@@ -74,7 +74,8 @@ impl CircularBufferReader for SharedMemoryBufferReader {
 
         if same_page {
             // No wraparound -> Primary: from read_ptr to write_ptr, Secondary: empty
-            let primary_region = &buffer_slice[self.read_status.ptr() as usize..write_status.ptr() as usize];
+            let primary_region =
+                &buffer_slice[self.read_status.ptr() as usize..write_status.ptr() as usize];
             let secondary_region = &[];
             (primary_region, secondary_region)
         } else {

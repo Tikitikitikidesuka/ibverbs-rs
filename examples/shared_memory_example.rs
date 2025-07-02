@@ -39,10 +39,7 @@ fn print_non_contiguous_buffer(reader: &SharedMemoryBufferReader) {
     println!("Secondary: {:?}", secondary_region);
 }
 
-fn write_to_buffer(
-    writer: &mut SharedMemoryBufferWriter,
-    data: &[u8],
-) -> Result<(), ()> {
+fn write_to_buffer(writer: &mut SharedMemoryBufferWriter, data: &[u8]) -> Result<(), ()> {
     let (primary_region, secondary_region) = writer.writable_region();
     println!("Primary: {primary_region:?}, Secondary: {secondary_region:?}");
 

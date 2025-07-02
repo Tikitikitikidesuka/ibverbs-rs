@@ -136,7 +136,6 @@ pub fn pow2(exponent: u8) -> usize {
     1 << exponent
 }
 
-
 pub enum IsPow2Result {
     Yes(u8),
     No,

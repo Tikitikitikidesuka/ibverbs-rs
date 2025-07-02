@@ -1,10 +1,10 @@
-use thiserror::Error;
 use crate::circular_buffer::CircularBufferReader;
 use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
 use crate::mock_buffers::non_aliased_buffer::MockNonAliasedBufferReader;
 use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
 use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
 use crate::utils;
+use thiserror::Error;
 
 pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
 pub const WRAP_MAGIC: [u8; 2] = [0x55, 0x55];
@@ -33,11 +33,12 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
         }
 
         // Determine which region to read from based on wrap flag
-        let readable_region = if unsafe { Self::magic_bytes(primary_region.as_ptr()) } == &WRAP_MAGIC {
-            secondary_region
-        } else {
-            primary_region
-        };
+        let readable_region =
+            if unsafe { Self::magic_bytes(primary_region.as_ptr()) } == &WRAP_MAGIC {
+                secondary_region
+            } else {
+                primary_region
+            };
 
         // Validate minimum size for header
         if readable_region.len() < size_of::<Self>() {
@@ -45,9 +46,8 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
         }
 
         // Cast to diary entry and validate magic
-        let diary_entry = unsafe {
-            &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self)
-        };
+        let diary_entry =
+            unsafe { &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self) };
 
         if diary_entry.magic != VALID_MAGIC {
             return Err(ReadError::CorruptData);
@@ -67,7 +67,7 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
 
 impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
     type MultiReadResult<'a> =
-    Result<MultiReadGuard<'a, MockNonAliasedBufferReader, Self>, ReadError>;
+        Result<MultiReadGuard<'a, MockNonAliasedBufferReader, Self>, ReadError>;
 
     fn read_multiple(
         reader: &mut MockNonAliasedBufferReader,

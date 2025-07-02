@@ -1,7 +1,7 @@
 pub mod ctrl;
 pub mod id;
-pub mod stream;
 pub mod reader;
+pub mod stream;
 
 mod bindings {
     // Suppress warnings about non-standard naming in imported C bindings and unused code

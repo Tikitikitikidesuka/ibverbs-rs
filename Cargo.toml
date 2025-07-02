@@ -33,8 +33,8 @@ path = "bin/pcie40_reader_benchmark.rs"
 required-features = ["pcie40", "utils", "multi-fragment-packet"]
 
 [[example]]
-name = "pcie40_example"
-path = "examples/pcie40_example.rs"
+name = "mfp_pcie40_example"
+path = "examples/mfp_pcie40_example.rs"
 required-features = ["pcie40", "utils", "multi-fragment-packet"]
 
 [[example]]
@@ -66,8 +66,3 @@ required-features = ["mock-buffers", "utils"]
 name = "mock_typed_non_aliased_example"
 path = "examples/mock_typed_non_aliased_example.rs"
 required-features = ["mock-buffers", "utils"]
-
-[[example]]
-name = "typed_shared_memory_example"
-path = "examples/typed_shared_memory_example.rs"
-required-features = ["shared-memory", "mock-buffers", "utils"]

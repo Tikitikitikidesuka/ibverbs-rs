@@ -1,4 +1,4 @@
-use std::io::{stdin, Read};
+use pcie40_rs::circular_buffer::CircularBufferReader;
 use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40::reader::PCIe40Reader;
 use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
@@ -7,6 +7,7 @@ use pcie40_rs::pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::P
 use pcie40_rs::pcie40::stream::stream::PCIe40StreamManager;
 use pcie40_rs::utils;
 use pcie40_rs::utils::IsPow2Result;
+use std::io::{Read, stdin};
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
@@ -31,28 +32,6 @@ fn main() {
 
     println!("\n\nStream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
-
-    // Create reader and writer
-    let mut reader = DemoContiguousBufferReader::new(&mut demo_buffer);
-    let mut writer = DemoContiguousBufferWriter::new(&mut demo_buffer);
-
-    write_to_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
-    print_contiguous_buffer(&reader);
-
-    reader.advance_read_pointer(2).unwrap();
-    print_contiguous_buffer(&reader);
-
-    write_to_contiguous_buffer(&mut writer, b"EFGH").unwrap();
-    print_contiguous_buffer(&reader);
-
-    reader.advance_read_pointer(10).unwrap();
-    print_contiguous_buffer(&reader);
-
-    write_to_contiguous_buffer(&mut writer, b"IJKLMN").unwrap();
-    print_contiguous_buffer(&reader);
-
-    reader.advance_read_pointer(4).unwrap();
-    print_contiguous_buffer(&reader);
 
     println!("Loading 2 MFPs...");
     let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();

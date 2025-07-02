@@ -1,5 +1,7 @@
 use pcie40_rs::circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use pcie40_rs::mock_buffers::non_aliased_buffer::{MockNonAliasedBuffer, MockNonAliasedBufferReader, MockNonAliasedBufferWriter};
+use pcie40_rs::mock_buffers::non_aliased_buffer::{
+    MockNonAliasedBuffer, MockNonAliasedBufferReader, MockNonAliasedBufferWriter,
+};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)

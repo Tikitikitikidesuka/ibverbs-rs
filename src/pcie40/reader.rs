@@ -75,7 +75,11 @@ impl<'a> PCIe40Reader<'a> {
 
 impl<'r> CircularBufferReader for PCIe40Reader<'r> {
     type AdvanceResult = Result<(), PCIe40AdvanceError>;
-    type ReadableRegionResult<'a> = Result<&'a [u8], PCIe40StreamError> where Self: 'a, 'r: 'a;
+    type ReadableRegionResult<'a>
+        = Result<&'a [u8], PCIe40StreamError>
+    where
+        Self: 'a,
+        'r: 'a;
 
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
         if !utils::check_alignment_pow2(self.read_offset + bytes, self.alignment_pow2) {
@@ -95,6 +99,7 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
 
     fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
         let available_bytes = self.mapped_buffer.available_bytes()?;
-        Ok(&unsafe { self.mapped_buffer.data() }[self.read_offset..(self.read_offset + available_bytes)])
+        Ok(&unsafe { self.mapped_buffer.data() }
+            [self.read_offset..(self.read_offset + available_bytes)])
     }
 }
