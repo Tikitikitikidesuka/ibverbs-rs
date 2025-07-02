@@ -91,8 +91,8 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
             .move_read_offset(bytes)
             .map_err(|_| PCIe40AdvanceError::OutOfBounds)?;
 
-        // Update local read offset wrapping to fit the buffer boundary
-        self.read_offset = utils::wrap_around(self.read_offset + bytes, self.mapped_buffer.size());
+        // Update local read offset wrapping to fit the buffer boundary (div by 2 for aliasing)
+        self.read_offset = utils::wrap_around(self.read_offset + bytes, self.mapped_buffer.size() / 2);
 
         Ok(())
     }
