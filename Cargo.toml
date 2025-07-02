@@ -43,6 +43,11 @@ path = "examples/shared_memory_example.rs"
 required-features = ["shared-memory", "utils"]
 
 [[example]]
+name = "mfp_shared_memory_example"
+path = "examples/mfp_shared_memory_example.rs"
+required-features = ["multi-fragment-packet", "shared-memory", "utils"]
+
+[[example]]
 name = "mock_aliased_example"
 path = "examples/mock_aliased_example.rs"
 required-features = ["mock-buffers", "utils"]
@@ -61,3 +66,8 @@ required-features = ["mock-buffers", "utils"]
 name = "mock_typed_non_aliased_example"
 path = "examples/mock_typed_non_aliased_example.rs"
 required-features = ["mock-buffers", "utils"]
+
+[[example]]
+name = "typed_shared_memory_example"
+path = "examples/typed_shared_memory_example.rs"
+required-features = ["shared-memory", "mock-buffers", "utils"]

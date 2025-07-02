@@ -30,19 +30,16 @@ use thiserror::Error;
 /// maintains minimum 2-byte alignment, placing the wrap flag in the first two bytes
 /// guarantees it will be written and readable even when an element crosses the
 /// wraparound boundary.
+
 pub trait SharedMemoryBufferElement {
+    /// Returns the element's size in bytes.
+    fn length_in_bytes(&self) -> usize;
+}
+
+pub trait ReadableSharedMemoryBufferElement: SharedMemoryBufferElement {
     /// Returns a reference to a `Self` if possible to cast from the provided raw data.
     /// Otherwise, a `SharedMemoryTypedReadError` is raised.
     fn cast_to_element(data: &[u8]) -> Result<&Self, SharedMemoryTypedReadError>;
-
-    /// Writes the element to memory as raw bytes.
-    fn cast_to_bytes(
-        element: &Self,
-        bytes: &mut [u8],
-    ) -> Result<(), SharedMemoryTypedWriteError>;
-
-    /// Returns the element's size in bytes.
-    fn length_in_bytes(&self) -> usize;
 
     /// Returns the wrap flag state for this element. If the element wraps, meaning it would reach
     /// the end of the buffer, and therefore it must be written to the beginning, the flag is true.
@@ -56,11 +53,20 @@ pub trait SharedMemoryBufferElement {
     /// minimum alignment of the buffer is two bytes because of how it stores pointers. Meaning, if
     /// the wrap flag is in the first two bytes, there will always be space for it.
     fn check_wrap_flag(bytes: &[u8]) -> Result<bool, SharedMemoryTypedReadError>;
+}
 
-    /// Sets the wrap flag for this element as if it started on the first byte of `bytes`.
+pub trait WritableSharedMemoryBufferElement: SharedMemoryBufferElement {
+    /// Writes the element to memory as raw bytes.
+    fn write_to_buffer(
+        &self,
+        buffer: &mut [u8],
+    ) -> Result<(), SharedMemoryTypedWriteError>;
+
+    /// Sets the wrap flag as if the element started on the first byte of `bytes`.
     ///
     /// The writer calls this method when an element cannot fit in the
     /// remaining space at the end of the buffer. The wrap flag must be stored
     /// in the first two bytes to ensure durability.
-    fn set_wrap_flag(bytes: &mut [u8]);
+    fn set_wrap_flag(bytes: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError>;
 }
+

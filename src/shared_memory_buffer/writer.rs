@@ -1,7 +1,6 @@
 use crate::circular_buffer::CircularBufferWriter;
 use crate::shared_memory_buffer::buffer_backend::SharedMemoryWriteBuffer;
-use crate::shared_memory_buffer::buffer_element::SharedMemoryBufferElement;
-use crate::shared_memory_buffer::buffer_status::{CircularBufferStatus, PtrStatus};
+use crate::shared_memory_buffer::buffer_status::PtrStatus;
 use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
 use crate::utils;
 

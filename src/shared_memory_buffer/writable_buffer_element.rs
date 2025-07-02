@@ -1,9 +1,9 @@
-use thiserror::Error;
 use crate::circular_buffer::CircularBufferWriter;
-use crate::shared_memory_buffer::buffer_element::SharedMemoryBufferElement;
+use crate::shared_memory_buffer::buffer_element::WritableSharedMemoryBufferElement;
 use crate::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use crate::typed_circular_buffer::CircularBufferWritable;
 use crate::utils;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedWriteError {
@@ -11,7 +11,7 @@ pub enum SharedMemoryTypedWriteError {
     NotEnoughSpace,
 }
 
-impl<T: SharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBufferWriter> for T {
+impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBufferWriter> for T {
     type WriteResult = Result<(), SharedMemoryTypedWriteError>;
 
     fn write(&self, writer: &mut SharedMemoryBufferWriter) -> Self::WriteResult {
@@ -34,7 +34,7 @@ impl<T: SharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBufferWrit
         }
 
         // Write the element data
-        Self::cast_to_bytes(self, writable_region)?;
+        Self::write_to_buffer(self, writable_region)?;
 
         // Commit the write
         writer

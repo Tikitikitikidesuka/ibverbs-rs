@@ -57,7 +57,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
 
 impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
     type MultiReadResult<'a> =
-        Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError> where Self: 'a, PCIe40Reader<'r>: 'a;
+    Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError> where Self: 'a, PCIe40Reader<'r>: 'a;
 
     fn read_multiple<'a>(
         reader: &'a mut PCIe40Reader<'r>,

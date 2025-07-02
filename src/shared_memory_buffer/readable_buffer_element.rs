@@ -1,5 +1,5 @@
 use crate::circular_buffer::CircularBufferReader;
-use crate::shared_memory_buffer::buffer_element::SharedMemoryBufferElement;
+use crate::shared_memory_buffer::buffer_element::ReadableSharedMemoryBufferElement;
 use crate::shared_memory_buffer::reader::SharedMemoryBufferReader;
 use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
 use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
@@ -21,7 +21,7 @@ pub enum SharedMemoryTypedReadError {
 /// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
 impl<T> CircularBufferReadable<SharedMemoryBufferReader> for T
 where
-    T: SharedMemoryBufferElement,
+    T: ReadableSharedMemoryBufferElement,
     for<'a> T: 'a,
 {
     type ReadResult<'a> =
@@ -60,7 +60,7 @@ where
 /// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
 impl<T> CircularBufferMultiReadable<SharedMemoryBufferReader> for T
 where
-    T: SharedMemoryBufferElement,
+    T: ReadableSharedMemoryBufferElement,
     for<'a> T: 'a,
 {
     type MultiReadResult<'a> =
@@ -93,7 +93,7 @@ where
 
             // Cast to element
             let element = Self::cast_to_element(current_region)?;
-            
+
             // Untie lifetimes so ReadGuard can take both ref to reader and element
             let element_ptr = element as *const Self;
             let element = unsafe { &*element_ptr };

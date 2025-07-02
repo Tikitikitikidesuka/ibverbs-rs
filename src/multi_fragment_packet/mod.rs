@@ -1,10 +1,15 @@
 mod builder;
-mod readable;
+#[cfg(feature = "pcie40")]
+pub mod pcie40_readable;
+
+#[cfg(feature = "shared-memory")]
+pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
 
 use crate::utils;
 use std::fmt::{Debug, Display};
+use std::mem::offset_of;
 use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
@@ -169,6 +174,14 @@ impl MultiFragmentPacketRef {
         }
 
         Ok(mfp)
+    }
+
+    pub fn magic_field_offset() -> usize {
+        offset_of!(MultiFragmentPacketHeader, magic)
+    }
+
+    pub fn magic_field_size() -> usize {
+        size_of::<u16>()
     }
 
     pub fn magic(&self) -> u16 {
