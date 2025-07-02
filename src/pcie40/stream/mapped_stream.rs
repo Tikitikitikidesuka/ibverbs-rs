@@ -76,6 +76,10 @@ impl PCIe40MappedStream<'_> {
     pub unsafe fn data(&self) -> &[u8] {
         self.buffer
     }
+    
+    pub fn size(&self) -> usize {
+        self.buffer.len()
+    }
 
     /// Gets the read offset from the card
     pub fn get_read_offset(&self) -> Result<usize, PCIe40StreamError> {

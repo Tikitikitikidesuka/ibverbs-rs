@@ -44,7 +44,7 @@ impl<'a> PCIe40Reader<'a> {
         alignment_pow2: u8,
     ) -> Result<Self, PCIe40ReaderInstanceError> {
         // Size has to be aligned for advance alignment check to work properly
-        let buffer_size = unsafe { mapped_buffer.data().len() };
+        let buffer_size = mapped_buffer.size();
         if !utils::check_alignment_pow2(buffer_size, alignment_pow2) {
             return Err(PCIe40ReaderInstanceError::BufferSizeNotAligned {
                 buffer_size,
@@ -92,7 +92,7 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
             .map_err(|_| PCIe40AdvanceError::OutOfBounds)?;
 
         // Update local read offset wrapping to fit the buffer boundary
-        self.read_offset = utils::wrap_around_pow2(self.read_offset + bytes, self.alignment_pow2);
+        self.read_offset = utils::wrap_around(self.read_offset + bytes, self.mapped_buffer.size());
 
         Ok(())
     }
