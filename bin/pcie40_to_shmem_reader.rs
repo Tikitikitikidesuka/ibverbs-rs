@@ -10,7 +10,6 @@ use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
 use pcie40_rs::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
 use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use pcie40_rs::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
-use pcie40_rs::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
 use pcie40_rs::utils;
 use pcie40_rs::utils::IsPow2Result;
 use std::io::{Read, stdin};
@@ -38,7 +37,8 @@ fn main() {
         .unwrap();
 
     let mut locked_stream = stream.lock().unwrap();
-    locked_stream.flush().unwrap();
+    locked_stream.reset_flush().unwrap();
+    locked_stream.reset_logic().unwrap();
 
     let mapped_stream = locked_stream.map_buffer().unwrap();
     let buffer_size = mapped_stream.size();
