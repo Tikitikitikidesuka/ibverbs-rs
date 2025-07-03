@@ -56,6 +56,10 @@ fn main() {
 
     let mut shmem_writer = SharedMemoryBufferWriter::new(shmem_write_buffer);
 
+    // -------------------------- //
+    //        READY TO GO!        //
+    // -------------------------- //
+
     println!("\n\nStream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
@@ -77,6 +81,14 @@ fn main() {
             .expect("Error writing MFPs to shared memory");
 
         println!("Wrote MFPs to shared memory successfully");
+
+        println!("Discarding MFPs...");
+
+        mfps.discard().unwrap();
+
+        println!("Discarded MFPs successfully");
+
+        println!("\n\n");
     }
 }
 
