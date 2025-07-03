@@ -66,8 +66,13 @@ fn main() {
     loop {
         println!("Loading 5 MFPs...");
 
-        let mfps = pcie40_read_mfps(&mut pcie40_reader, 5, Duration::from_millis(100))
-            .expect("Error reading MFPs from PCIe40");
+        // Wait for 5 MFPs to be ready
+        pcie40_wait_for_mfps(&mut pcie40_reader, 5, Duration::from_millis(100))
+            .expect("Error reading MFPs from shared memory");
+
+        // Read the MFPs
+        let mfps = MultiFragmentPacketRef::read_multiple(&mut pcie40_reader, 5)
+            .expect("Error reading MFPs from shared memory");
 
         println!("Read MFP[0]: {:?}", mfps[0]);
         println!("Read MFP[1]: {:?}", mfps[1]);
@@ -92,14 +97,14 @@ fn main() {
     }
 }
 
-fn pcie40_read_mfps(
+fn pcie40_wait_for_mfps(
     reader: &mut PCIe40Reader,
     num: usize,
     poll_interval: Duration,
-) -> Result<MultiReadGuard<PCIe40Reader, MultiFragmentPacketRef>, ()> {
+) -> Result<(), ()> {
     loop {
         match MultiFragmentPacketRef::read_multiple(reader, num) {
-            Ok(guard) => return Ok(guard),
+            Ok(_) => return Ok(()),
             Err(PCIe40TypedReadError::NotFound | PCIe40TypedReadError::NotEnoughData) => {
                 println!("No MFPs found, waiting for more data...");
                 std::thread::sleep(poll_interval);
