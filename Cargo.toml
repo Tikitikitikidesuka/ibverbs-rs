@@ -40,7 +40,7 @@ required-features = ["pcie40", "shared-memory", "utils", "multi-fragment-packet"
 [[bin]]
 name = "pcie40_to_shmem_receiver"
 path = "bin/pcie40_to_shmem_receiver.rs"
-required-features = ["pcie40", "shared-memory", "utils", "multi-fragment-packet"]
+required-features = ["shared-memory", "utils", "multi-fragment-packet"]
 
 [[example]]
 name = "mfp_pcie40_example"
