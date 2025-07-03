@@ -32,6 +32,11 @@ name = "pcie40_reader_benchmark"
 path = "bin/pcie40_reader_benchmark.rs"
 required-features = ["pcie40", "utils", "multi-fragment-packet"]
 
+[[bin]]
+name = "pcie40_to_shmem_reader"
+path = "bin/pcie40_to_shmem_reader.rs"
+required-features = ["pcie40", "shared-memory", "utils", "multi-fragment-packet"]
+
 [[example]]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
