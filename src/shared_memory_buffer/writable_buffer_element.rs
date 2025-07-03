@@ -24,7 +24,7 @@ impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBu
             (primary_region, aligned_size)
         } else {
             // Doesn't fit, write wrap marker and use secondary region
-            Self::set_wrap_flag(primary_region);
+            Self::set_wrap_flag(primary_region)?;
             (secondary_region, aligned_size + primary_region.len())
         };
 
