@@ -3,7 +3,6 @@ use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
 use pcie40_rs::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
 use pcie40_rs::shared_memory_buffer::reader::SharedMemoryBufferReader;
 use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
-use pcie40_rs::typed_circular_buffer_read_guard::MultiReadGuard;
 use std::io::{Read, stdin};
 use std::time::Duration;
 
@@ -25,8 +24,13 @@ fn main() {
     loop {
         println!("Receiving MFPs from shared memory...");
 
-        let mfps = shmem_read_mfps(&mut reader, 5, Duration::from_millis(100))
-            .expect("Error reading MFPs from PCIe40");
+        // Wait for 5 MFPs to be ready
+        shmem_wait_for_mfps(&mut reader, 5, Duration::from_millis(100))
+            .expect("Error reading MFPs from shared memory");
+
+        // Read the MFPs
+        let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 5)
+            .expect("Error reading MFPs from shared memory");
 
         println!("Read MFP[0]: {:?}", mfps[0]);
         println!("Read MFP[1]: {:?}", mfps[1]);
@@ -44,6 +48,10 @@ fn main() {
     }
 }
 
+// This hits a limitation on the borrow checker that cannot realize that when returning the guard,
+// the next iteration will not occur and therefore this is safe. Many people have this problem.
+// It can be solved in nightly with alpha Polonius
+/*
 fn shmem_read_mfps(
     reader: &mut SharedMemoryBufferReader,
     num: usize,
@@ -52,6 +60,30 @@ fn shmem_read_mfps(
     loop {
         match MultiFragmentPacketRef::read_multiple(reader, num) {
             Ok(guard) => return Ok(guard),
+            Err(
+                SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,
+            ) => {
+                println!("No MFPs found, waiting for more data...");
+                std::thread::sleep(poll_interval);
+                continue;
+            }
+            Err(SharedMemoryTypedReadError::CorruptData) => {
+                return Err(());
+            }
+        }
+    }
+}
+*/
+
+// For now we solve it by just waiting for one to be ready and then the user has to read it again.
+fn shmem_wait_for_mfps(
+    reader: &mut SharedMemoryBufferReader,
+    num: usize,
+    poll_interval: Duration,
+) -> Result<(), ()> {
+    loop {
+        match MultiFragmentPacketRef::read_multiple(reader, num) {
+            Ok(_) => return Ok(()),
             Err(
                 SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,
             ) => {
