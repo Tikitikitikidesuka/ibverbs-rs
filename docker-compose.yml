@@ -6,4 +6,5 @@ services:
       - ./:/app
     # Use privileged mode to access hardware
     privileged: true
+    shm_size: 32gb
 
