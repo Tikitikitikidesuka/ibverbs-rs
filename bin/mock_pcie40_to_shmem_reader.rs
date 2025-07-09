@@ -7,7 +7,7 @@ use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
-    const BUFFER_SIZE: usize = 34359738368;
+    const BUFFER_SIZE: usize = 1<<32; // 4Gb
     const ALIGNMENT_POW2: u8 = 12;
 
     // -------------------------- //
