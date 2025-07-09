@@ -4,6 +4,7 @@ use std::ffi::{CString, c_uint};
 use std::mem::forget;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
+use libc::off_t;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -129,8 +130,12 @@ impl SharedMemory {
             path, size
         );
 
-        let c_name = CString::new(path.to_str().unwrap_or("")).map_err(|_| {
+        let path_str = path.to_str().ok_or_else(|| {
             error!("Invalid shared memory path: {:?}", path);
+            SharedMemoryCreateError::InvalidSegmentName { path: path.clone() }
+        })?;
+        let c_name = CString::new(path_str).map_err(|_| {
+            error!("Path contains interior null byte: {:?}", path);
             SharedMemoryCreateError::InvalidSegmentName { path: path.clone() }
         })?;
 
@@ -161,7 +166,7 @@ impl SharedMemory {
 
         // Set shared memory size
         trace!("Calling ftruncate({}, {})", file_descriptor, size);
-        if unsafe { libc::ftruncate(file_descriptor, size as i64) } < 0 {
+        if unsafe { libc::ftruncate(file_descriptor, size as off_t) } < 0 {
             let err = std::io::Error::last_os_error();
             error!("Failed to set size of shared memory at {:?}: {}", path, err);
             trace!("Calling close({})", file_descriptor);
