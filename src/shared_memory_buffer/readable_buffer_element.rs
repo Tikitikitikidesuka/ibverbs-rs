@@ -78,7 +78,9 @@ where
         for _ in 0..num {
             // Determine current reading position and region
             let (current_region, offset) = if !wrapped {
-                if Self::check_wrap_flag(&primary_region[advance_size..])? {
+                if advance_size == primary_region.len()
+                    || Self::check_wrap_flag(&primary_region[advance_size..])?
+                {
                     wrapped = true;
                     advance_size = primary_region.len();
                     (secondary_region, 0)
