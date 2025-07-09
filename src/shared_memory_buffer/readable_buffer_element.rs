@@ -92,7 +92,6 @@ where
             };
 
             // Cast to element
-            println!("Element region is {:?}", current_region.as_ptr_range());
             let element = Self::cast_to_element(&current_region[offset..])?;
 
             // Untie lifetimes so ReadGuard can take both ref to reader and element
