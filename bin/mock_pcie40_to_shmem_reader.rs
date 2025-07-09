@@ -17,6 +17,7 @@ fn main() {
     let shmem_write_buffer =
         SharedMemoryBuffer::new_write_buffer("maredshemory33", BUFFER_SIZE, ALIGNMENT_POW2)
             .unwrap();
+    let shmem_buffer_size = shmem_write_buffer.size();
 
     let mut shmem_writer = SharedMemoryBufferWriter::new(shmem_write_buffer);
 
@@ -24,7 +25,8 @@ fn main() {
     //        READY TO GO!        //
     // -------------------------- //
 
-    println!("\n\nStream configured... Press any key to proceed\n");
+    println!("\n\nGot shared memory buffer of size: {}", shmem_buffer_size);
+    println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
     let mut event_id = 0;

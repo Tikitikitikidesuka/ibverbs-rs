@@ -12,9 +12,12 @@ fn main() {
     // -------------------------- //
 
     let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
+    let shmem_buffer_size = read_buffer.size();
+
     let mut reader = SharedMemoryBufferReader::new(read_buffer);
 
-    println!("\n\nStream configured... Press any key to proceed\n");
+    println!("\n\nGot shared memory buffer of size: {}", shmem_buffer_size);
+    println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
     // -------------------------- //
