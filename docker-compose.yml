@@ -1,5 +1,6 @@
 services:
   rust-dev:
+    platform: linux/amd64
     image: gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest
     command: sleep infinity
     volumes:
