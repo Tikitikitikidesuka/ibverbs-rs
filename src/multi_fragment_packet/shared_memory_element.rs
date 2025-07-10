@@ -5,7 +5,7 @@ use crate::shared_memory_buffer::buffer_element::{
 use crate::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
 use crate::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
 
-const WRAP_MAGIC: u16 = 0x5555;
+const WRAP_MAGIC: u16 = 0xBF3;
 
 impl SharedMemoryBufferElement for MultiFragmentPacketRef {
     fn length_in_bytes(&self) -> usize {
