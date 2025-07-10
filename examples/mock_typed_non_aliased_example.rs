@@ -41,12 +41,12 @@ fn main() {
     // [ ,1,2, ]
     let read_entry = BufferedDiaryEntry::read(&mut reader).unwrap();
     println!("Consume: {}", *read_entry);
-    read_entry.discard();
+    read_entry.discard().unwrap();
 
     // [ , ,2, ]
     let read_entry = BufferedDiaryEntry::read(&mut reader).unwrap();
     println!("Consume: {}", *read_entry);
-    read_entry.discard();
+    read_entry.discard().unwrap();
 
     // [3,3,2,W]
     let writable_entry_3_64 =
@@ -62,5 +62,5 @@ fn main() {
     read_entries.iter().for_each(|entry| {
         println!("Read many: {}", entry);
     });
-    read_entries.discard();
+    read_entries.discard().unwrap();
 }

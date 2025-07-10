@@ -1,6 +1,5 @@
 use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
 use crate::utils;
-use std::ops::Range;
 use thiserror::Error;
 
 pub struct MockAliasedBuffer {

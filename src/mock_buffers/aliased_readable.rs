@@ -66,7 +66,7 @@ impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry
         let mut advance_size = 0;
         let mut read_data = Vec::with_capacity(num);
 
-        for i in 0..num {
+        for _ in 0..num {
             // Verify enough data for header
             if readable_region.len() < size_of::<Self>() + advance_size {
                 return Err(ReadError::NotEnoughData);

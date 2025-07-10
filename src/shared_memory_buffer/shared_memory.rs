@@ -234,7 +234,7 @@ impl SharedMemory {
         })
     }
 
-    pub fn close(mut self) -> Result<(), SharedMemoryCloseError> {
+    pub fn close(self) -> Result<(), SharedMemoryCloseError> {
         trace!(
             "Closing shared memory fd {} at path {:?}",
             self.file_descriptor, self.path
@@ -359,22 +359,22 @@ impl MappedSharedMemory {
     }
 
     // Get a slice to the mapped memory
-    pub unsafe fn as_slice(&self) -> &[u8] {
+    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
         trace!("Getting immutable slice to mapped shared memory");
 
         let slice = std::slice::from_raw_parts(self.mapped_address as *const u8, self.size());
         trace!("Returned immutable slice of size {}", self.size());
         slice
-    }
+    }}
 
     // Get a mutable slice to the mapped memory
-    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
+    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] { unsafe {
         trace!("Getting mutable slice to mapped shared memory");
 
         let slice = std::slice::from_raw_parts_mut(self.mapped_address as *mut u8, self.size());
         trace!("Returned mutable slice of size {}", self.size());
         slice
-    }
+    }}
 
     // Explicitly unmap the memory
     pub fn unmap(mut self) -> Result<SharedMemory, SharedMemoryMapError> {
@@ -1096,10 +1096,6 @@ mod tests {
                 // Some implementations might return a CloseError, which is also acceptable
                 SharedMemoryCloseAndDeleteError::CloseError(_) => {
                     println!("close_and_delete failed with CloseError");
-                }
-                _ => {
-                    // Any other error is unexpected
-                    panic!("close_and_delete failed with unexpected error: {:?}", err);
                 }
             }
         }

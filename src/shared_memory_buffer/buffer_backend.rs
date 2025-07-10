@@ -5,7 +5,6 @@ use crate::utils;
 use log::{debug, error, info, trace};
 use nix::sys::stat::Mode;
 use std::path::{Path, PathBuf};
-use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 use thiserror::Error;
 
 const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
@@ -64,7 +63,7 @@ impl SharedMemoryBuffer {
 
         // Open and map shared memory
         debug!("Opening and mapping shared memory for buffer '{}'", name);
-        let mut shared_memory = Self::open_mapped_shared_memory(&name)?;
+        let shared_memory = Self::open_mapped_shared_memory(&name)?;
         debug!(
             "Successfully mapped shared memory for buffer '{}', size: {} bytes",
             name,
@@ -388,9 +387,9 @@ impl SharedMemoryBuffer {
 }
 
 impl SharedMemoryReadBuffer {
-    pub unsafe fn as_slice(&self) -> &[u8] {
+    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
         self.shmem_buffer.as_slice()
-    }
+    }}
 
     pub fn size(&self) -> usize {
         self.shmem_buffer.size
@@ -453,13 +452,13 @@ impl SharedMemoryReadBuffer {
 }
 
 impl SharedMemoryWriteBuffer {
-    pub unsafe fn as_slice(&self) -> &[u8] {
+    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
         self.shmem_buffer.as_slice()
-    }
+    }}
 
-    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
+    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] { unsafe {
         self.shmem_buffer.as_slice_mut()
-    }
+    }}
 
     pub fn size(&self) -> usize {
         self.shmem_buffer.size

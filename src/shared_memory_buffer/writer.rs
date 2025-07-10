@@ -55,7 +55,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
 
     fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
         let read_status = self.buffer.read_status();
-        let mut buffer_slice = unsafe { self.buffer.as_slice_mut() };
+        let buffer_slice = unsafe { self.buffer.as_slice_mut() };
 
         let same_page = self.write_status.wrap() == read_status.wrap();
 

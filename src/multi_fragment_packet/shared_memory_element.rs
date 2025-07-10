@@ -67,7 +67,7 @@ impl WritableSharedMemoryBufferElement for MultiFragmentPacketRef {
         }
 
         // If there is, cast magic
-        let mut magic =
+        let magic =
             unsafe { &mut *(bytes[Self::magic_field_offset()..].as_mut_ptr() as *mut u16) };
 
         // And write it
