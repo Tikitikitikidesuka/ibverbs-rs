@@ -35,6 +35,8 @@ fn main() {
     //        READY TO GO!        //
     // -------------------------- //
 
+    let mut last_event = 0;
+
     loop {
         println!("Receiving MFPs from shared memory...");
 
@@ -45,6 +47,17 @@ fn main() {
         // Read the MFPs
         let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 5)
             .expect("Error reading MFPs from shared memory");
+
+        // Check MFPs follow proper order
+        let local_first_event = mfps[0].event_id();
+        let local_last_event = mfps[4].event_id() + mfps[4].fragment_count() as u64;
+        let local_num_events = mfps.iter().fold(0, |acc, x| acc + x.fragment_count());
+        assert_eq!(last_event, local_first_event);
+        assert_eq!(
+            local_last_event - local_first_event,
+            local_num_events as u64
+        );
+        last_event = local_last_event;
 
         println!("Read MFP[0]: {:?}", mfps[0]);
         println!("Read MFP[1]: {:?}", mfps[1]);
