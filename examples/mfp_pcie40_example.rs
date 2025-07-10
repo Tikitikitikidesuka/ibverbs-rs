@@ -1,14 +1,14 @@
+use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
 use pcie40_rs::pcie40::reader::PCIe40Reader;
 use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
 use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40_rs::pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40_rs::pcie40::stream::stream::PCIe40StreamManager;
+use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
 use pcie40_rs::utils;
 use pcie40_rs::utils::IsPow2Result;
 use std::io::{Read, stdin};
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
-use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";

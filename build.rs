@@ -1,11 +1,3 @@
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-
-const PCIE40_WRAPPER_H: &str = "src/pcie40/wrapper.h";
-const PCIE40_BINDINGS: &str = "src/pcie40/bindings.rs";
-const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
-
 fn main() {
     #[cfg(feature = "pcie40")]
     build_pcie40_bindings();
@@ -13,6 +5,15 @@ fn main() {
 
 #[cfg(feature = "pcie40")]
 fn build_pcie40_bindings() {
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+
+    const PCIE40_WRAPPER_H: &str = "src/pcie40/wrapper.h";
+    const PCIE40_BINDINGS: &str = "src/pcie40/bindings.rs";
+    const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
+
+
     // Tell cargo to re-run if the wrapper.h changes
     println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
 

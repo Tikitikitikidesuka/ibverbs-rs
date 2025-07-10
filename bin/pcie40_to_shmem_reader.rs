@@ -1,4 +1,3 @@
-use std::env;
 use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
 use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
@@ -13,6 +12,7 @@ use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use pcie40_rs::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
 use pcie40_rs::utils;
 use pcie40_rs::utils::IsPow2Result;
+use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
 
@@ -25,7 +25,7 @@ fn main() {
 
     let device_name = &args[1];
     let shmem_name = &args[2];
-    
+
     // -------------------------- //
     //    PCIe40 Stream Setup     //
     // -------------------------- //
