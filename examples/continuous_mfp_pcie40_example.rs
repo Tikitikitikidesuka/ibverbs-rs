@@ -28,7 +28,8 @@ fn main() {
         .unwrap();
 
     let mut locked_stream = stream.lock().unwrap();
-    locked_stream.flush().unwrap();
+    locked_stream.reset_flush().unwrap();
+    locked_stream.reset_logic().unwrap();
 
     let mapped_stream = locked_stream.map_buffer().unwrap();
 
