@@ -359,22 +359,26 @@ impl MappedSharedMemory {
     }
 
     // Get a slice to the mapped memory
-    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
-        trace!("Getting immutable slice to mapped shared memory");
+    pub unsafe fn as_slice(&self) -> &[u8] {
+        unsafe {
+            trace!("Getting immutable slice to mapped shared memory");
 
-        let slice = std::slice::from_raw_parts(self.mapped_address as *const u8, self.size());
-        trace!("Returned immutable slice of size {}", self.size());
-        slice
-    }}
+            let slice = std::slice::from_raw_parts(self.mapped_address as *const u8, self.size());
+            trace!("Returned immutable slice of size {}", self.size());
+            slice
+        }
+    }
 
     // Get a mutable slice to the mapped memory
-    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] { unsafe {
-        trace!("Getting mutable slice to mapped shared memory");
+    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            trace!("Getting mutable slice to mapped shared memory");
 
-        let slice = std::slice::from_raw_parts_mut(self.mapped_address as *mut u8, self.size());
-        trace!("Returned mutable slice of size {}", self.size());
-        slice
-    }}
+            let slice = std::slice::from_raw_parts_mut(self.mapped_address as *mut u8, self.size());
+            trace!("Returned mutable slice of size {}", self.size());
+            slice
+        }
+    }
 
     // Explicitly unmap the memory
     pub fn unmap(mut self) -> Result<SharedMemory, SharedMemoryMapError> {

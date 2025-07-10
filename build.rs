@@ -13,7 +13,6 @@ fn build_pcie40_bindings() {
     const PCIE40_BINDINGS: &str = "src/pcie40/bindings.rs";
     const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
 
-
     // Tell cargo to re-run if the wrapper.h changes
     println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
 

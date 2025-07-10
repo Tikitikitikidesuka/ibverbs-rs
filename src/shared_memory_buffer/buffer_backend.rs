@@ -387,9 +387,9 @@ impl SharedMemoryBuffer {
 }
 
 impl SharedMemoryReadBuffer {
-    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
-        self.shmem_buffer.as_slice()
-    }}
+    pub unsafe fn as_slice(&self) -> &[u8] {
+        unsafe { self.shmem_buffer.as_slice() }
+    }
 
     pub fn size(&self) -> usize {
         self.shmem_buffer.size
@@ -452,13 +452,13 @@ impl SharedMemoryReadBuffer {
 }
 
 impl SharedMemoryWriteBuffer {
-    pub unsafe fn as_slice(&self) -> &[u8] { unsafe {
-        self.shmem_buffer.as_slice()
-    }}
+    pub unsafe fn as_slice(&self) -> &[u8] {
+        unsafe { self.shmem_buffer.as_slice() }
+    }
 
-    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] { unsafe {
-        self.shmem_buffer.as_slice_mut()
-    }}
+    pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
+        unsafe { self.shmem_buffer.as_slice_mut() }
+    }
 
     pub fn size(&self) -> usize {
         self.shmem_buffer.size
