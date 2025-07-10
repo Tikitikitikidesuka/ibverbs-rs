@@ -1,3 +1,4 @@
+use std::env;
 use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
 use pcie40_rs::multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
 use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
@@ -16,13 +17,20 @@ use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        eprintln!("Usage: {} <device_name> <shmem_name>", args[0]);
+        std::process::exit(1);
+    }
+
+    let device_name = &args[1];
+    let shmem_name = &args[2];
+    
     // -------------------------- //
     //    PCIe40 Stream Setup     //
     // -------------------------- //
 
-    const DEVICE_NAME: &str = "tdtel203_1";
-
-    let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
+    let controller = PCIe40ControllerManager::open_by_device_name(device_name).unwrap();
     let meta_alignment_pow2 = match utils::is_pow2(controller.meta_alignment().unwrap()) {
         IsPow2Result::Yes(pow2) => pow2,
         IsPow2Result::No => {
@@ -31,7 +39,7 @@ fn main() {
     };
 
     let mut stream =
-        PCIe40StreamManager::open_by_device_name(DEVICE_NAME, MainStream, MetaFormat).unwrap();
+        PCIe40StreamManager::open_by_device_name(device_name, MainStream, MetaFormat).unwrap();
     stream
         .set_raii_enable_state_close_mode(PreserveEnableState)
         .unwrap();

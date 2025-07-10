@@ -3,20 +3,27 @@ use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
 use pcie40_rs::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
 use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use pcie40_rs::typed_circular_buffer::CircularBufferWritable;
+use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
-    const BUFFER_SIZE: usize = 1<<32; // 4Gb
+    const BUFFER_SIZE: usize = 1 << 32; // 4Gb
     const ALIGNMENT_POW2: u8 = 12;
 
     // -------------------------- //
     // Shared Memory Buffer Setup //
     // -------------------------- //
 
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        eprintln!("Usage: {} <shmem_name>", args[0]);
+        std::process::exit(1);
+    }
+
+    let shmem_name = &args[1];
     let shmem_write_buffer =
-        SharedMemoryBuffer::new_write_buffer("maredshemory33", BUFFER_SIZE, ALIGNMENT_POW2)
-            .unwrap();
+        SharedMemoryBuffer::new_write_buffer(shmem_name, BUFFER_SIZE, ALIGNMENT_POW2).unwrap();
     let shmem_buffer_size = shmem_write_buffer.size();
 
     let mut shmem_writer = SharedMemoryBufferWriter::new(shmem_write_buffer);
@@ -25,7 +32,10 @@ fn main() {
     //        READY TO GO!        //
     // -------------------------- //
 
-    println!("\n\nGot shared memory buffer of size: {}", shmem_buffer_size);
+    println!(
+        "\n\nGot shared memory buffer of size: {}",
+        shmem_buffer_size
+    );
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 

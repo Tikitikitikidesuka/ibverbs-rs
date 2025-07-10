@@ -3,6 +3,7 @@ use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
 use pcie40_rs::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
 use pcie40_rs::shared_memory_buffer::reader::SharedMemoryBufferReader;
 use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
+use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
 
@@ -11,12 +12,22 @@ fn main() {
     // Shared Memory Buffer Setup //
     // -------------------------- //
 
-    let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        eprintln!("Usage: {} <shmem_name>", args[0]);
+        std::process::exit(1);
+    }
+
+    let shmem_name = &args[1];
+    let read_buffer = SharedMemoryBuffer::new_read_buffer(shmem_name).unwrap();
     let shmem_buffer_size = read_buffer.size();
 
     let mut reader = SharedMemoryBufferReader::new(read_buffer);
 
-    println!("\n\nGot shared memory buffer of size: {}", shmem_buffer_size);
+    println!(
+        "\n\nGot shared memory buffer of size: {}",
+        shmem_buffer_size
+    );
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
