@@ -369,15 +369,15 @@ mod tests {
     #[test]
     fn test_is_pow2() {
         // Test powers of 2 - should return Yes with the correct exponent
-        assert!(matches!(is_pow2(1), IsPow2Result::Yes(0)));      // 2^0 = 1
-        assert!(matches!(is_pow2(2), IsPow2Result::Yes(1)));      // 2^1 = 2
-        assert!(matches!(is_pow2(4), IsPow2Result::Yes(2)));      // 2^2 = 4
-        assert!(matches!(is_pow2(8), IsPow2Result::Yes(3)));      // 2^3 = 8
-        assert!(matches!(is_pow2(16), IsPow2Result::Yes(4)));     // 2^4 = 16
-        assert!(matches!(is_pow2(32), IsPow2Result::Yes(5)));     // 2^5 = 32
-        assert!(matches!(is_pow2(64), IsPow2Result::Yes(6)));     // 2^6 = 64
-        assert!(matches!(is_pow2(128), IsPow2Result::Yes(7)));    // 2^7 = 128
-        assert!(matches!(is_pow2(256), IsPow2Result::Yes(8)));    // 2^8 = 256
+        assert!(matches!(is_pow2(1), IsPow2Result::Yes(0))); // 2^0 = 1
+        assert!(matches!(is_pow2(2), IsPow2Result::Yes(1))); // 2^1 = 2
+        assert!(matches!(is_pow2(4), IsPow2Result::Yes(2))); // 2^2 = 4
+        assert!(matches!(is_pow2(8), IsPow2Result::Yes(3))); // 2^3 = 8
+        assert!(matches!(is_pow2(16), IsPow2Result::Yes(4))); // 2^4 = 16
+        assert!(matches!(is_pow2(32), IsPow2Result::Yes(5))); // 2^5 = 32
+        assert!(matches!(is_pow2(64), IsPow2Result::Yes(6))); // 2^6 = 64
+        assert!(matches!(is_pow2(128), IsPow2Result::Yes(7))); // 2^7 = 128
+        assert!(matches!(is_pow2(256), IsPow2Result::Yes(8))); // 2^8 = 256
         assert!(matches!(is_pow2(1 << 30), IsPow2Result::Yes(30))); // 2^30
 
         // Test non-powers of 2 - should return No
