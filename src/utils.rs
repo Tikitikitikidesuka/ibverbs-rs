@@ -153,30 +153,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_power_of_two() {
-        assert!(is_pow2(1));
-        assert!(is_pow2(2));
-        assert!(is_pow2(4));
-        assert!(is_pow2(8));
-        assert!(is_pow2(16));
-        assert!(is_pow2(32));
-        assert!(is_pow2(64));
-        assert!(is_pow2(128));
-        assert!(is_pow2(256));
-        assert!(is_pow2(1 << 30));
-
-        assert!(!is_pow2(0));
-        assert!(!is_pow2(3));
-        assert!(!is_pow2(5));
-        assert!(!is_pow2(6));
-        assert!(!is_pow2(7));
-        assert!(!is_pow2(9));
-        assert!(!is_pow2(10));
-        assert!(!is_pow2(15));
-        assert!(!is_pow2(127));
-    }
-
-    #[test]
     fn test_align_up() {
         // Edge cases
         assert_eq!(align_up(0, 4), 0);
@@ -238,10 +214,16 @@ mod tests {
         assert_eq!(align_up_pow2(3, 2), 4);
         assert_eq!(align_up_pow2(4, 2), 4);
         assert_eq!(align_up_pow2(5, 2), 8);
+        assert_eq!(align_up_pow2(6, 2), 8);
+        assert_eq!(align_up_pow2(7, 2), 8);
+        assert_eq!(align_up_pow2(8, 2), 8);
 
-        assert_eq!(align_up_pow2(4, 3), 8);
+        assert_eq!(align_up_pow2(1, 3), 8);
+        assert_eq!(align_up_pow2(7, 3), 8);
         assert_eq!(align_up_pow2(8, 3), 8);
         assert_eq!(align_up_pow2(9, 3), 16);
+        assert_eq!(align_up_pow2(15, 3), 16);
+        assert_eq!(align_up_pow2(16, 3), 16);
 
         assert_eq!(align_up_pow2(4095, 12), 4096);
         assert_eq!(align_up_pow2(4096, 12), 4096);
@@ -310,5 +292,103 @@ mod tests {
         assert!(!check_alignment_pow2(4095, 12));
         assert!(check_alignment_pow2(4096, 12));
         assert!(!check_alignment_pow2(4097, 12));
+    }
+
+    #[test]
+    fn test_wrap_around() {
+        // Edge cases
+        assert_eq!(wrap_around(42, 0), 42);
+
+        // Power of two wraps
+        assert_eq!(wrap_around(0, 4), 0);
+        assert_eq!(wrap_around(1, 4), 1);
+        assert_eq!(wrap_around(3, 4), 3);
+        assert_eq!(wrap_around(4, 4), 0);
+        assert_eq!(wrap_around(5, 4), 1);
+        assert_eq!(wrap_around(7, 8), 7);
+        assert_eq!(wrap_around(8, 8), 0);
+        assert_eq!(wrap_around(9, 8), 1);
+        assert_eq!(wrap_around(15, 8), 7);
+        assert_eq!(wrap_around(16, 8), 0);
+        assert_eq!(wrap_around(1023, 1024), 1023);
+        assert_eq!(wrap_around(1024, 1024), 0);
+        assert_eq!(wrap_around(1025, 1024), 1);
+
+        // Non-power of two wraps
+        assert_eq!(wrap_around(0, 3), 0);
+        assert_eq!(wrap_around(1, 3), 1);
+        assert_eq!(wrap_around(2, 3), 2);
+        assert_eq!(wrap_around(3, 3), 0);
+        assert_eq!(wrap_around(4, 3), 1);
+        assert_eq!(wrap_around(5, 3), 2);
+        assert_eq!(wrap_around(6, 3), 0);
+        assert_eq!(wrap_around(7, 6), 1);
+        assert_eq!(wrap_around(12, 6), 0);
+        assert_eq!(wrap_around(13, 6), 1);
+    }
+
+    #[test]
+    fn test_wrap_around_pow2() {
+        assert_eq!(wrap_around_pow2(0, 2), 0);
+        assert_eq!(wrap_around_pow2(1, 2), 1);
+        assert_eq!(wrap_around_pow2(2, 2), 2);
+        assert_eq!(wrap_around_pow2(3, 2), 3);
+        assert_eq!(wrap_around_pow2(4, 2), 0);
+        assert_eq!(wrap_around_pow2(5, 2), 1);
+        assert_eq!(wrap_around_pow2(7, 2), 3);
+        assert_eq!(wrap_around_pow2(8, 2), 0);
+
+        assert_eq!(wrap_around_pow2(7, 3), 7);
+        assert_eq!(wrap_around_pow2(8, 3), 0);
+        assert_eq!(wrap_around_pow2(9, 3), 1);
+        assert_eq!(wrap_around_pow2(15, 3), 7);
+        assert_eq!(wrap_around_pow2(16, 3), 0);
+
+        assert_eq!(wrap_around_pow2(4095, 12), 4095);
+        assert_eq!(wrap_around_pow2(4096, 12), 0);
+        assert_eq!(wrap_around_pow2(4097, 12), 1);
+    }
+
+    #[test]
+    fn test_pow2() {
+        assert_eq!(pow2(0), 1);
+        assert_eq!(pow2(1), 2);
+        assert_eq!(pow2(2), 4);
+        assert_eq!(pow2(3), 8);
+        assert_eq!(pow2(4), 16);
+        assert_eq!(pow2(5), 32);
+        assert_eq!(pow2(6), 64);
+        assert_eq!(pow2(7), 128);
+        assert_eq!(pow2(8), 256);
+        assert_eq!(pow2(10), 1024);
+        assert_eq!(pow2(12), 4096);
+        assert_eq!(pow2(20), 1048576);
+        assert_eq!(pow2(30), 1073741824);
+    }
+
+    #[test]
+    fn test_is_pow2() {
+        // Test powers of 2 - should return Yes with the correct exponent
+        assert!(matches!(is_pow2(1), IsPow2Result::Yes(0)));      // 2^0 = 1
+        assert!(matches!(is_pow2(2), IsPow2Result::Yes(1)));      // 2^1 = 2
+        assert!(matches!(is_pow2(4), IsPow2Result::Yes(2)));      // 2^2 = 4
+        assert!(matches!(is_pow2(8), IsPow2Result::Yes(3)));      // 2^3 = 8
+        assert!(matches!(is_pow2(16), IsPow2Result::Yes(4)));     // 2^4 = 16
+        assert!(matches!(is_pow2(32), IsPow2Result::Yes(5)));     // 2^5 = 32
+        assert!(matches!(is_pow2(64), IsPow2Result::Yes(6)));     // 2^6 = 64
+        assert!(matches!(is_pow2(128), IsPow2Result::Yes(7)));    // 2^7 = 128
+        assert!(matches!(is_pow2(256), IsPow2Result::Yes(8)));    // 2^8 = 256
+        assert!(matches!(is_pow2(1 << 30), IsPow2Result::Yes(30))); // 2^30
+
+        // Test non-powers of 2 - should return No
+        assert!(matches!(is_pow2(0), IsPow2Result::No));
+        assert!(matches!(is_pow2(3), IsPow2Result::No));
+        assert!(matches!(is_pow2(5), IsPow2Result::No));
+        assert!(matches!(is_pow2(6), IsPow2Result::No));
+        assert!(matches!(is_pow2(7), IsPow2Result::No));
+        assert!(matches!(is_pow2(9), IsPow2Result::No));
+        assert!(matches!(is_pow2(10), IsPow2Result::No));
+        assert!(matches!(is_pow2(15), IsPow2Result::No));
+        assert!(matches!(is_pow2(127), IsPow2Result::No));
     }
 }
