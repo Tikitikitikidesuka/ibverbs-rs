@@ -24,6 +24,10 @@ impl SharedMemoryBufferWriter {
     pub fn alignment_pow2(&self) -> u8 {
         self.buffer.alignment_pow2()
     }
+
+    pub fn buffer_name(&self) -> &str {
+        self.buffer.name()
+    }
 }
 
 impl CircularBufferWriter for SharedMemoryBufferWriter {
