@@ -4,7 +4,7 @@ use crate::shared_memory_buffer::buffer_status::PtrStatus;
 use crate::utils;
 use log::error;
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 pub struct SharedMemoryBufferReader {
     buffer: SharedMemoryReadBuffer,
@@ -43,6 +43,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
     type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
     type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
 
+    #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
@@ -73,6 +74,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(shmem = self.buffer.name()))]
     fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
         debug!("Attempting to get the buffer's readable region");
 

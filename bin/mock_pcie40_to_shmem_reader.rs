@@ -11,6 +11,10 @@ fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb
     const ALIGNMENT_POW2: u8 = 12;
 
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
     // -------------------------- //
     // Shared Memory Buffer Setup //
     // -------------------------- //

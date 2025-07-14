@@ -3,7 +3,7 @@ use crate::shared_memory_buffer::buffer_backend::SharedMemoryWriteBuffer;
 use crate::shared_memory_buffer::buffer_status::PtrStatus;
 use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
 use crate::utils;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 pub struct SharedMemoryBufferWriter {
     buffer: SharedMemoryWriteBuffer,
@@ -30,6 +30,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
     type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
     type WriteableRegionResult<'a> = (&'a mut [u8], &'a mut [u8]);
 
+    #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
     fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
         debug!("Attempting to advance the buffer's write pointer by {bytes} bytes");
 
@@ -60,6 +61,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(shmem = self.buffer.name()))]
     fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
         debug!("Attempting to get the buffer's writable region");
 
