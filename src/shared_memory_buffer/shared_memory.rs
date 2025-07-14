@@ -1,11 +1,11 @@
 use libc::off_t;
-use log::{debug, error, info, trace};
 use nix::sys::stat::{Mode, umask};
 use std::ffi::{CString, c_uint};
 use std::mem::forget;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use tracing::{debug, instrument, warn};
 
 #[derive(Error, Debug)]
 pub enum SharedMemoryCreateError {
@@ -58,12 +58,6 @@ pub enum SharedMemoryMapError {
     Io(#[from] std::io::Error),
 }
 
-#[derive(Error, Debug)]
-pub enum SharedMemoryUnmapError {
-    #[error("IO error trying to unmap shared memory: {0}")]
-    Io(#[from] std::io::Error),
-}
-
 pub struct SharedMemory {
     path: PathBuf,
     size: usize,
@@ -71,7 +65,7 @@ pub struct SharedMemory {
 }
 
 pub struct MappedSharedMemory {
-    shared: Option<SharedMemory>,
+    shared: SharedMemory,
     mapped_address: *mut libc::c_void,
 }
 
@@ -84,68 +78,67 @@ impl SharedMemory {
         self.size
     }
 
-    pub fn exists(path: impl Into<PathBuf>) -> bool {
-        let path = path.into();
-        trace!("Checking if shared memory exists at path: {:?}", path);
+    /// Anything that would fail like an invalid name will just output false
+    #[instrument(skip_all, fields(path = ?path.as_ref().display()))]
+    pub fn exists(path: impl AsRef<Path>) -> bool {
+        let path = path.as_ref();
 
-        let c_name = match CString::new(path.to_str().unwrap_or("")) {
-            Ok(c_name) => c_name,
-            Err(_) => {
-                trace!(
-                    "Invalid shared memory path (contains null bytes): {:?}",
-                    path
-                );
+        debug!("Checking if shared memory exists");
+
+        debug!("Turning Rust Path into C string");
+        let c_name = match Self::path_to_cstring(&path) {
+            Some(c_name) => c_name,
+            None => {
+                warn!("Failed to convert Rust Path to C string");
                 return false;
             }
         };
 
-        // Try to open the shared memory in read-only mode without creating it
-        trace!("Calling shm_open with O_RDONLY to check existence");
+        debug!("Attempting to open shared memory in read-only mode");
         let file_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDONLY, 0) };
-        trace!("shm_open returned file descriptor: {}", file_descriptor);
 
         if file_descriptor < 0 {
-            trace!("Shared memory does not exist at {:?}", path);
+            debug!("Failed to open shared memory. Assuming it does not exist");
             false
         } else {
-            trace!("Calling close({})", file_descriptor);
+            debug!("Successfully opened shared memory. It exists");
+            debug!("Closing shared memory file descriptor");
             unsafe {
                 libc::close(file_descriptor);
             }
-            trace!("close({}) completed", file_descriptor);
-            debug!("Shared memory exists at {:?}", path);
             true
         }
     }
 
     // Create a new shared memory segment
+    #[instrument(skip_all, fields(
+        path = ?path.as_ref().display(),
+        size = size,
+        permission_mode = ?permission_mode.bits()
+    ))]
     pub fn create(
-        path: impl Into<PathBuf>,
+        path: impl AsRef<Path>,
         size: usize,
         permission_mode: Mode,
     ) -> Result<Self, SharedMemoryCreateError> {
-        let path = path.into();
-        info!(
-            "Creating shared memory at path: {:?} with size: {}",
-            path, size
+        let path = path.as_ref();
+
+        debug!("Creating shared memory");
+
+        debug!("Turning Rust Path into C string");
+        let c_name = Self::path_to_cstring(&path)
+            .ok_or_else(|| SharedMemoryCreateError::InvalidSegmentName {
+                path: path.to_owned(),
+            })
+            .map_err(|error| {
+                warn!("Failed to convert Rust Path to C string");
+                error
+            })?;
+
+        debug!(
+            "Creating shared memory with shm_open. Flags \
+            O_CREAT | O_RDWR and permission mode {permission_mode:o}"
         );
-
-        let path_str = path.to_str().ok_or_else(|| {
-            error!("Invalid shared memory path: {:?}", path);
-            SharedMemoryCreateError::InvalidSegmentName { path: path.clone() }
-        })?;
-        let c_name = CString::new(path_str).map_err(|_| {
-            error!("Path contains interior null byte: {:?}", path);
-            SharedMemoryCreateError::InvalidSegmentName { path: path.clone() }
-        })?;
-
-        debug!("Using permission mode: {:?}", permission_mode);
-
-        // Create shared memory
-        let old_mask = umask(permission_mode.not());
-        trace!("Setting umask to {:?}", permission_mode.not());
-
-        trace!("Calling shm_open with O_CREAT | O_RDWR");
         let file_descriptor = unsafe {
             libc::shm_open(
                 c_name.as_ptr(),
@@ -153,157 +146,111 @@ impl SharedMemory {
                 permission_mode.bits() as c_uint,
             )
         };
-        trace!("shm_open returned file descriptor: {}", file_descriptor);
-
-        umask(old_mask);
-        trace!("Restored umask to previous value");
 
         if file_descriptor < 0 {
+            warn!("Failed to create shared memory");
             let err = std::io::Error::last_os_error();
-            error!("Failed to create shared memory at {:?}: {}", path, err);
             return Err(SharedMemoryCreateError::Io(err));
         }
 
-        // Set shared memory size
-        trace!("Calling ftruncate({}, {})", file_descriptor, size);
+        debug!("Setting shared memory size to {} with ftruncate", size);
         if unsafe { libc::ftruncate(file_descriptor, size as off_t) } < 0 {
+            warn!("Failed to set shared memory size");
             let err = std::io::Error::last_os_error();
-            error!("Failed to set size of shared memory at {:?}: {}", path, err);
-            trace!("Calling close({})", file_descriptor);
+            debug!("Closing shared memory file descriptor");
             unsafe { libc::close(file_descriptor) };
-            trace!("close({}) completed", file_descriptor);
             return Err(SharedMemoryCreateError::Io(err));
         }
-        trace!("ftruncate completed successfully");
 
-        debug!(
-            "Successfully created shared memory at {:?} with fd {}",
-            path, file_descriptor
-        );
+        debug!("Successfully created shared memory");
         Ok(SharedMemory {
-            path,
+            path: path.to_owned(),
             size,
             file_descriptor,
         })
     }
 
     // Open an existing shared memory segment
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self, SharedMemoryOpenError> {
-        let path = path.into();
-        info!("Opening shared memory at path: {:?}", path);
+    #[instrument(skip_all, fields(path = ?path.as_ref().display()))]
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, SharedMemoryOpenError> {
+        let path = path.as_ref();
 
-        let c_name = CString::new(path.to_str().unwrap_or("")).map_err(|_| {
-            error!("Invalid shared memory path: {:?}", path);
-            SharedMemoryOpenError::InvalidSegmentName { path: path.clone() }
-        })?;
+        debug!("Opening shared memory");
 
-        // Open shared memory
-        trace!("Calling shm_open with O_RDWR");
+        debug!("Turning Rust Path into C string");
+        let c_name = Self::path_to_cstring(&path)
+            .ok_or_else(|| SharedMemoryOpenError::InvalidSegmentName {
+                path: path.to_owned(),
+            })
+            .map_err(|error| {
+                warn!("Failed to convert Rust Path to C string");
+                error
+            })?;
+
+        debug!("Opening shared memory with shm_open. Flags O_RDWR");
         let file_descriptor = unsafe { libc::shm_open(c_name.as_ptr(), libc::O_RDWR, 0) };
-        trace!("shm_open returned file descriptor: {}", file_descriptor);
 
         if file_descriptor < 0 {
+            warn!("Failed to open shared memory");
             let err = std::io::Error::last_os_error();
-            error!("Failed to open shared memory at {:?}: {}", path, err);
             return Err(SharedMemoryOpenError::Io(err));
         }
 
-        // Get shared memory size
-        trace!("Calling fstat({})", file_descriptor);
+        debug!("Getting shared memory size with fstat");
         let mut stat: libc::stat = unsafe { std::mem::zeroed() };
         if unsafe { libc::fstat(file_descriptor, &mut stat) } != 0 {
+            warn!("Failed to get shared memory size");
             let err = std::io::Error::last_os_error();
-            error!("Failed to get size of shared memory at {:?}: {}", path, err);
-            trace!("Calling close({})", file_descriptor);
+            debug!("Closing shared memory file descriptor");
             unsafe { libc::close(file_descriptor) };
-            trace!("close({}) completed", file_descriptor);
             return Err(SharedMemoryOpenError::Io(err));
         }
-        trace!("fstat completed successfully");
 
         let size = stat.st_size as usize;
-        debug!(
-            "Successfully opened shared memory at {:?} with fd {} and size {}",
-            path, file_descriptor, size
-        );
 
+        debug!("Successfully opened shared memory with size {size}");
         Ok(SharedMemory {
-            path,
+            path: path.to_owned(),
             size,
             file_descriptor,
         })
     }
 
-    pub fn close(self) -> Result<(), SharedMemoryCloseError> {
-        trace!(
-            "Closing shared memory fd {} at path {:?}",
-            self.file_descriptor, self.path
-        );
+    #[instrument(skip_all, fields(path = ?path.as_ref().display()))]
+    pub fn delete(path: impl AsRef<Path>) -> Result<(), SharedMemoryDeleteError> {
+        debug!("Deleting shared memory");
 
-        let c_result = unsafe { libc::close(self.file_descriptor) };
+        let path = path.as_ref();
 
-        if c_result != 0 {
-            let err = std::io::Error::last_os_error();
-            error!(
-                "Failed to close shared memory fd {} at {:?}: {}",
-                self.file_descriptor, self.path, err
-            );
-            return Err(SharedMemoryCloseError::Io(err));
-        }
+        debug!("Turning Rust Path into C string");
+        let c_name = Self::path_to_cstring(&path)
+            .ok_or_else(|| SharedMemoryDeleteError::InvalidSegmentName {
+                path: path.to_owned(),
+            })
+            .map_err(|error| {
+                warn!("Failed to convert Rust Path to C string");
+                error
+            })?;
 
-        debug!(
-            "Successfully closed shared memory fd {} at {:?}",
-            self.file_descriptor, self.path
-        );
-
-        forget(self);
-
-        Ok(())
-    }
-
-    pub fn delete(path: impl Into<PathBuf>) -> Result<(), SharedMemoryDeleteError> {
-        let path = path.into();
-        info!("Deleting shared memory at path: {:?}", path);
-
-        let c_name = CString::new(path.to_str().unwrap_or("")).map_err(|_| {
-            error!("Invalid shared memory path: {:?}", path);
-            SharedMemoryDeleteError::InvalidSegmentName { path: path.clone() }
-        })?;
-
-        // Delete shared memory (unlink it from the namespace)
-        trace!("Calling shm_unlink");
+        debug!("Deleting shared memory with shm_unlink");
         let result = unsafe { libc::shm_unlink(c_name.as_ptr()) };
-        trace!("shm_unlink returned: {}", result);
 
         if result < 0 {
+            warn!("Failed to delete shared memory");
             let err = std::io::Error::last_os_error();
-            error!("Failed to delete shared memory at {:?}: {}", path, err);
             return Err(SharedMemoryDeleteError::Io(err));
         }
 
-        debug!("Successfully deleted shared memory at {:?}", path);
-        Ok(())
-    }
-
-    pub fn close_and_delete(self) -> Result<(), SharedMemoryCloseAndDeleteError> {
-        let path = self.path.clone();
-        self.close()?;
-        Self::delete(path)?;
+        debug!("Successfully deleted shared memory");
         Ok(())
     }
 
     // Map the shared memory to process address space
+    #[instrument(skip_all, fields(path = ?self.path().display(), size = self.size()))]
     pub fn map(self) -> Result<MappedSharedMemory, SharedMemoryMapError> {
-        debug!(
-            "Mapping shared memory at {:?} to process address space",
-            self.path
-        );
+        debug!("Mapping shared memory");
 
-        trace!(
-            "Calling mmap(NULL, {}, PROT_READ | PROT_WRITE, MAP_SHARED, {}, 0)",
-            self.size, self.file_descriptor
-        );
-
+        debug!("Mapping shared memory with mmap");
         let mapped_address = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -314,173 +261,78 @@ impl SharedMemory {
                 0,
             )
         };
-        trace!("mmap returned address: {:p}", mapped_address);
 
         if mapped_address == libc::MAP_FAILED {
+            warn!("Failed to map shared memory");
             let err = std::io::Error::last_os_error();
-            error!(
-                "Failed to map shared memory at {:?} with fd {}: {}",
-                self.path, self.file_descriptor, err
-            );
-
             return Err(SharedMemoryMapError::Io(err));
         }
 
-        debug!(
-            "Successfully mapped shared memory at {:?} with fd {} to address {:p}",
-            self.path, self.file_descriptor, mapped_address
-        );
-
-        // Create the mapped shared memory, wrapping self
+        debug!("Successfully mapped shared memory");
         Ok(MappedSharedMemory {
-            shared: Some(self),
+            shared: self,
             mapped_address,
         })
+    }
+
+    fn path_to_cstring(path: &Path) -> Option<CString> {
+        path.to_str().and_then(|s| CString::new(s).ok())
     }
 }
 
 impl MappedSharedMemory {
     pub fn path(&self) -> &Path {
-        self.shared.as_ref().expect(
-            "Attempted to access path of a MappedSharedMemory that has no inner SharedMemory.\n\
-            This indicates a severe implementation error as any valid MappedSharedMemory must always \
-            contain a SharedMemory reference until explicitly unmapped.\n\
-            Please report this issue to the developers."
-        ).path()
+        self.shared.path()
     }
 
     pub fn size(&self) -> usize {
-        self.shared.as_ref().expect(
-            "Attempted to access size of a MappedSharedMemory that has no inner SharedMemory.\n\
-            This indicates a severe implementation error as the Option<SharedMemory> should never be None \
-            unless explicitly unmapped.\n\
-            Please report this issue to the developers."
-        ).size()
+        self.shared.size()
     }
 
     // Get a slice to the mapped memory
     pub unsafe fn as_slice(&self) -> &[u8] {
-        unsafe {
-            trace!("Getting immutable slice to mapped shared memory");
-
-            let slice = std::slice::from_raw_parts(self.mapped_address as *const u8, self.size());
-            trace!("Returned immutable slice of size {}", self.size());
-            slice
-        }
+        unsafe { std::slice::from_raw_parts(self.mapped_address as *const u8, self.size()) }
     }
 
     // Get a mutable slice to the mapped memory
     pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
-        unsafe {
-            trace!("Getting mutable slice to mapped shared memory");
-
-            let slice = std::slice::from_raw_parts_mut(self.mapped_address as *mut u8, self.size());
-            trace!("Returned mutable slice of size {}", self.size());
-            slice
-        }
-    }
-
-    // Explicitly unmap the memory
-    pub fn unmap(mut self) -> Result<SharedMemory, SharedMemoryMapError> {
-        match self.shared.take() {
-            Some(shared) => {
-                debug!("Unmapping shared memory at {:?}", shared.path);
-
-                // Unmap the memory
-                trace!(
-                    "Calling munmap({:p}, {})",
-                    self.mapped_address,
-                    shared.size()
-                );
-                let result = unsafe { libc::munmap(self.mapped_address, shared.size()) };
-                trace!("munmap returned: {}", result);
-
-                if result == -1 {
-                    let err = std::io::Error::last_os_error();
-                    error!(
-                        "Failed to unmap shared memory at {:?} from address {:p}: {}",
-                        shared.path, self.mapped_address, err
-                    );
-
-                    // Put shared memory back since we couldn't unmap
-                    self.shared = Some(shared);
-
-                    return Err(SharedMemoryMapError::Io(err));
-                }
-
-                debug!(
-                    "Successfully unmapped shared memory at {:?} from address {:p}",
-                    shared.path, self.mapped_address
-                );
-
-                // Return the inner SharedMemory
-                Ok(shared)
-            }
-            None => {
-                error!("Cannot unmap: shared memory has already been unmapped");
-                unreachable!(
-                    "MappedSharedMemory::unmap called after the shared memory was already taken.\n\
-                    This indicates an erroneous implementation as the API should prevent double unmapping.\n\
-                    The shared member should never be None before explicit unmapping."
-                );
-            }
-        }
+        unsafe { std::slice::from_raw_parts_mut(self.mapped_address as *mut u8, self.size()) }
     }
 }
 
 impl Drop for SharedMemory {
+    #[instrument(skip_all, fields(path = ?self.path().display(), size = self.size()))]
     fn drop(&mut self) {
-        trace!(
-            "Dropping SharedMemory at {:?} with fd {}",
-            self.path, self.file_descriptor
-        );
+        debug!("Dropping shared memory");
 
-        // Close the file descriptor
-        unsafe {
-            trace!("Calling close({})", self.file_descriptor);
-            let result = libc::close(self.file_descriptor);
+        debug!("Closing shared memory file descriptor");
+        let result = unsafe { libc::close(self.file_descriptor) };
 
-            if result != 0 {
-                let err = std::io::Error::last_os_error();
-                error!(
-                    "Failed to close shared memory fd {} at {:?} during drop: {}",
-                    self.file_descriptor, self.path, err
-                );
-            } else {
-                debug!(
-                    "Closed shared memory file descriptor {} for {:?}",
-                    self.file_descriptor, self.path
-                );
-            }
+        if result != 0 {
+            let err = std::io::Error::last_os_error();
+            warn!("Failed to close shared memory file descriptor: {err}");
+        } else {
+            debug!("Successfully closed shared memory file descriptor");
         }
     }
 }
 
 impl Drop for MappedSharedMemory {
+    #[instrument(skip_all, fields(path = ?self.path().display(), size = self.size()))]
     fn drop(&mut self) {
-        if let Some(shared) = &self.shared {
-            trace!("Dropping MappedSharedMemory at {:?}", shared.path);
+        debug!("Dropping mapped shared memory");
 
-            // Unmap the memory
-            trace!("Calling munmap({:p}, {})", self.mapped_address, shared.size);
-            let result = unsafe { libc::munmap(self.mapped_address, shared.size) };
+        debug!("Unmapping shared memory");
+        let result = unsafe { libc::munmap(self.mapped_address, self.shared.size) };
 
-            if result == -1 {
-                // We can only log the error in drop, we can't propagate it
-                let err = std::io::Error::last_os_error();
-                error!(
-                    "Failed to unmap shared memory at {:?} from address {:p} during drop: {}",
-                    shared.path, self.mapped_address, err
-                );
-            } else {
-                debug!(
-                    "Successfully unmapped shared memory at {:?} from address {:p} during drop",
-                    shared.path, self.mapped_address
-                );
-            }
-
-            // The SharedMemory will be dropped automatically after this
+        if result == -1 {
+            let err = std::io::Error::last_os_error();
+            warn!("Failed to unmap shared memory: {err}");
+        } else {
+            debug!("Successfully unmapped shared memory");
         }
+
+        // The SharedMemory will be dropped automatically after this
     }
 }
 
@@ -533,14 +385,6 @@ mod tests {
             "Failed to open just-created memory: {:?}",
             open_result.err()
         );
-
-        // Close the opened shared memory
-        if let Ok(opened_shm) = open_result {
-            let _ = opened_shm.close();
-        }
-
-        // Clean up explicitly
-        let _ = shm.close_and_delete();
     }
 
     #[test]
@@ -562,34 +406,6 @@ mod tests {
                 _ => panic!("Expected InvalidSegmentName error, got: {:?}", err),
             }
         }
-    }
-
-    #[test]
-    fn test_create_existing_path() {
-        // Test behavior when creating shared memory with the same path twice
-        let path = get_unique_path("test_create_existing_path");
-        let size1 = 4096;
-        let size2 = 8192; // Different size to verify which one is used
-        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-
-        // First creation
-        let shm1 = SharedMemory::create(&path, size1, mode).expect("First creation should succeed");
-
-        // Second creation with same path
-        let result = SharedMemory::create(&path, size2, mode);
-
-        // The current implementation will likely succeed without O_EXCL flag
-        // but we should verify the behavior is consistent
-        if let Ok(shm2) = result {
-            println!("Note: Second creation succeeded - checking behavior");
-
-            // Check if size reflects first or second creation
-            // (implementation-specific, but should be consistent)
-            let _ = shm2.close();
-        }
-
-        // Clean up
-        let _ = shm1.close_and_delete();
     }
 
     #[test]
@@ -631,10 +447,6 @@ mod tests {
             shm_create.file_descriptor, shm_open.file_descriptor,
             "Open should create a new file descriptor"
         );
-
-        // Clean up
-        let _ = shm_open.close();
-        let _ = shm_create.close_and_delete();
     }
 
     #[test]
@@ -680,97 +492,6 @@ mod tests {
                 ),
             }
         }
-    }
-
-    #[test]
-    fn test_close_success() {
-        // Create a shared memory segment
-        let path = get_unique_path("test_close_success");
-        let size = 4096;
-        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-
-        let shm = SharedMemory::create(&path, size, mode)
-            .expect("Failed to create shared memory for close test");
-
-        // Close the shared memory
-        let close_result = shm.close();
-
-        // Check the close operation succeeded
-        assert!(
-            close_result.is_ok(),
-            "Close operation failed: {:?}",
-            close_result.err()
-        );
-
-        // At this point, shm is consumed (moved) by the close method,
-        // so we can't directly check its state
-
-        // Verify we can still open the shared memory (close shouldn't delete it)
-        let open_result = SharedMemory::open(&path);
-        assert!(
-            open_result.is_ok(),
-            "Failed to open shared memory after close: {:?}",
-            open_result.err()
-        );
-
-        // Clean up
-        if let Ok(reopened_shm) = open_result {
-            let _ = reopened_shm.close_and_delete();
-        } else {
-            let _ = SharedMemory::delete(&path);
-        }
-    }
-
-    #[test]
-    fn test_close_and_delete() {
-        // Test the combined close_and_delete operation
-        let path = get_unique_path("test_close_and_delete");
-        let shm = SharedMemory::create(&path, 4096, Mode::S_IRUSR | Mode::S_IWUSR)
-            .expect("Failed to create shared memory");
-
-        // Use close_and_delete method
-        let result = shm.close_and_delete();
-        assert!(
-            result.is_ok(),
-            "close_and_delete failed: {:?}",
-            result.err()
-        );
-
-        // Verify the segment is gone by trying to open it
-        let open_result = SharedMemory::open(&path);
-        assert!(
-            open_result.is_err(),
-            "Segment still exists after close_and_delete"
-        );
-    }
-
-    #[test]
-    fn test_delete_success() {
-        // Create a shared memory segment
-        let path = get_unique_path("test_delete_success");
-        let size = 4096;
-        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-
-        let shm = SharedMemory::create(&path, size, mode)
-            .expect("Failed to create shared memory for delete test");
-
-        // Must close the handle before deleting - otherwise some systems won't let us delete it
-        let _ = shm.close();
-
-        // Delete the shared memory segment
-        let delete_result = SharedMemory::delete(&path);
-        assert!(
-            delete_result.is_ok(),
-            "Delete operation failed: {:?}",
-            delete_result.err()
-        );
-
-        // Verify the segment is actually deleted by trying to open it
-        let open_result = SharedMemory::open(&path);
-        assert!(
-            open_result.is_err(),
-            "Shared memory still exists after delete"
-        );
     }
 
     #[test]
@@ -913,15 +634,6 @@ mod tests {
                     }
                 }
             }
-
-            // Clean up - unmap and close both handles
-            if let Ok(unmapped1) = mapped1.unmap() {
-                let _ = unmapped1.close();
-            }
-
-            if let Ok(unmapped2) = mapped2.unmap() {
-                let _ = unmapped2.close();
-            }
         }
     }
 
@@ -933,15 +645,14 @@ mod tests {
         let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
         // Create the shared memory segment
-        let create_result = SharedMemory::create(&path, size, mode);
-        assert!(
-            create_result.is_ok(),
-            "Failed to create shared memory for double delete test"
-        );
+        {
+            let create_result = SharedMemory::create(&path, size, mode);
+            assert!(
+                create_result.is_ok(),
+                "Failed to create shared memory for double delete test"
+            );
 
-        // Close it to ensure we can delete it cleanly
-        if let Ok(shm) = create_result {
-            let _ = shm.close();
+            // Close it to ensure we can delete it cleanly
         }
 
         // First delete - should succeed
@@ -993,11 +704,14 @@ mod tests {
         let mode = Mode::S_IRUSR | Mode::S_IWUSR;
 
         // Create first shared memory segment
-        let shm1 =
-            SharedMemory::create(&path, size1, mode).expect("Failed to create first shared memory");
+        {
+            let shm1 = SharedMemory::create(&path, size1, mode)
+                .expect("Failed to create first shared memory");
 
-        // Close and delete it
-        let _ = shm1.close();
+            // Close it
+        }
+
+        // Delete it
         let delete_result = SharedMemory::delete(&path);
         assert!(
             delete_result.is_ok(),
@@ -1021,94 +735,6 @@ mod tests {
                 shm2.size(),
                 size2
             );
-
-            // Clean up
-            let _ = shm2.close_and_delete();
         }
-    }
-
-    #[test]
-    fn test_delete_then_close_and_delete() {
-        // Create a shared memory segment
-        let path = get_unique_path("test_delete_then_close_and_delete");
-        let size = 4096;
-        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-
-        // Create the segment
-        let create_result = SharedMemory::create(&path, size, mode);
-        assert!(create_result.is_ok(), "Failed to create shared memory");
-
-        // Open a handle to it
-        let open_result = SharedMemory::open(&path);
-        assert!(open_result.is_ok(), "Failed to open shared memory");
-
-        let shm = open_result.unwrap();
-
-        // Delete the segment by path (not using the handle)
-        let delete_result = SharedMemory::delete(&path);
-        assert!(
-            delete_result.is_ok(),
-            "Failed to delete shared memory by path"
-        );
-
-        // Verify it's deleted by trying to open it again
-        let reopen_result = SharedMemory::open(&path);
-        assert!(
-            reopen_result.is_err(),
-            "Shared memory still exists after delete"
-        );
-
-        // Now try to close_and_delete on the original handle
-        // This is the key test - what happens when we try to delete something
-        // that's already been deleted?
-        let close_and_delete_result = shm.close_and_delete();
-
-        // The behavior here depends on the implementation:
-        // 1. It might succeed fully if close_and_delete is resilient to non-existent segments
-        // 2. It might return an error if close_and_delete requires the segment to still exist
-
-        println!(
-            "close_and_delete after delete result: {:?}",
-            close_and_delete_result
-        );
-
-        // Test both possible outcomes:
-
-        // If it succeeded, great! The implementation is forgiving of this edge case
-        if close_and_delete_result.is_ok() {
-            println!("close_and_delete succeeded after prior delete - implementation is forgiving");
-        }
-        // If it failed, check that it's an appropriate error
-        else if let Err(err) = close_and_delete_result {
-            match err {
-                // In most implementations, this should be a DeleteError containing an IO error
-                SharedMemoryCloseAndDeleteError::DeleteError(delete_err) => {
-                    match delete_err {
-                        SharedMemoryDeleteError::Io(_) => {
-                            // This is the expected error type
-                            println!("close_and_delete failed with DeleteError/Io as expected");
-                        }
-                        _ => {
-                            // Other error types are acceptable but unexpected
-                            println!(
-                                "close_and_delete failed with unexpected DeleteError: {:?}",
-                                delete_err
-                            );
-                        }
-                    }
-                }
-                // Some implementations might return a CloseError, which is also acceptable
-                SharedMemoryCloseAndDeleteError::CloseError(_) => {
-                    println!("close_and_delete failed with CloseError");
-                }
-            }
-        }
-
-        // Try one more open to be absolutely sure the segment is gone
-        let final_open_result = SharedMemory::open(&path);
-        assert!(
-            final_open_result.is_err(),
-            "Shared memory somehow exists after multiple delete attempts"
-        );
     }
 }
