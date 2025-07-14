@@ -13,6 +13,7 @@ fn main() {
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter("pcie40_rs::shared_memory_buffer::writable_buffer_element")
         .init();
 
     // -------------------------- //
@@ -102,7 +103,7 @@ fn shmem_write_mfps(
             match mfp.write(writer) {
                 Ok(_) => break, // Move to next MFP
                 Err(error) => match error {
-                    SharedMemoryTypedWriteError::NotEnoughSpace => {
+                    _ => {
                         println!("Temporary error writing MFP: {:?}, retrying...", error);
                         std::thread::sleep(poll_interval);
                     }
