@@ -4,6 +4,7 @@ use crate::shared_memory_buffer::buffer_status::PtrStatus;
 use crate::utils;
 use log::error;
 use thiserror::Error;
+use tracing::{debug, warn};
 
 pub struct SharedMemoryBufferReader {
     buffer: SharedMemoryReadBuffer,
@@ -24,6 +25,7 @@ pub enum SharedMemoryBufferAdvanceError {
 
 impl SharedMemoryBufferReader {
     pub fn new(read_buffer: SharedMemoryReadBuffer) -> Self {
+        debug!("Creating new shared memory buffer reader");
         let read_status = read_buffer.read_status();
 
         Self {
@@ -42,24 +44,29 @@ impl CircularBufferReader for SharedMemoryBufferReader {
     type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
 
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
-        // Check minimum 2 byte alignment due to pointer representation
+        debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
+
+        debug!("Checking minimum 2 byte alignment due to pointer representation");
         if !utils::check_alignment_pow2(bytes, 1) {
+            warn!("Aborting read pointer advance due to failed 2 byte alignment violation");
             return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
         }
 
-        // Check alignment
+        debug!("Checking buffer's alignment");
         if !utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
+            warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(SharedMemoryBufferAdvanceError::NotAligned);
         }
 
-        // Check enough data available
+        debug!("Checking buffer's available space on readable region");
         let (primary_region, secondary_region) = self.readable_region();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
+            warn!("Aborting read pointer advance due to insufficient buffer readable region space");
             return Err(SharedMemoryBufferAdvanceError::OutOfBounds);
         }
 
-        // Update read status and handle wrapping when advancing
+        debug!("All necessary checks passed for read pointer advance passed! Updating read pointer");
         self.read_status = self.read_status.plus(bytes, self.buffer.size());
         self.buffer.set_read_status(self.read_status);
 
@@ -67,21 +74,34 @@ impl CircularBufferReader for SharedMemoryBufferReader {
     }
 
     fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
+        debug!("Attempting to get the buffer's readable region");
+
+        debug!("Getting the buffer's write pointer and complete byte slice");
         let write_status = self.buffer.write_status();
         let buffer_slice = unsafe { self.buffer.as_slice() };
 
+        debug!("Checking if the read and write pointer are on the same page");
+        // Being on different pages means only one of the two has wrapped around
         let same_page = write_status.wrap() == self.read_status.wrap();
 
         if same_page {
-            // No wraparound -> Primary: from read_ptr to write_ptr, Secondary: empty
+            debug!("Readable region does no wrap around");
+            // Primary region: from read_ptr to write_ptr
+            // Secondary region: empty
             let primary_region =
                 &buffer_slice[self.read_status.ptr() as usize..write_status.ptr() as usize];
             let secondary_region = &[];
+
+            debug!("Got the primary region and put an empty slice on secondary successfully");
             (primary_region, secondary_region)
         } else {
-            // Wraparound -> Primary: from read_ptr to end, Secondary: from start to write_ptr
+            debug!("Readable region wraps around");
+            // Primary region: from read_ptr to end
+            // Secondary region: from start to write_ptr
             let primary_region = &buffer_slice[self.read_status.ptr() as usize..];
             let secondary_region = &buffer_slice[..write_status.ptr() as usize];
+
+            debug!("Got the two regions successfully");
             (primary_region, secondary_region)
         }
     }
