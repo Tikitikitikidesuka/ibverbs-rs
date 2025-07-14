@@ -369,6 +369,10 @@ impl SharedMemoryBuffer {
         );
     }
 
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     fn status_ref(&self) -> &CircularBufferStatus {
         trace!(
             "Getting immutable reference to status header for buffer '{}'",
@@ -409,6 +413,10 @@ impl SharedMemoryReadBuffer {
 
     pub fn set_read_status(&mut self, status: PtrStatus) {
         self.shmem_buffer.set_read_status(status);
+    }
+
+    pub fn name(&self) -> &str {
+        self.shmem_buffer.name()
     }
 
     pub fn tail_free_space(&self) -> usize {
@@ -478,6 +486,10 @@ impl SharedMemoryWriteBuffer {
 
     pub fn set_write_status(&mut self, status: PtrStatus) {
         self.shmem_buffer.set_write_status(status);
+    }
+
+    pub fn name(&self) -> &str {
+        self.shmem_buffer.name()
     }
 
     pub fn tail_free_space(&self) -> usize {
