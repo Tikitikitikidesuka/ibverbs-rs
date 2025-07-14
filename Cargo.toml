@@ -8,9 +8,11 @@ description = "Rust bindings for the PCIe40 drivers"
 thiserror = "2.0.12"
 libc = "0.2.170"
 nix = { version = "0.30.1", features = ["fs"] }
-tracing = "0.1.41"
-tracing-subscriber = "0.3.19"
 log = "0.4.26"
+# Setting feature "release_max_level_info" makes sure compiled release binaries
+# do not contain traces on levels higher than Info. Its important for performance.
+tracing = { version = "0.1.41", features = ["release_max_level_info"] }
+tracing-subscriber = "0.3.19"
 
 [build-dependencies]
 bindgen = { version = "0.72.0", optional = true }
