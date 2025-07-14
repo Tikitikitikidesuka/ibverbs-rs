@@ -1,3 +1,4 @@
+use std::any::type_name;
 use std::fmt::Debug;
 use crate::circular_buffer::CircularBufferWriter;
 use crate::shared_memory_buffer::buffer_element::WritableSharedMemoryBufferElement;
@@ -17,10 +18,11 @@ pub enum SharedMemoryTypedWriteError {
     AdvanceWritePointerError(#[from] SharedMemoryBufferAdvanceError),
 }
 
+/// Blanket implementation for all tyeps that implement `SharedMemoryBufferElement`
 impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBufferWriter> for T {
     type WriteResult = Result<(), SharedMemoryTypedWriteError>;
 
-    #[instrument(skip_all, fields(shmem = writer.buffer_name()))]
+    #[instrument(skip_all, fields(type = type_name::<T>(), shmem = writer.buffer_name()))]
     fn write(&self, writer: &mut SharedMemoryBufferWriter) -> Self::WriteResult {
         debug!("Attempting to write element to the buffer");
 
