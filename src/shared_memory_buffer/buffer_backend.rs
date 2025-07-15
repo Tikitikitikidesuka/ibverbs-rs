@@ -1,9 +1,11 @@
 use crate::shared_memory_buffer::buffer_status::{CircularBufferStatus, PtrStatus};
-use crate::shared_memory_buffer::file_lock::FileLock;
+use crate::shared_memory_buffer::file_lock::LockFile;
 use crate::shared_memory_buffer::shared_memory::{MappedSharedMemory, SharedMemory};
 use crate::utils;
 use log::{debug, error, info, trace};
+use nix::fcntl::Flock;
 use nix::sys::stat::Mode;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -29,7 +31,7 @@ pub enum SharedMemoryBufferNewError {
 pub struct SharedMemoryBuffer {
     name: String,
     shared_memory: MappedSharedMemory,
-    file_lock: FileLock,
+    file_lock: LockFile,
     size: usize,
     alignment_pow2: u8,
     buffer_ptr: usize,
@@ -55,10 +57,7 @@ impl SharedMemoryBuffer {
 
         // Lock the reader
         debug!("Acquiring reader lock for buffer '{}'", name);
-        let mut file_lock = Self::get_reader_lock(&name)?;
-        trace!("Got reader lock file for buffer '{}'", name);
-
-        Self::try_lock(&mut file_lock)?;
+        let mut file_lock = Self::try_lock_reader(&name)?;
         debug!("Successfully locked reader for buffer '{}'", name);
 
         // Open and map shared memory
@@ -165,15 +164,9 @@ impl SharedMemoryBuffer {
 
         // Lock the writer
         debug!("Acquiring writer and reader locks for buffer '{}'", name);
-        let mut writer_lock = Self::get_writer_lock(&name)?;
-        let mut reader_lock = Self::get_reader_lock(&name)?;
-
-        trace!("Locking writer for buffer '{}'", name);
-        Self::try_lock(&mut writer_lock)?;
+        let mut writer_lock = Self::try_lock_writer(&name)?;
         debug!("Successfully locked writer for buffer '{}'", name);
-
-        trace!("Locking reader for buffer '{}'", name);
-        Self::try_lock(&mut reader_lock)?;
+        let mut reader_lock = Self::try_lock_reader(&name)?;
         debug!("Successfully locked reader for buffer '{}'", name);
 
         // Delete any existing shared memory (in case of unclean shutdown)
@@ -222,7 +215,7 @@ impl SharedMemoryBuffer {
 
         // Release reader lock when initialized
         trace!("Releasing reader lock for buffer '{}'", name);
-        Self::try_unlock(&mut reader_lock)?;
+        drop(reader_lock);
         debug!("Successfully released reader lock for buffer '{}'", name);
 
         // Get buffer offset taking header and alignment into account
@@ -677,97 +670,28 @@ impl SharedMemoryBuffer {
         Ok(mapped)
     }
 
-    fn get_reader_lock(name: impl AsRef<str>) -> Result<FileLock, SharedMemoryBufferNewError> {
+    fn try_lock_reader(name: impl AsRef<str>) -> Result<LockFile, SharedMemoryBufferNewError> {
         let name = name.as_ref();
         debug!("Getting reader lock for buffer '{}'", name);
         let lock_path = Self::reader_lock_path(name);
         debug!("Reader lock path for '{}': {:?}", name, lock_path);
-        Self::get_lock(lock_path)
+        LockFile::try_lock(&lock_path).map_err(|_| {
+            SharedMemoryBufferNewError::UnableToLockSharedMemory {
+                read_lock_path: lock_path,
+            }
+        })
     }
 
-    fn get_writer_lock(name: impl AsRef<str>) -> Result<FileLock, SharedMemoryBufferNewError> {
+    fn try_lock_writer(name: impl AsRef<str>) -> Result<LockFile, SharedMemoryBufferNewError> {
         let name = name.as_ref();
         debug!("Getting writer lock for buffer '{}'", name);
         let lock_path = Self::writer_lock_path(name);
         debug!("Writer lock path for '{}': {:?}", name, lock_path);
-        Self::get_lock(lock_path)
-    }
-
-    fn get_lock(lock_path: impl AsRef<Path>) -> Result<FileLock, SharedMemoryBufferNewError> {
-        let lock_path_ref = lock_path.as_ref();
-        trace!("Attempting to get lock file: {:?}", lock_path_ref);
-
-        // Try to open existing lock file first
-        trace!("Trying to open existing lock file: {:?}", lock_path_ref);
-        match FileLock::open(&lock_path_ref) {
-            Ok(lock) => {
-                debug!(
-                    "Successfully opened existing lock file: {:?}",
-                    lock_path_ref
-                );
-                Ok(lock)
+        LockFile::try_lock(&lock_path).map_err(|_| {
+            SharedMemoryBufferNewError::UnableToLockSharedMemory {
+                read_lock_path: lock_path,
             }
-            Err(open_err) => {
-                trace!(
-                    "Failed to open existing lock file: {:?}, trying to create: {:?}",
-                    open_err, lock_path_ref
-                );
-
-                match FileLock::create(&lock_path_ref) {
-                    Ok(lock) => {
-                        debug!("Successfully created new lock file: {:?}", lock_path_ref);
-                        Ok(lock)
-                    }
-                    Err(create_err) => {
-                        error!(
-                            "Failed to open or create lock file {:?}: open={:?}, create={:?}",
-                            lock_path_ref, open_err, create_err
-                        );
-                        Err(SharedMemoryBufferNewError::UnableToLockSharedMemory {
-                            read_lock_path: lock_path_ref.into(),
-                        })
-                    }
-                }
-            }
-        }
-    }
-
-    fn try_lock(lock_file: &mut FileLock) -> Result<(), SharedMemoryBufferNewError> {
-        let lock_path = lock_file.path().to_owned();
-        debug!("Attempting to acquire lock: {:?}", lock_path);
-
-        trace!("Calling lock() on file: {:?}", lock_path);
-        match lock_file.lock() {
-            Ok(()) => {
-                debug!("Successfully acquired lock: {:?}", lock_path);
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to acquire lock {:?}: {:?}", lock_path, e);
-                Err(SharedMemoryBufferNewError::UnableToLockSharedMemory {
-                    read_lock_path: lock_path.into(),
-                })
-            }
-        }
-    }
-
-    fn try_unlock(lock_file: &mut FileLock) -> Result<(), SharedMemoryBufferNewError> {
-        let lock_path = lock_file.path().to_owned();
-        debug!("Attempting to release lock: {:?}", lock_path);
-
-        trace!("Calling unlock() on file: {:?}", lock_path);
-        match lock_file.unlock() {
-            Ok(()) => {
-                debug!("Successfully released lock: {:?}", lock_path);
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to release lock {:?}: {:?}", lock_path, e);
-                Err(SharedMemoryBufferNewError::UnableToLockSharedMemory {
-                    read_lock_path: lock_path.into(),
-                })
-            }
-        }
+        })
     }
 
     fn reader_lock_path(name: impl AsRef<str>) -> PathBuf {
