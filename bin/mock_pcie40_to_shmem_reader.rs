@@ -1,6 +1,5 @@
 use pcie40_rs::multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder};
 use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use pcie40_rs::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
 use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use pcie40_rs::typed_circular_buffer::CircularBufferWritable;
 use std::env;

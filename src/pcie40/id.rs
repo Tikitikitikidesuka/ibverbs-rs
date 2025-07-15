@@ -2,7 +2,7 @@ use crate::pcie40::bindings::*;
 use std::ffi::CString;
 use std::ptr::null;
 use thiserror::Error;
-use tracing::{debug, info, instrument, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 
 pub struct PCIe40IdManager {}
 

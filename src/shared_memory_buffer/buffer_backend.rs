@@ -6,7 +6,6 @@ use log::debug;
 use nix::sys::stat::Mode;
 use std::path::PathBuf;
 use thiserror::Error;
-use tracing::field::debug;
 use tracing::{instrument, warn};
 
 const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
@@ -142,7 +141,7 @@ impl SharedMemoryBuffer {
         debug!("Checking if shared memory already exists (in case of unclean shutdown)");
         if SharedMemory::exists(name) {
             debug!("Previous shared memory exists, deleting it");
-            SharedMemory::delete(name).map_err(|error| {
+            SharedMemory::delete(name).map_err(|_error| {
                 warn!("Failed to delete previous shared memory");
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
                     shared_memory_path: name.into(),
@@ -385,7 +384,7 @@ impl SharedMemoryBuffer {
         let name = name.as_ref();
 
         debug!("Opening shared memory");
-        let shared_memory = SharedMemory::open(name).map_err(|e| {
+        let shared_memory = SharedMemory::open(name).map_err(|_error| {
             warn!("Failed to open shared memory");
             SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
                 shared_memory_path: name.into(),
@@ -393,10 +392,10 @@ impl SharedMemoryBuffer {
         })?;
 
         debug!("Mapping shared memory");
-        let mapped = shared_memory.map().map_err(|e| {
+        let mapped = shared_memory.map().map_err(|_error| {
             warn!("Failed to map shared memory");
             SharedMemoryBufferNewError::UnableToMapSharedMemory {
-                shared_memory_path: name.clone().into(),
+                shared_memory_path: name.into(),
             }
         })?;
 
@@ -427,18 +426,18 @@ impl SharedMemoryBuffer {
 
         debug!("Creating shared memory");
         let shared_memory =
-            SharedMemory::create(&name, total_size, PERMISSION_MODE).map_err(|e| {
+            SharedMemory::create(&name, total_size, PERMISSION_MODE).map_err(|_error| {
                 warn!("Failed to create shared memory");
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
-                    shared_memory_path: name.clone().into(),
+                    shared_memory_path: name.into(),
                 }
             })?;
 
         debug!("Mapping shared memory");
-        let mapped = shared_memory.map().map_err(|e| {
+        let mapped = shared_memory.map().map_err(|_error| {
             warn!("Failed to map shared memory");
             SharedMemoryBufferNewError::UnableToMapSharedMemory {
-                shared_memory_path: name.clone().into(),
+                shared_memory_path: name.into(),
             }
         })?;
 

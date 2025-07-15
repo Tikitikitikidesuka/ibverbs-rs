@@ -1,8 +1,6 @@
 use libc::off_t;
-use nix::sys::stat::{Mode, umask};
+use nix::sys::stat::Mode;
 use std::ffi::{CString, c_uint};
-use std::mem::forget;
-use std::ops::Not;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
