@@ -2,7 +2,6 @@ use crate::circular_buffer::CircularBufferReader;
 use crate::shared_memory_buffer::buffer_backend::SharedMemoryReadBuffer;
 use crate::shared_memory_buffer::buffer_status::PtrStatus;
 use crate::utils;
-use log::error;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
