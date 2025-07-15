@@ -13,7 +13,6 @@ fn main() {
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
-        .with_env_filter("pcie40_rs::shared_memory_buffer::writable_buffer_element")
         .init();
 
     // -------------------------- //

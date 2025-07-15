@@ -17,6 +17,10 @@ use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+    
     let args: Vec<String> = env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <device_name> <shmem_name>", args[0]);
@@ -138,6 +142,7 @@ fn shmem_write_mfps(
                         println!("Temporary error writing MFP: {:?}, retrying...", error);
                         std::thread::sleep(poll_interval);
                     }
+                    _ => {}
                 },
             }
         }

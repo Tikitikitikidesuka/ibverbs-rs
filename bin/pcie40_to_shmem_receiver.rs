@@ -8,6 +8,10 @@ use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
     // -------------------------- //
     // Shared Memory Buffer Setup //
     // -------------------------- //
