@@ -118,34 +118,34 @@ impl SharedMemoryBuffer {
         size = size,
         alignment_pow2 = alignment_pow2
     ))]
-    pub fn new_write_buffer<T: Into<String>>(
+    pub fn new_write_buffer<T: AsRef<str>>(
         name: T,
         size: usize,
         alignment_pow2: u8,
     ) -> Result<SharedMemoryWriteBuffer, SharedMemoryBufferNewError> {
-        let name = name.into();
+        let name = name.as_ref();
 
         debug!("Creating write buffer for shared memory");
 
         debug!("Locking writer");
-        let writer_lock = Self::try_lock_writer(&name).map_err(|error| {
+        let writer_lock = Self::try_lock_writer(name).map_err(|error| {
             warn!("Failed to lock the writer");
             error
         })?;
 
         debug!("Locking reader (until buffer is initialized)");
-        let reader_lock = Self::try_lock_reader(&name).map_err(|error| {
+        let reader_lock = Self::try_lock_reader(name).map_err(|error| {
             warn!("Failed to lock the reader");
             error
         })?;
 
         debug!("Checking if shared memory already exists (in case of unclean shutdown)");
-        if SharedMemory::exists(&name) {
+        if SharedMemory::exists(name) {
             debug!("Previous shared memory exists, deleting it");
-            SharedMemory::delete(&name).map_err(|error| {
+            SharedMemory::delete(name).map_err(|error| {
                 warn!("Failed to delete previous shared memory");
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
-                    shared_memory_path: name.clone().into(),
+                    shared_memory_path: name.into()
                 }
             })?;
         } else {
@@ -193,7 +193,7 @@ impl SharedMemoryBuffer {
 }
 
 impl Drop for SharedMemoryWriteBuffer {
-    #[instrument(skip_all, fields(name = ?self.name))]
+    #[instrument(skip_all, fields(name = ?self.name()))]
     fn drop(&mut self) {
         // Unlink the shared memory - this removes it from the filesystem
         // Existing mappings remain valid until unmapped
@@ -410,11 +410,11 @@ impl SharedMemoryBuffer {
         alignment_pow2 = alignment_pow2
     ))]
     fn create_mapped_shared_memory(
-        name: impl Into<String>,
+        name: impl AsRef<str>,
         size: usize,
         alignment_pow2: u8,
     ) -> Result<MappedSharedMemory, SharedMemoryBufferNewError> {
-        let name = name.into();
+        let name = name.as_ref();
 
         debug!("Creating shared memory");
 
