@@ -70,7 +70,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
             return Err(SharedMemoryBufferAdvanceError::OutOfBounds);
         }
 
-        debug!("All necessary checks passed for read pointer advance passed! Updating read pointer");
+        debug!("All necessary checks for read pointer advance passed! Updating read pointer");
         self.read_status = self.read_status.plus(bytes, self.buffer.size());
         self.buffer.set_read_status(self.read_status);
 

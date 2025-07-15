@@ -1,7 +1,7 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::id::PCIe40IdManager;
-use log::{debug, error, info, trace};
 use thiserror::Error;
+use tracing::{debug, error, info, instrument, trace, warn};
 
 pub struct PCIe40ControllerManager {}
 
@@ -24,6 +24,7 @@ pub enum PCIe40ControllerManagerError {
 }
 
 impl PCIe40ControllerManager {
+    #[instrument]
     pub fn controller_exists(device_id: i32) -> Result<bool, PCIe40ControllerManagerError> {
         debug!("Checking if controller with ID {} exists", device_id);
 
@@ -33,7 +34,7 @@ impl PCIe40ControllerManager {
 
         match c_result.cmp(&0) {
             std::cmp::Ordering::Less => {
-                error!(
+                warn!(
                     "Driver read error while checking if controller with ID {} exists",
                     device_id
                 );
@@ -50,17 +51,18 @@ impl PCIe40ControllerManager {
         }
     }
 
+    #[instrument]
     pub fn open_by_device_name(
         device_name: &str,
     ) -> Result<PCIe40Controller, PCIe40ControllerManagerError> {
-        info!("Opening controller by device name '{}'", device_name);
+        debug!("Opening controller by device name '{}'", device_name);
 
         trace!(
             "Calling PCIe40IdManager::find_id_by_name(\"{}\")",
             device_name
         );
         let device_id = PCIe40IdManager::find_id_by_name(device_name).map_err(|_| {
-            error!("Device with name '{}' not found", device_name);
+            warn!("Device with name '{}' not found", device_name);
             PCIe40ControllerManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
             }
@@ -70,17 +72,18 @@ impl PCIe40ControllerManager {
         Self::open_by_device_id(device_id)
     }
 
+    #[instrument]
     pub fn open_by_device_id(
         device_id: i32,
     ) -> Result<PCIe40Controller, PCIe40ControllerManagerError> {
-        info!("Opening controller for device with ID {}", device_id);
+        debug!("Opening controller for device with ID {}", device_id);
 
         trace!("Calling p40_ctrl_open({})", device_id);
         let ctrl_fd = unsafe { p40_ctrl_open(device_id) };
         trace!("p40_ctrl_open returned {}", ctrl_fd);
 
         if ctrl_fd < 0 {
-            error!("Failed to open controller for device with ID {}", device_id);
+            warn!("Failed to open controller for device with ID {}", device_id);
             Err(PCIe40ControllerManagerError::DeviceNotFoundById { device_id })?;
         }
 
@@ -125,6 +128,7 @@ pub enum PCIe40ControllerError {
 }
 
 impl Drop for PCIe40Controller {
+    #[instrument(skip_all, fields(device_id = self.device_id))]
     fn drop(&mut self) {
         trace!(
             "Drop called on PCIe40Controller for device {}",
@@ -135,6 +139,7 @@ impl Drop for PCIe40Controller {
 }
 
 impl PCIe40Controller {
+    #[instrument(skip_all, fields(device_id = self.device_id))]
     pub fn meta_alignment(&self) -> Result<usize, PCIe40ControllerError> {
         debug!("Getting meta alignment for device {}", self.device_id);
 
@@ -143,7 +148,7 @@ impl PCIe40Controller {
         trace!("p40_ctrl_get_meta_alignment returned {}", c_result);
 
         if c_result < 0 {
-            error!("Failed to get meta alignment for device {}", self.device_id);
+            warn!("Failed to get meta alignment for device {}", self.device_id);
             return Err(PCIe40ControllerError::DeviceReadError {
                 device_id: self.device_id,
             });

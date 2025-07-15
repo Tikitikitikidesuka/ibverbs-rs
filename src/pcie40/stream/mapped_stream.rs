@@ -81,6 +81,10 @@ impl PCIe40MappedStream<'_> {
         self.buffer.len()
     }
 
+    pub fn device_id(&self) -> i32 {
+        self.locked_stream.stream.device_id
+    }
+
     /// Gets the read offset from the card
     pub fn get_read_offset(&self) -> Result<usize, PCIe40StreamError> {
         let offset =
