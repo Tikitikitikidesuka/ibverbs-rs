@@ -1,23 +1,29 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::stream::mapped_stream::PCIe40MappedStream;
 use crate::pcie40::stream::stream::{PCIe40Stream, PCIe40StreamError};
-use log::{debug, error, info, trace};
 use std::mem::ManuallyDrop;
 use std::slice;
+use tracing::field::debug;
+use tracing::instrument;
+use tracing::{debug, trace, warn};
 
 pub struct PCIe40LockedStream {
     pub(super) stream: ManuallyDrop<PCIe40Stream>,
 }
 
 impl Drop for PCIe40LockedStream {
+    #[instrument(skip_all, fields(
+        device_id = self.stream.device_id(),
+        stream_type = ?self.stream.stream_type()
+    ))]
     fn drop(&mut self) {
-        trace!(
+        debug!(
             "Drop called on PCIe40LockedStream for device {} stream {}",
             self.stream.device_id(),
             self.stream.stream_type()
         );
         if let Err(e) = self.ref_unlock() {
-            error!("Failed to unlock stream during Drop: {}", e);
+            warn!("Failed to unlock stream during Drop: {}", e);
         }
         unsafe {
             ManuallyDrop::drop(&mut self.stream);
@@ -32,12 +38,21 @@ impl PCIe40LockedStream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.stream.device_id(),
+        stream_type = ?self.stream.stream_type()
+    ))]
     pub fn unlock(mut self) -> Result<PCIe40Stream, PCIe40StreamError> {
+        debug!(
+            "Unlocking stream {} on device {}",
+            self.stream.stream_type(),
+            self.stream.device_id()
+        );
         self.ref_unlock()?;
 
-        // Take ownership of the stream avoiding Drop impl restriction
+        debug!("Taking ownership of stream to manually drop");
         let stream = unsafe { ManuallyDrop::into_inner(std::ptr::read(&self.stream)) };
-        // Forget self to prevent Drop from running
+        debug!("Forgetting self to prevent Drop from running");
         std::mem::forget(self);
 
         Ok(stream)
@@ -56,7 +71,7 @@ impl PCIe40LockedStream {
 
         match c_result.cmp(&0) {
             std::cmp::Ordering::Equal => {
-                info!(
+                debug!(
                     "Successfully unlocked stream {} on device {}",
                     self.stream.stream_type(),
                     self.stream.device_id()
@@ -64,7 +79,7 @@ impl PCIe40LockedStream {
                 Ok(())
             }
             std::cmp::Ordering::Greater => {
-                error!(
+                debug!(
                     "Failed to unlock stream {} on device {} (locked by process {})",
                     self.stream.stream_type(),
                     self.stream.device_id(),
@@ -79,7 +94,7 @@ impl PCIe40LockedStream {
                 })
             }
             std::cmp::Ordering::Less => {
-                error!(
+                debug!(
                     "Error writing unlock for stream {} on device {}",
                     self.stream.stream_type(),
                     self.stream.device_id()
@@ -93,32 +108,53 @@ impl PCIe40LockedStream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.stream.device_id(),
+        stream_type = ?self.stream.stream_type()
+    ))]
     pub fn reset_flush(&mut self) -> Result<(), PCIe40StreamError> {
+        debug!("Flushing stream's memory");
+
+        trace!("Calling p40_stream_reset_flush({})", self.stream.stream_fd);
         let result = unsafe { p40_stream_reset_flush(self.stream.stream_fd) };
         if result != 0 {
+            warn!("Failed to flush stream: {}", result);
             Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.stream.device_id,
                 stream_type: self.stream.stream_type,
                 info: "Could not flush stream".to_string(),
             })
         } else {
+            debug!("Successfully flushed stream");
             Ok(())
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.stream.device_id(),
+        stream_type = ?self.stream.stream_type()
+    ))]
     pub fn reset_logic(&mut self) -> Result<(), PCIe40StreamError> {
+        debug!("Resetting logic on stream");
+        trace!("Calling p40_stream_reset_logic({})", self.stream.stream_fd);
         let result = unsafe { p40_stream_reset_logic(self.stream.stream_fd) };
         if result != 0 {
+            warn!("Failed to reset logic on stream: {}", result);
             Err(PCIe40StreamError::StreamWriteError {
                 device_id: self.stream.device_id,
                 stream_type: self.stream.stream_type,
                 info: "Could not reset logic on stream".to_string(),
             })
         } else {
+            debug!("Successfully reset logic on stream");
             Ok(())
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.stream.device_id(),
+        stream_type = ?self.stream.stream_type()
+    ))]
     pub fn map_buffer<'a>(self) -> Result<PCIe40MappedStream<'a>, PCIe40StreamError> {
         debug!(
             "Mapping buffer for stream {} on device {}",
@@ -131,7 +167,7 @@ impl PCIe40LockedStream {
         trace!("p40_stream_map returned {:p}", buff_ptr);
 
         if buff_ptr.is_null() {
-            error!(
+            warn!(
                 "Failed to map buffer for stream {} on device {}: null pointer",
                 self.stream.stream_type(),
                 self.stream.device_id()
@@ -151,7 +187,7 @@ impl PCIe40LockedStream {
         trace!("p40_stream_get_host_buf_bytes returned {}", buff_size);
 
         if buff_size <= 0 {
-            error!(
+            warn!(
                 "Failed to map buffer for stream {} on device {}: invalid buffer size {}",
                 self.stream.stream_type(),
                 self.stream.device_id(),

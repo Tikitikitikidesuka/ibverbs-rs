@@ -1,10 +1,10 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::id::PCIe40IdManager;
 use crate::pcie40::stream::locked_stream::PCIe40LockedStream;
-use log::{debug, error, info, trace};
 use std::fmt::{Display, Formatter};
 use std::ptr;
 use thiserror::Error;
+use tracing::{debug, instrument, trace, warn};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PCIe40DAQStreamType {
@@ -81,6 +81,7 @@ pub enum PCIe40StreamManagerError {
 }
 
 impl PCIe40StreamManager {
+    #[instrument]
     pub fn stream_exists(
         device_id: i32,
         stream_type: PCIe40DAQStreamType,
@@ -99,7 +100,7 @@ impl PCIe40StreamManager {
 
         match c_result.cmp(&0) {
             std::cmp::Ordering::Less => {
-                error!(
+                warn!(
                     "Driver read error while checking if stream {} exists for device {}",
                     stream_type, device_id
                 );
@@ -119,18 +120,19 @@ impl PCIe40StreamManager {
         }
     }
 
+    #[instrument]
     pub fn open_by_device_name(
         device_name: &str,
         stream_type: PCIe40DAQStreamType,
         stream_format: PCIe40DAQStreamFormat,
     ) -> Result<PCIe40Stream, PCIe40StreamManagerError> {
-        info!(
+        debug!(
             "Opening stream {} with format {} by device name '{}'",
             stream_type, stream_format, device_name
         );
 
         let device_id = PCIe40IdManager::find_id_by_name(device_name).map_err(|_| {
-            error!("Device with name '{}' not found", device_name);
+            warn!("Device with name '{}' not found", device_name);
             PCIe40StreamManagerError::DeviceNotFoundByName {
                 device_name: device_name.into(),
             }
@@ -139,18 +141,19 @@ impl PCIe40StreamManager {
         Self::open_by_device_id(device_id, stream_type, stream_format)
     }
 
+    #[instrument]
     pub fn open_by_device_id(
         device_id: i32,
         stream_type: PCIe40DAQStreamType,
         stream_format: PCIe40DAQStreamFormat,
     ) -> Result<PCIe40Stream, PCIe40StreamManagerError> {
-        info!(
+        debug!(
             "Opening stream {} with format {} by device ID {}",
             stream_type, stream_format, device_id
         );
 
         if !Self::stream_exists(device_id, stream_type)? {
-            error!("Device with id {} not found", device_id);
+            warn!("Device with id {} not found", device_id);
             return Err(PCIe40StreamManagerError::DeviceNotFoundById { device_id });
         }
 
@@ -159,7 +162,7 @@ impl PCIe40StreamManager {
         trace!("p40_stream_open returned {}", stream_fd);
 
         if stream_fd < 0 {
-            error!(
+            warn!(
                 "Failed to open stream {} for device {}",
                 stream_type, device_id
             );
@@ -182,7 +185,7 @@ impl PCIe40StreamManager {
         );
 
         if meta_stream_fd < 0 {
-            error!(
+            warn!(
                 "Failed to open meta stream {} for device {}",
                 stream_type, device_id
             );
@@ -200,7 +203,8 @@ impl PCIe40StreamManager {
             stream_type,
             stream_format,
         );
-        info!(
+
+        debug!(
             "Successfully opened stream {} for device {}",
             stream_type, device_id
         );
@@ -275,8 +279,12 @@ enum PCIe40StreamHandleEnableStateActionOnClose {
 }
 
 impl Drop for PCIe40Stream {
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type
+    ))]
     fn drop(&mut self) {
-        trace!(
+        debug!(
             "Drop called on PCIe40Stream for device {} stream {}",
             self.device_id, self.stream_type
         );
@@ -286,6 +294,7 @@ impl Drop for PCIe40Stream {
 }
 
 impl PCIe40Stream {
+    #[instrument]
     fn new(
         device_id: i32,
         stream_fd: i32,
@@ -320,8 +329,12 @@ impl PCIe40Stream {
         self.stream_format
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type
+    ))]
     pub fn enabled(&self) -> Result<bool, PCIe40StreamError> {
-        trace!(
+        debug!(
             "Checking if stream {} on device {} is enabled",
             self.stream_type, self.device_id
         );
@@ -331,7 +344,7 @@ impl PCIe40Stream {
         trace!("p40_stream_enabled returned {}", c_result);
 
         if c_result < 0 {
-            error!(
+            warn!(
                 "Unable to read enabled status for stream {} on device {}",
                 self.stream_type, self.device_id
             );
@@ -352,6 +365,11 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+        preserve_mode = ?preserve_mode
+    ))]
     pub fn set_raii_enable_state_close_mode(
         &mut self,
         preserve_mode: PCIe40StreamHandleEnableStateCloseMode,
@@ -382,8 +400,12 @@ impl PCIe40Stream {
         Ok(())
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+    ))]
     pub fn locking_process(&self) -> Result<Option<i32>, PCIe40StreamError> {
-        trace!(
+        debug!(
             "Checking locking process for stream {} on device {}",
             self.stream_type, self.device_id
         );
@@ -408,7 +430,7 @@ impl PCIe40Stream {
                 Ok(Some(c_result))
             }
             std::cmp::Ordering::Less => {
-                error!(
+                warn!(
                     "Unable to read locking process for stream {} on device {}",
                     self.stream_type, self.device_id
                 );
@@ -421,6 +443,10 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+    ))]
     pub fn lock(mut self) -> Result<PCIe40LockedStream, PCIe40StreamError> {
         debug!(
             "Attempting to lock stream {} on device {}",
@@ -445,14 +471,14 @@ impl PCIe40Stream {
 
         match c_result.cmp(&0) {
             std::cmp::Ordering::Equal => {
-                info!(
+                debug!(
                     "Successfully locked stream {} on device {}",
                     self.stream_type, self.device_id
                 );
                 Ok(PCIe40LockedStream::new(self))
             }
             std::cmp::Ordering::Greater => {
-                error!(
+                warn!(
                     "Failed to lock stream {} on device {} (already locked by process {})",
                     self.stream_type, self.device_id, c_result
                 );
@@ -463,7 +489,7 @@ impl PCIe40Stream {
                 })
             }
             std::cmp::Ordering::Less => {
-                error!(
+                warn!(
                     "Error writing lock for stream {} on device {}",
                     self.stream_type, self.device_id
                 );
@@ -476,6 +502,11 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+        enabled = enabled,
+    ))]
     fn set_meta_enabled_state(&mut self, enabled: bool) -> Result<(), PCIe40StreamError> {
         debug!(
             "{} meta sub-stream for stream {} on device {}",
@@ -515,7 +546,7 @@ impl PCIe40Stream {
         };
 
         if c_result != 0 {
-            error!(
+            warn!(
                 "Failed to {} meta bits for stream {} on device {}",
                 if enabled { "enable" } else { "disable" },
                 self.stream_type,
@@ -537,6 +568,10 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+    ))]
     fn enable(&mut self) -> Result<(), PCIe40StreamError> {
         debug!(
             "Enabling stream {} on device {}",
@@ -554,13 +589,13 @@ impl PCIe40Stream {
             trace!("p40_stream_enable returned {}", c_result);
 
             if c_result == 0 {
-                info!(
+                debug!(
                     "Successfully enabled stream {} on device {}",
                     self.stream_type, self.device_id
                 );
                 Ok(())
             } else {
-                error!(
+                warn!(
                     "Failed to enable stream {} on device {}",
                     self.stream_type, self.device_id
                 );
@@ -573,6 +608,10 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+    ))]
     fn disable(&mut self) -> Result<(), PCIe40StreamError> {
         debug!(
             "Disabling stream {} on device {}",
@@ -590,7 +629,7 @@ impl PCIe40Stream {
             trace!("p40_stream_disable returned {}", c_result);
 
             if c_result != 0 {
-                error!(
+                warn!(
                     "Failed to disable stream {} on device {}",
                     self.stream_type, self.device_id
                 );
@@ -600,7 +639,7 @@ impl PCIe40Stream {
                     info: "Failed to disable stream".to_string(),
                 })
             } else {
-                info!(
+                debug!(
                     "Successfully disabled stream {} on device {}",
                     self.stream_type, self.device_id
                 );
@@ -609,6 +648,10 @@ impl PCIe40Stream {
         }
     }
 
+    #[instrument(skip_all, fields(
+        device_id = self.device_id,
+        stream_type = ?self.stream_type,
+    ))]
     fn run_raii_enable_state_action(&mut self) {
         match self.enable_state_action_on_close {
             PCIe40StreamHandleEnableStateActionOnClose::DisableOnClose => {
@@ -617,7 +660,7 @@ impl PCIe40Stream {
                     self.stream_type, self.device_id
                 );
                 if let Err(e) = self.disable() {
-                    error!("Failed to disable stream during Drop: {}", e);
+                    warn!("Failed to disable stream during Drop: {}", e);
                 }
             }
             PCIe40StreamHandleEnableStateActionOnClose::EnableOnClose => {
@@ -634,7 +677,7 @@ impl PCIe40Stream {
                         self.stream_type, self.device_id
                     );
                     if let Err(e) = self.disable() {
-                        error!("Failed to disable stream during Drop: {}", e);
+                        warn!("Failed to disable stream during Drop: {}", e);
                     }
                 } else {
                     debug!(
