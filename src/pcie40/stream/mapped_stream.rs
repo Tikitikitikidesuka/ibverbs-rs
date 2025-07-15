@@ -1,8 +1,9 @@
 use crate::pcie40::bindings::*;
 use crate::pcie40::stream::locked_stream::PCIe40LockedStream;
 use crate::pcie40::stream::stream::PCIe40StreamError;
-use log::{debug, trace};
 use std::mem::ManuallyDrop;
+use tracing::field::debug;
+use tracing::{debug, instrument, trace, warn};
 
 pub struct PCIe40MappedStream<'a> {
     locked_stream: ManuallyDrop<PCIe40LockedStream>,
@@ -11,7 +12,7 @@ pub struct PCIe40MappedStream<'a> {
 
 impl Drop for PCIe40MappedStream<'_> {
     fn drop(&mut self) {
-        trace!(
+        debug!(
             "Drop called on PCIe40MappedBuffer for device {} stream {}",
             self.locked_stream.stream.device_id, self.locked_stream.stream.stream_type
         );
@@ -86,11 +87,17 @@ impl PCIe40MappedStream<'_> {
     }
 
     /// Gets the read offset from the card
+    #[instrument(skip_all, fields(
+        device_id = self.device_id(),
+        stream_type = ?self.locked_stream.stream.stream_type
+    ))]
     pub fn get_read_offset(&self) -> Result<usize, PCIe40StreamError> {
+        debug!("Getting read offset");
         let offset =
             unsafe { p40_stream_get_host_buf_read_off(self.locked_stream.stream.stream_fd) };
 
         if offset < 0 {
+            warn!("Unable to get buffer read offset");
             return Err(PCIe40StreamError::StreamReadError {
                 device_id: self.locked_stream.stream.device_id,
                 stream_type: self.locked_stream.stream.stream_type,
@@ -98,15 +105,22 @@ impl PCIe40MappedStream<'_> {
             });
         }
 
+        debug!("Read offset: {}", offset);
         Ok(offset as usize)
     }
 
     /// Gets the write offset from the card
+    #[instrument(skip_all, fields(
+        device_id = self.device_id(),
+        stream_type = ?self.locked_stream.stream.stream_type
+    ))]
     pub fn get_write_offset(&self) -> Result<usize, PCIe40StreamError> {
+        debug!("Getting write offset");
         let offset =
             unsafe { p40_stream_get_host_buf_write_off(self.locked_stream.stream.stream_fd) };
 
         if offset < 0 {
+            warn!("Unable to get buffer write offset");
             return Err(PCIe40StreamError::StreamReadError {
                 device_id: self.locked_stream.stream.device_id,
                 stream_type: self.locked_stream.stream.stream_type,
@@ -114,17 +128,27 @@ impl PCIe40MappedStream<'_> {
             });
         }
 
+        debug!("Write offset: {}", offset);
         Ok(offset as usize)
     }
 
     /// Moves the read offset by exactly `offset` bytes. Otherwise, it returns a stream error.
+    #[instrument(skip_all, fields(
+        device_id = self.device_id(),
+        stream_type = ?self.locked_stream.stream.stream_type,
+        offset = offset
+    ))]
     pub fn move_read_offset(&mut self, offset: usize) -> Result<(), PCIe40StreamError> {
+        debug!("Moving read offset by {} bytes", offset);
+
         // Get read region size
         let available =
             unsafe { p40_stream_get_host_buf_bytes_used(self.locked_stream.stream.stream_fd) };
 
         // Check enough available bytes
+        debug!("Available bytes: {}", available);
         if available < 0 || (available as usize) < offset {
+            warn!("Not enough available bytes to move read offset");
             return Err(PCIe40StreamError::StreamReadError {
                 device_id: self.locked_stream.stream.device_id,
                 stream_type: self.locked_stream.stream.stream_type,
@@ -134,7 +158,7 @@ impl PCIe40MappedStream<'_> {
             });
         }
 
-        // If enough available data, move read offset on the card
+        debug!("Enough bytes available, moving read offset");
         unsafe { p40_stream_free_host_buf_bytes(self.locked_stream.stream.stream_fd, offset) };
 
         Ok(())
