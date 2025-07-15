@@ -1,10 +1,10 @@
-use std::any::type_name;
 use crate::circular_buffer::CircularBufferReader;
 use crate::shared_memory_buffer::buffer_element::ReadableSharedMemoryBufferElement;
 use crate::shared_memory_buffer::reader::SharedMemoryBufferReader;
 use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
 use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
 use crate::utils;
+use std::any::type_name;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 

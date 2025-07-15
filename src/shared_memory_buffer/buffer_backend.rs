@@ -145,7 +145,7 @@ impl SharedMemoryBuffer {
             SharedMemory::delete(name).map_err(|error| {
                 warn!("Failed to delete previous shared memory");
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
-                    shared_memory_path: name.into()
+                    shared_memory_path: name.into(),
                 }
             })?;
         } else {

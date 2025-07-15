@@ -1,11 +1,11 @@
-use std::any::type_name;
-use std::fmt::Debug;
 use crate::circular_buffer::CircularBufferWriter;
 use crate::shared_memory_buffer::buffer_element::WritableSharedMemoryBufferElement;
 use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
 use crate::shared_memory_buffer::writer::SharedMemoryBufferWriter;
 use crate::typed_circular_buffer::CircularBufferWritable;
 use crate::utils;
+use std::any::type_name;
+use std::fmt::Debug;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
@@ -59,10 +59,12 @@ impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBu
         })?;
 
         debug!("Advancing the write pointer to commit the write");
-        writer.advance_write_pointer(advance_size).map_err(|error| {
-            warn!("Unable to advance the write pointer. The write has not been committed");
-            error
-        })?;
+        writer
+            .advance_write_pointer(advance_size)
+            .map_err(|error| {
+                warn!("Unable to advance the write pointer. The write has not been committed");
+                error
+            })?;
 
         debug!("Wrote the element to the buffer successfully");
 

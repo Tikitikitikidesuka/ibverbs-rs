@@ -54,11 +54,15 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
         let (primary_region, secondary_region) = self.writable_region();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
-            warn!("Aborting write pointer advance due to insufficient buffer writable region space");
+            warn!(
+                "Aborting write pointer advance due to insufficient buffer writable region space"
+            );
             return Err(SharedMemoryBufferAdvanceError::OutOfBounds);
         }
 
-        debug!("All necessary checks passed for write pointer advance passed! Updating write pointer");
+        debug!(
+            "All necessary checks passed for write pointer advance passed! Updating write pointer"
+        );
         self.write_status = self.write_status.plus(bytes, self.buffer.size());
         self.buffer.set_write_status(self.write_status);
 
