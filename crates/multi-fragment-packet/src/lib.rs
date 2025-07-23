@@ -1,13 +1,13 @@
 mod builder;
-#[cfg(feature = "pcie40")]
+#[cfg(feature = "pcie40-readable")]
 pub mod pcie40_readable;
 
-#[cfg(feature = "shared-memory")]
+#[cfg(feature = "shmem-element")]
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
 
-use crate::utils;
+use alignment_utils;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
 use std::ops::Deref;
@@ -274,13 +274,13 @@ impl MultiFragmentPacketRef {
 
     unsafe fn fragment_size_ptr(&self) -> *const u16 {
         let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
-        let aligned_fragment_types_size = utils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = alignment_utils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16 }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
-        let aligned_fragment_sizes_size = utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = alignment_utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
 }
@@ -301,7 +301,7 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
-        self.offset += utils::align_up_pow2(fragment_size as usize, self.packet.align());
+        self.offset += alignment_utils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
         Some(FragmentRef {
@@ -401,7 +401,7 @@ mod tests {
             vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Fragment 4
             vec![0, 0, 0, 0],                           // Padding to 2^3
         ]
-        .concat()
+            .concat()
     }
 
     #[test]

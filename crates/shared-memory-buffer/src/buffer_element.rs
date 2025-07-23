@@ -5,8 +5,8 @@
 //! required for proper buffer management and ensures compatibility between producers
 //! and consumers.
 
-use crate::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
-use crate::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
+use crate::readable_buffer_element::SharedMemoryTypedReadError;
+use crate::writable_buffer_element::SharedMemoryTypedWriteError;
 
 /// A trait for elements that can be stored in the shared memory ring buffer.
 ///

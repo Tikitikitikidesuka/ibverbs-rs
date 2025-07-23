@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "alignment_utils"
+name = "alignment-utils"
 version = "0.1.0"
 
 [[package]]
@@ -61,6 +61,10 @@ name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+
+[[package]]
+name = "circular-buffer"
+version = "0.1.0"
 
 [[package]]
 name = "clang-sys"
@@ -144,6 +148,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "multi-fragment-packet"
+version = "0.1.0"
+dependencies = [
+ "alignment-utils",
+ "circular-buffer",
+ "pcie40",
+ "thiserror",
+]
+
+[[package]]
 name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -191,7 +205,9 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 name = "pcie40"
 version = "0.1.0"
 dependencies = [
+ "alignment-utils",
  "bindgen",
+ "circular-buffer",
  "thiserror",
  "tracing",
 ]
@@ -200,9 +216,11 @@ dependencies = [
 name = "pcie40-rs"
 version = "0.1.0"
 dependencies = [
- "libc",
- "log",
- "nix",
+ "alignment-utils",
+ "circular-buffer",
+ "multi-fragment-packet",
+ "pcie40",
+ "shared-memory-buffer",
  "thiserror",
  "tracing",
  "tracing-subscriber",
@@ -299,6 +317,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared-memory-buffer"
+version = "0.1.0"
+dependencies = [
+ "alignment-utils",
+ "circular-buffer",
+ "libc",
+ "nix",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

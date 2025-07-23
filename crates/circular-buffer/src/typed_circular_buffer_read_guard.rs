@@ -1,5 +1,4 @@
 use crate::circular_buffer::CircularBufferReader;
-use std::ops::Deref;
 
 pub struct ReadGuard<'a, R: CircularBufferReader, T> {
     reader: &'a mut R,
@@ -21,7 +20,7 @@ impl<'a, R: CircularBufferReader, T> ReadGuard<'a, R, T> {
     }
 }
 
-impl<'a, R: CircularBufferReader, T> Deref for ReadGuard<'a, R, T> {
+impl<'a, R: CircularBufferReader, T> std::ops::Deref for ReadGuard<'a, R, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -49,7 +48,7 @@ impl<'a, R: CircularBufferReader, T> MultiReadGuard<'a, R, T> {
     }
 }
 
-impl<'a, R: CircularBufferReader, T> Deref for MultiReadGuard<'a, R, T> {
+impl<'a, R: CircularBufferReader, T> std::ops::Deref for MultiReadGuard<'a, R, T> {
     type Target = [&'a T];
 
     fn deref(&self) -> &Self::Target {

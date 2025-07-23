@@ -1,8 +1,6 @@
-use crate::multi_fragment_packet::{
-    Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef,
-};
-use crate::utils;
+use alignment_utils;
 use std::marker::PhantomData;
+use crate::{Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
 
 pub struct MagicDefault;
 pub struct MagicSet;
@@ -304,10 +302,10 @@ impl
     pub fn build(self) -> MultiFragmentPacket {
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = self.fragments.len();
-        let fragment_types_size = utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
-        let fragment_sizes_size = utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
+        let fragment_types_size = alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
+        let fragment_sizes_size = alignment_utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
         let fragments_size = self.fragments.iter().fold(0, |acc, fragment| {
-            acc + utils::align_up_pow2(fragment.fragment_size() as usize, self.align)
+            acc + alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align)
         });
         let packet_size = header_size + fragment_types_size + fragment_sizes_size + fragments_size;
 
@@ -364,7 +362,7 @@ impl
             write_bytes(&mut data, &mut cursor, fragment_data);
 
             // Skip padding (already zeroed)
-            let aligned_size = utils::align_up_pow2(fragment.fragment_size() as usize, self.align);
+            let aligned_size = alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align);
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
@@ -374,8 +372,8 @@ impl
 
 #[cfg(test)]
 mod tests {
+    use crate::FragmentRef;
     use super::*;
-    use crate::multi_fragment_packet::FragmentRef;
 
     fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
         MultiFragmentPacketBuilder::new()

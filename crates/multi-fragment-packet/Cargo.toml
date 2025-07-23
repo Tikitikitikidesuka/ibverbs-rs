@@ -1,14 +1,14 @@
 [package]
-name = "pcie40"
+name = "multi-fragment-packet"
 version = "0.1.0"
 edition = "2024"
-description = "Rust bindings for the PCIe40 drivers"
 
 [dependencies]
 thiserror = "2.0.12"
-tracing = "0.1.41"
+pcie40 = { path = "../pcie40", optional = true }
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }
 
-[build-dependencies]
-bindgen = { version = "0.72.0" }
+[features]
+pcie40-readable = ["dep:pcie40"]
+#shmem-element = ["dep:shared_memory_buffer"]

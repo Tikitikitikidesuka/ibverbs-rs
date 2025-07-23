@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/alignment_utils", "crates/pcie40"]
+members = ["crates/alignment-utils", "crates/circular-buffer", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
 
 [package]
 name = "pcie40-rs"
@@ -10,19 +10,18 @@ description = "Rust bindings for the PCIe40 drivers"
 
 [dependencies]
 thiserror = "2.0.12"
-libc = "0.2.170"
-nix = { version = "0.30.1", features = ["fs"] }
-log = "0.4.26"
+pcie40 = { path = "crates/pcie40" }
+alignment-utils = { path = "crates/alignment-utils" }
+circular-buffer = { path = "crates/circular-buffer" }
+shared-memory-buffer = { path = "crates/shared-memory-buffer" }
+multi-fragment-packet = { path = "crates/multi-fragment-packet" }
 # Setting feature "release_max_level_info" makes sure compiled release binaries
 # do not contain traces on levels higher than Info. Its important for performance.
 tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 
 [features]
-multi-fragment-packet = []
-shared-memory = []
 mock-buffers = []
-utils = []
 
 [profile.release]
 opt-level = 3
@@ -32,59 +31,47 @@ codegen-units = 1
 [[bin]]
 name = "pcie40_to_shmem_reader"
 path = "bin/pcie40_to_shmem_reader.rs"
-required-features = [
-    "pcie40",
-    "shared-memory",
-    "utils",
-    "multi-fragment-packet",
-]
 
 [[bin]]
 name = "pcie40_to_shmem_receiver"
 path = "bin/pcie40_to_shmem_receiver.rs"
-required-features = ["shared-memory", "utils", "multi-fragment-packet"]
 
 [[bin]]
 name = "mock_pcie40_to_shmem_reader"
 path = "bin/mock_pcie40_to_shmem_reader.rs"
-required-features = ["shared-memory", "utils", "multi-fragment-packet"]
 
 [[example]]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
-required-features = ["pcie40", "utils", "multi-fragment-packet"]
 
 [[example]]
 name = "continuous_mfp_pcie40_example"
 path = "examples/continuous_mfp_pcie40_example.rs"
-required-features = ["pcie40", "utils", "multi-fragment-packet"]
 
 [[example]]
 name = "shared_memory_example"
 path = "examples/shared_memory_example.rs"
-required-features = ["shared-memory", "utils"]
 
 [[example]]
 name = "mfp_shared_memory_example"
 path = "examples/mfp_shared_memory_example.rs"
-required-features = ["multi-fragment-packet", "shared-memory", "utils"]
 
 [[example]]
 name = "mock_aliased_example"
 path = "examples/mock_aliased_example.rs"
-required-features = ["mock-buffers", "utils"]
+required-features = ["mock-buffers"]
 
 [[example]]
 name = "mock_non_aliased_example"
 path = "examples/mock_non_aliased_example.rs"
-required-features = ["mock-buffers", "utils"]
+required-features = ["mock-buffers"]
 
 [[example]]
 name = "mock_typed_aliased_example"
 path = "examples/mock_typed_aliased_example.rs"
-required-features = ["mock-buffers", "utils"]
+required-features = ["mock-buffers"]
 
 [[example]]
 name = "mock_typed_non_aliased_example"
 path = "examples/mock_typed_non_aliased_example.rs"
-required-features = ["mock-buffers", "utils"]
+required-features = ["mock-buffers"]

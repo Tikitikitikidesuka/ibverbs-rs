@@ -1,13 +1,11 @@
-use crate::circular_buffer::CircularBufferWriter;
-use crate::shared_memory_buffer::buffer_element::WritableSharedMemoryBufferElement;
-use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
-use crate::shared_memory_buffer::writer::SharedMemoryBufferWriter;
-use crate::typed_circular_buffer::CircularBufferWritable;
-use crate::utils;
 use std::any::type_name;
 use std::fmt::Debug;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
+use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
+use crate::buffer_element::WritableSharedMemoryBufferElement;
+use crate::reader::SharedMemoryBufferAdvanceError;
+use crate::writer::SharedMemoryBufferWriter;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedWriteError {
@@ -27,7 +25,7 @@ impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBu
         debug!("Attempting to write element to the buffer");
 
         debug!("Calculating the aligned size and getting the buffer's writable region");
-        let aligned_size = utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
+        let aligned_size = alignment_utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
         let (primary_region, secondary_region) = writer.writable_region();
 
         debug!("Determining which region of the buffer's writable region to write to");

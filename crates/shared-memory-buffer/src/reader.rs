@@ -1,9 +1,8 @@
-use crate::circular_buffer::CircularBufferReader;
-use crate::shared_memory_buffer::buffer_backend::SharedMemoryReadBuffer;
-use crate::shared_memory_buffer::buffer_status::PtrStatus;
-use crate::utils;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
+use circular_buffer::CircularBufferReader;
+use crate::buffer_backend::SharedMemoryReadBuffer;
+use crate::buffer_status::PtrStatus;
 
 pub struct SharedMemoryBufferReader {
     buffer: SharedMemoryReadBuffer,
@@ -51,13 +50,13 @@ impl CircularBufferReader for SharedMemoryBufferReader {
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !utils::check_alignment_pow2(bytes, 1) {
+        if !alignment_utils::check_alignment_pow2(bytes, 1) {
             warn!("Aborting read pointer advance due to failed 2 byte alignment violation");
             return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
         }
 
         debug!("Checking buffer's alignment");
-        if !utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
+        if !alignment_utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
             warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(SharedMemoryBufferAdvanceError::NotAligned);
         }

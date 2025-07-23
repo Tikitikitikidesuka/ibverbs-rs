@@ -1,9 +1,8 @@
-use crate::circular_buffer::CircularBufferWriter;
-use crate::shared_memory_buffer::buffer_backend::SharedMemoryWriteBuffer;
-use crate::shared_memory_buffer::buffer_status::PtrStatus;
-use crate::shared_memory_buffer::reader::SharedMemoryBufferAdvanceError;
-use crate::utils;
 use tracing::{debug, instrument, warn};
+use circular_buffer::CircularBufferWriter;
+use crate::buffer_backend::SharedMemoryWriteBuffer;
+use crate::buffer_status::PtrStatus;
+use crate::reader::SharedMemoryBufferAdvanceError;
 
 pub struct SharedMemoryBufferWriter {
     buffer: SharedMemoryWriteBuffer,
@@ -39,13 +38,13 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
         debug!("Attempting to advance the buffer's write pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !utils::check_alignment_pow2(bytes, 1) {
+        if !alignment_utils::check_alignment_pow2(bytes, 1) {
             warn!("Aborting write pointer advance due to failed 2 byte alignment violation");
             return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
         }
 
         debug!("Checking buffer's alignment");
-        if !utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
+        if !alignment_utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
             warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(SharedMemoryBufferAdvanceError::NotAligned);
         }

@@ -1,12 +1,10 @@
-use crate::circular_buffer::CircularBufferReader;
-use crate::shared_memory_buffer::buffer_element::ReadableSharedMemoryBufferElement;
-use crate::shared_memory_buffer::reader::SharedMemoryBufferReader;
-use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
-use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
-use crate::utils;
 use std::any::type_name;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
+use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard, ReadGuard};
+use crate::buffer_element::{ReadableSharedMemoryBufferElement, SharedMemoryBufferElement};
+use crate::reader::SharedMemoryBufferReader;
+
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedReadError {
@@ -19,6 +17,8 @@ pub enum SharedMemoryTypedReadError {
     #[error("Data is corrupt for requested type")]
     CorruptData,
 }
+
+struct ReadableSharedMemoryBufferElementKeo<T>(T);
 
 /// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
 impl<T> CircularBufferReadable<SharedMemoryBufferReader> for T
@@ -62,7 +62,7 @@ where
         let element = unsafe { &*element_ptr };
 
         debug!("Verifying there is enough data to read this element and its alignment padding");
-        let aligned_size = utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
+        let aligned_size = alignment_utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
         if readable_region.len() < aligned_size {
             warn!("There is not enough data to read this element and its alignment padding");
             return Err(SharedMemoryTypedReadError::NotEnoughData);
@@ -156,7 +156,7 @@ where
 
             debug!("Verifying there is enough data to read this element and its alignment padding");
             let aligned_size =
-                utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
+                alignment_utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
             if current_region.len() < aligned_size + offset {
                 warn!("There is not enough data to read this element and its alignment padding");
                 return Err(SharedMemoryTypedReadError::NotEnoughData);
