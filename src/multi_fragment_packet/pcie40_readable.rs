@@ -1,10 +1,10 @@
 use crate::circular_buffer::CircularBufferReader;
 use crate::multi_fragment_packet::MultiFragmentPacketRef;
-use crate::pcie40::reader::PCIe40Reader;
 use crate::pcie40::stream::stream::PCIe40StreamError;
 use crate::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable};
 use crate::typed_circular_buffer_read_guard::{MultiReadGuard, ReadGuard};
 use crate::utils;
+use pcie40::reader::PCIe40Reader;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

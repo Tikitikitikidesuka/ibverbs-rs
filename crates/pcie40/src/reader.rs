@@ -1,9 +1,9 @@
 use crate::circular_buffer::CircularBufferReader;
-use crate::pcie40::stream::mapped_stream::PCIe40MappedStream;
-use crate::pcie40::stream::stream::PCIe40StreamError;
-use crate::utils;
+use crate::stream::mapped_stream::PCIe40MappedStream;
+use crate::stream::stream::PCIe40StreamError;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
+use utils;
 
 pub struct PCIe40Reader<'a> {
     mapped_buffer: PCIe40MappedStream<'a>,

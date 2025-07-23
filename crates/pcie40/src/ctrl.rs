@@ -1,5 +1,5 @@
-use crate::pcie40::bindings::*;
-use crate::pcie40::id::PCIe40IdManager;
+use crate::bindings::*;
+use crate::id::PCIe40IdManager;
 use thiserror::Error;
 use tracing::{debug, error, instrument, trace, warn};
 

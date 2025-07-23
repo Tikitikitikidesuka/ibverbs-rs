@@ -12,6 +12,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "alignment_utils"
+version = "0.1.0"
+
+[[package]]
 name = "bindgen"
 version = "0.72.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -184,10 +188,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
-name = "pcie40-rs"
+name = "pcie40"
 version = "0.1.0"
 dependencies = [
  "bindgen",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "pcie40-rs"
+version = "0.1.0"
+dependencies = [
  "libc",
  "log",
  "nix",

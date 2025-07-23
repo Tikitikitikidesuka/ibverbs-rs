@@ -1,6 +1,6 @@
-use crate::pcie40::bindings::*;
-use crate::pcie40::id::PCIe40IdManager;
-use crate::pcie40::stream::locked_stream::PCIe40LockedStream;
+use crate::bindings::*;
+use crate::id::PCIe40IdManager;
+use crate::stream::locked_stream::PCIe40LockedStream;
 use std::fmt::{Display, Formatter};
 use std::ptr;
 use thiserror::Error;

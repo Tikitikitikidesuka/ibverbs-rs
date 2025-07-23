@@ -1,0 +1,13 @@
+[package]
+name = "pcie40"
+version = "0.1.0"
+edition = "2024"
+description = "Rust bindings for the PCIe40 drivers"
+
+[dependencies]
+thiserror = "2.0.12"
+tracing = "0.1.41"
+utils = "0.1.0"
+
+[build-dependencies]
+bindgen = { version = "0.72.0", optional = true }

@@ -1,4 +1,4 @@
-use crate::pcie40::bindings::*;
+use crate::bindings::*;
 use std::ffi::CString;
 use std::ptr::null;
 use thiserror::Error;

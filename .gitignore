@@ -3,4 +3,4 @@
 .vscode
 /target
 deploy_config.local
-src/bindings.rs
+crates/pcie40/src/bindings.rs
