@@ -1,11 +1,6 @@
-use std::any::type_name;
 use std::fmt::Debug;
 use thiserror::Error;
-use tracing::{debug, instrument, warn};
-use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
-use crate::buffer_element::WritableSharedMemoryBufferElement;
 use crate::reader::SharedMemoryBufferAdvanceError;
-use crate::writer::SharedMemoryBufferWriter;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedWriteError {
@@ -16,7 +11,49 @@ pub enum SharedMemoryTypedWriteError {
     AdvanceWritePointerError(#[from] SharedMemoryBufferAdvanceError),
 }
 
-/// Blanket implementation for all tyeps that implement `SharedMemoryBufferElement`
+/// Macro to implement `CircularBufferWritable<SharedMemoryBufferWriter>` for types
+/// that implement `WritableSharedMemoryBufferElement`.
+///
+/// This macro generates the implementation that would violate orphan rules if done
+/// as a blanket implementation.
+#[macro_export]
+macro_rules! impl_circular_buffer_writable {
+    ($type:ty) => {
+        impl $crate::CircularBufferWritable<$crate::SharedMemoryBufferWriter> for $type {
+            type WriteResult = Result<(), $crate::SharedMemoryTypedWriteError>;
+
+            fn write(&self, writer: &mut $crate::SharedMemoryBufferWriter) -> Self::WriteResult {
+                let aligned_size = alignment_utils::align_up_pow2(
+                    self.length_in_bytes(),
+                    writer.alignment_pow2(),
+                );
+                let (primary_region, secondary_region) = writer.writable_region();
+
+                let (writable_region, advance_size) = if aligned_size <= primary_region.len() {
+                    (primary_region, aligned_size)
+                } else {
+                    Self::set_wrap_flag(primary_region)?;
+
+                    if aligned_size > secondary_region.len() {
+                        return Err($crate::SharedMemoryTypedWriteError::NotEnoughSpace);
+                    }
+
+                    (secondary_region, aligned_size + primary_region.len())
+                };
+
+                Self::write_to_buffer(self, writable_region)?;
+
+                writer.advance_write_pointer(advance_size)?;
+
+                Ok(())
+            }
+        }
+    };
+}
+
+// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
+// Violates orphan rules so a macro for the user to call is offered instead.
+/*
 impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBufferWriter> for T {
     type WriteResult = Result<(), SharedMemoryTypedWriteError>;
 
@@ -69,3 +106,4 @@ impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBu
         Ok(())
     }
 }
+*/

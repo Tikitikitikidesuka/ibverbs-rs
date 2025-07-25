@@ -120,12 +120,24 @@
 //! the first two bytes (magic field), ensuring it's always available to readers even
 //! during wraparound scenarios.
 
-pub mod buffer_backend;
-pub mod buffer_element;
+mod buffer_backend;
+mod buffer_element;
 mod buffer_status;
-pub mod file_lock;
-pub mod readable_buffer_element;
-pub mod reader;
-pub mod shared_memory;
-pub mod writable_buffer_element;
-pub mod writer;
+mod file_lock;
+mod readable_buffer_element;
+mod reader;
+mod shared_memory;
+mod writable_buffer_element;
+mod writer;
+
+pub use buffer_backend::{
+    SharedMemoryBuffer, SharedMemoryBufferNewError, SharedMemoryReadBuffer, SharedMemoryWriteBuffer,
+};
+pub use buffer_element::{
+    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, WritableSharedMemoryBufferElement,
+};
+pub use circular_buffer::*;
+pub use readable_buffer_element::SharedMemoryTypedReadError;
+pub use reader::{SharedMemoryBufferAdvanceError, SharedMemoryBufferReader};
+pub use writable_buffer_element::SharedMemoryTypedWriteError;
+pub use writer::SharedMemoryBufferWriter;

@@ -1,11 +1,17 @@
-use crate::multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketRef};
-use crate::shared_memory_buffer::buffer_element::{
-    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, WritableSharedMemoryBufferElement,
+use crate::{MultiFragmentPacket, MultiFragmentPacketRef};
+use circular_buffer::CircularBufferWritable;
+use circular_buffer::CircularBufferWriter;
+use shared_memory_buffer::{
+    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement,
+    SharedMemoryTypedReadError, SharedMemoryTypedWriteError, WritableSharedMemoryBufferElement,
+    impl_circular_buffer_readable, impl_circular_buffer_writable,
 };
-use crate::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
-use crate::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
 
 const WRAP_MAGIC: u16 = 0xBF31;
+
+impl_circular_buffer_writable!(MultiFragmentPacket);
+impl_circular_buffer_writable!(MultiFragmentPacketRef);
+impl_circular_buffer_readable!(MultiFragmentPacketRef);
 
 impl SharedMemoryBufferElement for MultiFragmentPacketRef {
     fn length_in_bytes(&self) -> usize {

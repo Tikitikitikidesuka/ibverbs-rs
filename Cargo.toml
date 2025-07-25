@@ -53,10 +53,6 @@ name = "shared_memory_example"
 path = "examples/shared_memory_example.rs"
 
 [[example]]
-name = "mfp_shared_memory_example"
-path = "examples/mfp_shared_memory_example.rs"
-
-[[example]]
 name = "mock_aliased_example"
 path = "examples/mock_aliased_example.rs"
 required-features = ["mock-buffers"]

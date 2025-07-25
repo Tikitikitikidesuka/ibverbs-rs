@@ -1,8 +1,9 @@
 mod builder;
+
 #[cfg(feature = "pcie40-readable")]
 pub mod pcie40_readable;
 
-#[cfg(feature = "shmem-element")]
+#[cfg(feature = "shmem-readable")]
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;

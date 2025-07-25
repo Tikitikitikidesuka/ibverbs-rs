@@ -1,10 +1,6 @@
-use std::any::type_name;
 use thiserror::Error;
-use tracing::{debug, instrument, warn};
-use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard, ReadGuard};
-use crate::buffer_element::{ReadableSharedMemoryBufferElement, SharedMemoryBufferElement};
-use crate::reader::SharedMemoryBufferReader;
 
+pub use tracing;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedReadError {
@@ -18,9 +14,136 @@ pub enum SharedMemoryTypedReadError {
     CorruptData,
 }
 
-struct ReadableSharedMemoryBufferElementKeo<T>(T);
+/// Macro to implement `CircularBufferReadable<SharedMemoryBufferReader>` for types
+/// that implement `ReadableSharedMemoryBufferElement`.
+///
+/// This macro generates the implementation that would violate orphan rules if done
+/// as a blanket implementation.
+#[macro_export]
+macro_rules! impl_circular_buffer_single_readable {
+    ($type:ty) => {
+        impl $crate::CircularBufferReadable<$crate::SharedMemoryBufferReader> for $type {
+            type ReadResult<'a> = Result<
+                $crate::ReadGuard<'a, $crate::SharedMemoryBufferReader, Self>,
+                $crate::SharedMemoryTypedReadError,
+            >;
 
-/// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
+            fn read(reader: &mut $crate::SharedMemoryBufferReader) -> Self::ReadResult<'_> {
+                use $crate::CircularBufferReader;
+
+                let (primary_region, secondary_region) = reader.readable_region();
+
+                let (readable_region, region_offset) =
+                    if Self::check_wrap_flag(primary_region)? {
+                        (secondary_region, primary_region.len())
+                    } else {
+                        (primary_region, 0)
+                    };
+
+                let element = Self::cast_to_element(readable_region)?;
+
+                // Untie lifetimes to allow ReadGuard to take both ref to reader and element
+                // The safety of this operation is based on the ReadGuard's safety promises
+                let element_ptr = element as *const Self;
+                let element = unsafe { &*element_ptr };
+
+                let aligned_size = alignment_utils::align_up_pow2(
+                    element.length_in_bytes(),
+                    reader.alignment_pow2(),
+                );
+
+                if readable_region.len() < aligned_size {
+                    return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
+                }
+
+                let discard_size = region_offset + aligned_size;
+                Ok($crate::ReadGuard::new(reader, element, discard_size))
+            }
+        }
+    };
+}
+
+/// Macro to implement `CircularBufferMultiReadable<SharedMemoryBufferReader>` for types
+/// that implement `ReadableSharedMemoryBufferElement`.
+///
+/// This macro generates the implementation that would violate orphan rules if done
+/// as a blanket implementation.
+#[macro_export]
+macro_rules! impl_circular_buffer_multi_readable {
+    ($type:ty) => {
+        impl $crate::CircularBufferMultiReadable<$crate::SharedMemoryBufferReader> for $type {
+            type MultiReadResult<'a> = Result<
+                $crate::MultiReadGuard<'a, $crate::SharedMemoryBufferReader, Self>,
+                $crate::SharedMemoryTypedReadError,
+            >;
+
+            fn read_multiple(
+                reader: &mut $crate::SharedMemoryBufferReader,
+                num: usize,
+            ) -> Self::MultiReadResult<'_> {
+                use $crate::CircularBufferReader;
+
+                let (primary_region, secondary_region) = reader.readable_region();
+
+                let mut read_data = Vec::with_capacity(num);
+                let mut advance_size = 0;
+                let mut wrapped = false;
+
+                for _i in 0..num {
+                    let (current_region, offset) = if !wrapped {
+                        if advance_size == primary_region.len()
+                            || Self::check_wrap_flag(&primary_region[advance_size..])?
+                        {
+                            wrapped = true;
+                            advance_size = primary_region.len();
+                            (secondary_region, 0)
+                        } else {
+                            (primary_region, advance_size)
+                        }
+                    } else {
+                        let offset = advance_size - primary_region.len();
+                        (secondary_region, offset)
+                    };
+
+                    let element = Self::cast_to_element(&current_region[offset..])?;
+
+                    // Untie lifetimes to allow MultiReadGuard to take both ref to reader and element
+                    // The safety of this operation is based on the MultiReadGuard's safety promises
+                    let element_ptr = element as *const Self;
+                    let element = unsafe { &*element_ptr };
+
+                    let aligned_size = alignment_utils::align_up_pow2(
+                        element.length_in_bytes(),
+                        reader.alignment_pow2(),
+                    );
+
+                    if current_region.len() < aligned_size + offset {
+                        return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
+                    }
+
+                    read_data.push(element);
+                    advance_size += aligned_size;
+                }
+
+                Ok($crate::MultiReadGuard::new(reader, read_data, advance_size))
+            }
+        }
+    };
+}
+
+/// Convenience macro that implements both traits at once
+#[macro_export]
+macro_rules! impl_circular_buffer_readable {
+    ($type:ty) => {
+        $crate::impl_circular_buffer_single_readable!($type);
+        $crate::impl_circular_buffer_multi_readable!($type);
+    };
+}
+
+
+// Blanket implementation for all types that implement `SharedMemoryBufferElement`.
+// Violates orphan rules so a macro for the user to call is offered instead.
+/*
 impl<T> CircularBufferReadable<SharedMemoryBufferReader> for T
 where
     T: ReadableSharedMemoryBufferElement,
@@ -174,3 +297,4 @@ where
         Ok(MultiReadGuard::new(reader, read_data, advance_size))
     }
 }
+*/

@@ -8,7 +8,14 @@ thiserror = "2.0.12"
 pcie40 = { path = "../pcie40", optional = true }
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }
+shared-memory-buffer = { path = "../shared-memory-buffer", optional = true }
 
 [features]
 pcie40-readable = ["dep:pcie40"]
-#shmem-element = ["dep:shared_memory_buffer"]
+shmem-readable = ["dep:shared-memory-buffer"]
+
+[[example]]
+name = "mfp_shared_memory_example"
+path = "examples/mfp_shared_memory_example.rs"
+required-features = ["shmem-readable"]
+

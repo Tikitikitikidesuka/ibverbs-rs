@@ -1,13 +1,6 @@
-use pcie40_rs::multi_fragment_packet::{
-    Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef,
-};
-use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use pcie40_rs::shared_memory_buffer::reader::SharedMemoryBufferReader;
-use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
-use pcie40_rs::typed_circular_buffer::{
-    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
-};
-use pcie40_rs::utils;
+use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable};
+use multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter, SharedMemoryBuffer};
 
 fn main() {
     // Create the buffer with size 1024 bytes, alignment 8 (2^8 = 256 bytes) (max 4 elements of 256 bytes)
@@ -33,7 +26,7 @@ fn main() {
     mfp_0_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
+        alignment_utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -44,7 +37,7 @@ fn main() {
     read_mfp.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
+        alignment_utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1,2, ]
@@ -60,7 +53,7 @@ fn main() {
     mfp_2_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
+        alignment_utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -90,7 +83,7 @@ fn main() {
     mfp_3_512.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
+        alignment_utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ , , , ]
