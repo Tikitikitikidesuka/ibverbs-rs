@@ -6,3 +6,6 @@ pub use circular_buffer::*;
 pub use typed_circular_buffer::*;
 pub use typed_circular_buffer_read_guard::*;
 
+#[cfg(feature = "mock-buffers")]
+pub mod mock_buffers;
+
