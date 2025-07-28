@@ -1,5 +1,5 @@
-use pcie40_rs::circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use pcie40_rs::mock_buffers::aliased_buffer::{
+use circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use mock_buffers::aliased_buffer::{
     MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
 };
 

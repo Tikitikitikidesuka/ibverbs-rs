@@ -1,13 +1,6 @@
-use pcie40_rs::mock_buffers::aliased_buffer::{
-    MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
-};
-use pcie40_rs::mock_buffers::dynamic_size_element::{
-    BufferedDiaryEntry, MockWritable, OwnedDiaryEntry,
-};
-use pcie40_rs::typed_circular_buffer::{
-    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
-};
-use pcie40_rs::utils;
+use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable};
+use mock_buffers::aliased_buffer::{MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter};
+use mock_buffers::dynamic_size_element::{BufferedDiaryEntry, MockWritable, OwnedDiaryEntry};
 
 fn main() {
     // [ , , , ]
@@ -21,7 +14,7 @@ fn main() {
     writable_entry_0_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        utils::align_up_pow2(writable_entry_0_32.buffered_size(), writer.alignment_pow2())
+        alignment_utils::align_up_pow2(writable_entry_0_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -35,7 +28,7 @@ fn main() {
     writable_entry_2_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        utils::align_up_pow2(writable_entry_2_32.buffered_size(), writer.alignment_pow2())
+        alignment_utils::align_up_pow2(writable_entry_2_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -49,7 +42,7 @@ fn main() {
     writable_entry_3_64.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        utils::align_up_pow2(writable_entry_3_64.buffered_size(), writer.alignment_pow2())
+        alignment_utils::align_up_pow2(writable_entry_3_64.buffered_size(), writer.alignment_pow2())
     );
 
     // [ , , , ]

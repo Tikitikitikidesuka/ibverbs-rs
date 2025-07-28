@@ -4,3 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+thiserror = "2.0.12"
+alignment-utils = { path = "../alignment-utils" }
+circular-buffer = { path = "../circular-buffer" }
+
+[[example]]
+name = "mock_aliased_example"
+path = "examples/mock_aliased_example.rs"
+
+[[example]]
+name = "mock_non_aliased_example"
+path = "examples/mock_non_aliased_example.rs"
+
+[[example]]
+name = "mock_typed_aliased_example"
+path = "examples/mock_typed_aliased_example.rs"
+
+[[example]]
+name = "mock_typed_non_aliased_example"
+path = "examples/mock_typed_non_aliased_example.rs"
