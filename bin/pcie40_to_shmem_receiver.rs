@@ -1,11 +1,9 @@
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
-use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use pcie40_rs::shared_memory_buffer::readable_buffer_element::SharedMemoryTypedReadError;
-use pcie40_rs::shared_memory_buffer::reader::SharedMemoryBufferReader;
-use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
+use circular_buffer::CircularBufferMultiReadable;
+use multi_fragment_packet::MultiFragmentPacketRef;
+use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError};
 
 fn main() {
     tracing_subscriber::fmt()

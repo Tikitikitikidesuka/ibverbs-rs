@@ -1,20 +1,17 @@
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
-use pcie40_rs::multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
-use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
-use pcie40_rs::pcie40::reader::PCIe40Reader;
-use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
-use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::pcie40::stream::stream::PCIe40StreamManager;
-use pcie40_rs::shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use pcie40_rs::shared_memory_buffer::writable_buffer_element::SharedMemoryTypedWriteError;
-use pcie40_rs::shared_memory_buffer::writer::SharedMemoryBufferWriter;
-use pcie40_rs::typed_circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
-use pcie40_rs::utils;
-use pcie40_rs::utils::IsPow2Result;
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
+use alignment_utils::IsPow2Result;
+use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
+use multi_fragment_packet::MultiFragmentPacketRef;
+use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
+use pcie40::ctrl::PCIe40ControllerManager;
+use pcie40::reader::PCIe40Reader;
+use pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
+use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
+use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40::stream::stream::PCIe40StreamManager;
+use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter, SharedMemoryTypedWriteError};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -35,7 +32,7 @@ fn main() {
     // -------------------------- //
 
     let controller = PCIe40ControllerManager::open_by_device_name(device_name).unwrap();
-    let meta_alignment_pow2 = match utils::is_pow2(controller.meta_alignment().unwrap()) {
+    let meta_alignment_pow2 = match alignment_utils::is_pow2(controller.meta_alignment().unwrap()) {
         IsPow2Result::Yes(pow2) => pow2,
         IsPow2Result::No => {
             panic!("Meta alignment is not a power of 2")
