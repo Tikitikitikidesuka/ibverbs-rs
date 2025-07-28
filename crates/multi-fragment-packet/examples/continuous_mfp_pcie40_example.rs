@@ -1,20 +1,19 @@
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
-use pcie40_rs::pcie40::ctrl::PCIe40ControllerManager;
-use pcie40_rs::pcie40::reader::PCIe40Reader;
-use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
-use pcie40_rs::pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
-use pcie40_rs::pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
-use pcie40_rs::pcie40::stream::stream::PCIe40StreamManager;
-use pcie40_rs::typed_circular_buffer::CircularBufferMultiReadable;
-use pcie40_rs::utils;
-use pcie40_rs::utils::IsPow2Result;
 use std::io::{Read, stdin};
+use alignment_utils::IsPow2Result;
+use circular_buffer::CircularBufferMultiReadable;
+use multi_fragment_packet::MultiFragmentPacketRef;
+use pcie40::ctrl::PCIe40ControllerManager;
+use pcie40::reader::PCIe40Reader;
+use pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
+use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
+use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
+use pcie40::stream::stream::PCIe40StreamManager;
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
 
     let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
-    let meta_alignment_pow2 = match utils::is_pow2(controller.meta_alignment().unwrap()) {
+    let meta_alignment_pow2 = match alignment_utils::is_pow2(controller.meta_alignment().unwrap()) {
         IsPow2Result::Yes(pow2) => pow2,
         IsPow2Result::No => {
             panic!("Meta alignment is not a power of 2")

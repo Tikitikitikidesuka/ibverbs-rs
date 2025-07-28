@@ -5,7 +5,8 @@ use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40::stream::stream::PCIe40StreamManager;
 use std::io::{Read, stdin};
-use pcie40_rs::multi_fragment_packet::MultiFragmentPacketRef;
+use circular_buffer::CircularBufferMultiReadable;
+use multi_fragment_packet::MultiFragmentPacketRef;
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
