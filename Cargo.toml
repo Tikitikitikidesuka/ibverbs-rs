@@ -40,34 +40,4 @@ path = "bin/pcie40_to_shmem_receiver.rs"
 name = "mock_pcie40_to_shmem_reader"
 path = "bin/mock_pcie40_to_shmem_reader.rs"
 
-[[example]]
-name = "mfp_pcie40_example"
-path = "examples/mfp_pcie40_example.rs"
 
-[[example]]
-name = "continuous_mfp_pcie40_example"
-path = "examples/continuous_mfp_pcie40_example.rs"
-
-[[example]]
-name = "shared_memory_example"
-path = "examples/shared_memory_example.rs"
-
-[[example]]
-name = "mock_aliased_example"
-path = "examples/mock_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_non_aliased_example"
-path = "examples/mock_non_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_typed_aliased_example"
-path = "examples/mock_typed_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_typed_non_aliased_example"
-path = "examples/mock_typed_non_aliased_example.rs"
-required-features = ["mock-buffers"]
