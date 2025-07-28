@@ -14,14 +14,11 @@ pcie40 = { path = "crates/pcie40" }
 alignment-utils = { path = "crates/alignment-utils" }
 circular-buffer = { path = "crates/circular-buffer" }
 shared-memory-buffer = { path = "crates/shared-memory-buffer" }
-multi-fragment-packet = { path = "crates/multi-fragment-packet" }
+multi-fragment-packet = { path = "crates/multi-fragment-packet", features = ["pcie40-io", "shmem-io"] }
 # Setting feature "release_max_level_info" makes sure compiled release binaries
 # do not contain traces on levels higher than Info. Its important for performance.
 tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-
-[features]
-mock-buffers = []
 
 [profile.release]
 opt-level = 3
