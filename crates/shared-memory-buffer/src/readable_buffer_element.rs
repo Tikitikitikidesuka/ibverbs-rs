@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedReadError {
     #[error("Type not found on buffer")]

@@ -53,9 +53,7 @@ impl LockFile {
         match Flock::lock(file, flockarg) {
             Ok(locked_file) => {
                 debug!("File lock acquired");
-                Ok(Self {
-                    file: locked_file,
-                })
+                Ok(Self { file: locked_file })
             }
             Err((_, errno)) => {
                 if errno == Errno::EAGAIN {
