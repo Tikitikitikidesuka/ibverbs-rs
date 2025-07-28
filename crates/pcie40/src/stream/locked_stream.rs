@@ -7,7 +7,7 @@ use tracing::instrument;
 use tracing::{debug, trace, warn};
 
 pub struct PCIe40LockedStream {
-    pub(super) stream: ManuallyDrop<PCIe40Stream>,
+    pub(super) stream: PCIe40Stream,
 }
 
 impl Drop for PCIe40LockedStream {
@@ -21,43 +21,18 @@ impl Drop for PCIe40LockedStream {
             self.stream.device_id(),
             self.stream.stream_type()
         );
-        if let Err(e) = self.ref_unlock() {
+        if let Err(e) = self.unlock() {
             warn!("Failed to unlock stream during Drop: {}", e);
-        }
-        unsafe {
-            ManuallyDrop::drop(&mut self.stream);
         }
     }
 }
 
 impl PCIe40LockedStream {
     pub(super) fn new(stream: PCIe40Stream) -> Self {
-        Self {
-            stream: ManuallyDrop::new(stream),
-        }
+        Self { stream }
     }
 
-    #[instrument(skip_all, fields(
-        device_id = self.stream.device_id(),
-        stream_type = ?self.stream.stream_type()
-    ))]
-    pub fn unlock(mut self) -> Result<PCIe40Stream, PCIe40StreamError> {
-        debug!(
-            "Unlocking stream {} on device {}",
-            self.stream.stream_type(),
-            self.stream.device_id()
-        );
-        self.ref_unlock()?;
-
-        debug!("Taking ownership of stream to manually drop");
-        let stream = unsafe { ManuallyDrop::into_inner(std::ptr::read(&self.stream)) };
-        debug!("Forgetting self to prevent Drop from running");
-        std::mem::forget(self);
-
-        Ok(stream)
-    }
-
-    fn ref_unlock(&mut self) -> Result<(), PCIe40StreamError> {
+    fn unlock(&mut self) -> Result<(), PCIe40StreamError> {
         debug!(
             "Unlocking stream {} on device {}",
             self.stream.stream_type(),
@@ -78,7 +53,7 @@ impl PCIe40LockedStream {
                 Ok(())
             }
             std::cmp::Ordering::Greater => {
-                debug!(
+                warn!(
                     "Failed to unlock stream {} on device {} (locked by process {})",
                     self.stream.stream_type(),
                     self.stream.device_id(),
@@ -93,7 +68,7 @@ impl PCIe40LockedStream {
                 })
             }
             std::cmp::Ordering::Less => {
-                debug!(
+                warn!(
                     "Error writing unlock for stream {} on device {}",
                     self.stream.stream_type(),
                     self.stream.device_id()

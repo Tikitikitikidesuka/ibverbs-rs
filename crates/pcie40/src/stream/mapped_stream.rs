@@ -5,7 +5,7 @@ use std::mem::ManuallyDrop;
 use tracing::{debug, instrument, trace, warn};
 
 pub struct PCIe40MappedStream<'a> {
-    locked_stream: ManuallyDrop<PCIe40LockedStream>,
+    locked_stream: PCIe40LockedStream,
     buffer: &'a [u8],
 }
 
@@ -15,22 +15,19 @@ impl Drop for PCIe40MappedStream<'_> {
             "Drop called on PCIe40MappedBuffer for device {} stream {}",
             self.locked_stream.stream.device_id, self.locked_stream.stream.stream_type
         );
-        self.ref_unmap_buffer();
-        unsafe {
-            ManuallyDrop::drop(&mut self.locked_stream);
-        }
+        self.unmap_buffer();
     }
 }
 
 impl<'a> PCIe40MappedStream<'a> {
     pub(super) fn new(locked_stream: PCIe40LockedStream, buffer: &'a [u8]) -> Self {
         Self {
-            locked_stream: ManuallyDrop::new(locked_stream),
+            locked_stream,
             buffer,
         }
     }
 
-    fn ref_unmap_buffer(&mut self) {
+    fn unmap_buffer(&mut self) {
         debug!(
             "Unmapping buffer for stream {} on device {}",
             self.locked_stream.stream.stream_type, self.locked_stream.stream.device_id
@@ -51,18 +48,6 @@ impl<'a> PCIe40MappedStream<'a> {
             "Successfully unmapped buffer for stream {} on device {}",
             self.locked_stream.stream.stream_type, self.locked_stream.stream.device_id
         );
-    }
-
-    fn unmap_buffer(mut self) -> PCIe40LockedStream {
-        self.ref_unmap_buffer();
-
-        // Take ownership of the locked stream avoiding Drop impl restriction
-        let locked_stream =
-            unsafe { ManuallyDrop::into_inner(std::ptr::read(&self.locked_stream)) };
-        // Forget self to prevent Drop from running
-        std::mem::forget(self);
-
-        locked_stream
     }
 }
 
