@@ -2,6 +2,7 @@
 name = "mock-buffers"
 version = "0.1.0"
 edition = "2024"
+description = "Mock buffer implementations for the circular buffer interface of the LHCb Event Builder"
 
 [dependencies]
 thiserror = "2.0.12"

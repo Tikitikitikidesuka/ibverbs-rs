@@ -2,6 +2,7 @@
 name = "shared-memory-buffer"
 version = "0.1.0"
 edition = "2024"
+description = "Safe Rust shared memory buffer implementation for interprocess communication for the LHCb Event Builder"
 
 [dependencies]
 tracing = "0.1.41"
@@ -10,3 +11,7 @@ nix = { version = "0.30.1", features = ["fs"] }
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }
 libc = "0.2.174"
+
+[[example]]
+name = "shared_memory_example"
+path = "examples/shared_memory_example.rs"

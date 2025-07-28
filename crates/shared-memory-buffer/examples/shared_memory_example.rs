@@ -1,7 +1,5 @@
 use circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use shared_memory_buffer::buffer_backend::SharedMemoryBuffer;
-use shared_memory_buffer::reader::SharedMemoryBufferReader;
-use shared_memory_buffer::writer::SharedMemoryBufferWriter;
+use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)

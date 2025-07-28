@@ -2,6 +2,7 @@
 name = "multi-fragment-packet"
 version = "0.1.0"
 edition = "2024"
+description = "Multi Fragment Packet structure for the LHCb Event Builder"
 
 [dependencies]
 thiserror = "2.0.12"
@@ -11,13 +12,13 @@ circular-buffer = { path = "../circular-buffer" }
 shared-memory-buffer = { path = "../shared-memory-buffer", optional = true }
 
 [features]
-pcie40-readable = ["dep:pcie40"]
-shmem-readable = ["dep:shared-memory-buffer"]
+pcie40-io = ["dep:pcie40"]
+shmem-io = ["dep:shared-memory-buffer"]
 
 [[example]]
 name = "mfp_shared_memory_example"
 path = "examples/mfp_shared_memory_example.rs"
-required-features = ["shmem-readable"]
+required-features = ["shmem-io"]
 
 [[example]]
 name = "continouous_mfp_pcie40_example"

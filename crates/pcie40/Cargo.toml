@@ -2,7 +2,7 @@
 name = "pcie40"
 version = "0.1.0"
 edition = "2024"
-description = "Rust bindings for the PCIe40 drivers"
+description = "Safe Rust PCIe40 bindings wrapper for the LHCb Event Builder"
 
 [dependencies]
 thiserror = "2.0.12"
