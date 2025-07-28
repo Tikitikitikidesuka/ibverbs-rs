@@ -27,7 +27,7 @@ rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all-targets --features pcie40,multi-fragment-packet,shared-memory,mock-buffers,utils #,shared-memory
+    - cargo test --all --all-features
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
