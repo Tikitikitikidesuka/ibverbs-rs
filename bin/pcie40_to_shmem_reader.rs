@@ -1,6 +1,3 @@
-use std::env;
-use std::io::{Read, stdin};
-use std::time::Duration;
 use alignment_utils::IsPow2Result;
 use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
 use multi_fragment_packet::MultiFragmentPacketRef;
@@ -11,7 +8,12 @@ use pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
 use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40::stream::stream::PCIe40StreamManager;
-use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter, SharedMemoryTypedWriteError};
+use shared_memory_buffer::{
+    SharedMemoryBuffer, SharedMemoryBufferWriter, SharedMemoryTypedWriteError,
+};
+use std::env;
+use std::io::{Read, stdin};
+use std::time::Duration;
 
 fn main() {
     tracing_subscriber::fmt()
@@ -134,10 +136,12 @@ fn shmem_write_mfps(
         loop {
             match mfp.write(writer) {
                 Ok(_) => break, // Move to next MFP
-                Err(error) => if let SharedMemoryTypedWriteError::NotEnoughSpace = error {
-                    println!("Temporary error writing MFP: {error:?}, retrying...");
-                    std::thread::sleep(poll_interval);
-                },
+                Err(error) => {
+                    if let SharedMemoryTypedWriteError::NotEnoughSpace = error {
+                        println!("Temporary error writing MFP: {error:?}, retrying...");
+                        std::thread::sleep(poll_interval);
+                    }
+                }
             }
         }
     }

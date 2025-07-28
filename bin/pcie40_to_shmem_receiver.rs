@@ -1,9 +1,11 @@
+use circular_buffer::CircularBufferMultiReadable;
+use multi_fragment_packet::MultiFragmentPacketRef;
+use shared_memory_buffer::{
+    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError,
+};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
-use circular_buffer::CircularBufferMultiReadable;
-use multi_fragment_packet::MultiFragmentPacketRef;
-use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -26,9 +28,7 @@ fn main() {
 
     let mut reader = SharedMemoryBufferReader::new(read_buffer);
 
-    println!(
-        "\n\nGot shared memory buffer of size: {shmem_buffer_size}"
-    );
+    println!("\n\nGot shared memory buffer of size: {shmem_buffer_size}");
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 

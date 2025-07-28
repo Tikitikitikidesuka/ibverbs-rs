@@ -1,4 +1,3 @@
-use std::io::{Read, stdin};
 use alignment_utils::IsPow2Result;
 use circular_buffer::CircularBufferMultiReadable;
 use multi_fragment_packet::MultiFragmentPacketRef;
@@ -8,6 +7,7 @@ use pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
 use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40::stream::stream::PCIe40StreamManager;
+use std::io::{Read, stdin};
 
 fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";

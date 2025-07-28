@@ -1,9 +1,9 @@
-use std::env;
-use std::io::{stdin, Read};
-use std::time::Duration;
 use circular_buffer::CircularBufferWritable;
 use multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
+use std::env;
+use std::io::{Read, stdin};
+use std::time::Duration;
 
 fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb
@@ -34,9 +34,7 @@ fn main() {
     //        READY TO GO!        //
     // -------------------------- //
 
-    println!(
-        "\n\nGot shared memory buffer of size: {shmem_buffer_size}"
-    );
+    println!("\n\nGot shared memory buffer of size: {shmem_buffer_size}");
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
 
@@ -101,7 +99,7 @@ fn shmem_write_mfps(
                 Err(error) => {
                     println!("Temporary error writing MFP: {error:?}, retrying...");
                     std::thread::sleep(poll_interval);
-                },
+                }
             }
         }
     }

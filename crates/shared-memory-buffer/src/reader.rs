@@ -1,8 +1,8 @@
-use thiserror::Error;
-use tracing::{debug, instrument, warn};
-use circular_buffer::CircularBufferReader;
 use crate::buffer_backend::SharedMemoryReadBuffer;
 use crate::buffer_status::PtrStatus;
+use circular_buffer::CircularBufferReader;
+use thiserror::Error;
+use tracing::{debug, instrument, warn};
 
 pub struct SharedMemoryBufferReader {
     buffer: SharedMemoryReadBuffer,

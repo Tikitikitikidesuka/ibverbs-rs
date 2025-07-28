@@ -33,12 +33,11 @@ macro_rules! impl_circular_buffer_single_readable {
 
                 let (primary_region, secondary_region) = reader.readable_region();
 
-                let (readable_region, region_offset) =
-                    if Self::check_wrap_flag(primary_region)? {
-                        (secondary_region, primary_region.len())
-                    } else {
-                        (primary_region, 0)
-                    };
+                let (readable_region, region_offset) = if Self::check_wrap_flag(primary_region)? {
+                    (secondary_region, primary_region.len())
+                } else {
+                    (primary_region, 0)
+                };
 
                 let element = Self::cast_to_element(readable_region)?;
 
@@ -139,7 +138,6 @@ macro_rules! impl_circular_buffer_readable {
         $crate::impl_circular_buffer_multi_readable!($type);
     };
 }
-
 
 // Blanket implementation for all types that implement `SharedMemoryBufferElement`.
 // Violates orphan rules so a macro for the user to call is offered instead.

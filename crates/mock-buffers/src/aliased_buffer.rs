@@ -1,5 +1,5 @@
-use thiserror::Error;
 use circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use thiserror::Error;
 
 pub struct MockAliasedBuffer {
     alignment_pow2: u8,

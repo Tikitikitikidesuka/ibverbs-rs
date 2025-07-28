@@ -1,7 +1,10 @@
-use thiserror::Error;
-use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard, ReadGuard};
 use crate::aliased_buffer::MockAliasedBufferReader;
 use crate::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
+use circular_buffer::{
+    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
+    ReadGuard,
+};
+use thiserror::Error;
 
 pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
 
@@ -82,7 +85,8 @@ impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry
 
             // Verify enough data for whole entry and alignment
             let total_length = size_of::<Self>() + diary_entry_mem.note().len();
-            let aligned_size = alignment_utils::align_up_pow2(total_length, reader.alignment_pow2());
+            let aligned_size =
+                alignment_utils::align_up_pow2(total_length, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
                 return Err(ReadError::NotEnoughData);
             }

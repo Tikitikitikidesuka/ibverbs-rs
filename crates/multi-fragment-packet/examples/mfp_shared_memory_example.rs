@@ -1,6 +1,12 @@
-use circular_buffer::{CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable};
-use multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
-use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter, SharedMemoryBuffer};
+use circular_buffer::{
+    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
+};
+use multi_fragment_packet::{
+    Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder, MultiFragmentPacketRef,
+};
+use shared_memory_buffer::{
+    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
+};
 
 fn main() {
     // Create the buffer with size 1024 bytes, alignment 8 (2^8 = 256 bytes) (max 4 elements of 256 bytes)

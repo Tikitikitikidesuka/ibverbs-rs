@@ -1,10 +1,10 @@
-use nix::sys::stat::Mode;
-use std::path::PathBuf;
-use thiserror::Error;
-use tracing::{instrument, debug, warn};
 use crate::buffer_status::{CircularBufferStatus, PtrStatus};
 use crate::file_lock::LockFile;
 use crate::shared_memory::{MappedSharedMemory, SharedMemory};
+use nix::sys::stat::Mode;
+use std::path::PathBuf;
+use thiserror::Error;
+use tracing::{debug, instrument, warn};
 
 const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 

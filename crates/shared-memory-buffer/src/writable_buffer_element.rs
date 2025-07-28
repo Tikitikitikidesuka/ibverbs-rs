@@ -1,6 +1,6 @@
+use crate::reader::SharedMemoryBufferAdvanceError;
 use std::fmt::Debug;
 use thiserror::Error;
-use crate::reader::SharedMemoryBufferAdvanceError;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedWriteError {
@@ -23,10 +23,8 @@ macro_rules! impl_circular_buffer_writable {
             type WriteResult = Result<(), $crate::SharedMemoryTypedWriteError>;
 
             fn write(&self, writer: &mut $crate::SharedMemoryBufferWriter) -> Self::WriteResult {
-                let aligned_size = alignment_utils::align_up_pow2(
-                    self.length_in_bytes(),
-                    writer.alignment_pow2(),
-                );
+                let aligned_size =
+                    alignment_utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
                 let (primary_region, secondary_region) = writer.writable_region();
 
                 let (writable_region, advance_size) = if aligned_size <= primary_region.len() {

@@ -1,8 +1,8 @@
-use tracing::{debug, instrument, warn};
-use circular_buffer::CircularBufferWriter;
 use crate::buffer_backend::SharedMemoryWriteBuffer;
 use crate::buffer_status::PtrStatus;
 use crate::reader::SharedMemoryBufferAdvanceError;
+use circular_buffer::CircularBufferWriter;
+use tracing::{debug, instrument, warn};
 
 pub struct SharedMemoryBufferWriter {
     buffer: SharedMemoryWriteBuffer,
