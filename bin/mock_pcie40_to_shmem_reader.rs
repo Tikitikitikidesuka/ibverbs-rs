@@ -35,8 +35,7 @@ fn main() {
     // -------------------------- //
 
     println!(
-        "\n\nGot shared memory buffer of size: {}",
-        shmem_buffer_size
+        "\n\nGot shared memory buffer of size: {shmem_buffer_size}"
     );
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();
@@ -99,11 +98,9 @@ fn shmem_write_mfps(
         loop {
             match mfp.write(writer) {
                 Ok(_) => break, // Move to next MFP
-                Err(error) => match error {
-                    _ => {
-                        println!("Temporary error writing MFP: {:?}, retrying...", error);
-                        std::thread::sleep(poll_interval);
-                    }
+                Err(error) => {
+                    println!("Temporary error writing MFP: {error:?}, retrying...");
+                    std::thread::sleep(poll_interval);
                 },
             }
         }

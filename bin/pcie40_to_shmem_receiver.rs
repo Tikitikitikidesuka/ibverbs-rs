@@ -27,8 +27,7 @@ fn main() {
     let mut reader = SharedMemoryBufferReader::new(read_buffer);
 
     println!(
-        "\n\nGot shared memory buffer of size: {}",
-        shmem_buffer_size
+        "\n\nGot shared memory buffer of size: {shmem_buffer_size}"
     );
     println!("Stream configured... Press any key to proceed\n");
     stdin().read_exact(&mut [0]).unwrap();

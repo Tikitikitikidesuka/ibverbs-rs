@@ -134,12 +134,9 @@ fn shmem_write_mfps(
         loop {
             match mfp.write(writer) {
                 Ok(_) => break, // Move to next MFP
-                Err(error) => match error {
-                    SharedMemoryTypedWriteError::NotEnoughSpace => {
-                        println!("Temporary error writing MFP: {:?}, retrying...", error);
-                        std::thread::sleep(poll_interval);
-                    }
-                    _ => {}
+                Err(error) => if let SharedMemoryTypedWriteError::NotEnoughSpace = error {
+                    println!("Temporary error writing MFP: {error:?}, retrying...");
+                    std::thread::sleep(poll_interval);
                 },
             }
         }
