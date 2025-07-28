@@ -27,7 +27,6 @@ fn main() {
     }
 
     let device_name = &args[1];
-    let shmem_name = &args[2];
 
     // -------------------------- //
     //    PCIe40 Stream Setup     //

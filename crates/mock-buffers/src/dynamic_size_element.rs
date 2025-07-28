@@ -1,5 +1,4 @@
 use std::fmt::{Display, Formatter};
-use std::ops::Deref;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 
 pub trait DiaryEntry {

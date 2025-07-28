@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-pub use tracing;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedReadError {

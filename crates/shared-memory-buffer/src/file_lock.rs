@@ -15,7 +15,6 @@ pub enum LockFileError {
 }
 
 pub struct LockFile {
-    path: PathBuf,
     file: Flock<File>,
 }
 
@@ -55,7 +54,6 @@ impl LockFile {
             Ok(locked_file) => {
                 debug!("File lock acquired");
                 Ok(Self {
-                    path: path.as_ref().to_owned(),
                     file: locked_file,
                 })
             }

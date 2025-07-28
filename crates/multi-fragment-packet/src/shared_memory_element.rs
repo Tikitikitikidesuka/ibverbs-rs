@@ -1,5 +1,4 @@
 use crate::{MultiFragmentPacket, MultiFragmentPacketRef};
-use circular_buffer::CircularBufferWritable;
 use circular_buffer::CircularBufferWriter;
 use shared_memory_buffer::{
     ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError,

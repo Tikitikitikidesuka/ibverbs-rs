@@ -703,7 +703,7 @@ mod tests {
 
         // Create first shared memory segment
         {
-            let shm1 = SharedMemory::create(&path, size1, mode)
+            let _shm1 = SharedMemory::create(&path, size1, mode)
                 .expect("Failed to create first shared memory");
 
             // Close it
