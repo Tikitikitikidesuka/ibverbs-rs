@@ -1,0 +1,15 @@
+[package]
+name = "infinibuilder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ibverbs = { git = "https://github.com/jonhoo/rust-ibverbs.git", rev = "fa92aa3" }
+
+[[bin]]
+name = "loopback"
+path = "bin/loopback.rs"
+
+[[bin]]
+name = "test"
+path = "bin/test.rs"
