@@ -26,23 +26,23 @@ fn main() {
         .set_context(&context)
         .set_data_memory_region(unsafe { &mut *(memory.as_mut_slice() as *mut [u8]) })
         .set_completion_queue_size(16)
-        .build();
+        .build().unwrap();
 
     print_local_endpoint_json(&endpoint.endpoint());
 
     let remote_endpoint = prompt_for_remote_endpoint().unwrap();
-    let mut connection = endpoint.connect(remote_endpoint);
+    let mut connection = endpoint.connect(remote_endpoint).unwrap();
 
     match mode {
         Send => {
             println!("Sending message...");
             memory.copy_from_slice(MESSAGE);
-            connection.post_send(..).wait();
+            connection.post_send(..).unwrap().wait().unwrap();
             println!("Sent!");
         }
         Receive => {
             println!("Waiting for message...");
-            connection.post_receive(..).wait();
+            connection.post_receive(..).unwrap().wait().unwrap();
             println!("Received: {:?}", str::from_utf8(&memory).unwrap());
         }
         _ => unreachable!(),

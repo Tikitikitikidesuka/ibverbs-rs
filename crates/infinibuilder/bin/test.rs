@@ -2,8 +2,6 @@ use infinibuilder::IbBEndpointBuilder;
 use std::ptr::slice_from_raw_parts_mut;
 
 fn main() {
-    println!("Listing devices...");
-
     let devices = ibverbs::devices().unwrap();
 
     println!(
@@ -28,31 +26,33 @@ fn main() {
         .set_context(&context_a)
         .set_data_memory_region(rdma_mem_a)
         .set_completion_queue_size(16)
-        .build();
+        .build()
+        .unwrap();
     let endpoint_b = IbBEndpointBuilder::new()
         .set_context(&context_b)
         .set_data_memory_region(rdma_mem_b)
         .set_completion_queue_size(16)
-        .build();
+        .build()
+        .unwrap();
 
     println!("Endpoint A: {:?}", endpoint_a.endpoint());
     println!("Endpoint B: {:?}", endpoint_b.endpoint());
 
     println!("Establishing connections...");
-    let mut endpoint_a = endpoint_a.connect(endpoint_b.endpoint());
-    let mut endpoint_b = endpoint_b.connect(endpoint_a.endpoint());
+    let mut endpoint_a = endpoint_a.connect(endpoint_b.endpoint()).unwrap();
+    let mut endpoint_b = endpoint_b.connect(endpoint_a.endpoint()).unwrap();
 
     println!("Connection established");
 
     println!("Memory A: {:?}", memory_a);
     println!("Memory B: {:?}", memory_b);
 
-    let receive_wr = endpoint_a.post_receive(..);
-    let extra_receive_wr = endpoint_a.post_receive(..);
-    let send_wr = endpoint_b.post_send(1..2);
+    let receive_wr = endpoint_a.post_receive(..).unwrap();
+    let extra_receive_wr = endpoint_a.post_receive(..).unwrap();
+    let send_wr = endpoint_b.post_send(1..2).unwrap();
 
     println!("Waiting for receive wr...");
-    receive_wr.wait();
+    receive_wr.wait().unwrap();
 
     println!("Memory A: {:?}", memory_a);
     println!("Memory B: {:?}", memory_b);

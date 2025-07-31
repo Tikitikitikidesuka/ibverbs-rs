@@ -5,6 +5,7 @@ use ibverbs::{
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::io;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::sync::atomic::AtomicU64;
@@ -83,11 +84,11 @@ impl<ContextStatus, DataMemoryRegionStatus>
 }
 
 impl<'a> IbBEndpointBuilder<SetContext<'_>, SetDataMemoryRegion<'a>, SetCompletionQueueSize> {
-    pub fn build(self) -> IbBUnconnectedEndpoint<'a> {
+    pub fn build(self) -> io::Result<IbBUnconnectedEndpoint<'a>> {
         let context = self.context.0;
         let cq_size = self.cq_size.0;
-        let cq = context.create_cq(cq_size as i32, 0).unwrap();
-        let pd = context.alloc_pd().unwrap();
+        let cq = context.create_cq(cq_size as i32, 0)?;
+        let pd = context.alloc_pd()?;
         let prepared_qp = pd
             .create_qp(&cq, &cq, IBV_QPT_RC)
             .unwrap()
@@ -95,16 +96,16 @@ impl<'a> IbBEndpointBuilder<SetContext<'_>, SetDataMemoryRegion<'a>, SetCompleti
             .build()
             .unwrap();
         let data_mr = pd.register(self.data_mr.0).unwrap();
-        let endpoint = prepared_qp.endpoint().unwrap();
+        let endpoint = prepared_qp.endpoint()?;
 
-        IbBUnconnectedEndpoint {
+        Ok(IbBUnconnectedEndpoint {
             prepared_qp,
             cq,
             cq_size,
             pd,
             data_mr,
             endpoint,
-        }
+        })
     }
 }
 
@@ -122,10 +123,10 @@ impl<'a> IbBUnconnectedEndpoint<'a> {
         self.endpoint
     }
 
-    pub fn connect(self, endpoint: QueuePairEndpoint) -> IbBConnectedEndpoint<'a> {
-        let qp = self.prepared_qp.handshake(endpoint).unwrap();
+    pub fn connect(self, endpoint: QueuePairEndpoint) -> io::Result<IbBConnectedEndpoint<'a>> {
+        let qp = self.prepared_qp.handshake(endpoint)?;
 
-        IbBConnectedEndpoint {
+        Ok(IbBConnectedEndpoint {
             cq: Rc::new(self.cq),
             cq_size: self.cq_size,
             pd: self.pd,
@@ -136,7 +137,7 @@ impl<'a> IbBUnconnectedEndpoint<'a> {
             next_wr_id: AtomicU64::new(0),
             wc_cache: Rc::new(RefCell::new(HashMap::new())),
             dead_wr: Rc::new(RefCell::new(HashSet::new())),
-        }
+        })
     }
 }
 
@@ -163,12 +164,12 @@ pub struct WorkRequest {
 }
 
 impl WorkRequest {
-    fn gather_completions(&self) {
+    fn gather_completions(&self) -> io::Result<()> {
         const CQ_POLL_ARR_SIZE: usize = 16;
         let mut cq_poll_arr = [ibv_wc::default(); CQ_POLL_ARR_SIZE];
 
         // Get new completions
-        let mut completions = self.cq.poll(&mut cq_poll_arr[..]).unwrap();
+        let mut completions = self.cq.poll(&mut cq_poll_arr[..])?;
         while completions.len() != 0 {
             completions.into_iter().for_each(|completion| {
                 // Insert it to the completion cache only if it is not a dead request
@@ -178,19 +179,23 @@ impl WorkRequest {
                         .insert(completion.wr_id(), *completion);
                 }
             });
-            completions = self.cq.poll(&mut cq_poll_arr[..]).unwrap();
+            completions = self.cq.poll(&mut cq_poll_arr[..])?;
         }
+
+        Ok(())
     }
 
-    pub fn poll(&self) -> bool {
-        self.gather_completions();
-        self.wc_cache.borrow().contains_key(&self.id)
+    pub fn poll(&self) -> io::Result<bool> {
+        self.gather_completions()?;
+        Ok(self.wc_cache.borrow().contains_key(&self.id))
     }
 
-    pub fn wait(self) {
-        while !self.poll() {
+    pub fn wait(self) -> io::Result<()> {
+        while !self.poll()? {
             std::hint::spin_loop();
         }
+
+        Ok(())
     }
 }
 
@@ -216,28 +221,28 @@ impl IbBConnectedEndpoint<'_> {
     }
 
     #[must_use = "Work request has to be polled or waited for"]
-    pub fn post_send(&mut self, bounds: impl RangeBounds<usize>) -> WorkRequest {
+    pub fn post_send(&mut self, bounds: impl RangeBounds<usize>) -> io::Result<WorkRequest> {
         let wr_id = self.next_wr_id.fetch_add(1, Relaxed);
-        unsafe { self.qp.post_send(&[self.data_mr.slice(bounds)], wr_id) }.unwrap();
+        unsafe { self.qp.post_send(&[self.data_mr.slice(bounds)], wr_id) }?;
 
-        WorkRequest {
+        Ok(WorkRequest {
             id: wr_id,
             cq: self.cq.clone(),
             wc_cache: self.wc_cache.clone(),
             dead_wr: self.dead_wr.clone(),
-        }
+        })
     }
 
     #[must_use = "Work request has to be polled or waited for"]
-    pub fn post_receive(&mut self, bounds: impl RangeBounds<usize>) -> WorkRequest {
+    pub fn post_receive(&mut self, bounds: impl RangeBounds<usize>) -> io::Result<WorkRequest> {
         let wr_id = self.next_wr_id.fetch_add(1, Relaxed);
-        unsafe { self.qp.post_receive(&[self.data_mr.slice(bounds)], wr_id) }.unwrap();
+        unsafe { self.qp.post_receive(&[self.data_mr.slice(bounds)], wr_id) }?;
 
-        WorkRequest {
+        Ok(WorkRequest {
             id: wr_id,
             cq: self.cq.clone(),
             wc_cache: self.wc_cache.clone(),
             dead_wr: self.dead_wr.clone(),
-        }
+        })
     }
 }
