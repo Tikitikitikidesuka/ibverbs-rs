@@ -68,7 +68,7 @@ COPY Cargo.toml Cargo.lock ./
 
 # Vendor dependencies and set config to use them
 RUN mkdir ~/.cargo
-RUN cargo vendor > ~/.cargo/config
+RUN cargo vendor > ~/.cargo/config.toml
 
 # Default command
 CMD ["/bin/bash"]
