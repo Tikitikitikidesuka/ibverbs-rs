@@ -30,7 +30,10 @@ RUN dnf update -y && \
     openssl-devel \
     libnl3-devel \
     python3-devel \
-    pkg-config && \
+    pkg-config  \
+    rdma-core-devel \
+    libibverbs-devel \
+    librdmacm-devel && \
     dnf clean all
 
 # Install EPEL repository
