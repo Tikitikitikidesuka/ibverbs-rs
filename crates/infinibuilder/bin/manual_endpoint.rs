@@ -1,9 +1,9 @@
 use crate::Mode::{Receive, Send, Undetermined};
 use ibverbs::QueuePairEndpoint;
-use infinibuilder::IbBEndpointBuilder;
 use std::io::Write;
 use std::process::exit;
 use std::{env, io};
+use infinibuilder::IbBEndpointBuilder;
 
 const MESSAGE: &[u8] = b"HOLA, MUNDO!";
 

@@ -1,5 +1,4 @@
 use infinibuilder::IbBEndpointBuilder;
-use std::ptr::slice_from_raw_parts_mut;
 
 fn main() {
     let devices = ibverbs::devices().unwrap();
