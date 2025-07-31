@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ibverbs = { git = "https://github.com/jonhoo/rust-ibverbs.git", rev = "fa92aa3" }
+ibverbs = { git = "https://github.com/jonhoo/rust-ibverbs.git", rev = "fa92aa3", features = ["serde"] }
+serde_json = "1.0.141"
 
 [[bin]]
 name = "loopback"
@@ -13,3 +14,7 @@ path = "bin/loopback.rs"
 [[bin]]
 name = "test"
 path = "bin/test.rs"
+
+[[bin]]
+name = "manual_endpoint"
+path = "bin/manual_endpoint.rs"
