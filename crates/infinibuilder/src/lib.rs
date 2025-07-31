@@ -1,3 +1,5 @@
+mod endpoint_builder;
+
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
 use ibverbs::{
     CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
@@ -8,8 +10,6 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::RangeBounds;
 use std::rc::Rc;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering::Relaxed;
 
 pub struct UnsetContext;
 pub struct SetContext<'a>(&'a Context);
@@ -134,7 +134,7 @@ impl<'a> IbBUnconnectedEndpoint<'a> {
             data_mr: self.data_mr,
             endpoint: self.endpoint,
             remote_endpoint: endpoint,
-            next_wr_id: AtomicU64::new(0),
+            next_wr_id: 0,
             wc_cache: Rc::new(RefCell::new(HashMap::new())),
             dead_wr: Rc::new(RefCell::new(HashSet::new())),
         })
@@ -151,7 +151,7 @@ pub struct IbBConnectedEndpoint<'a> {
     cq_size: usize,
     endpoint: QueuePairEndpoint,
     remote_endpoint: QueuePairEndpoint,
-    next_wr_id: AtomicU64,
+    next_wr_id: u64,
     wc_cache: Rc<RefCell<HashMap<u64, ibv_wc>>>,
     dead_wr: Rc<RefCell<HashSet<u64>>>,
 }
@@ -222,7 +222,9 @@ impl IbBConnectedEndpoint<'_> {
 
     #[must_use = "Work request has to be polled or waited for"]
     pub fn post_send(&mut self, bounds: impl RangeBounds<usize>) -> io::Result<WorkRequest> {
-        let wr_id = self.next_wr_id.fetch_add(1, Relaxed);
+        let wr_id = self.next_wr_id;
+        self.next_wr_id += 1;
+
         unsafe { self.qp.post_send(&[self.data_mr.slice(bounds)], wr_id) }?;
 
         Ok(WorkRequest {
@@ -235,7 +237,9 @@ impl IbBConnectedEndpoint<'_> {
 
     #[must_use = "Work request has to be polled or waited for"]
     pub fn post_receive(&mut self, bounds: impl RangeBounds<usize>) -> io::Result<WorkRequest> {
-        let wr_id = self.next_wr_id.fetch_add(1, Relaxed);
+        let wr_id = self.next_wr_id;
+        self.next_wr_id += 1;
+
         unsafe { self.qp.post_receive(&[self.data_mr.slice(bounds)], wr_id) }?;
 
         Ok(WorkRequest {
