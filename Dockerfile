@@ -27,7 +27,10 @@ RUN dnf update -y && \
     kernel-headers \
     pciutils \
     usbutils \
-    openssl-devel && \
+    openssl-devel \
+    libnl3-devel \
+    python3-devel \
+    pkg-config && \
     dnf clean all
 
 # Install EPEL repository
