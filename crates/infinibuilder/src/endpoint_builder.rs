@@ -1,7 +1,7 @@
-use std::io;
+use crate::IbBUnconnectedEndpoint;
 use ibverbs::Context;
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
-use crate::IbBUnconnectedEndpoint;
+use std::io;
 
 pub struct UnsetContext;
 pub struct SetContext<'a>(&'a Context);
@@ -31,7 +31,7 @@ impl IbBEndpointBuilder<UnsetContext, UnsetDataMemoryRegion, UnsetCompletionQueu
 }
 
 impl<DataMemoryRegionStatus, CompletionQueueSizeStatus>
-IbBEndpointBuilder<UnsetContext, DataMemoryRegionStatus, CompletionQueueSizeStatus>
+    IbBEndpointBuilder<UnsetContext, DataMemoryRegionStatus, CompletionQueueSizeStatus>
 {
     pub fn set_context(
         self,
@@ -46,7 +46,7 @@ IbBEndpointBuilder<UnsetContext, DataMemoryRegionStatus, CompletionQueueSizeStat
 }
 
 impl<ContextStatus, CompletionQueueSizeStatus>
-IbBEndpointBuilder<ContextStatus, UnsetDataMemoryRegion, CompletionQueueSizeStatus>
+    IbBEndpointBuilder<ContextStatus, UnsetDataMemoryRegion, CompletionQueueSizeStatus>
 {
     pub fn set_data_memory_region(
         self,
@@ -61,7 +61,7 @@ IbBEndpointBuilder<ContextStatus, UnsetDataMemoryRegion, CompletionQueueSizeStat
 }
 
 impl<ContextStatus, DataMemoryRegionStatus>
-IbBEndpointBuilder<ContextStatus, DataMemoryRegionStatus, UnsetCompletionQueueSize>
+    IbBEndpointBuilder<ContextStatus, DataMemoryRegionStatus, UnsetCompletionQueueSize>
 {
     pub fn set_completion_queue_size(
         self,
@@ -81,9 +81,7 @@ impl<'a> IbBEndpointBuilder<SetContext<'_>, SetDataMemoryRegion<'a>, SetCompleti
         let cq_size = self.cq_size.0;
         let cq = context.create_cq(cq_size as i32, 0)?;
         let pd = context.alloc_pd()?;
-        let prepared_qp = pd
-            .create_qp(&cq, &cq, IBV_QPT_RC)?
-            .build()?;
+        let prepared_qp = pd.create_qp(&cq, &cq, IBV_QPT_RC)?.build()?;
         let data_mr = pd.register(self.data_mr.0)?;
         let endpoint = prepared_qp.endpoint()?;
 

@@ -1,10 +1,12 @@
+use crate::WorkRequest;
+use ibverbs::{
+    CompletionQueue, MemoryRegion, ProtectionDomain, QueuePair, QueuePairEndpoint, ibv_wc,
+};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::RangeBounds;
 use std::rc::Rc;
-use ibverbs::{ibv_wc, CompletionQueue, MemoryRegion, ProtectionDomain, QueuePair, QueuePairEndpoint};
-use crate::WorkRequest;
 
 // Attribute order is important since Rust drops attributes in order of declaration
 // QP must be destroyed before CQ

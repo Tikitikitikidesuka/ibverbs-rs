@@ -1,9 +1,11 @@
+use crate::IbBConnectedEndpoint;
+use ibverbs::{
+    CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePairEndpoint,
+};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
-use ibverbs::{CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePairEndpoint};
-use crate::IbBConnectedEndpoint;
 
 pub struct IbBUnconnectedEndpoint<'a> {
     pub(crate) prepared_qp: PreparedQueuePair,

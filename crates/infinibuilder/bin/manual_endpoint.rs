@@ -1,9 +1,9 @@
 use crate::Mode::{Receive, Send, Undetermined};
 use ibverbs::QueuePairEndpoint;
+use infinibuilder::IbBEndpointBuilder;
 use std::io::Write;
 use std::process::exit;
 use std::{env, io};
-use infinibuilder::IbBEndpointBuilder;
 
 const MESSAGE: &[u8] = b"HOLA, MUNDO!";
 
@@ -26,7 +26,8 @@ fn main() {
         .set_context(&context)
         .set_data_memory_region(unsafe { &mut *(memory.as_mut_slice() as *mut [u8]) })
         .set_completion_queue_size(16)
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     print_local_endpoint_json(&endpoint.endpoint());
 

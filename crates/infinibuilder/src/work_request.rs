@@ -1,8 +1,8 @@
+use ibverbs::{CompletionQueue, ibv_wc};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
-use ibverbs::{ibv_wc, CompletionQueue};
 
 #[must_use = "Work request should be polled until complete or waited for"]
 pub struct WorkRequest {
