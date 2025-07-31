@@ -63,8 +63,8 @@ WORKDIR /app
 # Make /app a dummy rust project to vendor dependencies
 RUN cargo init
 
-# Copy Cargo files
-COPY Cargo.toml Cargo.lock ./
+# Copy the entire project
+COPY . .
 
 # Vendor dependencies and set config to use them
 RUN mkdir ~/.cargo
