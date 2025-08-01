@@ -22,9 +22,8 @@ fn main() {
 
     let context = devices.get(0).unwrap().open().unwrap();
     let mut memory = vec![0u8; MESSAGE.len()];
-    let endpoint = IbBEndpointBuilder::new()
+    let endpoint = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory) }
         .set_context(&context)
-        .set_data_memory_region(unsafe { &mut *(memory.as_mut_slice() as *mut [u8]) })
         .set_completion_queue_size(16)
         .build()
         .unwrap();

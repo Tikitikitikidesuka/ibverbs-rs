@@ -2,12 +2,13 @@ use crate::IbBUnconnectedEndpoint;
 use ibverbs::Context;
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
 use std::io;
+use crate::unsafe_slice::UnsafeSlice;
 
 pub struct UnsetContext;
 pub struct SetContext<'a>(&'a Context);
 
 pub struct UnsetDataMemoryRegion;
-pub struct SetDataMemoryRegion<'a>(&'a mut [u8]);
+pub struct SetDataMemoryRegion(UnsafeSlice);
 
 pub struct UnsetCompletionQueueSize;
 pub struct SetCompletionQueueSize(usize);
@@ -48,13 +49,15 @@ impl<DataMemoryRegionStatus, CompletionQueueSizeStatus>
 impl<ContextStatus, CompletionQueueSizeStatus>
     IbBEndpointBuilder<ContextStatus, UnsetDataMemoryRegion, CompletionQueueSizeStatus>
 {
-    pub fn set_data_memory_region(
+    /// SAFETY: Takes the memory region as &[u8] and decouples it from the reference meaning
+    /// the memory must be ensured by the user to live more than the IbBEndopint
+    pub unsafe fn set_data_memory_region(
         self,
-        memory: &mut [u8],
+        memory: &[u8],
     ) -> IbBEndpointBuilder<ContextStatus, SetDataMemoryRegion, CompletionQueueSizeStatus> {
         IbBEndpointBuilder {
             context: self.context,
-            data_mr: SetDataMemoryRegion(memory),
+            data_mr: SetDataMemoryRegion(unsafe { UnsafeSlice::new(memory) }),
             cq_size: self.cq_size,
         }
     }
@@ -75,8 +78,8 @@ impl<ContextStatus, DataMemoryRegionStatus>
     }
 }
 
-impl<'a> IbBEndpointBuilder<SetContext<'_>, SetDataMemoryRegion<'a>, SetCompletionQueueSize> {
-    pub fn build(self) -> io::Result<IbBUnconnectedEndpoint<'a>> {
+impl<'a> IbBEndpointBuilder<SetContext<'_>, SetDataMemoryRegion, SetCompletionQueueSize> {
+    pub fn build(self) -> io::Result<IbBUnconnectedEndpoint> {
         let context = self.context.0;
         let cq_size = self.cq_size.0;
         let cq = context.create_cq(cq_size as i32, 0)?;

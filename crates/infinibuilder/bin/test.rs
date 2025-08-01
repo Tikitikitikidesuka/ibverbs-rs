@@ -16,20 +16,14 @@ fn main() {
     let mut memory_a = [0u8, 0, 0, 0];
     let mut memory_b = [0u8, 1, 2, 3];
 
-    println!("Decoupling memory unsafely for independent mutable reference");
-    let rdma_mem_a = unsafe { &mut *(&mut memory_a[..] as *mut [u8]) };
-    let rdma_mem_b = unsafe { &mut *(&mut memory_b[..] as *mut [u8]) };
-
     println!("Creating endpoints...");
-    let endpoint_a = IbBEndpointBuilder::new()
+    let endpoint_a = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory_a) }
         .set_context(&context_a)
-        .set_data_memory_region(rdma_mem_a)
         .set_completion_queue_size(16)
         .build()
         .unwrap();
-    let endpoint_b = IbBEndpointBuilder::new()
+    let endpoint_b = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory_b) }
         .set_context(&context_b)
-        .set_data_memory_region(rdma_mem_b)
         .set_completion_queue_size(16)
         .build()
         .unwrap();

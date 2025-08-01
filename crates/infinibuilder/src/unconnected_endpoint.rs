@@ -6,22 +6,23 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
+use crate::unsafe_slice::UnsafeSlice;
 
-pub struct IbBUnconnectedEndpoint<'a> {
+pub struct IbBUnconnectedEndpoint {
     pub(crate) prepared_qp: PreparedQueuePair,
     pub(crate) cq: CompletionQueue,
     pub(crate) cq_size: usize,
     pub(crate) pd: ProtectionDomain,
-    pub(crate) data_mr: MemoryRegion<&'a mut [u8]>,
+    pub(crate) data_mr: MemoryRegion<UnsafeSlice>,
     pub(crate) endpoint: QueuePairEndpoint,
 }
 
-impl<'a> IbBUnconnectedEndpoint<'a> {
+impl IbBUnconnectedEndpoint {
     pub fn endpoint(&self) -> QueuePairEndpoint {
         self.endpoint
     }
 
-    pub fn connect(self, endpoint: QueuePairEndpoint) -> io::Result<IbBConnectedEndpoint<'a>> {
+    pub fn connect(self, endpoint: QueuePairEndpoint) -> io::Result<IbBConnectedEndpoint> {
         let qp = self.prepared_qp.handshake(endpoint)?;
 
         Ok(IbBConnectedEndpoint {

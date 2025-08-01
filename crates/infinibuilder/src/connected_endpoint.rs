@@ -7,13 +7,14 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::RangeBounds;
 use std::rc::Rc;
+use crate::unsafe_slice::UnsafeSlice;
 
 // Attribute order is important since Rust drops attributes in order of declaration
 // QP must be destroyed before CQ
-pub struct IbBConnectedEndpoint<'a> {
+pub struct IbBConnectedEndpoint {
     pub(crate) qp: QueuePair,
     pub(crate) pd: ProtectionDomain,
-    pub(crate) data_mr: MemoryRegion<&'a mut [u8]>,
+    pub(crate) data_mr: MemoryRegion<UnsafeSlice>,
     pub(crate) cq: Rc<CompletionQueue>,
     pub(crate) cq_size: usize,
     pub(crate) endpoint: QueuePairEndpoint,
@@ -23,7 +24,7 @@ pub struct IbBConnectedEndpoint<'a> {
     pub(crate) dead_wr: Rc<RefCell<HashSet<u64>>>,
 }
 
-impl IbBConnectedEndpoint<'_> {
+impl IbBConnectedEndpoint {
     pub fn endpoint(&self) -> QueuePairEndpoint {
         self.endpoint
     }
