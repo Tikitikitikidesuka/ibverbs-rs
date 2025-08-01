@@ -38,13 +38,19 @@ fn main() {
         Send => {
             println!("Sending message...");
             memory.copy_from_slice(MESSAGE);
-            connection.post_send(..).unwrap().wait().unwrap();
-            println!("Sent!");
+            let wc = connection.post_send(..).unwrap().wait().unwrap();
+            match wc.is_valid() {
+                true => println!("Sent!"),
+                false => println!("Error while sending!"),
+            };
         }
         Receive => {
             println!("Waiting for message...");
-            connection.post_receive(..).unwrap().wait().unwrap();
-            println!("Received: {:?}", str::from_utf8(&memory).unwrap());
+            let wc = connection.post_receive(..).unwrap().wait().unwrap();
+            match wc.is_valid() {
+                true => println!("Received: {:?}", str::from_utf8(&memory).unwrap()),
+                false => println!("Error while receiving!"),
+            };
         }
         _ => unreachable!(),
     }

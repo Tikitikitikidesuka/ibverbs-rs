@@ -1,3 +1,4 @@
+use crate::WorkRequestStatus::{Done, Waiting};
 use ibverbs::{CompletionQueue, ibv_wc};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -10,6 +11,11 @@ pub struct WorkRequest {
     pub(crate) cq: Rc<CompletionQueue>,
     pub(crate) wc_cache: Rc<RefCell<HashMap<u64, ibv_wc>>>,
     pub(crate) dead_wr: Rc<RefCell<HashSet<u64>>>,
+}
+
+pub enum WorkRequestStatus {
+    Done(ibv_wc),
+    Waiting,
 }
 
 impl WorkRequest {
@@ -34,17 +40,21 @@ impl WorkRequest {
         Ok(())
     }
 
-    pub fn poll(&self) -> io::Result<bool> {
+    pub fn poll(&self) -> io::Result<WorkRequestStatus> {
         self.gather_completions()?;
-        Ok(self.wc_cache.borrow().contains_key(&self.id))
+        match self.wc_cache.borrow().get(&self.id) {
+            Some(wc) => Ok(Done(*wc)),
+            None => Ok(Waiting),
+        }
     }
 
-    pub fn wait(self) -> io::Result<()> {
-        while !self.poll()? {
-            std::hint::spin_loop();
+    pub fn wait(self) -> io::Result<ibv_wc> {
+        loop {
+            match self.poll()? {
+                Done(wc) => return Ok(wc),
+                Waiting => std::hint::spin_loop(),
+            }
         }
-
-        Ok(())
     }
 }
 
