@@ -54,12 +54,13 @@ fn main() -> io::Result<()> {
     match mode {
         Mode::Server => {
             println!("Starting server mode...");
+
             let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8844);
+            let exchange = IbBEndpointExchange::new(address).unwrap();
             println!("Running at: {address}");
 
             // Exchange qp
-            let qp = IbBEndpointExchange::exchange_as_server(
-                &address,
+            let qp = exchange.accept_and_exchange(
                 server_qp,
                 Duration::from_secs(10),
             )
@@ -75,7 +76,7 @@ fn main() -> io::Result<()> {
 
             // Exchange qp
             loop {
-                match IbBEndpointExchange::exchange_as_client(
+                match IbBEndpointExchange::connect_and_exchange(
                     &address,
                     client_qp,
                     Duration::from_secs(10),
