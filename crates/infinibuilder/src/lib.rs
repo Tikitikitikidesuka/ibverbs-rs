@@ -2,12 +2,15 @@ mod connected_endpoint;
 mod endpoint_builder;
 mod unconnected_endpoint;
 mod work_request;
-mod synchronization;
+//mod synchronization;
 mod unsafe_slice;
+//mod network;
+mod socket_qp_exchange;
 
 pub use connected_endpoint::*;
 pub use endpoint_builder::*;
 pub use unconnected_endpoint::*;
 pub use work_request::*;
+pub use socket_qp_exchange::*;
 
 pub use ibverbs;
