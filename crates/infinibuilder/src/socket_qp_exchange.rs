@@ -1,5 +1,6 @@
-use std::io::{Read, Write};
+use crate::IbBEndpointExchangeError::ConnectionError;
 use ibverbs::QueuePairEndpoint;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 use thiserror::Error;
@@ -51,11 +52,14 @@ impl IbBEndpointExchange {
     ) -> Result<QueuePairEndpoint, IbBEndpointExchangeError> {
         let mut stream = TcpStream::connect_timeout(
             &socket_addr.to_socket_addrs()?.next().ok_or_else(|| {
-                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid address")
+                ConnectionError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Invalid address",
+                ))
             })?,
             timeout,
         )
-        .map_err(IbBEndpointExchangeError::ConnectionError)?;
+        .map_err(ConnectionError)?;
 
         Self::exchange_with_stream(&mut stream, qp_endpoint, timeout)
     }
@@ -67,6 +71,8 @@ impl IbBEndpointExchange {
     ) -> Result<QueuePairEndpoint, IbBEndpointExchangeError> {
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
+
+        println!("Exchanging from {:?}", local_endpoint);
 
         let json = serde_json::to_string(&local_endpoint)?;
         Self::send_message(stream, &json)?;
