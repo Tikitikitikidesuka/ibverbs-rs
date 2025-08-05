@@ -1,4 +1,7 @@
-use crate::IbBEndpointExchangeError::ConnectionError;
+use crate::IbBTcpNodeQpEndpointExchangeError::{
+    ConnectionError, InvalidAddress, InvalidUtf8, MessageTooLarge,
+};
+use crate::{IbBReadyNodeConfig, IbBStaticNodeConfig};
 use ibverbs::QueuePairEndpoint;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
@@ -8,28 +11,30 @@ use thiserror::Error;
 const MAX_MESSAGE_SIZE: usize = 4096;
 
 #[derive(Debug, Error)]
-pub enum IbBEndpointExchangeError {
-    #[error("Error connecting to Queue pair exchange socket server")]
+pub enum IbBTcpNodeQpEndpointExchangeError {
+    #[error("Invalid address")]
+    InvalidAddress,
+    #[error(transparent)]
     ConnectionError(std::io::Error),
-    #[error("Queue pair endpoint serialization/deserialization error: {0}")]
+    #[error(transparent)]
     SerdeError(#[from] serde_json::Error),
-    #[error("Queue pair socket IO error: {0}")]
+    #[error(transparent)]
     IoError(#[from] std::io::Error),
-    #[error("Message too large: {0} bytes (max: {1})")]
-    MessageTooLarge(usize, usize),
-    #[error("Invalid UTF-8 in received message")]
+    #[error("Serialized data too large: {0} bytes (max: {MAX_MESSAGE_SIZE})")]
+    MessageTooLarge(usize),
+    #[error(transparent)]
     InvalidUtf8(#[from] std::str::Utf8Error),
     #[error("Incomplete message received")]
     IncompleteMessage,
 }
 
-pub struct IbBEndpointExchange {
+pub struct IbBTcpNodeQpEndpointExchanger {
     listener: TcpListener,
 }
 
-impl IbBEndpointExchange {
+impl IbBTcpNodeQpEndpointExchanger {
     /// Create a new server that listens on the given address
-    pub fn new(socket_addr: impl ToSocketAddrs) -> Result<Self, IbBEndpointExchangeError> {
+    pub fn new(socket_addr: impl ToSocketAddrs) -> Result<Self, IbBTcpNodeQpEndpointExchangeError> {
         let listener = TcpListener::bind(socket_addr)?;
         Ok(Self { listener })
     }
@@ -37,44 +42,53 @@ impl IbBEndpointExchange {
     /// Accept a connection and exchange endpoints with a client
     pub fn accept_and_exchange(
         &self,
-        qp_endpoint: QueuePairEndpoint,
+        local_node: IbBStaticNodeConfig,
+        local_qp_endpoint: QueuePairEndpoint,
         timeout: Duration,
-    ) -> Result<QueuePairEndpoint, IbBEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
         let (mut stream, _addr) = self.listener.accept()?;
-        Self::exchange_with_stream(&mut stream, qp_endpoint, timeout)
+
+        let ready_node = IbBReadyNodeConfig {
+            node_config: local_node,
+            qp_endpoint: local_qp_endpoint,
+        };
+
+        Self::exchange_with_stream(&mut stream, ready_node, timeout)
     }
 
     /// Connect to a server and exchange endpoints (client mode)
     pub fn connect_and_exchange(
         socket_addr: impl ToSocketAddrs,
-        qp_endpoint: QueuePairEndpoint,
+        local_node: IbBStaticNodeConfig,
+        local_qp_endpoint: QueuePairEndpoint,
         timeout: Duration,
-    ) -> Result<QueuePairEndpoint, IbBEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
         let mut stream = TcpStream::connect_timeout(
-            &socket_addr.to_socket_addrs()?.next().ok_or_else(|| {
-                ConnectionError(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Invalid address",
-                ))
-            })?,
+            &socket_addr
+                .to_socket_addrs()?
+                .next()
+                .ok_or(InvalidAddress)?,
             timeout,
         )
         .map_err(ConnectionError)?;
 
-        Self::exchange_with_stream(&mut stream, qp_endpoint, timeout)
+        let ready_node = IbBReadyNodeConfig {
+            node_config: local_node,
+            qp_endpoint: local_qp_endpoint,
+        };
+
+        Self::exchange_with_stream(&mut stream, ready_node, timeout)
     }
 
     fn exchange_with_stream(
         stream: &mut TcpStream,
-        local_endpoint: QueuePairEndpoint,
+        local_ready_node: IbBReadyNodeConfig,
         timeout: Duration,
-    ) -> Result<QueuePairEndpoint, IbBEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
 
-        println!("Exchanging from {:?}", local_endpoint);
-
-        let json = serde_json::to_string(&local_endpoint)?;
+        let json = serde_json::to_string(&local_ready_node)?;
         Self::send_message(stream, &json)?;
         let received_json = Self::receive_message(stream)?;
 
@@ -90,22 +104,20 @@ impl IbBEndpointExchange {
         Ok(())
     }
 
-    fn receive_message(stream: &mut TcpStream) -> Result<String, IbBEndpointExchangeError> {
+    fn receive_message(
+        stream: &mut TcpStream,
+    ) -> Result<String, IbBTcpNodeQpEndpointExchangeError> {
         let mut len_bytes = [0u8; 4];
         stream.read_exact(&mut len_bytes)?;
         let len = u32::from_be_bytes(len_bytes) as usize;
 
         if len > MAX_MESSAGE_SIZE {
-            return Err(IbBEndpointExchangeError::MessageTooLarge(
-                len,
-                MAX_MESSAGE_SIZE,
-            ));
+            return Err(MessageTooLarge(len));
         }
 
         let mut buffer = vec![0u8; len];
         stream.read_exact(&mut buffer)?;
 
-        Ok(String::from_utf8(buffer)
-            .map_err(|e| IbBEndpointExchangeError::InvalidUtf8(e.utf8_error()))?)
+        Ok(String::from_utf8(buffer).map_err(|e| InvalidUtf8(e.utf8_error()))?)
     }
 }

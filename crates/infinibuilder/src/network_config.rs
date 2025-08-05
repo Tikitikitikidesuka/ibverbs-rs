@@ -17,7 +17,7 @@ pub struct IbBCheckedStaticNetworkConfig {
     node_config_map: HashMap<u32, IbBStaticNodeConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct IbBStaticNodeConfig {
     hostname: String,
     ib_device: String,
@@ -35,7 +35,7 @@ impl Deref for IbBUncheckedStaticNetworkConfig {
 
 impl Deref for IbBCheckedStaticNetworkConfig {
     type Target = HashMap<u32, IbBStaticNodeConfig>;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.node_config_map
     }
