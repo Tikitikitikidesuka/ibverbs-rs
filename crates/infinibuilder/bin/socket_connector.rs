@@ -1,5 +1,5 @@
-use infinibuilder::IbBEndpointExchange;
-use infinibuilder::IbBEndpointExchangeError::ConnectionError;
+use infinibuilder::IbBNodeTcpQpEndpointExchanger;
+use infinibuilder::IbBNodeTcpQpEndpointExchangeError::ConnectionError;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::exit;
@@ -56,7 +56,7 @@ fn main() -> io::Result<()> {
             println!("Starting server mode...");
 
             let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 8844);
-            let exchange = IbBEndpointExchange::new(address).unwrap();
+            let exchange = IbBNodeTcpQpEndpointExchanger::new(address).unwrap();
             println!("Running at: {address}");
 
             // Exchange qp
@@ -76,7 +76,7 @@ fn main() -> io::Result<()> {
 
             // Exchange qp
             loop {
-                match IbBEndpointExchange::connect_and_exchange(
+                match IbBNodeTcpQpEndpointExchanger::connect_and_exchange(
                     &address,
                     client_qp,
                     Duration::from_secs(10),

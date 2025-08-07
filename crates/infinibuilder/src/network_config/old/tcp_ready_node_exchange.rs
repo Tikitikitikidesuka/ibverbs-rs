@@ -1,4 +1,4 @@
-use crate::IbBTcpNodeQpEndpointExchangeError::{
+use crate::IbBNodeTcpQpEndpointExchangeError::{
     ConnectionError, InvalidAddress, InvalidUtf8, MessageTooLarge,
 };
 use crate::{IbBReadyNodeConfig, IbBStaticNodeConfig};
@@ -11,7 +11,7 @@ use thiserror::Error;
 const MAX_MESSAGE_SIZE: usize = 4096;
 
 #[derive(Debug, Error)]
-pub enum IbBTcpNodeQpEndpointExchangeError {
+pub enum IbBNodeTcpQpEndpointExchangeError {
     #[error("Invalid address")]
     InvalidAddress,
     #[error(transparent)]
@@ -28,13 +28,13 @@ pub enum IbBTcpNodeQpEndpointExchangeError {
     IncompleteMessage,
 }
 
-pub struct IbBTcpNodeQpEndpointExchanger {
+pub struct IbBNodeTcpQpEndpointExchanger {
     listener: TcpListener,
 }
 
-impl IbBTcpNodeQpEndpointExchanger {
+impl IbBNodeTcpQpEndpointExchanger {
     /// Create a new server that listens on the given address
-    pub fn new(socket_addr: impl ToSocketAddrs) -> Result<Self, IbBTcpNodeQpEndpointExchangeError> {
+    pub fn new(socket_addr: impl ToSocketAddrs) -> Result<Self, IbBNodeTcpQpEndpointExchangeError> {
         let listener = TcpListener::bind(socket_addr)?;
         Ok(Self { listener })
     }
@@ -45,7 +45,7 @@ impl IbBTcpNodeQpEndpointExchanger {
         local_node: IbBStaticNodeConfig,
         local_qp_endpoint: QueuePairEndpoint,
         timeout: Duration,
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBNodeTcpQpEndpointExchangeError> {
         let (mut stream, _addr) = self.listener.accept()?;
 
         let ready_node = IbBReadyNodeConfig {
@@ -62,7 +62,7 @@ impl IbBTcpNodeQpEndpointExchanger {
         local_node: IbBStaticNodeConfig,
         local_qp_endpoint: QueuePairEndpoint,
         timeout: Duration,
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBNodeTcpQpEndpointExchangeError> {
         let mut stream = TcpStream::connect_timeout(
             &socket_addr
                 .to_socket_addrs()?
@@ -84,7 +84,7 @@ impl IbBTcpNodeQpEndpointExchanger {
         stream: &mut TcpStream,
         local_ready_node: IbBReadyNodeConfig,
         timeout: Duration,
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNodeQpEndpointExchangeError> {
+    ) -> Result<IbBReadyNodeConfig, IbBNodeTcpQpEndpointExchangeError> {
         stream.set_read_timeout(Some(timeout))?;
         stream.set_write_timeout(Some(timeout))?;
 
@@ -106,7 +106,7 @@ impl IbBTcpNodeQpEndpointExchanger {
 
     fn receive_message(
         stream: &mut TcpStream,
-    ) -> Result<String, IbBTcpNodeQpEndpointExchangeError> {
+    ) -> Result<String, IbBNodeTcpQpEndpointExchangeError> {
         let mut len_bytes = [0u8; 4];
         stream.read_exact(&mut len_bytes)?;
         let len = u32::from_be_bytes(len_bytes) as usize;

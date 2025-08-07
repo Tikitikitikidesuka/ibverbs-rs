@@ -2,22 +2,18 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 
-#[derive(Debug)]
-pub struct Unchecked;
-#[derive(Debug)]
-pub struct Checked;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IbBUncheckedStaticNetworkConfig {
-    node_config_vec: Vec<IbBStaticNodeConfig>,
+    pub(crate) node_config_vec: Vec<IbBStaticNodeConfig>,
 }
 
 #[derive(Debug, Clone)]
 pub struct IbBCheckedStaticNetworkConfig {
-    node_config_map: HashMap<u32, IbBStaticNodeConfig>,
+    pub(crate) node_config_map: HashMap<u32, IbBStaticNodeConfig>,
+    pub(crate) rank_ids: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct IbBStaticNodeConfig {
     hostname: String,
     ib_device: String,
@@ -38,6 +34,32 @@ impl Deref for IbBCheckedStaticNetworkConfig {
 
     fn deref(&self) -> &Self::Target {
         &self.node_config_map
+    }
+}
+
+impl IbBCheckedStaticNetworkConfig {
+    pub fn iter(&self) -> IbBStaticNetworkIter {
+        IbBStaticNetworkIter {
+            rank_ids: &self.rank_ids,
+            node_map: &self.node_config_map,
+            index: 0,
+        }
+    }
+}
+
+pub struct IbBStaticNetworkIter<'a> {
+    rank_ids: &'a Vec<u32>,
+    node_map: &'a HashMap<u32, IbBStaticNodeConfig>,
+    index: usize,
+}
+
+impl<'a> Iterator for IbBStaticNetworkIter<'a> {
+    type Item = &'a IbBStaticNodeConfig;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let res = self.node_map.get(self.rank_ids.get(self.index)?);
+        self.index += 1;
+        res
     }
 }
 
@@ -71,6 +93,7 @@ impl IbBUncheckedStaticNetworkConfig {
     }
 
     pub fn validate(self) -> Result<IbBCheckedStaticNetworkConfig, (Self, String)> {
+        let mut rank_ids = Vec::new();
         let mut seen = HashSet::new();
         let mut node_config_map = HashMap::new();
 
@@ -82,16 +105,18 @@ impl IbBUncheckedStaticNetworkConfig {
             }
 
             node_config_map.insert(rank_id, node.clone());
+            rank_ids.push(rank_id);
         }
 
         Ok(IbBCheckedStaticNetworkConfig {
             node_config_map,
+            rank_ids,
         })
     }
 }
 
 impl FromIterator<IbBStaticNodeConfig> for IbBUncheckedStaticNetworkConfig {
-    fn from_iter<T: IntoIterator<Item=IbBStaticNodeConfig>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = IbBStaticNodeConfig>>(iter: T) -> Self {
         Self {
             node_config_vec: iter.into_iter().collect(),
         }
@@ -189,7 +214,8 @@ mod tests {
 
     #[test]
     fn test_serialize_checked_matches_unchecked_format() {
-        let unchecked = IbBUncheckedStaticNetworkConfig::from_iter(vec![make_node(1), make_node(2)]);
+        let unchecked =
+            IbBUncheckedStaticNetworkConfig::from_iter(vec![make_node(1), make_node(2)]);
         let checked = unchecked.clone().validate().unwrap();
 
         let unchecked_json = serde_json::to_string(&unchecked).unwrap();
@@ -204,12 +230,10 @@ mod tests {
 
     #[test]
     fn test_serialize_checked_contains_all_nodes() {
-        let checked = IbBUncheckedStaticNetworkConfig::from_iter(vec![
-            make_node(42),
-            make_node(13),
-        ])
-            .validate()
-            .unwrap();
+        let checked =
+            IbBUncheckedStaticNetworkConfig::from_iter(vec![make_node(42), make_node(13)])
+                .validate()
+                .unwrap();
 
         let json = serde_json::to_string(&checked).unwrap();
         assert!(json.contains("host42"));
@@ -217,4 +241,3 @@ mod tests {
         assert!(json.contains("ut42"));
     }
 }
-
