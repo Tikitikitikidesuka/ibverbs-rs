@@ -1,4 +1,5 @@
 use crate::IbBConnectedEndpoint;
+use crate::infiniband::unsafe_slice::UnsafeSlice;
 use ibverbs::{
     CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePairEndpoint,
 };
@@ -6,7 +7,6 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
-use crate::unsafe_slice::UnsafeSlice;
 
 pub struct IbBUnconnectedEndpoint {
     pub(crate) prepared_qp: PreparedQueuePair,

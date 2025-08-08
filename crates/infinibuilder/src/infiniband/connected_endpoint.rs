@@ -1,4 +1,5 @@
 use crate::WorkRequest;
+use crate::infiniband::unsafe_slice::UnsafeSlice;
 use ibverbs::{
     CompletionQueue, MemoryRegion, ProtectionDomain, QueuePair, QueuePairEndpoint, ibv_wc,
 };
@@ -7,7 +8,6 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::ops::RangeBounds;
 use std::rc::Rc;
-use crate::unsafe_slice::UnsafeSlice;
 
 // Attribute order is important since Rust drops attributes in order of declaration
 // QP must be destroyed before CQ

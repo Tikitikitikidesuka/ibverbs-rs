@@ -1,8 +1,8 @@
 use crate::IbBUnconnectedEndpoint;
+use crate::infiniband::unsafe_slice::UnsafeSlice;
 use ibverbs::Context;
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
 use std::io;
-use crate::unsafe_slice::UnsafeSlice;
 
 pub struct UnsetContext;
 pub struct SetContext<'a>(&'a Context);

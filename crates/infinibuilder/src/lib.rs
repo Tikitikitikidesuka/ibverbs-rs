@@ -1,17 +1,8 @@
-mod connected_endpoint;
-mod endpoint_builder;
-mod unconnected_endpoint;
-mod work_request;
-//mod synchronization;
-mod unsafe_slice;
+mod infiniband;
 mod network_config;
-//mod connected_network;
 
-pub use connected_endpoint::*;
-pub use endpoint_builder::*;
-pub use unconnected_endpoint::*;
-pub use work_request::*;
+pub use infiniband::*;
 pub use network_config::*;
-//pub use connected_network::*;
 
+// Reexport ibverbs
 pub use ibverbs;
