@@ -41,7 +41,6 @@ pub struct IbBTcpNetworkConfigExchanger;
 pub struct IbBTcpNetworkConfigExchangerConfig {
     pub tcp_port: u16,                        // Port for exchange over tcp
     pub send_timeout: Duration,               // Timeout for whole network send
-    pub send_max_attempts: u32,               // Maximum of retries for send
     pub send_attempt_delay: Duration,         // Delay between send attempts
     pub receive_timeout: Duration,            // Timeout for whole network receive
     pub receive_connection_timeout: Duration, // Timeout per connection in receive
@@ -117,6 +116,8 @@ impl IbBTcpNetworkConfigExchanger {
         })
     }
 
+    // Will loop retrying failed sends until all are finished successfully
+    // Must be run with a timeout block to prevent infinite loop
     async fn send_config_to_nodes_async(
         self_rank_id: u32,
         self_qp_endpoint: QueuePairEndpoint,
@@ -149,16 +150,14 @@ impl IbBTcpNetworkConfigExchanger {
             let rank_id = node_config.rank_id();
             let hostname = node_config.hostname().to_string();
             let tcp_port = exchanger_config.tcp_port;
-            let max_attempts = exchanger_config.send_max_attempts;
             let attempt_delay = exchanger_config.send_attempt_delay;
             let message_payload = message_payload.clone();
 
             let task = tokio::spawn(async move {
-                Self::send_to_single_node(
+                Self::loop_attempt_send_to_single_node(
                     &hostname,
                     tcp_port,
                     &message_payload,
-                    max_attempts,
                     attempt_delay,
                     rank_id,
                 )
@@ -169,47 +168,32 @@ impl IbBTcpNetworkConfigExchanger {
         }
 
         // Wait for all send operations to complete concurrently
+        // Since loop_attempt_send_to_single_node never returns Err, only check for join errors
         let results = join_all(send_tasks).await;
 
-        let mut errors = Vec::new();
-
         for result in results {
-            match result {
-                Ok(Ok(())) => {
-                    // Success - continue
-                }
-                Ok(Err(error)) => {
-                    errors.push(error);
-                }
-                Err(join_error) => {
-                    errors.push(RuntimeServerError(format!(
-                        "Task join error: {}",
-                        join_error
-                    )));
-                }
+            if let Err(join_error) = result {
+                return Err(RuntimeServerError(format!(
+                    "Task join error: {}",
+                    join_error
+                )));
             }
-        }
-
-        // If any sends failed, return the first error
-        if let Some(error) = errors.into_iter().next() {
-            return Err(error);
         }
 
         Ok(())
     }
 
-    async fn send_to_single_node(
+    async fn loop_attempt_send_to_single_node(
         hostname: &str,
         tcp_port: u16,
         message_payload: &[u8],
-        max_attempts: u32,
         attempt_delay: Duration,
         rank_id: u32,
     ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
         let target_addr = format!("{}:{}", hostname, tcp_port);
-        let mut last_error = None;
+        let mut attempt = 1;
 
-        for attempt in 1..=max_attempts {
+        loop {
             match Self::attempt_send(&target_addr, message_payload).await {
                 Ok(()) => {
                     println!(
@@ -219,29 +203,15 @@ impl IbBTcpNetworkConfigExchanger {
                     return Ok(());
                 }
                 Err(error) => {
-                    last_error = Some(error);
-                    if attempt < max_attempts {
-                        println!(
-                            "Failed to send to node {} (attempt {}/{}): {}. Retrying in {:?}...",
-                            rank_id,
-                            attempt,
-                            max_attempts,
-                            last_error.as_ref().unwrap(),
-                            attempt_delay
-                        );
-                        tokio::time::sleep(attempt_delay).await;
-                    }
+                    println!(
+                        "Failed to send to node {} (attempt {}): {}. Retrying in {:?}...",
+                        rank_id, attempt, error, attempt_delay
+                    );
+                    tokio::time::sleep(attempt_delay).await;
+                    attempt += 1;
                 }
             }
         }
-
-        // If we get here, all attempts failed
-        let final_error = last_error.expect("Should have an error if all attempts failed");
-        println!(
-            "Failed to send to node {} after {} attempts: {}",
-            rank_id, max_attempts, final_error
-        );
-        Err(final_error)
     }
 
     async fn attempt_send(

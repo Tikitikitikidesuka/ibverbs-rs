@@ -26,12 +26,11 @@ fn main() {
 
     // Configure the TCP exchanger settings
     let exchanger_config = IbBTcpNetworkConfigExchangerConfig {
-        tcp_port: 8080,
-        send_timeout: Duration::from_secs(30),
-        send_max_attempts: 3,
-        send_attempt_delay: Duration::from_secs(2),
+        tcp_port: 8844,
+        send_timeout: Duration::from_secs(60),
+        send_attempt_delay: Duration::from_secs(1),
         receive_timeout: Duration::from_secs(60),
-        receive_connection_timeout: Duration::from_secs(10),
+        receive_connection_timeout: Duration::from_secs(1),
     };
 
     let my_endpoint = my_qp_endpoint(rank_id);
