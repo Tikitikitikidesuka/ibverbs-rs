@@ -1,9 +1,10 @@
-use crate::WorkRequestStatus::{Done, Waiting};
-use ibverbs::{CompletionQueue, ibv_wc};
+use ibverbs::{CompletionQueue, ibv_wc, ibv_wc_opcode};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::rc::Rc;
+use crate::data_transmission::WorkRequestStatus;
+use crate::data_transmission::WorkRequestStatus::{Done, Waiting};
 
 #[must_use = "Work request should be polled until complete or waited for"]
 pub struct WorkRequest {
@@ -11,11 +12,6 @@ pub struct WorkRequest {
     pub(crate) cq: Rc<CompletionQueue>,
     pub(crate) wc_cache: Rc<RefCell<HashMap<u64, ibv_wc>>>,
     pub(crate) dead_wr: Rc<RefCell<HashSet<u64>>>,
-}
-
-pub enum WorkRequestStatus {
-    Done(ibv_wc),
-    Waiting,
 }
 
 impl WorkRequest {
@@ -40,7 +36,7 @@ impl WorkRequest {
         Ok(())
     }
 
-    pub fn poll(&self) -> io::Result<WorkRequestStatus> {
+    pub fn poll(&self) -> io::Result<WorkRequestStatus<ibv_wc>> {
         self.gather_completions()?;
         match self.wc_cache.borrow().get(&self.id) {
             Some(wc) => Ok(Done(*wc)),

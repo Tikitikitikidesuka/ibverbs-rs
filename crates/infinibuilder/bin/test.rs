@@ -1,4 +1,5 @@
-use infinibuilder::IbBEndpointBuilder;
+use ibverbs::QueuePair;
+use infinibuilder::IbBConnectedNodeBuilder;
 
 fn main() {
     let devices = ibverbs::devices().unwrap();
@@ -7,6 +8,9 @@ fn main() {
         "Devices: {:?}",
         devices.iter().map(|d| d.name()).collect::<Vec<_>>()
     );
+
+    let qp: QueuePair;
+    qp.post_write()
 
     println!("Opening contexts...");
     let context_a = devices.get(0).unwrap().open().unwrap();
@@ -17,12 +21,12 @@ fn main() {
     let mut memory_b = [0u8, 1, 2, 3];
 
     println!("Creating endpoints...");
-    let endpoint_a = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory_a) }
+    let endpoint_a = unsafe { IbBConnectedNodeBuilder::new().set_data_memory_region(&memory_a) }
         .set_context(&context_a)
         .set_completion_queue_size(16)
         .build()
         .unwrap();
-    let endpoint_b = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory_b) }
+    let endpoint_b = unsafe { IbBConnectedNodeBuilder::new().set_data_memory_region(&memory_b) }
         .set_context(&context_b)
         .set_completion_queue_size(16)
         .build()

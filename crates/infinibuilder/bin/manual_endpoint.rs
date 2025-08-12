@@ -1,6 +1,6 @@
 use crate::Mode::{Receive, Send, Undetermined};
 use ibverbs::QueuePairEndpoint;
-use infinibuilder::IbBEndpointBuilder;
+use infinibuilder::IbBConnectedNodeBuilder;
 use std::io::Write;
 use std::process::exit;
 use std::{env, io};
@@ -22,7 +22,7 @@ fn main() {
 
     let context = devices.get(0).unwrap().open().unwrap();
     let mut memory = vec![0u8; MESSAGE.len()];
-    let endpoint = unsafe { IbBEndpointBuilder::new().set_data_memory_region(&memory) }
+    let endpoint = unsafe { IbBConnectedNodeBuilder::new().set_data_memory_region(&memory) }
         .set_context(&context)
         .set_completion_queue_size(16)
         .build()

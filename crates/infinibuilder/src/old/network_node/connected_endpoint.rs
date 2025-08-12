@@ -1,5 +1,5 @@
-use crate::WorkRequest;
 use crate::infiniband::unsafe_slice::UnsafeSlice;
+use crate::{IbBSyncBackend, WorkRequest};
 use ibverbs::{
     CompletionQueue, MemoryRegion, ProtectionDomain, QueuePair, QueuePairEndpoint, ibv_wc,
 };
@@ -11,20 +11,15 @@ use std::rc::Rc;
 
 // Attribute order is important since Rust drops attributes in order of declaration
 // QP must be destroyed before CQ
-pub struct IbBConnectedEndpoint {
+pub struct IbBConnectedEndpoint<SyncBackend: IbBSyncBackend> {
     pub(crate) qp: QueuePair,
     pub(crate) pd: ProtectionDomain,
-    pub(crate) data_mr: MemoryRegion<UnsafeSlice>,
-    pub(crate) cq: Rc<CompletionQueue>,
-    pub(crate) cq_size: usize,
-    pub(crate) endpoint: QueuePairEndpoint,
-    pub(crate) remote_endpoint: QueuePairEndpoint,
-    pub(crate) next_wr_id: u64,
-    pub(crate) wc_cache: Rc<RefCell<HashMap<u64, ibv_wc>>>,
-    pub(crate) dead_wr: Rc<RefCell<HashSet<u64>>>,
+    pub(crate) sync_backend: SyncBackend,
+    pub(crate) data_tranmission_bakcned: IbBDataTransmissionBackend,
 }
 
-impl IbBConnectedEndpoint {
+
+impl<SyncBackend: IbBSyncBackend> IbBConnectedEndpoint<SyncBackend> {
     pub fn endpoint(&self) -> QueuePairEndpoint {
         self.endpoint
     }

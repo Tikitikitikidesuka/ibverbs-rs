@@ -2,12 +2,12 @@ use crate::IbBTcpNetworkConfigExchangerError::{
     CommunicationError, ConnectionError, InvalidMessage, MessageTooLarge, NonExistentRankId,
     RuntimeServerError,
 };
+use crate::network_config::dynamic_config::IbBDynamicNodeConfig;
 use crate::{
     IbBCheckedStaticNetworkConfig, IbBReadyNetworkConfig, IbBReadyNodeConfig, IbBStaticNodeConfig,
 };
 use futures::future::join_all;
 use futures::join;
-use ibverbs::QueuePairEndpoint;
 use serde::de::Error;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -49,7 +49,7 @@ pub struct IbBTcpNetworkConfigExchangerConfig {
 impl IbBTcpNetworkConfigExchanger {
     pub fn await_exchange_network_config(
         self_rank_id: u32,
-        self_qp_endpoint: QueuePairEndpoint,
+        self_dynamic_config: &IbBDynamicNodeConfig,
         socket_addr: impl ToSocketAddrs,
         network_config: &IbBCheckedStaticNetworkConfig,
         exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
@@ -58,7 +58,7 @@ impl IbBTcpNetworkConfigExchanger {
             .map_err(|error| ConnectionError(error))?
             .block_on(Self::exchange_network_config(
                 self_rank_id,
-                self_qp_endpoint,
+                self_dynamic_config,
                 socket_addr,
                 network_config,
                 exchanger_config,
@@ -67,14 +67,14 @@ impl IbBTcpNetworkConfigExchanger {
 
     pub async fn exchange_network_config(
         self_rank_id: u32,
-        self_qp_endpoint: QueuePairEndpoint,
+        self_dynamic_config: &IbBDynamicNodeConfig,
         socket_addr: impl ToSocketAddrs,
         network_config: &IbBCheckedStaticNetworkConfig,
         exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
     ) -> Result<IbBReadyNetworkConfig, IbBTcpNetworkConfigExchangerError> {
         let send_fut = Self::send_network_config(
             self_rank_id,
-            self_qp_endpoint,
+            self_dynamic_config,
             &network_config,
             &exchanger_config,
         );
@@ -94,7 +94,7 @@ impl IbBTcpNetworkConfigExchanger {
 
     pub async fn send_network_config(
         self_rank_id: u32,
-        self_qp_endpoint: QueuePairEndpoint,
+        self_dynamic_config: &IbBDynamicNodeConfig,
         network_config: &IbBCheckedStaticNetworkConfig,
         exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
     ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
@@ -102,7 +102,7 @@ impl IbBTcpNetworkConfigExchanger {
             exchanger_config.send_timeout,
             Self::send_config_to_nodes_async(
                 self_rank_id,
-                self_qp_endpoint,
+                self_dynamic_config,
                 network_config,
                 exchanger_config,
             ),
@@ -120,7 +120,7 @@ impl IbBTcpNetworkConfigExchanger {
     // Must be run with a timeout block to prevent infinite loop
     async fn send_config_to_nodes_async(
         self_rank_id: u32,
-        self_qp_endpoint: QueuePairEndpoint,
+        self_dynamic_config: &IbBDynamicNodeConfig,
         network_config: &IbBCheckedStaticNetworkConfig,
         exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
     ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
@@ -132,7 +132,7 @@ impl IbBTcpNetworkConfigExchanger {
 
         let self_ready_node_config = IbBReadyNodeConfig {
             node_config: self_node_config,
-            qp_endpoint: self_qp_endpoint,
+            dynamic_config: self_dynamic_config.clone(),
         };
 
         // Serialize the ready node config once
@@ -364,10 +364,7 @@ impl IbBTcpNetworkConfigExchanger {
         println!("All {} nodes connected successfully!", total_nodes);
 
         // Create and return the ready network config
-        Ok(IbBReadyNetworkConfig {
-            node_config_map,
-            rank_ids,
-        })
+        Ok(IbBReadyNetworkConfig::new(node_config_map, rank_ids))
     }
 
     async fn handle_connection(

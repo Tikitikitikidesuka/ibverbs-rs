@@ -1,8 +1,5 @@
 use ibverbs::QueuePairEndpoint;
-use infinibuilder::{
-    IbBStaticNodeConfig, IbBTcpNetworkConfigExchanger, IbBTcpNetworkConfigExchangerConfig,
-    IbBUncheckedStaticNetworkConfig,
-};
+use infinibuilder::{IbBDynamicNodeConfig, IbBStaticNodeConfig, IbBTcpNetworkConfigExchanger, IbBTcpNetworkConfigExchangerConfig, IbBUncheckedStaticNetworkConfig};
 use std::env;
 use std::time::Duration;
 
@@ -35,6 +32,10 @@ fn main() {
 
     let my_endpoint = my_qp_endpoint(rank_id);
 
+    let dynamic_config = IbBDynamicNodeConfig {
+        qp_endpoint: my_endpoint,
+    };
+
     println!(
         "Starting network configuration exchange for rank {}...",
         rank_id
@@ -46,7 +47,7 @@ fn main() {
     // Exchange network configuration (send and receive simultaneously)
     match IbBTcpNetworkConfigExchanger::await_exchange_network_config(
         rank_id,
-        my_endpoint,
+        &dynamic_config,
         bind_addr,
         &network_config,
         &exchanger_config,
@@ -55,7 +56,7 @@ fn main() {
             println!("✅ Successfully exchanged network configuration!");
             println!("Complete network:");
             ready_network.iter().for_each(|node| {
-                println!("  Node {}: {:?}", node.rank_id(), node.qp_endpoint());
+                println!("  Node {}: {:?}", node.rank_id(), node.dynamic_config().qp_endpoint);
             });
         }
         Err(e) => {

@@ -3,7 +3,9 @@ use ibverbs::QueuePairEndpoint;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::ops::Deref;
+use crate::network_config::dynamic_config::IbBDynamicNodeConfig;
 
+// Nodes are guaranteed to be in the same order on every instance of the same network
 #[derive(Debug, Clone)]
 pub struct IbBReadyNetworkConfig {
     pub(crate) node_config_map: HashMap<u32, IbBReadyNodeConfig>,
@@ -13,7 +15,7 @@ pub struct IbBReadyNetworkConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IbBReadyNodeConfig {
     pub(crate) node_config: IbBStaticNodeConfig,
-    pub(crate) qp_endpoint: QueuePairEndpoint,
+    pub(crate) dynamic_config: IbBDynamicNodeConfig,
 }
 
 impl Deref for IbBReadyNetworkConfig {
@@ -25,6 +27,20 @@ impl Deref for IbBReadyNetworkConfig {
 }
 
 impl IbBReadyNetworkConfig {
+    pub(crate) fn new(
+        node_config_map: HashMap<u32, IbBReadyNodeConfig>,
+        rank_ids: Vec<u32>,
+    ) -> Self {
+        let mut sorted_rank_ids = rank_ids;
+        sorted_rank_ids.sort();
+
+        Self {
+            node_config_map,
+            rank_ids: sorted_rank_ids,
+        }
+    }
+
+    // Guaranteed to be sorted by sorting the vec on instantiation
     pub fn iter(&self) -> IbBReadyNetworkIter {
         IbBReadyNetworkIter {
             rank_ids: &self.rank_ids,
@@ -59,7 +75,7 @@ impl Deref for IbBReadyNodeConfig {
 }
 
 impl IbBReadyNodeConfig {
-    pub fn qp_endpoint(&self) -> QueuePairEndpoint {
-        self.qp_endpoint
+    pub fn dynamic_config(&self) -> &IbBDynamicNodeConfig {
+        &self.dynamic_config
     }
 }
