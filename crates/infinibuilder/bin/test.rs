@@ -1,7 +1,16 @@
-use ibverbs::QueuePair;
-use infinibuilder::IbBConnectedNodeBuilder;
+use infinibuilder::centralized_sync::{
+    CentralizedSyncConfig, CentralizedSyncMasterConfig, UnconnectedCentralizedSync,
+};
+use std::env;
+use std::process::exit;
+use std::str::FromStr;
 
 fn main() {
+    let mode = select_mode_from_args();
+    if let Mode::Undetermined = mode {
+        exit(1)
+    }
+
     let devices = ibverbs::devices().unwrap();
 
     println!(
@@ -9,50 +18,46 @@ fn main() {
         devices.iter().map(|d| d.name()).collect::<Vec<_>>()
     );
 
-    let qp: QueuePair;
-    qp.post_write()
+    let context = devices.get(0).unwrap().open().unwrap();
 
-    println!("Opening contexts...");
-    let context_a = devices.get(0).unwrap().open().unwrap();
-    let context_b = devices.get(1).unwrap().open().unwrap();
+    let config = match mode {
+        Mode::Master(num_nodes) => CentralizedSyncConfig::new_master(num_nodes),
+        Mode::Slave(slave_idx) => CentralizedSyncConfig::new_slave(slave_idx),
+        Mode::Undetermined => unreachable!(),
+    };
 
-    println!("Creating memories...");
-    let mut memory_a = [0u8, 0, 0, 0];
-    let mut memory_b = [0u8, 1, 2, 3];
+    let unconnected = UnconnectedCentralizedSync::new(context, config).unwrap();
+    let connection_config = unconnected.connection_config();
+    println!(
+        "Connection configuration: {}",
+        serde_json::to_string(&connection_config).unwrap()
+    );
+}
 
-    println!("Creating endpoints...");
-    let endpoint_a = unsafe { IbBConnectedNodeBuilder::new().set_data_memory_region(&memory_a) }
-        .set_context(&context_a)
-        .set_completion_queue_size(16)
-        .build()
-        .unwrap();
-    let endpoint_b = unsafe { IbBConnectedNodeBuilder::new().set_data_memory_region(&memory_b) }
-        .set_context(&context_b)
-        .set_completion_queue_size(16)
-        .build()
-        .unwrap();
+#[derive(Debug, Copy, Clone)]
+enum Mode {
+    Master(usize), // number of nodes
+    Slave(usize),  // slave index
+    Undetermined,
+}
 
-    println!("Endpoint A: {:?}", endpoint_a.endpoint());
-    println!("Endpoint B: {:?}", endpoint_b.endpoint());
+fn select_mode_from_args() -> Mode {
+    let args: Vec<String> = env::args().collect();
 
-    println!("Establishing connections...");
-    let mut endpoint_a = endpoint_a.connect(endpoint_b.endpoint()).unwrap();
-    let mut endpoint_b = endpoint_b.connect(endpoint_a.endpoint()).unwrap();
+    if args.len() != 3 {
+        eprintln!("Usage: {} <master|slave> <number>", args[0]);
+        exit(1);
+    }
 
-    println!("Connection established");
+    // Parse the second argument as a number
+    let number = usize::from_str(&args[2]).unwrap_or_else(|_| {
+        eprintln!("Second argument must be a positive integer");
+        exit(1);
+    });
 
-    println!("Memory A: {:?}", memory_a);
-    println!("Memory B: {:?}", memory_b);
-
-    let receive_wr = endpoint_a.post_receive(..).unwrap();
-    let extra_receive_wr = endpoint_a.post_receive(..).unwrap();
-    let send_wr = endpoint_b.post_send(1..2).unwrap();
-
-    println!("Waiting for receive wr...");
-    receive_wr.wait().unwrap();
-
-    println!("Memory A: {:?}", memory_a);
-    println!("Memory B: {:?}", memory_b);
-
-    //extra_receive_wr.wait();
+    match args[1].as_str() {
+        "master" => Mode::Master(number),
+        "slave" => Mode::Slave(number),
+        _ => Mode::Undetermined,
+    }
 }
