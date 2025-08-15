@@ -1,16 +1,8 @@
-use crate::synchronization::centralized::Role::*;
-use crate::synchronization::interface::{IbBNodeSync, IbBNodeSyncBuilder};
+use crate::synchronization::interface::{IbBNodeSync};
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
-use ibverbs::{
-    CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
-    QueuePairEndpoint,
-};
-
-pub struct IbBCentralizedNodeSyncStaticConfig {
-    pub ib_context: Context,
-    pub coordinator: bool,
-    pub nodes: usize,
-}
+use ibverbs::{CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint};
+use crate::component_builder::IbBNodeComponentBuilder;
+use crate::IbBCheckedStaticNetworkConfig;
 
 // Vector contains the endpoints of the rest of nodes
 pub enum IbBCentralizedSyncConfig {
@@ -34,15 +26,15 @@ enum BuilderFabric {
     },
 }
 
-impl IbBNodeSyncBuilder for IbBCentralizedNodeSyncBuilder {
-    type StaticConfig = IbBCentralizedNodeSyncStaticConfig;
+impl IbBNodeComponentBuilder for IbBCentralizedNodeSyncBuilder {
     type DynamicConfig = IbBCentralizedSyncConfig;
-    type IbBNodeSync = IbBCentralizedNodeSync;
+    type Component = IbBCentralizedNodeSync;
 
-    fn new(static_config: Self::StaticConfig) -> std::io::Result<Self> {
-        let cq = static_config
-            .ib_context
-            .create_cq(static_config.nodes as i32, IbBCentralizedNodeSync::CQ_ID)?;
+    fn new(ib_context: Context, static_network_config: &IbBCheckedStaticNetworkConfig, rank_id: u32) -> std::io::Result<Self> {
+        // Check this node is a Readout Unit
+
+        let cq = ib_context
+            .create_cq(static_network_config.len() as i32, IbBCentralizedNodeSync::CQ_ID)?;
         let pd = static_config.ib_context.alloc_pd()?;
 
         let fabric = match static_config.coordinator {
@@ -72,15 +64,13 @@ impl IbBNodeSyncBuilder for IbBCentralizedNodeSyncBuilder {
                     .collect::<Result<Vec<_>, _>>()?,
             ),
         })
-
-        // TODO: BASICALLY... :(
-        // TODO: YOU NEED A DIFFERENT BUILDER FOR MASTER AND SLAVE
     }
 
-    fn build(self, dynamic_config: Self::DynamicConfig) -> std::io::Result<Self::IbBNodeSync> {
+    fn build(self, dynamic_config: Self::DynamicConfig) -> std::io::Result<Self::Component> {
         match self.fabric {
             BuilderFabric::Master { mr, prepared_qps } => NodeFabric::Master {
-                mr, qps: prepared_qps.iter().map(|pqp| pqp.han)
+                mr,
+                qps: prepared_qps.iter().zip(dynamic_config).map(|pqp| pqp.handshake(dynamic_config.)),
             }
             BuilderFabric::Slave { prepared_qp } => {}
         }

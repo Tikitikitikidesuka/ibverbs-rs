@@ -125,7 +125,6 @@ impl IbBTcpNetworkConfigExchanger {
         exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
     ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
         let self_node_config = network_config
-            .node_config_map
             .get(&self_rank_id)
             .ok_or(NonExistentRankId(self_rank_id))?
             .clone();
@@ -273,7 +272,7 @@ impl IbBTcpNetworkConfigExchanger {
             .await
             .map_err(|error| ConnectionError(error))?;
 
-        let total_nodes = network_config.node_config_map.len();
+        let total_nodes = network_config.len();
 
         // Shared state for tracking received nodes by rank id
         let received_rank_ids = Arc::new(Mutex::new(HashSet::new()));

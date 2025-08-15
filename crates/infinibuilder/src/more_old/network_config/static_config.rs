@@ -9,8 +9,8 @@ pub struct IbBUncheckedStaticNetworkConfig {
 
 #[derive(Debug, Clone)]
 pub struct IbBCheckedStaticNetworkConfig {
-    pub(crate) node_config_map: HashMap<u32, IbBStaticNodeConfig>,
-    pub(crate) rank_ids: Vec<u32>,
+    node_config_map: HashMap<u32, IbBStaticNodeConfig>,
+    rank_ids: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
@@ -19,6 +19,13 @@ pub struct IbBStaticNodeConfig {
     ib_device: String,
     rank_id: u32,
     ut_id: String,
+    role: IbBNodeRole,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+pub enum IbBNodeRole {
+    ReadoutUnit,
+    BuilderUnit,
 }
 
 impl Deref for IbBUncheckedStaticNetworkConfig {
@@ -124,12 +131,13 @@ impl FromIterator<IbBStaticNodeConfig> for IbBUncheckedStaticNetworkConfig {
 }
 
 impl IbBStaticNodeConfig {
-    pub fn new<S: Into<String>>(hostname: S, ib_device: S, rank_id: u32, ut_id: S) -> Self {
+    pub fn new<S: Into<String>>(hostname: S, ib_device: S, rank_id: u32, ut_id: S, role: IbBNodeRole) -> Self {
         Self {
             hostname: hostname.into(),
             ib_device: ib_device.into(),
             rank_id,
             ut_id: ut_id.into(),
+            role
         }
     }
 
@@ -148,12 +156,17 @@ impl IbBStaticNodeConfig {
     pub fn ut_id(&self) -> &str {
         self.ut_id.as_str()
     }
+
+    pub fn role(&self) -> IbBNodeRole {
+        self.role
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json;
+    use crate::IbBNodeRole::ReadoutUnit;
 
     fn make_node(rank_id: u32) -> IbBStaticNodeConfig {
         IbBStaticNodeConfig {
@@ -161,6 +174,7 @@ mod tests {
             ib_device: format!("device{}", rank_id),
             rank_id,
             ut_id: format!("ut{}", rank_id),
+            role: ReadoutUnit,
         }
     }
 

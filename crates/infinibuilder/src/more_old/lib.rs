@@ -4,6 +4,7 @@ mod synchronization;
 mod connection;
 mod rdma;
 mod rdma_backend;
+mod component_builder;
 
 pub use data_transfer::*;
 pub use network_config::*;
