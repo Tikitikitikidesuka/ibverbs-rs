@@ -23,6 +23,10 @@ name = "test"
 path = "bin/test.rs"
 
 [[bin]]
+name = "simple_test"
+path = "bin/simple_test.rs"
+
+[[bin]]
 name = "manual_endpoint"
 path = "bin/manual_endpoint.rs"
 

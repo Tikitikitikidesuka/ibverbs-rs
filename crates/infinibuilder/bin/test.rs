@@ -1,37 +1,124 @@
 use infinibuilder::centralized_sync::{
-    CentralizedSyncConfig, CentralizedSyncMasterConfig, UnconnectedCentralizedSync,
+    CentralizedSync, CentralizedSyncConfig, CentralizedSyncConfigAdapter,
+    CentralizedSyncConnectionInputConfig, CentralizedSyncConnectionOutputConfig,
+    MasterConnectionOutputConfig, SlaveConnectionInputConfig, SlaveConnectionOutputConfig,
+    UnconnectedCentralizedSync,
 };
+use infinibuilder::sync_component::SyncComponent;
+use serde_json::Value;
 use std::env;
+use std::io::{self, Read};
 use std::process::exit;
 use std::str::FromStr;
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let mode = select_mode_from_args();
     if let Mode::Undetermined = mode {
         exit(1)
     }
 
-    let devices = ibverbs::devices().unwrap();
-
+    // Open device/context
+    let devices = ibverbs::devices()?;
     println!(
         "Devices: {:?}",
         devices.iter().map(|d| d.name()).collect::<Vec<_>>()
     );
+    let context = devices
+        .get(0)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No RDMA devices found"))?
+        .open()?;
 
-    let context = devices.get(0).unwrap().open().unwrap();
-
+    // Build config
     let config = match mode {
         Mode::Master(num_nodes) => CentralizedSyncConfig::new_master(num_nodes),
         Mode::Slave(slave_idx) => CentralizedSyncConfig::new_slave(slave_idx),
         Mode::Undetermined => unreachable!(),
     };
 
-    let unconnected = UnconnectedCentralizedSync::new(context, config).unwrap();
-    let connection_config = unconnected.connection_config();
-    println!(
-        "Connection configuration: {}",
-        serde_json::to_string(&connection_config).unwrap()
-    );
+    // Create unconnected endpoint and print local connection config as JSON
+    let unconnected = UnconnectedCentralizedSync::new(context, config)?;
+    let local_conn_cfg = unconnected.connection_config();
+
+    match local_conn_cfg {
+        CentralizedSyncConnectionOutputConfig::Master(config) => {
+            let json = serde_json::to_string_pretty(&config)?;
+            println!("=== Local connection configuration (copy/share this) ===");
+            println!("{json}");
+        }
+        CentralizedSyncConnectionOutputConfig::Slave(config) => {
+            let json = serde_json::to_string_pretty(&config)?;
+            println!("=== Local connection configuration (copy/share this) ===");
+            println!("{json}");
+        }
+    }
+
+    // Prompt and read the counterpart JSON
+    println!("\n=== Paste counterpart connection configuration JSON then press Ctrl-D/Ctrl-Z ===");
+
+    // Convert into the typed input config based on our role
+    let input_cfg: CentralizedSyncConnectionInputConfig = match mode {
+        Mode::Master(num_slaves) => {
+            println!("All the slave output configs one by one...");
+            let mut slave_output_configs = vec![];
+            for _ in 0..num_slaves {
+                let json = read_stdin_to_json()?;
+
+                // Expect Master input (many slave output configs)
+                let config =
+                    serde_json::from_value::<SlaveConnectionOutputConfig>(json).map_err(|e| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("Expected Slave output config; JSON did not match: {e}"),
+                        )
+                    })?;
+
+                slave_output_configs.push(config);
+            }
+
+            CentralizedSyncConnectionInputConfig::Master(
+                CentralizedSyncConfigAdapter::gather_master_config(slave_output_configs),
+            )
+        }
+        Mode::Slave(_) => {
+            println!("The master's config...");
+            let json = read_stdin_to_json()?;
+
+            // Expect Slave input (from master output config)
+            let master_config = serde_json::from_value::<MasterConnectionOutputConfig>(json)
+                .map_err(|e| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("Expected Slave input config; JSON did not match: {e}"),
+                    )
+                })?;
+
+            CentralizedSyncConnectionInputConfig::Slave(
+                CentralizedSyncConfigAdapter::adapt_slave_config(master_config),
+            )
+        }
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Local output config and role mismatch",
+            ));
+        }
+    };
+
+    // Connect
+    let mut connected = unconnected.connect(input_cfg)?;
+
+    println!("Connected.");
+    println!("Press a key to sync barrier...");
+    let mut input = String::new();
+    let _ = io::stdin().read_line(&mut input).unwrap();
+
+    if let Err(e) = connected.wait_barrier() {
+        eprintln!("Barrier failed: {e}");
+        exit(1);
+    }
+    println!("Barrier complete.");
+
+    Ok(())
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -43,21 +130,30 @@ enum Mode {
 
 fn select_mode_from_args() -> Mode {
     let args: Vec<String> = env::args().collect();
-
     if args.len() != 3 {
         eprintln!("Usage: {} <master|slave> <number>", args[0]);
         exit(1);
     }
-
     // Parse the second argument as a number
     let number = usize::from_str(&args[2]).unwrap_or_else(|_| {
         eprintln!("Second argument must be a positive integer");
         exit(1);
     });
-
     match args[1].as_str() {
         "master" => Mode::Master(number),
         "slave" => Mode::Slave(number),
         _ => Mode::Undetermined,
     }
+}
+
+fn read_stdin_to_json() -> io::Result<Value> {
+    let mut s = String::new();
+    io::stdin().read_to_string(&mut s)?;
+
+    serde_json::from_str(&s).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Failed to parse JSON: {e}"),
+        )
+    })
 }

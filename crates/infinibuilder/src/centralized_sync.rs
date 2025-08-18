@@ -3,10 +3,10 @@ use derivative::Derivative;
 use ibverbs::ibv_qp_type::IBV_QPT_RC;
 use ibverbs::{
     CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
-    QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice, ibv_wc, ibv_wc_opcode,
+    QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice, ibv_access_flags, ibv_wc,
+    ibv_wc_opcode,
 };
 use serde::{Deserialize, Serialize};
-use std::array::IntoIter;
 use std::cmp::PartialEq;
 
 #[derive(Debug, Copy, Clone)]
@@ -72,13 +72,13 @@ struct UnconnectedSyncSlave {
     cq: CompletionQueue,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CentralizedSyncConnectionOutputConfig {
     Master(MasterConnectionOutputConfig),
     Slave(SlaveConnectionOutputConfig),
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CentralizedSyncConnectionInputConfig {
     Master(MasterConnectionInputConfig),
     Slave(SlaveConnectionInputConfig),
@@ -102,9 +102,9 @@ pub struct MasterConnectionInputConfig {
     slave_mrs: Vec<RemoteMemoryRegion>,
 }
 
-pub struct CentralizedSyncConfigGatherer;
+pub struct CentralizedSyncConfigAdapter;
 
-impl CentralizedSyncConfigGatherer {
+impl CentralizedSyncConfigAdapter {
     pub fn gather_master_config(
         slave_configs: impl IntoIterator<Item = SlaveConnectionOutputConfig>,
     ) -> MasterConnectionInputConfig {
@@ -116,6 +116,15 @@ impl CentralizedSyncConfigGatherer {
         MasterConnectionInputConfig {
             slave_qp_endpoints,
             slave_mrs,
+        }
+    }
+
+    pub fn adapt_slave_config(
+        master_config: MasterConnectionOutputConfig,
+    ) -> SlaveConnectionInputConfig {
+        SlaveConnectionInputConfig {
+            master_qp_endpoints: master_config.self_qp_endpoints,
+            master_mr: master_config.self_mr,
         }
     }
 }
@@ -152,9 +161,9 @@ pub struct ConnectedSyncSlave {
 impl UnconnectedCentralizedSync {
     pub fn new(
         ib_context: ibverbs::Context,
-        network_config: CentralizedSyncConfig,
+        config: CentralizedSyncConfig,
     ) -> std::io::Result<Self> {
-        match network_config {
+        match config {
             CentralizedSyncConfig::Master(config) => Ok(Self::Master(UnconnectedSyncMaster::new(
                 ib_context, config,
             )?)),
@@ -211,7 +220,14 @@ impl UnconnectedSyncMaster {
         let mr = pd.allocate(config.num_slaves)?;
         let slave_prepared_qps = (0..config.num_slaves)
             .into_iter()
-            .map(|_| pd.create_qp(&cq, &cq, IBV_QPT_RC)?.build())
+            .map(|_| {
+                pd.create_qp(&cq, &cq, IBV_QPT_RC)?
+                    .set_access(
+                        ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                            | ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
+                    )
+                    .build()
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let slave_qp_endpoints = slave_prepared_qps
             .iter()
@@ -267,7 +283,13 @@ impl UnconnectedSyncSlave {
         let cq = ib_context.create_cq(Self::CQ_SIZE as i32, 0)?;
         let pd = ib_context.alloc_pd()?;
         let mr = pd.allocate(1)?;
-        let master_prepared_qp = pd.create_qp(&cq, &cq, IBV_QPT_RC)?.build()?;
+        let master_prepared_qp = pd
+            .create_qp(&cq, &cq, IBV_QPT_RC)?
+            .set_access(
+                ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                    | ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
+            )
+            .build()?;
         let master_qp_endpoint = master_prepared_qp.endpoint()?;
 
         Ok(Self {
