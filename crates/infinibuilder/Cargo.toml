@@ -27,6 +27,10 @@ name = "simple_test"
 path = "bin/simple_test.rs"
 
 [[bin]]
+name = "synchronization"
+path = "bin/synchronization.rs"
+
+[[bin]]
 name = "manual_endpoint"
 path = "bin/manual_endpoint.rs"
 

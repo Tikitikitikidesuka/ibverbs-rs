@@ -1,15 +1,10 @@
-use crate::IbBTcpNetworkConfigExchangerError::{
-    CommunicationError, ConnectionError, InvalidMessage, MessageTooLarge, NonExistentRankId,
-    RuntimeServerError,
-};
-use crate::network_config::dynamic_config::IbBDynamicNodeConfig;
-use crate::{
-    IbBCheckedStaticNetworkConfig, IbBReadyNetworkConfig, IbBReadyNodeConfig, IbBStaticNodeConfig,
-};
+use crate::config_exchange::TcpExchangerError::DuplicatedNodeId;
 use futures::future::join_all;
 use futures::join;
-use serde::de::Error;
+use serde::de::{DeserializeOwned, Error};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ops::Not;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -21,7 +16,7 @@ use tokio::sync::{Mutex, mpsc};
 const MAX_MESSAGE_LENGTH: usize = 4096;
 
 #[derive(Debug, Error)]
-pub enum IbBTcpNetworkConfigExchangerError {
+pub enum TcpExchangerError {
     #[error("Error during incoming TCP connection: {0}")]
     ConnectionError(std::io::Error),
     #[error("Error during TCP communication: {0}")]
@@ -34,11 +29,96 @@ pub enum IbBTcpNetworkConfigExchangerError {
     RuntimeServerError(String),
     #[error("Rank id is not in network config {0}")]
     NonExistentRankId(u32),
+    #[error("Duplicated node id {0} on network config")]
+    DuplicatedNodeId(u32),
 }
 
-pub struct IbBTcpNetworkConfigExchanger;
+pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
+    _marker: std::marker::PhantomData<T>,
+}
 
-pub struct IbBTcpNetworkConfigExchangerConfig {
+#[derive(Clone)]
+pub struct TcpExchangerNetworkConfig {
+    nodes: HashMap<u32, TcpExchangerNodeConfig>,
+    node_ids: Vec<u32>, // To iterate efficiently
+}
+
+impl TcpExchangerNetworkConfig {
+    pub fn new() -> Self {
+        Self {
+            nodes: HashMap::new(),
+            node_ids: Vec::new(),
+        }
+    }
+
+    pub fn add_node(mut self, node: TcpExchangerNodeConfig) -> Result<Self, TcpExchangerError> {
+        if !self.nodes.contains_key(&node.node_id) {
+            self.node_ids.push(node.node_id);
+            self.nodes.insert(node.node_id, node);
+            Ok(self)
+        } else {
+            Err(DuplicatedNodeId(node.node_id))
+        }
+    }
+
+    pub fn get(&self, node_id: &u32) -> Option<&TcpExchangerNodeConfig> {
+        self.nodes.get(node_id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.node_ids.len()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &TcpExchangerNodeConfig> + '_ {
+        self.node_ids
+            .iter()
+            .filter_map(move |id| self.nodes.get(id))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TcpExchangerNodeConfig {
+    node_id: u32,
+    address: String,
+}
+
+impl TcpExchangerNodeConfig {
+    pub fn new(node_id: u32, address: String) -> Self {
+        Self { node_id, address }
+    }
+}
+
+pub struct TcpExchangedData<T> {
+    nodes: Vec<TcpExchangedNodeData<T>>,
+}
+
+impl<T> TcpExchangedData<T> {
+    pub fn as_slice(&self) -> &[TcpExchangedNodeData<T>] {
+        &self.nodes
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, TcpExchangedNodeData<T>> {
+        self.nodes.iter()
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TcpExchangedNodeData<T> {
+    pub node_id: u32,
+    pub data: T,
+}
+
+impl<T> TcpExchangedNodeData<T> {
+    pub fn node_id(&self) -> u32 {
+        self.node_id
+    }
+
+    pub fn data(&self) -> &T {
+        &self.data
+    }
+}
+
+pub struct TcpExchangerConfig {
     pub tcp_port: u16,                        // Port for exchange over tcp
     pub send_timeout: Duration,               // Timeout for whole network send
     pub send_attempt_delay: Duration,         // Delay between send attempts
@@ -46,70 +126,81 @@ pub struct IbBTcpNetworkConfigExchangerConfig {
     pub receive_connection_timeout: Duration, // Timeout per connection in receive
 }
 
-impl IbBTcpNetworkConfigExchanger {
+impl Default for TcpExchangerConfig {
+    fn default() -> Self {
+        Self {
+            tcp_port: 8080,
+            send_timeout: Duration::from_secs(30),
+            send_attempt_delay: Duration::from_secs(1),
+            receive_timeout: Duration::from_secs(60),
+            receive_connection_timeout: Duration::from_secs(10),
+        }
+    }
+}
+
+impl<T> TcpExchanger<T>
+where
+    T: Serialize + DeserializeOwned + Send + Sync + 'static,
+{
     pub fn await_exchange_network_config(
-        self_rank_id: u32,
-        self_dynamic_config: &IbBDynamicNodeConfig,
-        socket_addr: impl ToSocketAddrs,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<IbBReadyNetworkConfig, IbBTcpNetworkConfigExchangerError> {
+        node_id: u32,
+        out_data: &T,
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
         Runtime::new()
-            .map_err(|error| ConnectionError(error))?
+            .map_err(|error| TcpExchangerError::ConnectionError(error))?
             .block_on(Self::exchange_network_config(
-                self_rank_id,
-                self_dynamic_config,
-                socket_addr,
+                node_id,
+                out_data,
                 network_config,
                 exchanger_config,
             ))
     }
 
     pub async fn exchange_network_config(
-        self_rank_id: u32,
-        self_dynamic_config: &IbBDynamicNodeConfig,
-        socket_addr: impl ToSocketAddrs,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<IbBReadyNetworkConfig, IbBTcpNetworkConfigExchangerError> {
-        let send_fut = Self::send_network_config(
-            self_rank_id,
-            self_dynamic_config,
-            &network_config,
-            &exchanger_config,
+        node_id: u32,
+        out_data: &T,
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
+        let send_fut =
+            Self::send_network_config(node_id, out_data, network_config, exchanger_config);
+
+        let socket_addr = format!(
+            "{}:{}",
+            network_config
+                .get(&node_id)
+                .ok_or(TcpExchangerError::NonExistentRankId(node_id))?
+                .address,
+            exchanger_config.tcp_port
         );
 
-        let recv_fut =
-            Self::receive_network_config(socket_addr, &network_config, &exchanger_config);
+        let recv_fut = Self::receive_network_config(socket_addr, network_config, exchanger_config);
 
         let (send_result, recv_result) = join!(send_fut, recv_fut);
 
         // Prioritize returning receive errors if they occur
         match (send_result, recv_result) {
             (Ok(_), Ok(ready_config)) => Ok(ready_config),
-            (Err(e), _) => Err(e),
             (_, Err(e)) => Err(e),
+            (Err(e), _) => Err(e),
         }
     }
 
     pub async fn send_network_config(
-        self_rank_id: u32,
-        self_dynamic_config: &IbBDynamicNodeConfig,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
+        node_id: u32,
+        out_data: &T,
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<(), TcpExchangerError> {
         tokio::time::timeout(
             exchanger_config.send_timeout,
-            Self::send_config_to_nodes_async(
-                self_rank_id,
-                self_dynamic_config,
-                network_config,
-                exchanger_config,
-            ),
+            Self::send_config_to_nodes_async(node_id, out_data, network_config, exchanger_config),
         )
         .await
         .unwrap_or_else(|_| {
-            Err(CommunicationError(std::io::Error::new(
+            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 "Operation timed out",
             )))
@@ -119,46 +210,40 @@ impl IbBTcpNetworkConfigExchanger {
     // Will loop retrying failed sends until all are finished successfully
     // Must be run with a timeout block to prevent infinite loop
     async fn send_config_to_nodes_async(
-        self_rank_id: u32,
-        self_dynamic_config: &IbBDynamicNodeConfig,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
-        let self_node_config = network_config
-            .get(&self_rank_id)
-            .ok_or(NonExistentRankId(self_rank_id))?
-            .clone();
-
-        let self_ready_node_config = IbBReadyNodeConfig {
-            node_config: self_node_config,
-            dynamic_config: self_dynamic_config.clone(),
+        node_id: u32,
+        out_data: &T,
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<(), TcpExchangerError> {
+        let sent_data = TcpExchangedNodeData {
+            node_id,
+            data: out_data.clone(),
         };
 
-        // Serialize the ready node config once
         let message_payload =
-            serde_json::to_vec(&self_ready_node_config).map_err(|error| InvalidMessage(error))?;
+            serde_json::to_vec(&sent_data).map_err(TcpExchangerError::InvalidMessage)?;
 
         if message_payload.len() > MAX_MESSAGE_LENGTH {
-            return Err(MessageTooLarge(message_payload.len()));
+            return Err(TcpExchangerError::MessageTooLarge(message_payload.len()));
         }
 
         // Create tasks for sending to all nodes concurrently
         let mut send_tasks = Vec::new();
 
         for node_config in network_config.iter() {
-            let rank_id = node_config.rank_id();
-            let hostname = node_config.hostname().to_string();
+            let target_node_id = node_config.node_id;
+            let address = node_config.address.clone();
             let tcp_port = exchanger_config.tcp_port;
             let attempt_delay = exchanger_config.send_attempt_delay;
             let message_payload = message_payload.clone();
 
             let task = tokio::spawn(async move {
                 Self::loop_attempt_send_to_single_node(
-                    &hostname,
+                    &address,
                     tcp_port,
                     &message_payload,
                     attempt_delay,
-                    rank_id,
+                    target_node_id,
                 )
                 .await
             });
@@ -172,7 +257,7 @@ impl IbBTcpNetworkConfigExchanger {
 
         for result in results {
             if let Err(join_error) = result {
-                return Err(RuntimeServerError(format!(
+                return Err(TcpExchangerError::RuntimeServerError(format!(
                     "Task join error: {}",
                     join_error
                 )));
@@ -183,13 +268,13 @@ impl IbBTcpNetworkConfigExchanger {
     }
 
     async fn loop_attempt_send_to_single_node(
-        hostname: &str,
+        address: &str,
         tcp_port: u16,
         message_payload: &[u8],
         attempt_delay: Duration,
-        rank_id: u32,
-    ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
-        let target_addr = format!("{}:{}", hostname, tcp_port);
+        node_id: u32,
+    ) -> Result<(), TcpExchangerError> {
+        let target_addr = format!("{}:{}", address, tcp_port);
         let mut attempt = 1;
 
         loop {
@@ -197,14 +282,14 @@ impl IbBTcpNetworkConfigExchanger {
                 Ok(()) => {
                     println!(
                         "Successfully sent config to node {} ({})",
-                        rank_id, target_addr
+                        node_id, target_addr
                     );
                     return Ok(());
                 }
                 Err(error) => {
                     println!(
                         "Failed to send to node {} (attempt {}): {}. Retrying in {:?}...",
-                        rank_id, attempt, error, attempt_delay
+                        node_id, attempt, error, attempt_delay
                     );
                     tokio::time::sleep(attempt_delay).await;
                     attempt += 1;
@@ -216,47 +301,47 @@ impl IbBTcpNetworkConfigExchanger {
     async fn attempt_send(
         target_addr: &str,
         message_payload: &[u8],
-    ) -> Result<(), IbBTcpNetworkConfigExchangerError> {
+    ) -> Result<(), TcpExchangerError> {
         use tokio::io::AsyncWriteExt;
 
         let mut stream = TcpStream::connect(target_addr)
             .await
-            .map_err(|error| ConnectionError(error))?;
+            .map_err(TcpExchangerError::ConnectionError)?;
 
         // Send 4-byte length header (little-endian)
         let len_bytes = (message_payload.len() as u32).to_le_bytes();
         stream
             .write_all(&len_bytes)
             .await
-            .map_err(|error| CommunicationError(error))?;
+            .map_err(TcpExchangerError::CommunicationError)?;
 
         // Send the message payload
         stream
             .write_all(message_payload)
             .await
-            .map_err(|error| CommunicationError(error))?;
+            .map_err(TcpExchangerError::CommunicationError)?;
 
         // Ensure all data is sent
         stream
             .flush()
             .await
-            .map_err(|error| CommunicationError(error))?;
+            .map_err(TcpExchangerError::CommunicationError)?;
 
         Ok(())
     }
 
     pub async fn receive_network_config(
         socket_addr: impl ToSocketAddrs,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<IbBReadyNetworkConfig, IbBTcpNetworkConfigExchangerError> {
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
         tokio::time::timeout(
             exchanger_config.receive_timeout,
             Self::run_network_config_server(socket_addr, network_config, exchanger_config),
         )
         .await
         .unwrap_or_else(|_| {
-            Err(CommunicationError(std::io::Error::new(
+            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 "Operation timed out",
             )))
@@ -265,29 +350,28 @@ impl IbBTcpNetworkConfigExchanger {
 
     async fn run_network_config_server(
         socket_addr: impl ToSocketAddrs,
-        network_config: &IbBCheckedStaticNetworkConfig,
-        exchanger_config: &IbBTcpNetworkConfigExchangerConfig,
-    ) -> Result<IbBReadyNetworkConfig, IbBTcpNetworkConfigExchangerError> {
+        network_config: &TcpExchangerNetworkConfig,
+        exchanger_config: &TcpExchangerConfig,
+    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
         let listener = TcpListener::bind(socket_addr)
             .await
-            .map_err(|error| ConnectionError(error))?;
+            .map_err(TcpExchangerError::ConnectionError)?;
 
-        let total_nodes = network_config.len();
+        let total_nodes = network_config.nodes.len();
 
-        // Shared state for tracking received nodes by rank id
-        let received_rank_ids = Arc::new(Mutex::new(HashSet::new()));
+        // Shared state for tracking received nodes by node id
+        let received_node_ids = Arc::new(Mutex::new(HashSet::new()));
         let network_config = Arc::new(network_config.clone());
 
         // Channel for sending received ready nodes to main task
-        let (tx, mut rx) = mpsc::channel::<
-            Result<IbBReadyNodeConfig, IbBTcpNetworkConfigExchangerError>,
-        >(total_nodes);
+        let (tx, mut rx) =
+            mpsc::channel::<Result<TcpExchangedNodeData<T>, TcpExchangerError>>(total_nodes);
 
         // Spawn the connection acceptor task
         let listener_task = {
             let tx = tx.clone();
             let network_config = Arc::clone(&network_config);
-            let received_rank_ids = Arc::clone(&received_rank_ids);
+            let received_node_ids = Arc::clone(&received_node_ids);
             let connection_timeout = exchanger_config.receive_connection_timeout;
 
             tokio::spawn(async move {
@@ -299,19 +383,19 @@ impl IbBTcpNetworkConfigExchanger {
                             // Spawn a task to handle each connection in parallel
                             let tx_clone = tx.clone();
                             let network_config_clone = Arc::clone(&network_config);
-                            let received_rank_ids_clone = Arc::clone(&received_rank_ids);
+                            let received_node_ids_clone = Arc::clone(&received_node_ids);
 
                             tokio::spawn(async move {
                                 let result = Self::handle_connection(
                                     stream,
                                     &network_config_clone,
-                                    &received_rank_ids_clone,
+                                    &received_node_ids_clone,
                                     connection_timeout,
                                 )
                                 .await;
 
                                 // Send result back to main task
-                                if let Err(_) = tx_clone.send(result).await {
+                                if tx_clone.send(result).await.is_err() {
                                     println!(
                                         "Failed to send result for connection from {}",
                                         peer_addr
@@ -321,7 +405,9 @@ impl IbBTcpNetworkConfigExchanger {
                         }
                         Err(accept_error) => {
                             println!("Failed to accept connection: {}", accept_error);
-                            let _ = tx.send(Err(ConnectionError(accept_error))).await;
+                            let _ = tx
+                                .send(Err(TcpExchangerError::ConnectionError(accept_error)))
+                                .await;
                             break;
                         }
                     }
@@ -331,15 +417,13 @@ impl IbBTcpNetworkConfigExchanger {
 
         // Collect results from parallel connection handlers
         let mut successful_nodes = 0;
-        let mut node_config_map = HashMap::new();
-        let mut rank_ids = Vec::new();
+        let mut in_data_vec = Vec::new();
 
         while successful_nodes < total_nodes {
             match rx.recv().await {
-                Some(Ok(node_config)) => {
+                Some(Ok(in_data)) => {
                     successful_nodes += 1;
-                    rank_ids.push(node_config.rank_id());
-                    node_config_map.insert(node_config.rank_id(), node_config);
+                    in_data_vec.push(in_data);
                     println!(
                         "Successfully validated node ({}/{} nodes received)",
                         successful_nodes, total_nodes
@@ -350,7 +434,7 @@ impl IbBTcpNetworkConfigExchanger {
                     // Continue waiting for valid connections
                 }
                 None => {
-                    return Err(RuntimeServerError(
+                    return Err(TcpExchangerError::RuntimeServerError(
                         "Channel closed unexpectedly".to_string(),
                     ));
                 }
@@ -362,16 +446,19 @@ impl IbBTcpNetworkConfigExchanger {
 
         println!("All {} nodes connected successfully!", total_nodes);
 
+        // Sort input data by node id
+        in_data_vec.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+
         // Create and return the ready network config
-        Ok(IbBReadyNetworkConfig::new(node_config_map, rank_ids))
+        Ok(TcpExchangedData { nodes: in_data_vec })
     }
 
     async fn handle_connection(
         mut stream: TcpStream,
-        network_config: &IbBCheckedStaticNetworkConfig,
+        network_config: &TcpExchangerNetworkConfig,
         received_nodes: &Arc<Mutex<HashSet<u32>>>,
         timeout: Duration,
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNetworkConfigExchangerError> {
+    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         let result = tokio::time::timeout(timeout, async {
             let mut buffer = [0u8; MAX_MESSAGE_LENGTH];
             let ready_node = Self::read_ready_node_from_stream(&mut stream, &mut buffer).await?;
@@ -383,7 +470,7 @@ impl IbBTcpNetworkConfigExchanger {
             received_nodes
                 .lock()
                 .await
-                .insert(validated_ready_node.rank_id());
+                .insert(validated_ready_node.node_id());
 
             // Return the ready node config
             Ok(validated_ready_node)
@@ -391,7 +478,7 @@ impl IbBTcpNetworkConfigExchanger {
         .await;
 
         result.unwrap_or_else(|_| {
-            Err(CommunicationError(std::io::Error::new(
+            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
                 "Operation timed out",
             )))
@@ -399,42 +486,41 @@ impl IbBTcpNetworkConfigExchanger {
     }
 
     async fn validate_ready_node_from_config(
-        ready_node: IbBReadyNodeConfig,
-        network_config: &IbBCheckedStaticNetworkConfig,
+        ready_node: TcpExchangedNodeData<T>,
+        network_config: &TcpExchangerNetworkConfig,
         received_nodes: &Arc<Mutex<HashSet<u32>>>,
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNetworkConfigExchangerError> {
-        let rank_id = ready_node.rank_id();
+    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
+        let node_id = ready_node.node_id();
 
-        if received_nodes.lock().await.contains(&rank_id) {
-            return Err(InvalidMessage(serde_json::Error::custom(
-                "Node already received",
-            )));
+        if received_nodes.lock().await.contains(&node_id) {
+            return Err(TcpExchangerError::InvalidMessage(
+                serde_json::Error::custom("Node already received"),
+            ));
         }
 
-        match network_config.get(&rank_id) {
-            Some(expected) if *expected == ready_node.node_config => Ok(ready_node),
-            _ => Err(InvalidMessage(serde_json::Error::custom(
-                "Node config mismatch",
-            ))),
+        // Check if node_id exists in network config
+        match network_config.get(&node_id) {
+            Some(_) => Ok(ready_node),
+            None => Err(TcpExchangerError::NonExistentRankId(node_id)),
         }
     }
 
     async fn read_ready_node_from_stream(
         stream: &mut TcpStream,
         buffer: &mut [u8],
-    ) -> Result<IbBReadyNodeConfig, IbBTcpNetworkConfigExchangerError> {
+    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         // Read message size from 4 byte header
         let mut len_bytes = [0u8; 4];
         stream
             .read_exact(&mut len_bytes)
             .await
-            .map_err(|error| CommunicationError(error))?;
+            .map_err(TcpExchangerError::CommunicationError)?;
 
         let len = u32::from_le_bytes(len_bytes) as usize;
 
         // Check size is within buffer boundaries
         if len > MAX_MESSAGE_LENGTH {
-            return Err(MessageTooLarge(len));
+            return Err(TcpExchangerError::MessageTooLarge(len));
         }
 
         // Read only the required bytes from the stream
@@ -442,10 +528,11 @@ impl IbBTcpNetworkConfigExchanger {
         stream
             .read_exact(msg_buffer)
             .await
-            .map_err(|error| CommunicationError(error))?;
+            .map_err(TcpExchangerError::CommunicationError)?;
 
         // Deserialize message payload
-        let config = serde_json::from_slice(msg_buffer).map_err(|error| InvalidMessage(error))?;
+        let config =
+            serde_json::from_slice(msg_buffer).map_err(TcpExchangerError::InvalidMessage)?;
 
         Ok(config)
     }

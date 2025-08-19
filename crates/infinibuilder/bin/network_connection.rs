@@ -1,5 +1,5 @@
 use ibverbs::QueuePairEndpoint;
-use infinibuilder::{IbBDynamicNodeConfig, IbBStaticNodeConfig, IbBTcpNetworkConfigExchanger, IbBTcpNetworkConfigExchangerConfig, IbBUncheckedStaticNetworkConfig};
+use infinibuilder::config_exchange::{TcpExchanger, TcpExchangerConfig, TcpExchangerError, TcpExchangerNetworkConfig, TcpExchangerNodeConfig};
 use std::env;
 use std::time::Duration;
 
@@ -13,16 +13,18 @@ fn main() {
     let rank_id: u32 = args[1].parse().expect("Invalid rank ID");
 
     // Create the static network configuration
-    let network_config = IbBUncheckedStaticNetworkConfig::new()
-        .add_node(IbBStaticNodeConfig::new("tdeb01", "keo", 0, "keo"))
-        .add_node(IbBStaticNodeConfig::new("tdeb02", "keo", 1, "keo"))
-        .add_node(IbBStaticNodeConfig::new("tdeb03", "keo", 2, "keo"))
-        .add_node(IbBStaticNodeConfig::new("tdeb04", "keo", 3, "keo"))
-        .validate()
+    let network_config = TcpExchangerNetworkConfig::new()
+        .add_node(TcpExchangerNodeConfig::new(0, "tdeb01".to_string()))
+        .unwrap()
+        .add_node(TcpExchangerNodeConfig::new(1, "tdeb02".to_string()))
+        .unwrap()
+        .add_node(TcpExchangerNodeConfig::new(2, "tdeb03".to_string()))
+        .unwrap()
+        .add_node(TcpExchangerNodeConfig::new(3, "tdeb05".to_string()))
         .expect("Failed to validate network configuration");
 
     // Configure the TCP exchanger settings
-    let exchanger_config = IbBTcpNetworkConfigExchangerConfig {
+    let exchanger_config = TcpExchangerConfig {
         tcp_port: 8844,
         send_timeout: Duration::from_secs(60),
         send_attempt_delay: Duration::from_secs(1),
@@ -32,23 +34,15 @@ fn main() {
 
     let my_endpoint = my_qp_endpoint(rank_id);
 
-    let dynamic_config = IbBDynamicNodeConfig {
-        qp_endpoint: my_endpoint,
-    };
-
     println!(
         "Starting network configuration exchange for rank {}...",
         rank_id
     );
 
-    // Bind to all interfaces on the specified port
-    let bind_addr = format!("0.0.0.0:{}", exchanger_config.tcp_port);
-
     // Exchange network configuration (send and receive simultaneously)
-    match IbBTcpNetworkConfigExchanger::await_exchange_network_config(
+    match TcpExchanger::await_exchange_network_config(
         rank_id,
-        &dynamic_config,
-        bind_addr,
+        &my_endpoint,
         &network_config,
         &exchanger_config,
     ) {
@@ -56,7 +50,11 @@ fn main() {
             println!("✅ Successfully exchanged network configuration!");
             println!("Complete network:");
             ready_network.iter().for_each(|node| {
-                println!("  Node {}: {:?}", node.rank_id(), node.dynamic_config().qp_endpoint);
+                println!(
+                    "  Node {}: {:?}",
+                    node.node_id,
+                    node.data,
+                );
             });
         }
         Err(e) => {
