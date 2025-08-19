@@ -1,2 +1,1 @@
-pub mod sync_component;
-pub mod centralized_sync;
+pub mod synchronization;

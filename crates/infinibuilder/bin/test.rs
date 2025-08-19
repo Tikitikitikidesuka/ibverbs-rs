@@ -1,15 +1,12 @@
-use infinibuilder::centralized_sync::{
-    CentralizedSync, CentralizedSyncConfig, CentralizedSyncConfigAdapter,
-    CentralizedSyncConnectionInputConfig, CentralizedSyncConnectionOutputConfig,
-    MasterConnectionOutputConfig, SlaveConnectionInputConfig, SlaveConnectionOutputConfig,
-    UnconnectedCentralizedSync,
-};
-use infinibuilder::sync_component::SyncComponent;
 use serde_json::Value;
 use std::env;
-use std::io::{self, Read};
+use std::io::{Read};
 use std::process::exit;
 use std::str::FromStr;
+use infinibuilder::synchronization::centralized::common::{CentralizedSyncConfig, CentralizedSyncConnectionInputConfig, CentralizedSyncConnectionOutputConfig, UnconnectedCentralizedSync};
+use infinibuilder::synchronization::centralized::master::{MasterConnectionInputConfig, MasterConnectionOutputConfig};
+use infinibuilder::synchronization::centralized::slave::{SlaveConnectionInputConfig, SlaveConnectionOutputConfig};
+use infinibuilder::synchronization::SyncComponent;
 
 fn main() -> std::io::Result<()> {
     let mode = select_mode_from_args();
@@ -25,7 +22,7 @@ fn main() -> std::io::Result<()> {
     );
     let context = devices
         .get(0)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "No RDMA devices found"))?
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "No RDMA devices found"))?
         .open()?;
 
     // Build config
@@ -66,8 +63,8 @@ fn main() -> std::io::Result<()> {
                 // Expect Master input (many slave output configs)
                 let config =
                     serde_json::from_value::<SlaveConnectionOutputConfig>(json).map_err(|e| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
                             format!("Expected Slave output config; JSON did not match: {e}"),
                         )
                     })?;
@@ -76,7 +73,7 @@ fn main() -> std::io::Result<()> {
             }
 
             CentralizedSyncConnectionInputConfig::Master(
-                CentralizedSyncConfigAdapter::gather_master_config(slave_output_configs),
+                MasterConnectionInputConfig::gather_master_config(slave_output_configs),
             )
         }
         Mode::Slave(_) => {
@@ -86,19 +83,19 @@ fn main() -> std::io::Result<()> {
             // Expect Slave input (from master output config)
             let master_config = serde_json::from_value::<MasterConnectionOutputConfig>(json)
                 .map_err(|e| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidInput,
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
                         format!("Expected Slave input config; JSON did not match: {e}"),
                     )
                 })?;
 
             CentralizedSyncConnectionInputConfig::Slave(
-                CentralizedSyncConfigAdapter::adapt_slave_config(master_config),
+                SlaveConnectionInputConfig::adapt_slave_config(master_config),
             )
         }
         _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
                 "Local output config and role mismatch",
             ));
         }
@@ -110,7 +107,7 @@ fn main() -> std::io::Result<()> {
     println!("Connected.");
     println!("Press a key to sync barrier...");
     let mut input = String::new();
-    let _ = io::stdin().read_line(&mut input).unwrap();
+    let _ = std::io::stdin().read_line(&mut input).unwrap();
 
     if let Err(e) = connected.wait_barrier() {
         eprintln!("Barrier failed: {e}");
@@ -146,13 +143,13 @@ fn select_mode_from_args() -> Mode {
     }
 }
 
-fn read_stdin_to_json() -> io::Result<Value> {
+fn read_stdin_to_json() -> std::io::Result<Value> {
     let mut s = String::new();
-    io::stdin().read_to_string(&mut s)?;
+    std::io::stdin().read_to_string(&mut s)?;
 
     serde_json::from_str(&s).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
             format!("Failed to parse JSON: {e}"),
         )
     })
