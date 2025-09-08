@@ -6,17 +6,9 @@ use infinibuilder::synchronization::centralized::common::{
     CentralizedSyncConfig, CentralizedSyncConnectionInputConfig,
     CentralizedSyncConnectionOutputConfig, UnconnectedCentralizedSync,
 };
-use infinibuilder::synchronization::centralized::master::{
-    MasterConnectionInputConfig, MasterConnectionOutputConfig,
-};
-use infinibuilder::synchronization::centralized::slave::{
-    SlaveConnectionInputConfig, SlaveConnectionOutputConfig,
-};
-use serde_json::Value;
+use infinibuilder::synchronization::centralized::master::MasterConnectionInputConfig;
+use infinibuilder::synchronization::centralized::slave::SlaveConnectionInputConfig;
 use std::env;
-use std::io::Read;
-use std::process::exit;
-use std::str::FromStr;
 use std::time::Duration;
 
 fn main() -> std::io::Result<()> {
@@ -93,7 +85,8 @@ fn main() -> std::io::Result<()> {
         .filter_map(|data| match data {
             CentralizedSyncConnectionOutputConfig::Master(master) => None,
             CentralizedSyncConnectionOutputConfig::Slave(slave) => Some(slave),
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     let master_configs = exchanged_configs
         .iter()
@@ -101,7 +94,8 @@ fn main() -> std::io::Result<()> {
         .filter_map(|data| match data {
             CentralizedSyncConnectionOutputConfig::Master(master) => Some(master),
             CentralizedSyncConnectionOutputConfig::Slave(slave) => None,
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
 
     if master_configs.len() > 1 || master_configs.is_empty() {
         panic!("There must be exactly one master node");
@@ -114,11 +108,9 @@ fn main() -> std::io::Result<()> {
         Mode::Master => CentralizedSyncConnectionInputConfig::Master(
             MasterConnectionInputConfig::gather_master_config(slave_configs),
         ),
-        Mode::Slave(idx) => {
-            CentralizedSyncConnectionInputConfig::Slave(
-                SlaveConnectionInputConfig::adapt_slave_config(master_config),
-            )
-        }
+        Mode::Slave(idx) => CentralizedSyncConnectionInputConfig::Slave(
+            SlaveConnectionInputConfig::adapt_slave_config(master_config),
+        ),
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -131,17 +123,25 @@ fn main() -> std::io::Result<()> {
     let mut connected = unconnected.connect(input_cfg)?;
 
     println!("Connected.");
+
+    wait_key_barrier(&mut connected);
+
+    wait_key_barrier(&mut connected);
+
+    Ok(())
+}
+
+fn wait_key_barrier(sync: &mut impl SyncComponent) {
     println!("Press a key to sync barrier...");
     let mut input = String::new();
     let _ = std::io::stdin().read_line(&mut input).unwrap();
+    println!("Waiting for the rest...");
 
-    if let Err(e) = connected.wait_barrier() {
+    if let Err(e) = sync.wait_barrier() {
         eprintln!("Barrier failed: {e}");
-        exit(1);
+        std::process::exit(1);
     }
     println!("Barrier complete.");
-
-    Ok(())
 }
 
 #[derive(Debug, Copy, Clone)]
