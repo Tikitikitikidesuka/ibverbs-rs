@@ -46,7 +46,7 @@ impl MasterConnectionInputConfig {
             .map(|slave_config| (slave_config.self_qp_endpoint, slave_config.self_mr))
             .unzip();
 
-        MasterConnectionInputConfig {
+        Self {
             slave_qp_endpoints,
             slave_mrs,
         }
