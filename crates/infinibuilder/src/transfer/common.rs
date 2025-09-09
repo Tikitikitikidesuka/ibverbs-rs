@@ -47,22 +47,22 @@ pub struct ConnectionOutputConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerConnectionInputConfig {
+pub struct ConnectionInputConfig {
     peer_qp_endpoints: Vec<QueuePairEndpoint>,
 }
 
 #[derive(Debug, Error)]
-pub enum PeerConnectionConfigGatherError {
+pub enum ConnectionConfigGatherError {
     #[error("Peer with index {idx} is not in range (0..{num_peers})")]
     PeerIndexOutOfRange { idx: usize, num_peers: usize },
 }
 
-impl PeerConnectionInputConfig {
+impl ConnectionInputConfig {
     pub fn gather_connection_config(
-        peer_configs: impl IntoIterator<Item = ReceiverConnectionOutputConfig>,
+        peer_configs: impl IntoIterator<Item = ConnectionOutputConfig>,
         remote_idx: usize,
-    ) -> Result<Self, PeerConnectionConfigGatherError> {
-        use PeerConnectionConfigGatherError::*;
+    ) -> Result<Self, ConnectionConfigGatherError> {
+        use ConnectionConfigGatherError::*;
 
         let peer_qp_endpoints = peer_configs
             .into_iter()
@@ -124,7 +124,7 @@ impl UnconnectedTransfer {
 
     pub fn connect(
         self,
-        connection_config: PeerConnectionInputConfig,
+        connection_config: ConnectionInputConfig,
     ) -> std::io::Result<ConnectedTransfer> {
         Ok(ConnectedTransfer {
             cq: Arc::new(self.cq),
