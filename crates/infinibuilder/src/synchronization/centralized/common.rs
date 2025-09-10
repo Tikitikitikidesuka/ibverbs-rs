@@ -63,7 +63,7 @@ pub enum CentralizedSync {
 
 impl UnconnectedCentralizedSync {
     pub fn new(
-        ib_context: ibverbs::Context,
+        ib_context: &ibverbs::Context,
         config: CentralizedSyncConfig,
     ) -> std::io::Result<Self> {
         match config {

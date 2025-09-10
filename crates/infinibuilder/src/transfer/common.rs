@@ -94,7 +94,7 @@ pub struct ConnectedTransfer {
 impl UnconnectedTransfer {
     const CQ_SIZE_PER_NODE: usize = 5;
 
-    pub fn new(ib_context: ibverbs::Context, config: TransferConfig) -> std::io::Result<Self> {
+    pub fn new(ib_context: &ibverbs::Context, config: TransferConfig) -> std::io::Result<Self> {
         let cq = ib_context.create_cq((Self::CQ_SIZE_PER_NODE * config.num_peers) as i32, 0)?;
         let pd = ib_context.alloc_pd()?;
         let mr = pd.register(config.memory_region)?;

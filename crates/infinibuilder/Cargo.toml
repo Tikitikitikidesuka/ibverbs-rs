@@ -35,6 +35,10 @@ name = "data_transfer"
 path = "bin/data_transfer.rs"
 
 [[bin]]
+name = "synced_transfer"
+path = "bin/synced_transfer.rs"
+
+[[bin]]
 name = "manual_endpoint"
 path = "bin/manual_endpoint.rs"
 

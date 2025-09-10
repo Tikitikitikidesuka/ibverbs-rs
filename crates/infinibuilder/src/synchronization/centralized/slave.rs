@@ -68,7 +68,7 @@ impl UnconnectedSyncSlave {
     const CQ_SIZE: usize = 16;
 
     pub fn new(
-        ib_context: ibverbs::Context,
+        ib_context: &ibverbs::Context,
         config: CentralizedSyncSlaveConfig,
     ) -> std::io::Result<Self> {
         let cq = ib_context.create_cq(Self::CQ_SIZE as i32, 0)?;

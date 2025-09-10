@@ -66,7 +66,7 @@ impl UnconnectedSyncMaster {
     const CQ_SIZE_PER_NODE: usize = 5;
 
     pub fn new(
-        ib_context: ibverbs::Context,
+        ib_context: &ibverbs::Context,
         config: CentralizedSyncMasterConfig,
     ) -> std::io::Result<Self> {
         let cq = ib_context.create_cq((Self::CQ_SIZE_PER_NODE * config.num_slaves) as i32, 0)?;
