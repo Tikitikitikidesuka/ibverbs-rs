@@ -1,4 +1,3 @@
-use crate::transfer::receiver::ReceiverConnectionOutputConfig;
 use crate::transfer::request::TransferRequest;
 use crate::transfer::unsafe_slice::UnsafeSlice;
 use dashmap::DashMap;

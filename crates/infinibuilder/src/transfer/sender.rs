@@ -2,32 +2,32 @@ use crate::transfer::common::{
     ConnectedTransfer, ConnectionConfigGatherError, ConnectionInputConfig, ConnectionOutputConfig,
     TransferConfig, TransferError, UnconnectedTransfer,
 };
+use crate::transfer::receiver::ReceiverConnectionOutputConfig;
 use crate::transfer::request::TransferRequest;
-use crate::transfer::sender::SenderConnectionOutputConfig;
 use ibverbs::ibv_wc;
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReceiverConnectionOutputConfig {
+pub struct SenderConnectionOutputConfig {
     pub inner: ConnectionOutputConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReceiverConnectionInputConfig {
+pub struct SenderConnectionInputConfig {
     pub inner: ConnectionInputConfig,
 }
 
-impl ReceiverConnectionInputConfig {
-    pub fn gather_from_senders(
-        sender_configs: impl IntoIterator<Item = SenderConnectionOutputConfig>,
-        receiver_idx: usize,
+impl SenderConnectionInputConfig {
+    pub fn gather_from_receivers(
+        receiver_configs: impl IntoIterator<Item = ReceiverConnectionOutputConfig>,
+        sender_idx: usize,
     ) -> Result<Self, ConnectionConfigGatherError> {
         ConnectionInputConfig::gather_connection_config(
-            sender_configs
+            receiver_configs
                 .into_iter()
-                .map(|sender_config| sender_config.inner),
-            receiver_idx,
+                .map(|receiver_config| receiver_config.inner),
+            sender_idx,
         )
         .map(|input_config| Self {
             inner: input_config,
@@ -35,51 +35,51 @@ impl ReceiverConnectionInputConfig {
     }
 }
 
-pub struct UnconnectedReceiverTransfer {
+pub struct UnconnectedSenderTransfer {
     inner: UnconnectedTransfer,
 }
 
-impl UnconnectedReceiverTransfer {
+impl UnconnectedSenderTransfer {
     pub fn new(ib_context: &ibverbs::Context, config: TransferConfig) -> std::io::Result<Self> {
         Ok(Self {
             inner: UnconnectedTransfer::new(ib_context, config)?,
         })
     }
 
-    pub fn connection_config(&self) -> ReceiverConnectionOutputConfig {
-        ReceiverConnectionOutputConfig {
+    pub fn connection_config(&self) -> SenderConnectionOutputConfig {
+        SenderConnectionOutputConfig {
             inner: self.inner.connection_config(),
         }
     }
 
     pub fn connect(
         self,
-        connection_config: ReceiverConnectionInputConfig,
-    ) -> std::io::Result<ReceiverTransfer> {
-        Ok(ReceiverTransfer {
+        connection_config: SenderConnectionInputConfig,
+    ) -> std::io::Result<SenderTransfer> {
+        Ok(SenderTransfer {
             inner: self.inner.connect(connection_config.inner)?,
         })
     }
 }
 
-pub struct ReceiverTransfer {
+pub struct SenderTransfer {
     inner: ConnectedTransfer,
 }
 
-impl ReceiverTransfer {
-    pub fn post_receive(
+impl SenderTransfer {
+    pub fn post_send(
         &mut self,
-        sender_idx: usize,
+        receiver_idx: usize,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<TransferRequest, TransferError> {
-        self.inner.post_receive(sender_idx, memory_range)
+        self.inner.post_send(receiver_idx, memory_range)
     }
 
-    pub fn wait_receive(
+    pub fn wait_send(
         &mut self,
-        sender_idx: usize,
+        receiver_idx: usize,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<ibv_wc, TransferError> {
-        self.inner.wait_receive(sender_idx, memory_range)
+        self.inner.wait_send(receiver_idx, memory_range)
     }
 }

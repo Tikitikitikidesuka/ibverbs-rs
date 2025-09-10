@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use dashmap::DashMap;
 use ibverbs::{CompletionQueue, ibv_wc};
+use std::sync::Arc;
 
 pub enum TransferRequestStatus<T> {
     Pending,
