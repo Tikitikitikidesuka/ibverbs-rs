@@ -1,5 +1,7 @@
+use crate::component::UnconnectedComponent;
+use crate::synchronization::centralized::common::CentralizedSyncConnectionInputConfig;
 use crate::transfer::common::{
-    ConnectedTransfer, ConnectionConfigGatherError, ConnectionInputConfig, ConnectionOutputConfig,
+    ConnectionConfigGatherError, ConnectionInputConfig, ConnectionOutputConfig, Transfer,
     TransferConfig, TransferError, UnconnectedTransfer,
 };
 use crate::transfer::request::TransferRequest;
@@ -45,14 +47,20 @@ impl UnconnectedReceiverTransfer {
             inner: UnconnectedTransfer::new(ib_context, config)?,
         })
     }
+}
 
-    pub fn connection_config(&self) -> ReceiverConnectionOutputConfig {
+impl UnconnectedComponent for UnconnectedReceiverTransfer {
+    type ConnectionOutputConfig = ReceiverConnectionOutputConfig;
+    type ConnectionInputConfig = ReceiverConnectionInputConfig;
+    type ConnectedComponent = ReceiverTransfer;
+
+    fn connection_config(&self) -> ReceiverConnectionOutputConfig {
         ReceiverConnectionOutputConfig {
             inner: self.inner.connection_config(),
         }
     }
 
-    pub fn connect(
+    fn connect(
         self,
         connection_config: ReceiverConnectionInputConfig,
     ) -> std::io::Result<ReceiverTransfer> {
@@ -63,7 +71,7 @@ impl UnconnectedReceiverTransfer {
 }
 
 pub struct ReceiverTransfer {
-    inner: ConnectedTransfer,
+    inner: Transfer,
 }
 
 impl ReceiverTransfer {

@@ -1,3 +1,4 @@
+use crate::component::UnconnectedComponent;
 use crate::transfer::request::TransferRequest;
 use crate::transfer::unsafe_slice::UnsafeSlice;
 use dashmap::DashMap;
@@ -81,7 +82,7 @@ impl ConnectionInputConfig {
     }
 }
 
-pub struct ConnectedTransfer {
+pub struct Transfer {
     qps: Vec<QueuePair>,
     mr: MemoryRegion<UnsafeSlice<u8>>,
     pd: ProtectionDomain,
@@ -114,18 +115,21 @@ impl UnconnectedTransfer {
             qp_endpoints,
         })
     }
+}
 
-    pub fn connection_config(&self) -> ConnectionOutputConfig {
+impl UnconnectedComponent for UnconnectedTransfer {
+    type ConnectionOutputConfig = ConnectionOutputConfig;
+    type ConnectionInputConfig = ConnectionInputConfig;
+    type ConnectedComponent = Transfer;
+
+    fn connection_config(&self) -> ConnectionOutputConfig {
         ConnectionOutputConfig {
             self_qp_endpoints: self.qp_endpoints.clone(),
         }
     }
 
-    pub fn connect(
-        self,
-        connection_config: ConnectionInputConfig,
-    ) -> std::io::Result<ConnectedTransfer> {
-        Ok(ConnectedTransfer {
+    fn connect(self, connection_config: ConnectionInputConfig) -> std::io::Result<Transfer> {
+        Ok(Transfer {
             cq: Arc::new(self.cq),
             pd: self.pd,
             mr: self.mr,
@@ -149,7 +153,7 @@ pub enum TransferError {
     IoError(#[from] std::io::Error),
 }
 
-impl ConnectedTransfer {
+impl Transfer {
     pub fn post_send(
         &mut self,
         peer_idx: usize,

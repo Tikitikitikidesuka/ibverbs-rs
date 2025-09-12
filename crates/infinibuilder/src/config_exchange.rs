@@ -1,4 +1,5 @@
 use crate::config_exchange::TcpExchangerError::DuplicatedNodeId;
+use crate::network::IBNetwork;
 use futures::future::join_all;
 use futures::join;
 use serde::de::{DeserializeOwned, Error};
@@ -48,6 +49,28 @@ impl TcpExchangerNetworkConfig {
             nodes: HashMap::new(),
             node_ids: Vec::new(),
         }
+    }
+
+    pub fn from_network<T: Ord>(network: IBNetwork<T>) -> Self {
+        network
+            .nodes()
+            .iter()
+            .try_fold(Self::new(), |exchanger_network, node_config| {
+                exchanger_network.add_node(TcpExchangerNodeConfig::new())
+            });
+        todo!()
+
+        /*
+        let network_config = TcpExchangerNetworkConfig::new()
+            .add_node(TcpExchangerNodeConfig::new(0, "tdeb01".to_string()))
+            .unwrap()
+            .add_node(TcpExchangerNodeConfig::new(1, "tdeb02".to_string()))
+            .unwrap()
+            .add_node(TcpExchangerNodeConfig::new(2, "tdeb03".to_string()))
+            .unwrap()
+            .add_node(TcpExchangerNodeConfig::new(3, "tdeb05".to_string()))
+        todo!()
+        */
     }
 
     pub fn add_node(mut self, node: TcpExchangerNodeConfig) -> Result<Self, TcpExchangerError> {

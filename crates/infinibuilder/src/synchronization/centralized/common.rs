@@ -1,7 +1,14 @@
+use crate::component::UnconnectedComponent;
+use crate::synchronization::centralized::master::{
+    CentralizedSyncMasterConfig, ConnectedSyncMaster, MasterConnectionInputConfig,
+    MasterConnectionOutputConfig, UnconnectedSyncMaster,
+};
+use crate::synchronization::centralized::slave::{
+    CentralizedSyncSlaveConfig, ConnectedSyncSlave, SlaveConnectionInputConfig,
+    SlaveConnectionOutputConfig, UnconnectedSyncSlave,
+};
+use crate::synchronization::{SyncComponent, UnconnectedSyncComponent};
 use serde::{Deserialize, Serialize};
-use crate::synchronization::centralized::master::{CentralizedSyncMasterConfig, ConnectedSyncMaster, MasterConnectionInputConfig, MasterConnectionOutputConfig, UnconnectedSyncMaster};
-use crate::synchronization::centralized::slave::{CentralizedSyncSlaveConfig, ConnectedSyncSlave, SlaveConnectionInputConfig, SlaveConnectionOutputConfig, UnconnectedSyncSlave};
-use crate::synchronization::SyncComponent;
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
@@ -37,12 +44,29 @@ impl CentralizedSyncConfig {
     }
 }
 
+impl UnconnectedSyncComponent for UnconnectedCentralizedSync {
+    type SyncComponent = CentralizedSync;
+
+    fn new(
+        context: ibverbs::Context,
+        sync_idx: usize,
+        num_nodes: usize,
+    ) -> std::io::Result<UnconnectedCentralizedSync> {
+        let config = if sync_idx == 0 {
+            CentralizedSyncConfig::new_master(num_nodes - 1)
+        } else {
+            CentralizedSyncConfig::new_slave(sync_idx - 1)
+        };
+
+        UnconnectedCentralizedSync::new(&context, config)
+    }
+}
+
 #[derive(Debug)]
 pub enum UnconnectedCentralizedSync {
     Master(UnconnectedSyncMaster),
     Slave(UnconnectedSyncSlave),
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CentralizedSyncConnectionOutputConfig {
@@ -75,8 +99,14 @@ impl UnconnectedCentralizedSync {
             }
         }
     }
+}
 
-    pub fn connection_config(&self) -> CentralizedSyncConnectionOutputConfig {
+impl UnconnectedComponent for UnconnectedCentralizedSync {
+    type ConnectionOutputConfig = CentralizedSyncConnectionOutputConfig;
+    type ConnectionInputConfig = CentralizedSyncConnectionInputConfig;
+    type ConnectedComponent = CentralizedSync;
+
+    fn connection_config(&self) -> CentralizedSyncConnectionOutputConfig {
         match self {
             UnconnectedCentralizedSync::Master(master) => {
                 CentralizedSyncConnectionOutputConfig::Master(master.connection_config())
@@ -87,7 +117,7 @@ impl UnconnectedCentralizedSync {
         }
     }
 
-    pub fn connect(
+    fn connect(
         self,
         connection_config: CentralizedSyncConnectionInputConfig,
     ) -> std::io::Result<CentralizedSync> {
@@ -119,5 +149,3 @@ impl SyncComponent for CentralizedSync {
         }
     }
 }
-
-
