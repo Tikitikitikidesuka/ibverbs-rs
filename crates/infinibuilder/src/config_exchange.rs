@@ -28,9 +28,9 @@ pub enum TcpExchangerError {
     #[error("Runtime server error: {0}")]
     RuntimeServerError(String),
     #[error("Rank id is not in network config {0}")]
-    NonExistentRankId(u32),
+    NonExistentRankId(usize),
     #[error("Duplicated node id {0} on network config")]
-    DuplicatedNodeId(u32),
+    DuplicatedNodeId(usize),
 }
 
 pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
@@ -39,8 +39,8 @@ pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
 
 #[derive(Clone)]
 pub struct TcpExchangerNetworkConfig {
-    nodes: HashMap<u32, TcpExchangerNodeConfig>,
-    node_ids: Vec<u32>, // To iterate efficiently
+    nodes: HashMap<usize, TcpExchangerNodeConfig>,
+    node_ids: Vec<usize>, // To iterate efficiently
 }
 
 impl TcpExchangerNetworkConfig {
@@ -51,26 +51,17 @@ impl TcpExchangerNetworkConfig {
         }
     }
 
-    pub fn from_network<T: Ord>(network: IBNetwork<T>) -> Self {
+    pub fn from_network<T: Ord>(network: IBNetwork<T>) -> Result<Self, TcpExchangerError> {
         network
             .nodes()
             .iter()
             .try_fold(Self::new(), |exchanger_network, node_config| {
-                exchanger_network.add_node(TcpExchangerNodeConfig::new())
-            });
-        todo!()
-
-        /*
-        let network_config = TcpExchangerNetworkConfig::new()
-            .add_node(TcpExchangerNodeConfig::new(0, "tdeb01".to_string()))
-            .unwrap()
-            .add_node(TcpExchangerNodeConfig::new(1, "tdeb02".to_string()))
-            .unwrap()
-            .add_node(TcpExchangerNodeConfig::new(2, "tdeb03".to_string()))
-            .unwrap()
-            .add_node(TcpExchangerNodeConfig::new(3, "tdeb05".to_string()))
-        todo!()
-        */
+                exchanger_network.add_node(TcpExchangerNodeConfig::new(
+                    node_config.idx,
+                    node_config.address.clone(),
+                    node_config.port,
+                ))
+            })
     }
 
     pub fn add_node(mut self, node: TcpExchangerNodeConfig) -> Result<Self, TcpExchangerError> {
@@ -83,7 +74,7 @@ impl TcpExchangerNetworkConfig {
         }
     }
 
-    pub fn get(&self, node_id: &u32) -> Option<&TcpExchangerNodeConfig> {
+    pub fn get(&self, node_id: &usize) -> Option<&TcpExchangerNodeConfig> {
         self.nodes.get(node_id)
     }
 
@@ -100,13 +91,18 @@ impl TcpExchangerNetworkConfig {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TcpExchangerNodeConfig {
-    node_id: u32,
+    node_id: usize,
     address: String,
+    port: u16,
 }
 
 impl TcpExchangerNodeConfig {
-    pub fn new(node_id: u32, address: String) -> Self {
-        Self { node_id, address }
+    pub fn new(node_id: usize, address: String, port: u16) -> Self {
+        Self {
+            node_id,
+            address,
+            port,
+        }
     }
 }
 
@@ -126,12 +122,12 @@ impl<T> TcpExchangedData<T> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TcpExchangedNodeData<T> {
-    pub node_id: u32,
+    pub node_id: usize,
     pub data: T,
 }
 
 impl<T> TcpExchangedNodeData<T> {
-    pub fn node_id(&self) -> u32 {
+    pub fn node_id(&self) -> usize {
         self.node_id
     }
 
@@ -141,7 +137,6 @@ impl<T> TcpExchangedNodeData<T> {
 }
 
 pub struct TcpExchangerConfig {
-    pub tcp_port: u16,                        // Port for exchange over tcp
     pub send_timeout: Duration,               // Timeout for whole network send
     pub send_attempt_delay: Duration,         // Delay between send attempts
     pub receive_timeout: Duration,            // Timeout for whole network receive
@@ -151,7 +146,6 @@ pub struct TcpExchangerConfig {
 impl Default for TcpExchangerConfig {
     fn default() -> Self {
         Self {
-            tcp_port: 8080,
             send_timeout: Duration::from_secs(30),
             send_attempt_delay: Duration::from_secs(1),
             receive_timeout: Duration::from_secs(60),
@@ -165,7 +159,7 @@ where
     T: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub fn await_exchange_network_config(
-        node_id: u32,
+        node_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
@@ -181,7 +175,7 @@ where
     }
 
     pub async fn exchange_network_config(
-        node_id: u32,
+        node_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
@@ -189,14 +183,10 @@ where
         let send_fut =
             Self::send_network_config(node_id, out_data, network_config, exchanger_config);
 
-        let socket_addr = format!(
-            "{}:{}",
-            network_config
-                .get(&node_id)
-                .ok_or(TcpExchangerError::NonExistentRankId(node_id))?
-                .address,
-            exchanger_config.tcp_port
-        );
+        let tcp_node_config = network_config
+            .get(&node_id)
+            .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
+        let socket_addr = format!("{}:{}", tcp_node_config.address, tcp_node_config.port,);
 
         let recv_fut = Self::receive_network_config(socket_addr, network_config, exchanger_config);
 
@@ -211,7 +201,7 @@ where
     }
 
     pub async fn send_network_config(
-        node_id: u32,
+        node_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
@@ -232,7 +222,7 @@ where
     // Will loop retrying failed sends until all are finished successfully
     // Must be run with a timeout block to prevent infinite loop
     async fn send_config_to_nodes_async(
-        node_id: u32,
+        node_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
@@ -255,7 +245,7 @@ where
         for node_config in network_config.iter() {
             let target_node_id = node_config.node_id;
             let address = node_config.address.clone();
-            let tcp_port = exchanger_config.tcp_port;
+            let tcp_port = node_config.port;
             let attempt_delay = exchanger_config.send_attempt_delay;
             let message_payload = message_payload.clone();
 
@@ -294,7 +284,7 @@ where
         tcp_port: u16,
         message_payload: &[u8],
         attempt_delay: Duration,
-        node_id: u32,
+        node_id: usize,
     ) -> Result<(), TcpExchangerError> {
         let target_addr = format!("{}:{}", address, tcp_port);
         let mut attempt = 1;
@@ -331,7 +321,7 @@ where
             .map_err(TcpExchangerError::ConnectionError)?;
 
         // Send 4-byte length header (little-endian)
-        let len_bytes = (message_payload.len() as u32).to_le_bytes();
+        let len_bytes = (message_payload.len() as usize).to_le_bytes();
         stream
             .write_all(&len_bytes)
             .await
@@ -478,7 +468,7 @@ where
     async fn handle_connection(
         mut stream: TcpStream,
         network_config: &TcpExchangerNetworkConfig,
-        received_nodes: &Arc<Mutex<HashSet<u32>>>,
+        received_nodes: &Arc<Mutex<HashSet<usize>>>,
         timeout: Duration,
     ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         let result = tokio::time::timeout(timeout, async {
@@ -510,7 +500,7 @@ where
     async fn validate_ready_node_from_config(
         ready_node: TcpExchangedNodeData<T>,
         network_config: &TcpExchangerNetworkConfig,
-        received_nodes: &Arc<Mutex<HashSet<u32>>>,
+        received_nodes: &Arc<Mutex<HashSet<usize>>>,
     ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         let node_id = ready_node.node_id();
 
@@ -532,13 +522,13 @@ where
         buffer: &mut [u8],
     ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         // Read message size from 4 byte header
-        let mut len_bytes = [0u8; 4];
+        let mut len_bytes = [0u8; size_of::<usize>()];
         stream
             .read_exact(&mut len_bytes)
             .await
             .map_err(TcpExchangerError::CommunicationError)?;
 
-        let len = u32::from_le_bytes(len_bytes) as usize;
+        let len = usize::from_le_bytes(len_bytes);
 
         // Check size is within buffer boundaries
         if len > MAX_MESSAGE_LENGTH {
