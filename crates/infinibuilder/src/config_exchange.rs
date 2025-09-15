@@ -37,7 +37,7 @@ pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
     _marker: std::marker::PhantomData<T>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TcpExchangerNetworkConfig {
     nodes: HashMap<usize, TcpExchangerNodeConfig>,
     node_ids: Vec<usize>, // To iterate efficiently
@@ -186,7 +186,8 @@ where
         let tcp_node_config = network_config
             .get(&node_id)
             .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
-        let socket_addr = format!("{}:{}", tcp_node_config.address, tcp_node_config.port,);
+        let socket_addr = format!("{}:{}", tcp_node_config.address, tcp_node_config.port);
+        println!("Receiving at {socket_addr}");
 
         let recv_fut = Self::receive_network_config(socket_addr, network_config, exchanger_config);
 

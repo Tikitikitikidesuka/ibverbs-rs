@@ -55,7 +55,7 @@ fn main() -> std::io::Result<()> {
         .unwrap();
 
     exchanger_network_config
-        .get(&rank_id)
+        .get(rank_id)
         .expect("Rank id not in network");
 
     let role = match rank_id {

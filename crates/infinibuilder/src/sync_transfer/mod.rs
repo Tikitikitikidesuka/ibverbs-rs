@@ -10,10 +10,6 @@ pub struct SenderSyncedTransfer<Sync: SyncComponent> {
 }
 
 impl<Sync: SyncComponent> SenderSyncedTransfer<Sync> {
-    pub fn new() {
-
-    }
-
     pub fn synced_send(
         &mut self,
         receiver_idx: usize,

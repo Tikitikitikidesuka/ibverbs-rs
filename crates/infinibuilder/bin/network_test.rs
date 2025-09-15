@@ -4,11 +4,12 @@ use std::env;
 use std::time::Duration;
 
 fn main() {
-    RunParams::from_args(env::args()).unwrap();
+    let run_params = RunParams::from_args(env::args()).unwrap();
     let network = network();
+    let node_idx = network.node(run_params.node_id.as_str()).unwrap().idx;
     let exchanger_network = TcpExchangerNetworkConfig::from_network(network).unwrap();
     let exchanged = TcpExchanger::await_exchange_network_config(
-        0,
+        node_idx,
         &"HELLO".to_owned(),
         &exchanger_network,
         &exchanger_config(),
@@ -29,8 +30,8 @@ impl RunParams {
     {
         args.next(); // skip program name
 
-        let node_id = args.next().ok_or("Missing node_id argument")?.into();
         let network_file = args.next().ok_or("Missing network_file argument")?.into();
+        let node_id = args.next().ok_or("Missing node_id argument")?.into();
 
         if args.next().is_some() {
             return Err("Too many arguments provided".into());
@@ -57,8 +58,8 @@ fn network() -> IBNetwork<&'static str> {
         "RU1",
         IBNodeBuilderConfig {
             role: IBNodeRole::Sender,
-            address: "tdeb02".to_string(),
-            port: 8000,
+            address: "tdeb01".to_string(),
+            port: 8001,
         },
     );
     network_builder.insert_node(

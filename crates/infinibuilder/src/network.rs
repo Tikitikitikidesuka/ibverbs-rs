@@ -1,5 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
-use std::hash::Hash;
+use std::borrow::Borrow;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Copy, Clone)]
 pub enum IBNodeRole {
@@ -84,25 +84,28 @@ pub struct IBNetwork<T: Ord> {
     receiver_nodes: Vec<usize>,
 }
 
-impl<T: Ord> IBNetwork<T> {
-    pub fn node(&self, node_id: impl AsRef<T>) -> Option<IBNodeRole> {
-        self.indexed_nodes
-            .get(node_id.as_ref())
-            .map(|&index| self.node_configs[index].role)
+impl<ID: Ord> IBNetwork<ID> {
+    pub fn node<Q>(&self, node_id: &Q) -> Option<&IBNodeConfig<ID>>
+    where
+        ID: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        let node_idx = self.indexed_nodes.get(node_id)?;
+        self.node_configs.get(*node_idx)
     }
 
-    pub fn nodes(&self) -> &[IBNodeConfig<T>] {
+    pub fn nodes(&self) -> &[IBNodeConfig<ID>] {
         self.node_configs.as_slice()
     }
 
-    pub fn senders(&self) -> Vec<&IBNodeConfig<T>> {
+    pub fn senders(&self) -> Vec<&IBNodeConfig<ID>> {
         self.sender_nodes
             .iter()
             .map(|&index| &self.node_configs[index])
             .collect()
     }
 
-    pub fn receivers(&self) -> Vec<&IBNodeConfig<T>> {
+    pub fn receivers(&self) -> Vec<&IBNodeConfig<ID>> {
         self.receiver_nodes
             .iter()
             .map(|&index| &self.node_configs[index])
