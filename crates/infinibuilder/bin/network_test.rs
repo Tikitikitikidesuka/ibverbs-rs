@@ -3,6 +3,8 @@ use infinibuilder::network::{IBNetwork, IBNetworkBuilder, IBNodeBuilderConfig, I
 use std::env;
 use std::time::Duration;
 
+//TODO: GATHER, SCATTER, POINT TO POINT SYNC SEND
+
 fn main() {
     let run_params = RunParams::from_args(env::args()).unwrap();
     let network = network();

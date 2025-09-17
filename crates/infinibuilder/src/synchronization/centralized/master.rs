@@ -1,9 +1,13 @@
-use derivative::Derivative;
-use ibverbs::{ibv_access_flags, ibv_qp_type, ibv_wc, ibv_wc_opcode, CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice};
-use serde::{Deserialize, Serialize};
+use crate::synchronization::SyncComponent;
 use crate::synchronization::centralized::common::NodeReadyStatus;
 use crate::synchronization::centralized::slave::SlaveConnectionOutputConfig;
-use crate::synchronization::SyncComponent;
+use derivative::Derivative;
+use ibverbs::{
+    CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
+    QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice, ibv_access_flags, ibv_qp_type,
+    ibv_wc, ibv_wc_opcode,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone)]
 pub struct CentralizedSyncMasterConfig {
@@ -126,7 +130,6 @@ impl UnconnectedSyncMaster {
         })
     }
 }
-
 
 impl SyncComponent for ConnectedSyncMaster {
     fn wait_barrier(&mut self) -> std::io::Result<()> {
