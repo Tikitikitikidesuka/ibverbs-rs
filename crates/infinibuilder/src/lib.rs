@@ -4,4 +4,4 @@ pub mod transfer;
 pub mod sync_transfer;
 pub mod component;
 pub mod network;
-mod new_ib;
+pub mod new_ib;

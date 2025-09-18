@@ -20,6 +20,10 @@ name = "loopback"
 path = "bin/loopback.rs"
 
 [[bin]]
+name = "new_ib_test"
+path = "bin/new_ib_test.rs"
+
+[[bin]]
 name = "network_test"
 path = "bin/network_test.rs"
 

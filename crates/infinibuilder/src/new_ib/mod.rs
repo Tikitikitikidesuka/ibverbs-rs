@@ -1,13 +1,21 @@
-mod implementation;
+//mod cq_cache;
+//mod implementation;
 mod unsafe_slice;
+pub mod simpleconn;
 
 use std::ops::RangeBounds;
 
 pub trait SendRecv {
     type Error;
 
-    fn post_send(&mut self, mr_range: impl RangeBounds<usize>) -> Result<impl WorkRequest, Self::Error>;
-    fn post_recv(&mut self, mr_range: impl RangeBounds<usize>) -> Result<impl WorkRequest, Self::Error>;
+    fn post_send(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, Self::Error>;
+    fn post_recv(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, Self::Error>;
 }
 
 pub trait RDMA {
@@ -18,7 +26,10 @@ pub trait RDMA {
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
     ) -> Result<impl WorkRequest, Self::Error>;
-    fn post_read(&mut self, mr_range: impl RangeBounds<usize>) -> Result<impl WorkRequest, Self::Error>;
+    fn post_read(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, Self::Error>;
 }
 
 pub trait SendRecvImmData {
@@ -38,19 +49,14 @@ pub trait WorkRequest {
     type WorkCompletion;
     type WorkRequestError;
 
-    fn poll(&self) -> Result<WorkRequestStatus<Self::WorkCompletion>, Self::WorkRequestError>;
+    fn poll(&self) -> Result<Option<Self::WorkCompletion>, Self::WorkRequestError>;
 
     fn spin_wait(&self) -> Result<Self::WorkCompletion, Self::WorkRequestError> {
         loop {
             match self.poll()? {
-                WorkRequestStatus::Done(wc) => return Ok(wc),
-                WorkRequestStatus::Pending => std::hint::spin_loop(),
+                Some(wc) => return Ok(wc),
+                None => std::hint::spin_loop(),
             }
         }
     }
-}
-
-pub enum WorkRequestStatus<WC> {
-    Done(WC),
-    Pending,
 }
