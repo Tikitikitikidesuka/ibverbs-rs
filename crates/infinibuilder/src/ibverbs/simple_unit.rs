@@ -1,5 +1,6 @@
+use crate::ibverbs::ibv_wc_conversion::work_completion_from_ibv_wc;
 use crate::rdma_traits::{
-    RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkCompletion, WorkCompletionSuccess, WorkRequest,
+    RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkCompletion, WorkRequest,
 };
 use crate::unsafe_slice::UnsafeSlice;
 use dashmap::DashMap;
@@ -250,15 +251,30 @@ impl Deref for RendezvousMemoryRegion {
 
 impl<const CQ_SIZE: usize> RdmaRendezvous for IBSimpleUnit<CQ_SIZE> {
     fn rendezvous(&mut self) -> std::io::Result<()> {
+        /*
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        self.qp.post_read(
+            &[self.mr.slice(mr_range)],
+            self.remote_mr.slice(remote_mr_slice),
+            wr_id,
+        )?;
+        Ok(SimpleConnectionWorkRequest::new(
+            wr_id,
+            self.cached_cq.clone(),
+        ))
+         */
         // Write READY to the peer's rendezvous memory
-        unsafe {
-            self.post_write(
-                self.rendezvous_state.local_state_range(), // Always READY
-                self.rendezvous_state.remote_state_range(),
-                None,
-            )
-        }?
-        .wait()?;
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        self.qp.post_write(
+            &[self
+                .rendezvous_mr
+                .slice(self.rendezvous_state.local_state_range())],
+            self.remote_rendezvous_mr
+                .slice(self.rendezvous_state.remote_state_range()),
+            wr_id,
+            None,
+        )?;
+        SimpleConnectionWorkRequest::new(wr_id, self.cached_cq.clone()).wait()?;
 
         // Wait for peer to write on our rendezvous memory
         while let RendezvousState::Waiting = self.rendezvous_state.remote_state() {
@@ -324,7 +340,9 @@ impl<const CQ_SIZE: usize> SimpleConnectionWorkRequest<CQ_SIZE> {
 
 impl<const CQ_SIZE: usize> WorkRequest for SimpleConnectionWorkRequest<CQ_SIZE> {
     fn poll(&mut self) -> std::io::Result<Option<WorkCompletion>> {
-        Ok(self._update_from_all()?.map(|wc| wc.into()))
+        self._update_from_all()?
+            .map(|wc| work_completion_from_ibv_wc(wc))
+            .transpose()
     }
 
     fn wait(mut self) -> std::io::Result<WorkCompletion> {
@@ -338,7 +356,7 @@ impl<const CQ_SIZE: usize> WorkRequest for SimpleConnectionWorkRequest<CQ_SIZE> 
             // Poll only the completion queue
             self._update_from_cq()?;
             if let Some(wc) = self.opt_wc {
-                return Ok(wc.into());
+                return work_completion_from_ibv_wc(wc);
             }
             std::hint::spin_loop();
         }

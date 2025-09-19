@@ -68,14 +68,8 @@ pub trait WorkRequest {
     fn wait_timeout(self, timeout: Duration) -> std::io::Result<WorkCompletion>;
 }
 
-#[derive(Debug)]
-pub enum WorkCompletion {
-    Success(WorkCompletionSuccess),
-    Error(std::io::Error),
-}
-
 #[derive(Debug, Copy, Clone)]
-pub struct WorkCompletionSuccess {
+pub struct WorkCompletion {
     pub len: usize,
     pub imm_data: Option<u32>,
 }
