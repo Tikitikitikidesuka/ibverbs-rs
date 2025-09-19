@@ -1,15 +1,12 @@
-use crate::ibverbs::ibv_wc_conversion::work_completion_from_ibv_wc;
-use crate::rdma_traits::{
-    RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkCompletion, WorkRequest,
-};
+use crate::ibverbs::cached_cq::CachedCompletionQueue;
+use crate::ibverbs::work_request::CachedWorkRequest;
+use crate::rdma_traits::{RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkRequest};
 use crate::unsafe_slice::UnsafeSlice;
-use dashmap::DashMap;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
     QueuePairEndpoint, RemoteMemoryRegion, ibv_access_flags, ibv_qp_type, ibv_wc, ibv_wc_status,
 };
-use std::mem::MaybeUninit;
 use std::ops::{Deref, Range, RangeBounds};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -144,10 +141,7 @@ impl<const CQ_SIZE: usize> RdmaSendRecv for IBSimpleUnit<CQ_SIZE> {
             self.qp
                 .post_send(&[self.mr.slice(mr_range)], wr_id, imm_data)
         }?;
-        Ok(SimpleConnectionWorkRequest::new(
-            wr_id,
-            self.cached_cq.clone(),
-        ))
+        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
     }
 
     /// # SAFETY
@@ -160,10 +154,7 @@ impl<const CQ_SIZE: usize> RdmaSendRecv for IBSimpleUnit<CQ_SIZE> {
     ) -> Result<impl WorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
         unsafe { self.qp.post_receive(&[self.mr.slice(mr_range)], wr_id) }?;
-        Ok(SimpleConnectionWorkRequest::new(
-            wr_id,
-            self.cached_cq.clone(),
-        ))
+        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
     }
 }
 
@@ -182,10 +173,7 @@ impl<const CQ_SIZE: usize> RdmaReadWrite for IBSimpleUnit<CQ_SIZE> {
             wr_id,
             imm_data,
         )?;
-        Ok(SimpleConnectionWorkRequest::new(
-            wr_id,
-            self.cached_cq.clone(),
-        ))
+        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
     }
 
     /// TODO: WRITE SAFETY
@@ -200,10 +188,7 @@ impl<const CQ_SIZE: usize> RdmaReadWrite for IBSimpleUnit<CQ_SIZE> {
             self.remote_mr.slice(remote_mr_slice),
             wr_id,
         )?;
-        Ok(SimpleConnectionWorkRequest::new(
-            wr_id,
-            self.cached_cq.clone(),
-        ))
+        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
     }
 }
 
@@ -251,18 +236,6 @@ impl Deref for RendezvousMemoryRegion {
 
 impl<const CQ_SIZE: usize> RdmaRendezvous for IBSimpleUnit<CQ_SIZE> {
     fn rendezvous(&mut self) -> std::io::Result<()> {
-        /*
-        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
-        self.qp.post_read(
-            &[self.mr.slice(mr_range)],
-            self.remote_mr.slice(remote_mr_slice),
-            wr_id,
-        )?;
-        Ok(SimpleConnectionWorkRequest::new(
-            wr_id,
-            self.cached_cq.clone(),
-        ))
-         */
         // Write READY to the peer's rendezvous memory
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
         self.qp.post_write(
@@ -274,7 +247,7 @@ impl<const CQ_SIZE: usize> RdmaRendezvous for IBSimpleUnit<CQ_SIZE> {
             wr_id,
             None,
         )?;
-        SimpleConnectionWorkRequest::new(wr_id, self.cached_cq.clone()).wait()?;
+        CachedWorkRequest::new(wr_id, self.cached_cq.clone()).wait()?;
 
         // Wait for peer to write on our rendezvous memory
         while let RendezvousState::Waiting = self.rendezvous_state.remote_state() {
@@ -289,123 +262,5 @@ impl<const CQ_SIZE: usize> RdmaRendezvous for IBSimpleUnit<CQ_SIZE> {
 
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
         todo!()
-    }
-}
-
-struct CachedCompletionQueue<const CQ_SIZE: usize> {
-    cq: Arc<CompletionQueue>,
-    cq_cache: Arc<DashMap<u64, ibv_wc>>,
-}
-
-impl<const CQ_SIZE: usize> CachedCompletionQueue<CQ_SIZE> {
-    pub fn new(cq: CompletionQueue) -> Self {
-        Self {
-            cq: Arc::new(cq),
-            cq_cache: Arc::new(DashMap::new()),
-        }
-    }
-
-    pub fn poll(&self) -> std::io::Result<usize> {
-        let mut poll_buff: [ibv_wc; CQ_SIZE] = unsafe { MaybeUninit::uninit().assume_init() };
-        let wc_slice = self.cq.poll(&mut poll_buff)?;
-
-        // Fill cache with polled work completions
-        for wc in wc_slice.iter() {
-            self.cq_cache.insert(wc.wr_id(), *wc);
-        }
-
-        Ok(wc_slice.len())
-    }
-
-    pub fn consume(&self, wr_id: u64) -> Option<ibv_wc> {
-        self.cq_cache.remove(&wr_id).map(|(_, wc)| wc)
-    }
-}
-
-pub struct SimpleConnectionWorkRequest<const CQ_SIZE: usize> {
-    wr_id: u64,
-    cq_cache: Arc<CachedCompletionQueue<CQ_SIZE>>,
-    opt_wc: Option<ibv_wc>,
-}
-
-impl<const CQ_SIZE: usize> SimpleConnectionWorkRequest<CQ_SIZE> {
-    fn new(wr_id: u64, cq_cache: Arc<CachedCompletionQueue<CQ_SIZE>>) -> Self {
-        Self {
-            wr_id,
-            cq_cache,
-            opt_wc: None,
-        }
-    }
-}
-
-impl<const CQ_SIZE: usize> WorkRequest for SimpleConnectionWorkRequest<CQ_SIZE> {
-    fn poll(&mut self) -> std::io::Result<Option<WorkCompletion>> {
-        self._update_from_all()?
-            .map(|wc| work_completion_from_ibv_wc(wc))
-            .transpose()
-    }
-
-    fn wait(mut self) -> std::io::Result<WorkCompletion> {
-        // Poll all sources first
-        if let Some(wc) = self.poll()? {
-            return Ok(wc);
-        }
-
-        // If not in opt_wc or cache, it will come through cq
-        loop {
-            // Poll only the completion queue
-            self._update_from_cq()?;
-            if let Some(wc) = self.opt_wc {
-                return work_completion_from_ibv_wc(wc);
-            }
-            std::hint::spin_loop();
-        }
-    }
-
-    fn wait_timeout(self, timeout: Duration) -> std::io::Result<WorkCompletion> {
-        todo!()
-    }
-}
-
-impl<const CQ_SIZE: usize> SimpleConnectionWorkRequest<CQ_SIZE> {
-    fn _update_from_all(&mut self) -> std::io::Result<Option<ibv_wc>> {
-        // Check if already polled completion
-        if let Some(_) = self._update_from_self() {
-            return Ok(self.opt_wc);
-        }
-
-        // Check if the wc is cached
-        if let Some(_) = self._update_from_cache()? {
-            return Ok(self.opt_wc);
-        }
-
-        // If not cached, poll the cq and check again
-        if let Some(_) = self._update_from_cq()? {
-            return Ok(self.opt_wc);
-        }
-
-        Ok(None)
-    }
-
-    fn _update_from_self(&self) -> Option<ibv_wc> {
-        // Poll self to check if already consumed the completion
-        self.opt_wc
-    }
-
-    fn _update_from_cq(&mut self) -> std::io::Result<Option<ibv_wc>> {
-        // Poll the cq and check the cache
-        self.cq_cache.poll()?;
-        self._update_from_cache()
-    }
-
-    fn _update_from_cache(&mut self) -> std::io::Result<Option<ibv_wc>> {
-        // Check if the wc is cached
-        match self.cq_cache.consume(self.wr_id) {
-            Some(wc) => {
-                self.opt_wc = Some(wc);
-                Ok(Some(wc))
-            }
-            None => Ok(None),
-        }
     }
 }
