@@ -1,7 +1,5 @@
-pub mod synchronization;
 pub mod config_exchange;
-pub mod transfer;
-pub mod sync_transfer;
-pub mod component;
 pub mod network;
-pub mod new_ib;
+mod unsafe_slice;
+pub mod rdma_traits;
+pub mod ibverbs;
