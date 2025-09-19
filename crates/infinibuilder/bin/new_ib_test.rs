@@ -1,4 +1,4 @@
-use infinibuilder::ibverbs::simple_unit::IBSimpleUnit;
+use infinibuilder::ibverbs::simple_unit::IbSimpleUnit;
 use infinibuilder::rdma_traits::{RdmaReadWrite, RdmaSendRecv};
 use infinibuilder::rdma_traits::{RdmaRendezvous, WorkRequest};
 use simple_logger::SimpleLogger;
@@ -12,8 +12,8 @@ fn main() -> std::io::Result<()> {
     let memory0: [u8; 16] = std::array::from_fn(|i| i as u8);
     let memory1 = [0u8; 16];
 
-    let conn0 = unsafe { IBSimpleUnit::new::<64>(&ib_context, &memory0)? };
-    let conn1 = unsafe { IBSimpleUnit::new::<64>(&ib_context, &memory1)? };
+    let conn0 = unsafe { IbSimpleUnit::new::<64>(&ib_context, &memory0)? };
+    let conn1 = unsafe { IbSimpleUnit::new::<64>(&ib_context, &memory1)? };
 
     let config0 = conn0.connection_config();
     let config1 = conn1.connection_config();
