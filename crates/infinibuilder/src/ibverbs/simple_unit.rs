@@ -5,7 +5,7 @@ use crate::unsafe_slice::UnsafeSlice;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
-    QueuePairEndpoint, RemoteMemoryRegion, ibv_access_flags, ibv_qp_type, ibv_wc, ibv_wc_status,
+    QueuePairEndpoint, RemoteMemoryRegion, ibv_access_flags, ibv_qp_type,
 };
 use std::ops::{Deref, Range, RangeBounds};
 use std::sync::Arc;
@@ -96,6 +96,23 @@ impl Mode for SyncTransferMode {
     }
 }
 
+impl Mode for EmptyMode {
+    type Unconnected = ();
+    type Connected = ();
+    type ConnectionConfig = ();
+
+    fn connection_config(_unconnected: &Self::Unconnected) -> Self::ConnectionConfig {
+        ()
+    }
+
+    fn connect(
+        _unconnected: Self::Unconnected,
+        _connection_config: Self::ConnectionConfig,
+    ) -> Self::Connected {
+        ()
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Debug)]
 pub struct UnconnectedIbSimpleUnit<const CQ_SIZE: usize, M: Mode> {
@@ -112,14 +129,14 @@ pub struct UnconnectedIbSimpleUnit<const CQ_SIZE: usize, M: Mode> {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct UnconnectedTransferModeMr {
+pub struct UnconnectedTransferModeMr {
     #[derivative(Debug = "ignore")]
     mr: MemoryRegion<UnsafeSlice<u8>>,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct UnconnectedSyncModeMr {
+pub struct UnconnectedSyncModeMr {
     #[derivative(Debug = "ignore")]
     rendezvous_state: Box<RendezvousMemoryRegion>,
     #[derivative(Debug = "ignore")]
@@ -127,7 +144,7 @@ struct UnconnectedSyncModeMr {
 }
 
 #[derive(Debug)]
-struct UnconnectedSyncTransferModeMr {
+pub struct UnconnectedSyncTransferModeMr {
     transfer_mem: UnconnectedTransferModeMr,
     sync_mem: UnconnectedSyncModeMr,
 }
@@ -151,7 +168,7 @@ pub struct IbSimpleUnit<const CQ_SIZE: usize, M: Mode> {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct ConnectedTransferModeMr {
+pub struct ConnectedTransferModeMr {
     #[derivative(Debug = "ignore")]
     mr: MemoryRegion<UnsafeSlice<u8>>,
     #[derivative(Debug = "ignore")]
@@ -160,7 +177,7 @@ struct ConnectedTransferModeMr {
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct ConnectedSyncModeMr {
+pub struct ConnectedSyncModeMr {
     #[derivative(Debug = "ignore")]
     rendezvous_state: Box<RendezvousMemoryRegion>,
     #[derivative(Debug = "ignore")]
@@ -170,7 +187,7 @@ struct ConnectedSyncModeMr {
 }
 
 #[derive(Debug)]
-struct ConnectedSyncTransferModeMr {
+pub struct ConnectedSyncTransferModeMr {
     transfer_mem: ConnectedTransferModeMr,
     sync_mem: ConnectedSyncModeMr,
 }
@@ -178,6 +195,7 @@ struct ConnectedSyncTransferModeMr {
 pub struct TransferMode;
 pub struct SyncMode;
 pub struct SyncTransferMode;
+pub struct EmptyMode;
 
 impl<const CQ_SIZE: usize, M: Mode> UnconnectedIbSimpleUnit<CQ_SIZE, M> {
     pub fn connection_config(&self) -> ConnectionEndpoint<M> {
@@ -221,7 +239,28 @@ pub struct ConnectionEndpoint<M: Mode> {
     connection_mode_mr: M::ConnectionConfig,
 }
 
-impl IbSimpleUnit<0> {
+impl IbSimpleUnit<0, EmptyMode> {
+    /// SAFETY: Memory slice will have its ownership unlinked, meaning that it might be freed but this
+    /// struct will still hold a reference to it which could result in illegal accesses to memory and UB.
+    /// Memory is also taken as immutable reference, however by the nature of RDMA it is aliased and therefore
+    /// can be mutated regardless.
+    pub unsafe fn new_transfer_unit<const CQ_SIZE: usize>(
+        ib_context: &ibverbs::Context,
+        memory: &[u8],
+    ) -> std::io::Result<UnconnectedIbSimpleUnit<CQ_SIZE, TransferMode>> {
+        let conn_data = Self::new_conn_data::<CQ_SIZE>(ib_context)?;
+        let mode_mr = unsafe { UnconnectedTransferModeMr::new(&conn_data.pd, memory)? };
+        Self::new_unit::<CQ_SIZE, TransferMode>(conn_data, mode_mr)
+    }
+
+    pub fn new_sync_unit<const CQ_SIZE: usize>(
+        ib_context: &ibverbs::Context,
+    ) -> std::io::Result<UnconnectedIbSimpleUnit<CQ_SIZE, SyncMode>> {
+        let conn_data = Self::new_conn_data::<CQ_SIZE>(ib_context)?;
+        let mode_mr = UnconnectedSyncModeMr::new(&conn_data.pd)?;
+        Self::new_unit::<CQ_SIZE, SyncMode>(conn_data, mode_mr)
+    }
+
     /// SAFETY: Memory slice will have its ownership unlinked, meaning that it might be freed but this
     /// struct will still hold a reference to it which could result in illegal accesses to memory and UB.
     /// Memory is also taken as immutable reference, however by the nature of RDMA it is aliased and therefore
@@ -230,11 +269,29 @@ impl IbSimpleUnit<0> {
         ib_context: &ibverbs::Context,
         memory: &[u8],
     ) -> std::io::Result<UnconnectedIbSimpleUnit<CQ_SIZE, SyncTransferMode>> {
+        let conn_data = Self::new_conn_data::<CQ_SIZE>(ib_context)?;
+        let mode_mr = unsafe { UnconnectedSyncTransferModeMr::new(&conn_data.pd, memory)? };
+        Self::new_unit::<CQ_SIZE, SyncTransferMode>(conn_data, mode_mr)
+    }
+
+    fn new_unit<const CQ_SIZE: usize, MI: Mode>(
+        conn_data: UnconnectedConnectionData,
+        mode_mr: MI::Unconnected,
+    ) -> std::io::Result<UnconnectedIbSimpleUnit<CQ_SIZE, MI>> {
+        Ok(UnconnectedIbSimpleUnit {
+            prepared_qp: conn_data.prepared_qp,
+            qp_endpoint: conn_data.qp_endpoint,
+            mode_mr,
+            pd: conn_data.pd,
+            cq: conn_data.cq,
+        })
+    }
+
+    fn new_conn_data<const CQ_SIZE: usize>(
+        ib_context: &ibverbs::Context,
+    ) -> std::io::Result<UnconnectedConnectionData> {
         let cq = ib_context.create_cq(CQ_SIZE as i32, 0)?;
         let pd = ib_context.alloc_pd()?;
-        let mr = pd.register(unsafe { UnsafeSlice::new(memory) })?;
-        let rendezvous_state = Box::new(RendezvousMemoryRegion::new());
-        let rendezvous_mr = pd.register(unsafe { UnsafeSlice::new(rendezvous_state.as_ref()) })?;
         let prepared_qp = pd
             .create_qp(&cq, &cq, ibv_qp_type::IBV_QPT_RC)?
             .set_access(
@@ -245,19 +302,109 @@ impl IbSimpleUnit<0> {
             .build()?;
         let qp_endpoint = prepared_qp.endpoint()?;
 
-        Ok(UnconnectedIbSimpleUnit {
+        Ok(UnconnectedConnectionData {
             prepared_qp,
             qp_endpoint,
-            mr,
-            rendezvous_state,
-            rendezvous_mr,
             pd,
             cq,
         })
     }
 }
 
-impl<const CQ_SIZE: usize> RdmaSendRecv for IbSimpleUnit<CQ_SIZE> {
+struct UnconnectedConnectionData {
+    cq: CompletionQueue,
+    pd: ProtectionDomain,
+    prepared_qp: PreparedQueuePair,
+    qp_endpoint: QueuePairEndpoint,
+}
+
+impl UnconnectedTransferModeMr {
+    unsafe fn new(pd: &ProtectionDomain, memory: &[u8]) -> std::io::Result<Self> {
+        let mr = pd.register(unsafe { UnsafeSlice::new(memory) })?;
+        Ok(Self { mr })
+    }
+}
+
+impl UnconnectedSyncModeMr {
+    fn new(pd: &ProtectionDomain) -> std::io::Result<Self> {
+        let rendezvous_state = Box::new(RendezvousMemoryRegion::new());
+        let rendezvous_mr = pd.register(unsafe { UnsafeSlice::new(rendezvous_state.as_ref()) })?;
+        Ok(Self {
+            rendezvous_state,
+            rendezvous_mr,
+        })
+    }
+}
+
+impl UnconnectedSyncTransferModeMr {
+    unsafe fn new(pd: &ProtectionDomain, memory: &[u8]) -> std::io::Result<Self> {
+        Ok(Self {
+            transfer_mem: unsafe { UnconnectedTransferModeMr::new(pd, memory)? },
+            sync_mem: unsafe { UnconnectedSyncModeMr::new(pd)? },
+        })
+    }
+}
+
+impl ConnectedTransferModeMr {
+    unsafe fn post_send<const CQ_SIZE: usize>(
+        &mut self,
+        wr_id: u64,
+        qp: &mut QueuePair,
+        cached_cq: Arc<CachedCompletionQueue<CQ_SIZE>>,
+        mr_range: impl RangeBounds<usize>,
+        imm_data: Option<u32>,
+    ) -> std::io::Result<impl WorkRequest> {
+        unsafe { qp.post_send(&[self.mr.slice(mr_range)], wr_id, imm_data) }?;
+        Ok(CachedWorkRequest::new(wr_id, cached_cq.clone()))
+    }
+
+    unsafe fn post_receive<const CQ_SIZE: usize>(
+        &mut self,
+        wr_id: u64,
+        qp: &mut QueuePair,
+        cached_cq: Arc<CachedCompletionQueue<CQ_SIZE>>,
+        mr_range: impl RangeBounds<usize>,
+    ) -> std::io::Result<impl WorkRequest> {
+        unsafe { qp.post_receive(&[self.mr.slice(mr_range)], wr_id) }?;
+        Ok(CachedWorkRequest::new(wr_id, cached_cq.clone()))
+    }
+
+    unsafe fn post_write<const CQ_SIZE: usize>(
+        &mut self,
+        wr_id: u64,
+        qp: &mut QueuePair,
+        cached_cq: Arc<CachedCompletionQueue<CQ_SIZE>>,
+        mr_range: impl RangeBounds<usize>,
+        remote_mr_range: impl RangeBounds<usize>,
+        imm_data: Option<u32>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        qp.post_write(
+            &[self.mr.slice(mr_range)],
+            self.remote_mr.slice(remote_mr_range),
+            wr_id,
+            imm_data,
+        )?;
+        Ok(CachedWorkRequest::new(wr_id, cached_cq.clone()))
+    }
+
+    unsafe fn post_read<const CQ_SIZE: usize>(
+        &mut self,
+        wr_id: u64,
+        qp: &mut QueuePair,
+        cached_cq: Arc<CachedCompletionQueue<CQ_SIZE>>,
+        mr_range: impl RangeBounds<usize>,
+        remote_mr_slice: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        qp.post_read(
+            &[self.mr.slice(mr_range)],
+            self.remote_mr.slice(remote_mr_slice),
+            wr_id,
+        )?;
+        Ok(CachedWorkRequest::new(wr_id, cached_cq.clone()))
+    }
+}
+
+impl<const CQ_SIZE: usize> RdmaSendRecv for IbSimpleUnit<CQ_SIZE, TransferMode> {
     /// # SAFETY
     /// The memory region can only be safely reused or dropped after the request is fully executed
     /// and a work completion has been retrieved from the corresponding completion queue
@@ -269,10 +416,14 @@ impl<const CQ_SIZE: usize> RdmaSendRecv for IbSimpleUnit<CQ_SIZE> {
     ) -> Result<impl WorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
         unsafe {
-            self.qp
-                .post_send(&[self.mr.slice(mr_range)], wr_id, imm_data)
-        }?;
-        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
+            self.mode_mr.post_send(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                imm_data,
+            )
+        }
     }
 
     /// # SAFETY
@@ -284,12 +435,56 @@ impl<const CQ_SIZE: usize> RdmaSendRecv for IbSimpleUnit<CQ_SIZE> {
         mr_range: impl RangeBounds<usize>,
     ) -> Result<impl WorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
-        unsafe { self.qp.post_receive(&[self.mr.slice(mr_range)], wr_id) }?;
-        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
+        unsafe {
+            self.mode_mr
+                .post_receive(wr_id, &mut self.qp, self.cached_cq.clone(), mr_range)
+        }
     }
 }
 
-impl<const CQ_SIZE: usize> RdmaReadWrite for IbSimpleUnit<CQ_SIZE> {
+impl<const CQ_SIZE: usize> RdmaSendRecv for IbSimpleUnit<CQ_SIZE, SyncTransferMode> {
+    /// # SAFETY
+    /// The memory region can only be safely reused or dropped after the request is fully executed
+    /// and a work completion has been retrieved from the corresponding completion queue
+    /// (i.e., until CompletionQueue::poll returns a completion for this send).
+    unsafe fn post_send(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+        imm_data: Option<u32>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            self.mode_mr.transfer_mem.post_send(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                imm_data,
+            )
+        }
+    }
+
+    /// # SAFETY
+    /// The memory region can only be safely reused or dropped after the request is fully executed
+    /// and a work completion has been retrieved from the corresponding completion queue
+    /// (i.e., until CompletionQueue::poll returns a completion for this receive)
+    unsafe fn post_receive(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            self.mode_mr.transfer_mem.post_receive(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+            )
+        }
+    }
+}
+
+impl<const CQ_SIZE: usize> RdmaReadWrite for IbSimpleUnit<CQ_SIZE, TransferMode> {
     /// TODO: WRITE SAFETY
     unsafe fn post_write(
         &mut self,
@@ -298,13 +493,16 @@ impl<const CQ_SIZE: usize> RdmaReadWrite for IbSimpleUnit<CQ_SIZE> {
         imm_data: Option<u32>,
     ) -> Result<impl WorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
-        self.qp.post_write(
-            &[self.mr.slice(mr_range)],
-            self.remote_mr.slice(remote_mr_range),
-            wr_id,
-            imm_data,
-        )?;
-        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
+        unsafe {
+            self.mode_mr.post_write(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                remote_mr_range,
+                imm_data,
+            )
+        }
     }
 
     /// TODO: WRITE SAFETY
@@ -314,12 +512,55 @@ impl<const CQ_SIZE: usize> RdmaReadWrite for IbSimpleUnit<CQ_SIZE> {
         remote_mr_slice: impl RangeBounds<usize>,
     ) -> Result<impl WorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
-        self.qp.post_read(
-            &[self.mr.slice(mr_range)],
-            self.remote_mr.slice(remote_mr_slice),
-            wr_id,
-        )?;
-        Ok(CachedWorkRequest::new(wr_id, self.cached_cq.clone()))
+        unsafe {
+            self.mode_mr.post_read(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                remote_mr_slice,
+            )
+        }
+    }
+}
+
+impl<const CQ_SIZE: usize> RdmaReadWrite for IbSimpleUnit<CQ_SIZE, SyncTransferMode> {
+    /// TODO: WRITE SAFETY
+    unsafe fn post_write(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+        remote_mr_range: impl RangeBounds<usize>,
+        imm_data: Option<u32>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            self.mode_mr.transfer_mem.post_write(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                remote_mr_range,
+                imm_data,
+            )
+        }
+    }
+
+    /// TODO: WRITE SAFETY
+    unsafe fn post_read(
+        &mut self,
+        mr_range: impl RangeBounds<usize>,
+        remote_mr_slice: impl RangeBounds<usize>,
+    ) -> Result<impl WorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        unsafe {
+            self.mode_mr.transfer_mem.post_read(
+                wr_id,
+                &mut self.qp,
+                self.cached_cq.clone(),
+                mr_range,
+                remote_mr_slice,
+            )
+        }
     }
 }
 
@@ -365,11 +606,15 @@ impl Deref for RendezvousMemoryRegion {
     }
 }
 
-impl<const CQ_SIZE: usize> RdmaRendezvous for IbSimpleUnit<CQ_SIZE> {
-    fn rendezvous(&mut self) -> std::io::Result<()> {
+impl ConnectedSyncModeMr {
+    fn rendezvous<const CQ_SIZE: usize>(
+        &mut self,
+        wr_id: u64,
+        qp: &mut QueuePair,
+        cached_cq: Arc<CachedCompletionQueue<CQ_SIZE>>,
+    ) -> std::io::Result<()> {
         // Write READY to the peer's rendezvous memory
-        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
-        self.qp.post_write(
+        qp.post_write(
             &[self
                 .rendezvous_mr
                 .slice(self.rendezvous_state.local_state_range())],
@@ -378,7 +623,7 @@ impl<const CQ_SIZE: usize> RdmaRendezvous for IbSimpleUnit<CQ_SIZE> {
             wr_id,
             None,
         )?;
-        CachedWorkRequest::new(wr_id, self.cached_cq.clone()).wait()?;
+        CachedWorkRequest::new(wr_id, cached_cq.clone()).wait()?;
 
         // Wait for peer to write on our rendezvous memory
         while let RendezvousState::Waiting = self.rendezvous_state.remote_state() {
@@ -389,6 +634,27 @@ impl<const CQ_SIZE: usize> RdmaRendezvous for IbSimpleUnit<CQ_SIZE> {
         self.rendezvous_state.reset_remote_state();
 
         Ok(())
+    }
+}
+
+impl<const CQ_SIZE: usize> RdmaRendezvous for IbSimpleUnit<CQ_SIZE, SyncMode> {
+    fn rendezvous(&mut self) -> std::io::Result<()> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        self.mode_mr
+            .rendezvous(wr_id, &mut self.qp, self.cached_cq.clone())
+    }
+
+    fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
+        todo!()
+    }
+}
+
+impl<const CQ_SIZE: usize> RdmaRendezvous for IbSimpleUnit<CQ_SIZE, SyncTransferMode> {
+    fn rendezvous(&mut self) -> std::io::Result<()> {
+        let wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
+        self.mode_mr
+            .sync_mem
+            .rendezvous(wr_id, &mut self.qp, self.cached_cq.clone())
     }
 
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
