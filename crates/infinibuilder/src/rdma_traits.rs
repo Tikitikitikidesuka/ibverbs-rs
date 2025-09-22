@@ -38,7 +38,7 @@ pub trait RdmaReadWrite {
     unsafe fn post_read(
         &mut self,
         mr_range: impl RangeBounds<usize>,
-        remote_mr_slice: impl RangeBounds<usize>,
+        remote_mr_range: impl RangeBounds<usize>,
     ) -> std::io::Result<impl WorkRequest>;
 }
 
@@ -53,7 +53,7 @@ pub trait SafeRdmaReadWrite {
     fn post_read(
         &mut self,
         mr_range: impl RangeBounds<usize>,
-        remote_mr_slice: impl RangeBounds<usize>,
+        remote_mr_range: impl RangeBounds<usize>,
     ) -> std::io::Result<impl WorkRequest>;
 }
 

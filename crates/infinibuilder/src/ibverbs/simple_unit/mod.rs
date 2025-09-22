@@ -1,0 +1,87 @@
+use crate::connection::Connect;
+use crate::ibverbs::simple_unit::connection::{
+    IbvConnection, IbvConnectionConfig, UnconnectedIbvConnection,
+};
+use crate::ibverbs::simple_unit::mode::Mode;
+use crate::ibverbs::simple_unit::sync_mode::{SyncMode, UnconnectedSyncMr};
+use crate::ibverbs::simple_unit::sync_transfer_mode::{
+    SyncTransferMode, UnconnectedSyncTransferMr,
+};
+use crate::ibverbs::simple_unit::transfer_mode::{TransferMode, UnconnectedTransferMr};
+use ibverbs::Context;
+
+mod connection;
+pub mod mode;
+pub mod sync_mode;
+pub mod sync_transfer_mode;
+pub mod transfer_mode;
+
+pub struct IbvUnconnectedSimpleUnit<M: Mode> {
+    connection: UnconnectedIbvConnection,
+    mr: M::UnconnectedMr,
+}
+
+pub struct IbvSimpleUnitConnectionConfig<M: Mode> {
+    connection_config: IbvConnectionConfig,
+    mr_connection_config: M::MrConnectionConfig,
+}
+
+pub struct IbvSimpleUnit<M: Mode> {
+    connection: IbvConnection,
+    mr: M::ConnectedMr,
+}
+
+impl IbvSimpleUnit<TransferMode<0>> {
+    pub unsafe fn new_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
+        ibv_context: &Context,
+        memory: &[u8],
+    ) -> std::io::Result<IbvUnconnectedSimpleUnit<TransferMode<POLL_BUFF_SIZE>>> {
+        let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
+        let mr = UnconnectedTransferMr::new(&mut connection, memory)?;
+        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+    }
+}
+
+impl IbvSimpleUnit<SyncMode> {
+    pub fn new_sync_unit(
+        ibv_context: &Context,
+    ) -> std::io::Result<IbvUnconnectedSimpleUnit<SyncMode>> {
+        let mut connection = UnconnectedIbvConnection::new::<1>(ibv_context)?;
+        let mr = UnconnectedSyncMr::new(&mut connection)?;
+        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+    }
+}
+
+impl IbvSimpleUnit<SyncTransferMode<0>> {
+    pub fn new_sync_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
+        ibv_context: &Context,
+        memory: &[u8],
+    ) -> std::io::Result<IbvUnconnectedSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>> {
+        let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
+        let mr = UnconnectedSyncTransferMr::new(&mut connection, memory)?;
+        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+    }
+}
+
+impl<M: Mode> Connect for IbvUnconnectedSimpleUnit<M> {
+    type ConnectionConfig = IbvSimpleUnitConnectionConfig<M>;
+    type Connected = IbvSimpleUnit<M>;
+
+    fn connection_config(&self) -> Self::ConnectionConfig {
+        IbvSimpleUnitConnectionConfig {
+            connection_config: self.connection.connection_config(),
+            mr_connection_config: self.mr.connection_config(),
+        }
+    }
+
+    fn connect(
+        self,
+        connection_config: Self::ConnectionConfig,
+    ) -> std::io::Result<Self::Connected> {
+        let connection = self
+            .connection
+            .connect(connection_config.connection_config)?;
+        let mr = self.mr.connect(connection_config.mr_connection_config)?;
+        Ok(IbvSimpleUnit { connection, mr })
+    }
+}

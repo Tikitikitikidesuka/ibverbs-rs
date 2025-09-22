@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-pub trait Mode {
+trait Mode {
     type Unconnected;
     type Connected;
     type ConnectionConfig;

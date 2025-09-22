@@ -5,13 +5,13 @@ use ibverbs::ibv_wc;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub struct CachedWorkRequest<const CQ_SIZE: usize> {
+pub struct CachedWorkRequest<const POLL_BUFF_SIZE: usize> {
     wr_id: u64,
-    cq_cache: Arc<CachedCompletionQueue<CQ_SIZE>>,
+    cq_cache: Arc<CachedCompletionQueue>,
     opt_wc: Option<ibv_wc>,
 }
 
-impl<const CQ_SIZE: usize> WorkRequest for CachedWorkRequest<CQ_SIZE> {
+impl<const POLL_BUFF_SIZE: usize> WorkRequest for CachedWorkRequest<POLL_BUFF_SIZE> {
     fn poll(&mut self) -> std::io::Result<Option<WorkCompletion>> {
         self._update_from_all()?
             .map(|wc| work_completion_from_ibv_wc(wc))
@@ -40,8 +40,11 @@ impl<const CQ_SIZE: usize> WorkRequest for CachedWorkRequest<CQ_SIZE> {
     }
 }
 
-impl<const CQ_SIZE: usize> CachedWorkRequest<CQ_SIZE> {
-    pub(super) fn new(wr_id: u64, cq_cache: Arc<CachedCompletionQueue<CQ_SIZE>>) -> Self {
+impl<const POLL_BUFF_SIZE: usize> CachedWorkRequest<POLL_BUFF_SIZE> {
+    pub(super) fn new(
+        wr_id: u64,
+        cq_cache: Arc<CachedCompletionQueue>,
+    ) -> Self {
         Self {
             wr_id,
             cq_cache,
@@ -75,7 +78,7 @@ impl<const CQ_SIZE: usize> CachedWorkRequest<CQ_SIZE> {
 
     fn _update_from_cq(&mut self) -> std::io::Result<Option<ibv_wc>> {
         // Poll the cq and check the cache
-        self.cq_cache.poll()?;
+        self.cq_cache.poll::<POLL_BUFF_SIZE>()?;
         self._update_from_cache()
     }
 
