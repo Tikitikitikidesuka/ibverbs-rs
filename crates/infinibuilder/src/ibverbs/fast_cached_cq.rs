@@ -4,14 +4,22 @@ use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-pub struct CachedCompletionQueue<const N: usize> {
+pub(super) struct FastCachedCompletionQueue<const N: usize> {
     cq: Arc<CompletionQueue>,
-    cache: UnsafeCell<[Option<ibv_wc>; N]>,
+    cq_cache: UnsafeCell<[Option<ibv_wc>; N]>,
     next_wr_id: AtomicU64,
 }
 
-impl<const N: usize> CachedCompletionQueue<N> {
-    pub fn reserve_wr_id(&self) -> u64 {
+impl<const N: usize> FastCachedCompletionQueue<N> {
+    pub fn new(cq: CompletionQueue) -> Self {
+        Self {
+            cq: Arc::new(cq),
+            cq_cache: UnsafeCell::new([None; N]),
+            next_wr_id: AtomicU64::new(0),
+        }
+    }
+
+    pub fn fetch_advance_next_wr_id(&self) -> u64 {
         let next_wr_id = self.next_wr_id.fetch_add(1, Ordering::Relaxed);
 
         if unsafe { self.cache()[next_wr_id as usize] }.is_some() {
@@ -31,18 +39,14 @@ impl<const N: usize> CachedCompletionQueue<N> {
 
         // Fill cache with polled work completions
         for wc in wc_slice.iter() {
-            self.mut_cache().cache[wc.wr_id() as usize] = Some(*wc);
+            unsafe { self.mut_cache()[wc.wr_id() as usize] = Some(*wc) };
         }
 
         Ok(wc_slice.len())
     }
 
-    /// SAFETY: The returned work completion option might be overwritten by a cache update while its
-    /// copied. The chances of this are minimized by making the space of work ids larger (N) as enough
-    /// work completions have to be reserved and completed to wraparound and reach the returned one again.
-    /// If the output is Some(ibv_wc), the completion is consumed (set to None on the cache).
-    pub unsafe fn consume_wc(&self, wr_id: u64) -> Option<ibv_wc> {
-        self.mut_cache()[wr_id as usize].take()
+    pub fn consume_wc(&self, wr_id: u64) -> Option<ibv_wc> {
+        unsafe { self.mut_cache()[wr_id as usize].take() }
     }
 
     unsafe fn mut_cache(&self) -> &mut [Option<ibv_wc>; N] {

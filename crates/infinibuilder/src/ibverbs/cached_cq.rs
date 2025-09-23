@@ -2,10 +2,12 @@ use dashmap::DashMap;
 use ibverbs::{CompletionQueue, ibv_wc};
 use std::mem::MaybeUninit;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(super) struct CachedCompletionQueue {
     cq: Arc<CompletionQueue>,
     cq_cache: Arc<DashMap<u64, ibv_wc>>,
+    next_wr_id: AtomicU64,
 }
 
 unsafe impl Sync for CachedCompletionQueue {}
@@ -18,7 +20,12 @@ impl CachedCompletionQueue {
         Self {
             cq: Arc::new(cq),
             cq_cache: Arc::new(DashMap::new()),
+            next_wr_id: AtomicU64::new(0),
         }
+    }
+
+    pub fn fetch_advance_next_wr_id(&self) -> u64 {
+        self.next_wr_id.fetch_add(1, Ordering::Relaxed)
     }
 
     pub fn poll<const POLL_BUFF_SIZE: usize>(&self) -> std::io::Result<usize> {

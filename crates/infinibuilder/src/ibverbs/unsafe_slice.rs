@@ -1,3 +1,10 @@
+/// This might actually not do exactly what I think it does.
+/// Rust makes optimizations based on the assumption that &mut []
+/// are unique references to memory (no aliasing) which this type
+/// violates by implementing AsMut<[T]>... Could be UB.
+/// UnsafeCell avoids this assumption on the compiler
+/// TODO: INVESTIGATE THIS
+
 use std::ptr::NonNull;
 
 pub struct UnsafeSlice<T> {

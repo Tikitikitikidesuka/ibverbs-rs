@@ -1,11 +1,12 @@
-use crate::connection::Connect;
+use crate::connect::Connect;
 use crate::ibverbs::simple_unit::IbvSimpleUnit;
 use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConnection};
 use crate::ibverbs::simple_unit::mode::Mode;
+use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
 use crate::rdma_traits::{RdmaReadWrite, RdmaSendRecv, WorkRequest};
-use crate::unsafe_slice::UnsafeSlice;
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
+use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
 pub struct TransferMode<const POLL_BUFF_SIZE: usize>;
@@ -21,7 +22,7 @@ pub struct UnconnectedTransferMr<const POLL_BUFF_SIZE: usize> {
 }
 
 impl<const POLL_BUFF_SIZE: usize> UnconnectedTransferMr<POLL_BUFF_SIZE> {
-    pub(super) fn new(
+    pub(super) unsafe fn new(
         connection: &mut UnconnectedIbvConnection,
         memory: &[u8],
     ) -> std::io::Result<Self> {
@@ -53,6 +54,7 @@ impl<const POLL_BUFF_SIZE: usize> Connect for UnconnectedTransferMr<POLL_BUFF_SI
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TransferMrConnectionConfig {
     remote_mr: RemoteMemoryRegion,
 }
@@ -69,7 +71,7 @@ impl<const POLL_BUFF_SIZE: usize> ConnectedTransferMr<POLL_BUFF_SIZE> {
         mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
     ) -> std::io::Result<CachedWorkRequest<POLL_BUFF_SIZE>> {
-        let wr_id = connection.fetch_advance_wr_id();
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
         unsafe {
             connection
                 .qp
@@ -83,7 +85,7 @@ impl<const POLL_BUFF_SIZE: usize> ConnectedTransferMr<POLL_BUFF_SIZE> {
         connection: &mut IbvConnection,
         mr_range: impl RangeBounds<usize>,
     ) -> std::io::Result<CachedWorkRequest<POLL_BUFF_SIZE>> {
-        let wr_id = connection.fetch_advance_wr_id();
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
         unsafe {
             connection
                 .qp
@@ -99,7 +101,7 @@ impl<const POLL_BUFF_SIZE: usize> ConnectedTransferMr<POLL_BUFF_SIZE> {
         remote_mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
     ) -> std::io::Result<CachedWorkRequest<POLL_BUFF_SIZE>> {
-        let wr_id = connection.fetch_advance_wr_id();
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
         connection.qp.post_write(
             &[self.mr.slice(mr_range)],
             self.remote_mr.slice(remote_mr_range),
@@ -115,7 +117,7 @@ impl<const POLL_BUFF_SIZE: usize> ConnectedTransferMr<POLL_BUFF_SIZE> {
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
     ) -> std::io::Result<CachedWorkRequest<POLL_BUFF_SIZE>> {
-        let wr_id = connection.fetch_advance_wr_id();
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
         connection.qp.post_read(
             &[self.mr.slice(mr_range)],
             self.remote_mr.slice(remote_mr_range),
@@ -130,14 +132,14 @@ impl<const POLL_BUFF_SIZE: usize> RdmaSendRecv for IbvSimpleUnit<TransferMode<PO
         &mut self,
         mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest> {
+    ) -> std::io::Result<impl WorkRequest + 'static> {
         unsafe { self.mr.post_send(&mut self.connection, mr_range, imm_data) }
     }
 
     unsafe fn post_receive(
         &mut self,
         mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest> {
+    ) -> std::io::Result<impl WorkRequest + 'static> {
         unsafe { self.mr.post_receive(&mut self.connection, mr_range) }
     }
 }
@@ -148,7 +150,7 @@ impl<const POLL_BUFF_SIZE: usize> RdmaReadWrite for IbvSimpleUnit<TransferMode<P
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest> {
+    ) -> std::io::Result<impl WorkRequest + 'static> {
         unsafe {
             self.mr
                 .post_write(&mut self.connection, mr_range, remote_mr_range, imm_data)
@@ -159,7 +161,7 @@ impl<const POLL_BUFF_SIZE: usize> RdmaReadWrite for IbvSimpleUnit<TransferMode<P
         &mut self,
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest> {
+    ) -> std::io::Result<impl WorkRequest + 'static> {
         unsafe {
             self.mr
                 .post_read(&mut self.connection, mr_range, remote_mr_range)

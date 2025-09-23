@@ -1,13 +1,14 @@
-use crate::connection::Connect;
+use crate::connect::Connect;
+use crate::ibverbs::simple_unit::IbvSimpleUnit;
 use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConnection};
 use crate::ibverbs::simple_unit::mode::Mode;
+use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
 use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
-use crate::unsafe_slice::UnsafeSlice;
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
+use serde::{Deserialize, Serialize};
 use std::ops::{Deref, RangeInclusive};
 use std::time::Duration;
-use crate::ibverbs::simple_unit::IbvSimpleUnit;
 
 pub struct SyncMode;
 
@@ -24,6 +25,7 @@ pub struct UnconnectedSyncMr {
 
 impl UnconnectedSyncMr {
     pub fn new(connection: &mut UnconnectedIbvConnection) -> std::io::Result<Self> {
+        // Box to ensure stable location in heap memory for DMA
         let rendezvous_state = Box::new(RendezvousMemoryRegion::new());
         let rendezvous_mr = connection
             .pd
@@ -57,6 +59,7 @@ impl Connect for UnconnectedSyncMr {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SyncMrConnectionConfig {
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
@@ -68,10 +71,14 @@ pub struct ConnectedSyncMr {
 }
 
 impl ConnectedSyncMr {
-    pub(super) fn rendezvous(&mut self, connection: &mut IbvConnection) -> std::io::Result<()> {
-        let wr_id = connection.fetch_advance_wr_id();
+    pub(super) fn rendezvous<const POLL_BUFF_SIZE: usize>(
+        &mut self,
+        connection: &mut IbvConnection,
+    ) -> std::io::Result<()> {
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
 
         // Write READY to the peer's rendezvous memory
+        println!("Write READY to peer");
         connection.qp.post_write(
             &[self
                 .rendezvous_mr
@@ -81,14 +88,16 @@ impl ConnectedSyncMr {
             wr_id,
             None,
         )?;
-        CachedWorkRequest::<1>::new(wr_id, connection.cached_cq.clone()).wait()?;
+        CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone()).wait()?;
 
         // Wait for peer to write on our rendezvous memory
+        println!("Wait for peer to write on ours");
         while let RendezvousState::Waiting = self.rendezvous_state.remote_state() {
             std::hint::spin_loop();
         }
 
         // Reset our rendezvous memory so the operation can be repeated
+        println!("Reset rendezvous memory");
         self.rendezvous_state.reset_remote_state();
 
         Ok(())
@@ -97,7 +106,7 @@ impl ConnectedSyncMr {
 
 impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
     fn rendezvous(&mut self) -> std::io::Result<()> {
-        self.mr.rendezvous(&mut self.connection)
+        self.mr.rendezvous::<1>(&mut self.connection)
     }
 
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {

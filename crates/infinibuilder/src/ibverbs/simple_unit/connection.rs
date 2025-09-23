@@ -1,4 +1,4 @@
-use crate::connection::Connect;
+use crate::connect::Connect;
 use crate::ibverbs::cached_cq::CachedCompletionQueue;
 use derivative::Derivative;
 use ibverbs::{
@@ -7,10 +7,11 @@ use ibverbs::{
 };
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use serde::{Deserialize, Serialize};
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub(super) struct UnconnectedIbvConnection {
+pub struct UnconnectedIbvConnection {
     #[derivative(Debug = "ignore")]
     prepared_qp: PreparedQueuePair,
     qp_endpoint: QueuePairEndpoint,
@@ -20,24 +21,22 @@ pub(super) struct UnconnectedIbvConnection {
     pub(super) cq: CompletionQueue,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IbvConnectionConfig {
     qp_endpoint: QueuePairEndpoint,
 }
 
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub(super) struct IbvConnection {
+pub struct IbvConnection {
     local_qp_endpoint: QueuePairEndpoint,
     remote_qp_endpoint: QueuePairEndpoint,
     #[derivative(Debug = "ignore")]
     pub(super) qp: QueuePair,
     #[derivative(Debug = "ignore")]
-    pub(super) pd: ProtectionDomain,
+    pub(super) _pd: ProtectionDomain,
     #[derivative(Debug = "ignore")]
     pub(super) cached_cq: Arc<CachedCompletionQueue>,
-    #[derivative(Debug = "ignore")]
-    next_wr_id: AtomicU64,
 }
 
 impl UnconnectedIbvConnection {
@@ -78,16 +77,8 @@ impl Connect for UnconnectedIbvConnection {
             local_qp_endpoint: self.qp_endpoint,
             remote_qp_endpoint: connection_config.qp_endpoint,
             qp: self.prepared_qp.handshake(connection_config.qp_endpoint)?,
-            pd: self.pd,
+            _pd: self.pd,
             cached_cq: Arc::new(CachedCompletionQueue::new(self.cq)),
-            next_wr_id: AtomicU64::new(0),
         })
-    }
-}
-
-impl IbvConnection {
-    pub fn fetch_advance_wr_id(&self) -> u64 {
-        self.next_wr_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }

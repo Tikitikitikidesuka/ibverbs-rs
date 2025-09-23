@@ -1,4 +1,4 @@
-use infinibuilder::connection::Connect;
+use infinibuilder::connect::Connect;
 use infinibuilder::ibverbs::simple_unit::IbvSimpleUnit;
 use infinibuilder::rdma_traits::{RdmaReadWrite, RdmaSendRecv};
 use infinibuilder::rdma_traits::{RdmaRendezvous, WorkRequest};

@@ -6,12 +6,12 @@ pub trait RdmaSendRecv {
         &mut self,
         mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 
     unsafe fn post_receive(
         &mut self,
         mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 }
 
 pub trait SafeRdmaSendRecv {
@@ -19,12 +19,12 @@ pub trait SafeRdmaSendRecv {
         &mut self,
         mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 
     fn post_receive(
         &mut self,
         mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 }
 
 pub trait RdmaReadWrite {
@@ -33,13 +33,13 @@ pub trait RdmaReadWrite {
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 
     unsafe fn post_read(
         &mut self,
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 }
 
 pub trait SafeRdmaReadWrite {
@@ -48,13 +48,13 @@ pub trait SafeRdmaReadWrite {
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
         imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 
     fn post_read(
         &mut self,
         mr_range: impl RangeBounds<usize>,
         remote_mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest>;
+    ) -> std::io::Result<impl WorkRequest + 'static>;
 }
 
 pub trait RdmaRendezvous {
