@@ -12,8 +12,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 fn main() {
-    const MESSAGE_SIZE: usize = 67_108_864;
-
     let args = parse_args();
 
     let network = network();
@@ -21,7 +19,7 @@ fn main() {
     let exchanger_network = TcpExchangerNetworkConfig::from_network(network).unwrap();
 
     let ibv_context = ibverbs::devices().unwrap().get(0).unwrap().open().unwrap();
-    let memory = vec![170; MESSAGE_SIZE];
+    let memory = vec![170; args.message_length];
 
     let conn =
         unsafe { IbvSimpleUnit::new_sync_transfer_unit::<64, 64>(&ibv_context, &memory).unwrap() };

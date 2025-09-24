@@ -3,7 +3,7 @@ use crate::ibverbs::ibv_wc_conversion::work_completion_from_ibv_wc;
 use crate::rdma_traits::{WorkCompletion, WorkRequest};
 use ibverbs::ibv_wc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct CachedWorkRequest<const POLL_BUFF_SIZE: usize> {
     wr_id: u64,
@@ -35,16 +35,38 @@ impl<const POLL_BUFF_SIZE: usize> WorkRequest for CachedWorkRequest<POLL_BUFF_SI
         }
     }
 
-    fn wait_timeout(self, timeout: Duration) -> std::io::Result<WorkCompletion> {
-        todo!()
+    fn wait_timeout(mut self, timeout: Duration) -> std::io::Result<WorkCompletion> {
+        // Get start time
+        let init_time = Instant::now();
+
+        // Poll all sources first
+        if let Some(wc) = self.poll()? {
+            return Ok(wc);
+        }
+
+        // If not in opt_wc or cache, it will come through cq
+        loop {
+            // Return if timeout
+            if init_time.elapsed() > timeout {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Timed out",
+                ));
+            }
+
+            // Poll only the completion queue
+            self._update_from_cq()?;
+            if let Some(wc) = self.opt_wc {
+                return work_completion_from_ibv_wc(wc);
+            }
+
+            std::hint::spin_loop();
+        }
     }
 }
 
 impl<const POLL_BUFF_SIZE: usize> CachedWorkRequest<POLL_BUFF_SIZE> {
-    pub(super) fn new(
-        wr_id: u64,
-        cq_cache: Arc<CachedCompletionQueue>,
-    ) -> Self {
+    pub(super) fn new(wr_id: u64, cq_cache: Arc<CachedCompletionQueue>) -> Self {
         Self {
             wr_id,
             cq_cache,

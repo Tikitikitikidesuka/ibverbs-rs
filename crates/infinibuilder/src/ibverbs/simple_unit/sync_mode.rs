@@ -7,8 +7,8 @@ use crate::ibverbs::work_request::CachedWorkRequest;
 use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, Range, RangeInclusive};
-use std::time::Duration;
+use std::ops::{Deref, Range};
+use std::time::{Duration, Instant};
 
 pub struct SyncMode;
 
@@ -98,6 +98,49 @@ impl ConnectedSyncMr {
 
         Ok(())
     }
+
+    pub(super) fn rendezvous_timeout<const POLL_BUFF_SIZE: usize>(
+        &mut self,
+        connection: &mut IbvConnection,
+        timeout: Duration,
+    ) -> std::io::Result<()> {
+        // Get start time
+        let init_time = Instant::now();
+
+        // Increment local generation
+        self.rendezvous_state.advance_epoch();
+
+        // Write next_epoch to peer
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
+        connection.qp.post_write(
+            &[self
+                .rendezvous_mr
+                .slice(self.rendezvous_state.local_epoch_mr_range())],
+            self.remote_rendezvous_mr
+                .slice(self.rendezvous_state.remote_epoch_mr_range()),
+            wr_id,
+            None,
+        )?;
+
+        // Wait send for timeout - elapsed
+        CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone())
+            .wait_timeout(timeout - init_time.elapsed())?;
+
+        // Wait for peer to write their next_epoch
+        while !self.rendezvous_state.remote_synced() {
+            // Return if timeout
+            if init_time.elapsed() > timeout {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Timed out",
+                ));
+            }
+
+            std::hint::spin_loop();
+        }
+
+        Ok(())
+    }
 }
 
 impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
@@ -106,7 +149,8 @@ impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
     }
 
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
-        todo!()
+        self.mr
+            .rendezvous_timeout::<1>(&mut self.connection, timeout)
     }
 }
 
@@ -131,11 +175,11 @@ impl RendezvousMemoryRegion {
     }
 
     pub fn remote_epoch_mr_range(&self) -> Range<usize> {
-        Self::REMOTE_IDX * size_of::<u64>() .. (Self::REMOTE_IDX + 1) * size_of::<u64>()
+        Self::REMOTE_IDX * size_of::<u64>()..(Self::REMOTE_IDX + 1) * size_of::<u64>()
     }
 
     pub fn local_epoch_mr_range(&self) -> Range<usize> {
-        Self::LOCAL_IDX * size_of::<u64>() .. (Self::LOCAL_IDX + 1) * size_of::<u64>()
+        Self::LOCAL_IDX * size_of::<u64>()..(Self::LOCAL_IDX + 1) * size_of::<u64>()
     }
 }
 
