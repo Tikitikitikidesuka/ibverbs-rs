@@ -7,7 +7,7 @@ use crate::ibverbs::work_request::CachedWorkRequest;
 use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, RangeInclusive};
+use std::ops::{Deref, Range, RangeInclusive};
 use std::time::Duration;
 
 pub struct SyncMode;
@@ -20,7 +20,7 @@ impl Mode for SyncMode {
 
 pub struct UnconnectedSyncMr {
     rendezvous_state: Box<RendezvousMemoryRegion>,
-    rendezvous_mr: MemoryRegion<UnsafeSlice<RendezvousState>>,
+    rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
 }
 
 impl UnconnectedSyncMr {
@@ -66,7 +66,7 @@ pub struct SyncMrConnectionConfig {
 
 pub struct ConnectedSyncMr {
     rendezvous_state: Box<RendezvousMemoryRegion>,
-    rendezvous_mr: MemoryRegion<UnsafeSlice<RendezvousState>>,
+    rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
 
@@ -75,30 +75,26 @@ impl ConnectedSyncMr {
         &mut self,
         connection: &mut IbvConnection,
     ) -> std::io::Result<()> {
-        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
+        // Increment local generation
+        self.rendezvous_state.advance_epoch();
 
-        // Write READY to the peer's rendezvous memory
-        println!("Write READY to peer");
+        // Write next_epoch to peer
+        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
         connection.qp.post_write(
             &[self
                 .rendezvous_mr
-                .slice(self.rendezvous_state.local_state_range())],
+                .slice(self.rendezvous_state.local_epoch_mr_range())],
             self.remote_rendezvous_mr
-                .slice(self.rendezvous_state.remote_state_range()),
+                .slice(self.rendezvous_state.remote_epoch_mr_range()),
             wr_id,
             None,
         )?;
         CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone()).wait()?;
 
-        // Wait for peer to write on our rendezvous memory
-        println!("Wait for peer to write on ours");
-        while let RendezvousState::Waiting = self.rendezvous_state.remote_state() {
+        // Wait for peer to write their next_epoch
+        while !self.rendezvous_state.remote_synced() {
             std::hint::spin_loop();
         }
-
-        // Reset our rendezvous memory so the operation can be repeated
-        println!("Reset rendezvous memory");
-        self.rendezvous_state.reset_remote_state();
 
         Ok(())
     }
@@ -114,45 +110,37 @@ impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
     }
 }
 
-#[repr(u8)]
-#[derive(Debug, Default, Copy, Clone)]
-enum RendezvousState {
-    #[default]
-    Waiting,
-    Ready,
-}
-
 #[repr(transparent)]
 #[derive(Debug)]
-struct RendezvousMemoryRegion([RendezvousState; 2]);
+struct RendezvousMemoryRegion([u64; 2]);
 
 impl RendezvousMemoryRegion {
     const LOCAL_IDX: usize = 0;
     const REMOTE_IDX: usize = 1;
 
-    fn new() -> Self {
-        Self([RendezvousState::Ready, RendezvousState::Waiting])
+    pub fn new() -> Self {
+        Self([0; 2])
     }
 
-    fn remote_state(&self) -> RendezvousState {
-        self.0[Self::REMOTE_IDX]
+    pub fn advance_epoch(&mut self) {
+        self.0[Self::LOCAL_IDX] += 1;
     }
 
-    fn reset_remote_state(&mut self) {
-        self.0[Self::REMOTE_IDX] = RendezvousState::Waiting;
+    pub fn remote_synced(&self) -> bool {
+        self.0[Self::REMOTE_IDX] >= self.0[Self::LOCAL_IDX]
     }
 
-    fn remote_state_range(&self) -> RangeInclusive<usize> {
-        Self::REMOTE_IDX..=Self::REMOTE_IDX
+    pub fn remote_epoch_mr_range(&self) -> Range<usize> {
+        Self::REMOTE_IDX * size_of::<u64>() .. (Self::REMOTE_IDX + 1) * size_of::<u64>()
     }
 
-    fn local_state_range(&self) -> RangeInclusive<usize> {
-        Self::LOCAL_IDX..=Self::LOCAL_IDX
+    pub fn local_epoch_mr_range(&self) -> Range<usize> {
+        Self::LOCAL_IDX * size_of::<u64>() .. (Self::LOCAL_IDX + 1) * size_of::<u64>()
     }
 }
 
 impl Deref for RendezvousMemoryRegion {
-    type Target = [RendezvousState];
+    type Target = [u64];
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()

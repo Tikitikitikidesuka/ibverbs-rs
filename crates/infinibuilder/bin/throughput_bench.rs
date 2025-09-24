@@ -12,14 +12,16 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 fn main() {
-    let (node_id, mode) = parse_args();
+    const MESSAGE_SIZE: usize = 67_108_864;
+
+    let args = parse_args();
 
     let network = network();
-    let node_idx = network.node(node_id.as_str()).unwrap().idx;
+    let node_idx = network.node(args.node_id.as_str()).unwrap().idx;
     let exchanger_network = TcpExchangerNetworkConfig::from_network(network).unwrap();
 
     let ibv_context = ibverbs::devices().unwrap().get(0).unwrap().open().unwrap();
-    let memory = [170; 100000];
+    let memory = vec![170; MESSAGE_SIZE];
 
     let conn =
         unsafe { IbvSimpleUnit::new_sync_transfer_unit::<64, 64>(&ibv_context, &memory).unwrap() };
@@ -47,32 +49,32 @@ fn main() {
 
     println!("\n\n");
 
-    let msg_size = 4096; // example
-    let num_messages = 3;
-    let mr_range = 0..msg_size;
+    let message_length = args.message_length; // example
+    let num_messages = args.num_messages;
+    let mr_range = 0..message_length;
 
-    match mode {
+    match args.mode {
         Mode::SpinSender => benchmark(
             || spin_send(&mut conn, mr_range.clone()),
-            msg_size,
+            message_length,
             num_messages,
             "SpinSender",
         ),
         Mode::SpinReceiver => benchmark(
             || spin_receive(&mut conn, mr_range.clone()),
-            msg_size,
+            message_length,
             num_messages,
             "SpinReceiver",
         ),
         Mode::SyncSender => benchmark(
             || sync_send(&mut conn, mr_range.clone()),
-            msg_size,
+            message_length,
             num_messages,
             "SyncSender",
         ),
         Mode::SyncReceiver => benchmark(
             || sync_receive(&mut conn, mr_range.clone()),
-            msg_size,
+            message_length,
             num_messages,
             "SyncReceiver",
         ),
@@ -135,9 +137,7 @@ fn sync_send<C: RdmaSendRecv + RdmaRendezvous, R: RangeBounds<usize> + Clone>(
     conn: &mut C,
     mr_range: R,
 ) -> std::io::Result<()> {
-    println!("Rendezvous");
     conn.rendezvous()?;
-    println!("Send");
     unsafe { conn.post_send(mr_range, None)?.wait()? };
     Ok(())
 }
@@ -147,9 +147,7 @@ fn sync_receive<C: RdmaSendRecv + RdmaRendezvous, R: RangeBounds<usize> + Clone>
     mr_range: R,
 ) -> std::io::Result<()> {
     let wr = unsafe { conn.post_receive(mr_range)? };
-    println!("Rendezvous");
     conn.rendezvous()?;
-    println!("Receive");
     wr.wait()?;
     Ok(())
 }
@@ -162,20 +160,29 @@ enum Mode {
     SyncReceiver,
 }
 
-fn parse_args() -> (String, Mode) {
+struct Args {
+    node_id: String,
+    num_messages: usize,
+    message_length: usize,
+    mode: Mode,
+}
+
+fn parse_args() -> Args {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 3 {
+    if args.len() != 5 {
         eprintln!(
-            "Usage: {} node_id [spin_sender|spin_receiver|sync_sender|sync_receiver]",
+            "Usage: {} node_id num_messages message_length [spin_sender|spin_receiver|sync_sender|sync_receiver]",
             args[0]
         );
         std::process::exit(1);
     }
 
     let node_id = args[1].clone();
+    let num_messages = args[2].parse().unwrap();
+    let message_length = args[3].parse().unwrap();
 
-    let mode = match args[2].as_str() {
+    let mode = match args[4].as_str() {
         "spin_sender" => Mode::SpinSender,
         "spin_receiver" => Mode::SpinReceiver,
         "sync_sender" => Mode::SyncSender,
@@ -189,7 +196,12 @@ fn parse_args() -> (String, Mode) {
         }
     };
 
-    (node_id, mode)
+    Args {
+        node_id,
+        num_messages,
+        message_length,
+        mode,
+    }
 }
 
 fn network() -> IBNetwork<&'static str> {
