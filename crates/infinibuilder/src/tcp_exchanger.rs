@@ -1,5 +1,5 @@
+use crate::network_config::NetworkConfig;
 use crate::tcp_exchanger::TcpExchangerError::DuplicatedNodeId;
-use crate::network::IBNetwork;
 use futures::future::join_all;
 use futures::join;
 use serde::de::{DeserializeOwned, Error};
@@ -51,14 +51,13 @@ impl TcpExchangerNetworkConfig {
         }
     }
 
-    pub fn from_network<T: Ord>(network: IBNetwork<T>) -> Result<Self, TcpExchangerError> {
+    pub fn from_network(network: NetworkConfig) -> Result<Self, TcpExchangerError> {
         network
-            .nodes()
             .iter()
             .try_fold(Self::new(), |exchanger_network, node_config| {
                 exchanger_network.add_node(TcpExchangerNodeConfig::new(
-                    node_config.idx,
-                    node_config.address.clone(),
+                    node_config.rankid,
+                    node_config.hostname.clone(),
                     node_config.port,
                 ))
             })
@@ -92,7 +91,7 @@ impl TcpExchangerNetworkConfig {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TcpExchangerNodeConfig {
     node_id: usize,
-    address: String,
+    hostname: String,
     port: u16,
 }
 
@@ -100,7 +99,7 @@ impl TcpExchangerNodeConfig {
     pub fn new(node_id: usize, address: String, port: u16) -> Self {
         Self {
             node_id,
-            address,
+            hostname: address,
             port,
         }
     }
@@ -186,7 +185,7 @@ where
         let tcp_node_config = network_config
             .get(&node_id)
             .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
-        let socket_addr = format!("{}:{}", tcp_node_config.address, tcp_node_config.port);
+        let socket_addr = format!("{}:{}", tcp_node_config.hostname, tcp_node_config.port);
         println!("Receiving at {socket_addr}");
 
         let recv_fut = Self::receive_network_config(socket_addr, network_config, exchanger_config);
@@ -245,7 +244,7 @@ where
 
         for node_config in network_config.iter() {
             let target_node_id = node_config.node_id;
-            let address = node_config.address.clone();
+            let address = node_config.hostname.clone();
             let tcp_port = node_config.port;
             let attempt_delay = exchanger_config.send_attempt_delay;
             let message_payload = message_payload.clone();
