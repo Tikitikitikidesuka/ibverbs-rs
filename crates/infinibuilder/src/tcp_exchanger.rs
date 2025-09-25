@@ -1,4 +1,4 @@
-use crate::config_exchange::TcpExchangerError::DuplicatedNodeId;
+use crate::tcp_exchanger::TcpExchangerError::DuplicatedNodeId;
 use crate::network::IBNetwork;
 use futures::future::join_all;
 use futures::join;
