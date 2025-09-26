@@ -6,6 +6,7 @@ use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchange
 use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
+use infinibuilder::synchronization::centralized::CentralizedSync;
 
 fn main() {
     let run_params = parse_args();
@@ -39,15 +40,7 @@ fn main() {
 
     let mut node = node.connect(in_conn_config).unwrap();
 
-    match run_params.rank_id {
-        0 => {
-            node.connection(1).unwrap().rendezvous().unwrap();
-            node.connection(2).unwrap().rendezvous().unwrap();
-        }
-        _ => {
-            node.connection(0).unwrap().rendezvous().unwrap();
-        }
-    }
+    node.run(&CentralizedSync {}, &node.group_others());
 }
 struct Args {
     rank_id: usize,

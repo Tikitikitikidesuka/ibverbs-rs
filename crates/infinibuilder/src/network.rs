@@ -100,19 +100,19 @@ pub struct NodeNotInNetwork {
 }
 
 #[derive(Debug, Error, Copy, Clone)]
-#[error("Groups do not belong to the same network")]
-pub struct GroupsFromDifferentNetwork;
+#[error("Group does not belong to the network")]
+pub struct NonMatchingNetwork;
 
 impl<T> NetworkGroup<'_, T> {
     pub fn members(&self) -> &[usize] {
         self.rank_ids.as_slice()
     }
 
-    pub fn union<G: Borrow<Self>>(&self, other: G) -> Result<Self, GroupsFromDifferentNetwork> {
+    pub fn union<G: Borrow<Self>>(&self, other: G) -> Result<Self, NonMatchingNetwork> {
         let other = other.borrow();
 
         if !std::ptr::eq(self.network, other.network) {
-            return Err(GroupsFromDifferentNetwork);
+            return Err(NonMatchingNetwork);
         }
 
         let ids = self
@@ -129,14 +129,11 @@ impl<T> NetworkGroup<'_, T> {
         })
     }
 
-    pub fn intersection<G: Borrow<Self>>(
-        &self,
-        other: G,
-    ) -> Result<Self, GroupsFromDifferentNetwork> {
+    pub fn intersection<G: Borrow<Self>>(&self, other: G) -> Result<Self, NonMatchingNetwork> {
         let other = other.borrow();
 
         if !std::ptr::eq(self.network, other.network) {
-            return Err(GroupsFromDifferentNetwork);
+            return Err(NonMatchingNetwork);
         }
 
         let ids = self
@@ -155,14 +152,11 @@ impl<T> NetworkGroup<'_, T> {
         })
     }
 
-    pub fn difference<G: Borrow<Self>>(
-        &self,
-        other: G,
-    ) -> Result<Self, GroupsFromDifferentNetwork> {
+    pub fn difference<G: Borrow<Self>>(&self, other: G) -> Result<Self, NonMatchingNetwork> {
         let other = other.borrow();
 
         if !std::ptr::eq(self.network, other.network) {
-            return Err(GroupsFromDifferentNetwork);
+            return Err(NonMatchingNetwork);
         }
 
         let ids = self
@@ -200,16 +194,32 @@ impl<T> NetworkGroup<'_, T> {
 }
 
 pub trait NetworkOp {
-    fn run<T: RdmaSendRecv + RdmaRendezvous>(
+    type Output;
+
+    fn run<'a, C: Iterator<Item = &'a mut T>, T: 'a + RdmaSendRecv + RdmaRendezvous>(
         &self,
-        network: &mut ConnectedNetworkNode<T>,
-        group: &NetworkGroup<T>,
-    );
+        connections: C,
+    ) -> Self::Output;
 }
 
 impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
     pub fn connection(&mut self, rank_id: usize) -> Option<&mut T> {
         self.connections.get_mut(rank_id)
+    }
+
+    pub fn connections<'a>(
+        &'a mut self,
+        group: &'a NetworkGroup<'_, T>,
+    ) -> Result<impl Iterator<Item = &'a mut T> + 'a, NonMatchingNetwork> {
+        if !std::ptr::eq(self, group.network) {
+            return Err(NonMatchingNetwork);
+        }
+
+        let ptr = self.connections.as_mut_ptr();
+        Ok(group
+            .rank_ids
+            .iter()
+            .map(move |&rank_id| unsafe { &mut *ptr.add(rank_id) }))
     }
 
     pub fn group<I>(&self, rank_ids: I) -> Result<NetworkGroup<T>, NodeNotInNetwork>
@@ -246,7 +256,11 @@ impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
             .unwrap()
     }
 
-    pub fn run(&mut self, network_op: &impl NetworkOp, group: &NetworkGroup<T>) {
-        network_op.run(self, group);
+    pub fn run<O: NetworkOp>(
+        &mut self,
+        network_op: &O,
+        group: &NetworkGroup<T>,
+    ) -> Result<O::Output, NonMatchingNetwork> {
+        Ok(network_op.run(self.connections(group)?))
     }
 }
