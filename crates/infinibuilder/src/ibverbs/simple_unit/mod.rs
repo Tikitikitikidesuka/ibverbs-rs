@@ -23,7 +23,7 @@ pub struct UnconnectedIbvSimpleUnit<M: Mode> {
     mr: M::UnconnectedMr,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IbvSimpleUnitConnectionConfig<M: Mode> {
     connection_config: IbvConnectionConfig,
     mr_connection_config: M::MrConnectionConfig,

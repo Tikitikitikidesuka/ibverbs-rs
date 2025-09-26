@@ -9,7 +9,7 @@ use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct TransferMode<const POLL_BUFF_SIZE: usize>;
 
 impl<const POLL_BUFF_SIZE: usize> Mode for TransferMode<POLL_BUFF_SIZE> {
@@ -55,7 +55,7 @@ impl<const POLL_BUFF_SIZE: usize> Connect for UnconnectedTransferMr<POLL_BUFF_SI
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferMrConnectionConfig {
     remote_mr: RemoteMemoryRegion,
 }

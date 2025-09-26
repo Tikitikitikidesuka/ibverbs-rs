@@ -1,8 +1,8 @@
 use crate::ibverbs::simple_unit::sync_transfer_mode::SyncTransferMode;
 use crate::ibverbs::simple_unit::{IbvSimpleUnit, UnconnectedIbvSimpleUnit};
+use crate::network::{ConnectedNetworkNode, UnconnectedNetworkNode};
 use crate::network_config::NetworkConfig;
 use thiserror::Error;
-use crate::network::{ConnectedNetworkNode, UnconnectedNetworkNode};
 
 #[derive(Debug, Error)]
 pub enum IbvSimpleUnitNetworkCreationError {
@@ -41,6 +41,7 @@ impl ConnectedNetworkNode<IbvSimpleUnit<SyncTransferMode<0>>> {
             .open()?;
 
         Ok(UnconnectedNetworkNode {
+            rank_id,
             connections: network_config
                 .iter()
                 .map(|_| unsafe {

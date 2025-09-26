@@ -1,6 +1,6 @@
 use crate::connect::Connect;
 use crate::ibverbs::simple_unit::IbvSimpleUnit;
-use crate::ibverbs::simple_unit::connection::{UnconnectedIbvConnection};
+use crate::ibverbs::simple_unit::connection::UnconnectedIbvConnection;
 use crate::ibverbs::simple_unit::mode::Mode;
 use crate::ibverbs::simple_unit::sync_mode::{
     ConnectedSyncMr, SyncMrConnectionConfig, UnconnectedSyncMr,
@@ -9,11 +9,11 @@ use crate::ibverbs::simple_unit::transfer_mode::{
     ConnectedTransferMr, TransferMrConnectionConfig, UnconnectedTransferMr,
 };
 use crate::rdma_traits::{RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkRequest};
+use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct SyncTransferMode<const POLL_BUFF_SIZE: usize>;
 
 impl<const POLL_BUFF_SIZE: usize> Mode for SyncTransferMode<POLL_BUFF_SIZE> {
@@ -28,7 +28,10 @@ pub struct UnconnectedSyncTransferMr<const POLL_BUFF_SIZE: usize> {
 }
 
 impl<const POLL_BUFF_SIZE: usize> UnconnectedSyncTransferMr<POLL_BUFF_SIZE> {
-    pub unsafe fn new(connection: &mut UnconnectedIbvConnection, memory: &[u8]) -> std::io::Result<Self> {
+    pub unsafe fn new(
+        connection: &mut UnconnectedIbvConnection,
+        memory: &[u8],
+    ) -> std::io::Result<Self> {
         Ok(Self {
             transfer_mr: unsafe { UnconnectedTransferMr::new(connection, memory)? },
             sync_mr: UnconnectedSyncMr::new(connection)?,
@@ -62,7 +65,7 @@ impl<const POLL_BUFF_SIZE: usize> Connect for UnconnectedSyncTransferMr<POLL_BUF
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncTransferMrConnectionConfig {
     transfer_mr_connection_config: TransferMrConnectionConfig,
     sync_mr_connection_config: SyncMrConnectionConfig,
@@ -134,10 +137,14 @@ impl<const POLL_BUFF_SIZE: usize> RdmaRendezvous
     for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>
 {
     fn rendezvous(&mut self) -> std::io::Result<()> {
-        self.mr.sync_mr.rendezvous::<POLL_BUFF_SIZE>(&mut self.connection)
+        self.mr
+            .sync_mr
+            .rendezvous::<POLL_BUFF_SIZE>(&mut self.connection)
     }
 
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
-        todo!()
+        self.mr
+            .sync_mr
+            .rendezvous_timeout::<POLL_BUFF_SIZE>(&mut self.connection, timeout)
     }
 }

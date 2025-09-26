@@ -5,6 +5,7 @@ use futures::join;
 use serde::de::{DeserializeOwned, Error};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -40,14 +41,14 @@ pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
 #[derive(Debug, Clone)]
 pub struct TcpExchangerNetworkConfig {
     nodes: HashMap<usize, TcpExchangerNodeConfig>,
-    node_ids: Vec<usize>, // To iterate efficiently
+    rank_ids: Vec<usize>, // To iterate efficiently
 }
 
 impl TcpExchangerNetworkConfig {
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
-            node_ids: Vec::new(),
+            rank_ids: Vec::new(),
         }
     }
 
@@ -64,25 +65,25 @@ impl TcpExchangerNetworkConfig {
     }
 
     pub fn add_node(mut self, node: TcpExchangerNodeConfig) -> Result<Self, TcpExchangerError> {
-        if !self.nodes.contains_key(&node.node_id) {
-            self.node_ids.push(node.node_id);
-            self.nodes.insert(node.node_id, node);
+        if !self.nodes.contains_key(&node.rank_id) {
+            self.rank_ids.push(node.rank_id);
+            self.nodes.insert(node.rank_id, node);
             Ok(self)
         } else {
-            Err(DuplicatedNodeId(node.node_id))
+            Err(DuplicatedNodeId(node.rank_id))
         }
     }
 
-    pub fn get(&self, node_id: &usize) -> Option<&TcpExchangerNodeConfig> {
-        self.nodes.get(node_id)
+    pub fn get(&self, rank_id: &usize) -> Option<&TcpExchangerNodeConfig> {
+        self.nodes.get(rank_id)
     }
 
     pub fn len(&self) -> usize {
-        self.node_ids.len()
+        self.rank_ids.len()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &TcpExchangerNodeConfig> + '_ {
-        self.node_ids
+        self.rank_ids
             .iter()
             .filter_map(move |id| self.nodes.get(id))
     }
@@ -90,15 +91,15 @@ impl TcpExchangerNetworkConfig {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TcpExchangerNodeConfig {
-    node_id: usize,
+    rank_id: usize,
     hostname: String,
     port: u16,
 }
 
 impl TcpExchangerNodeConfig {
-    pub fn new(node_id: usize, address: String, port: u16) -> Self {
+    pub fn new(rank_id: usize, address: String, port: u16) -> Self {
         Self {
-            node_id,
+            rank_id,
             hostname: address,
             port,
         }
@@ -106,32 +107,12 @@ impl TcpExchangerNodeConfig {
 }
 
 pub struct TcpExchangedData<T> {
-    nodes: Vec<TcpExchangedNodeData<T>>,
+    nodes: Vec<T>,
 }
 
 impl<T> TcpExchangedData<T> {
-    pub fn as_slice(&self) -> &[TcpExchangedNodeData<T>] {
-        &self.nodes
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<'_, TcpExchangedNodeData<T>> {
-        self.nodes.iter()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TcpExchangedNodeData<T> {
-    pub node_id: usize,
-    pub data: T,
-}
-
-impl<T> TcpExchangedNodeData<T> {
-    pub fn node_id(&self) -> usize {
-        self.node_id
-    }
-
-    pub fn data(&self) -> &T {
-        &self.data
+    pub fn as_slice(&self) -> &[T] {
+        self.nodes.as_ref()
     }
 }
 
@@ -153,12 +134,18 @@ impl Default for TcpExchangerConfig {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct TcpExchangedNodeData<T> {
+    rank_id: usize,
+    data: T,
+}
+
 impl<T> TcpExchanger<T>
 where
     T: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub fn await_exchange_network_config(
-        node_id: usize,
+        rank_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
@@ -166,7 +153,7 @@ where
         Runtime::new()
             .map_err(|error| TcpExchangerError::ConnectionError(error))?
             .block_on(Self::exchange_network_config(
-                node_id,
+                rank_id,
                 out_data,
                 network_config,
                 exchanger_config,
@@ -174,17 +161,17 @@ where
     }
 
     pub async fn exchange_network_config(
-        node_id: usize,
+        rank_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
     ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
         let send_fut =
-            Self::send_network_config(node_id, out_data, network_config, exchanger_config);
+            Self::send_network_config(rank_id, out_data, network_config, exchanger_config);
 
         let tcp_node_config = network_config
-            .get(&node_id)
-            .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
+            .get(&rank_id)
+            .ok_or(TcpExchangerError::NonExistentRankId(rank_id))?;
         let socket_addr = format!("{}:{}", tcp_node_config.hostname, tcp_node_config.port);
         println!("Receiving at {socket_addr}");
 
@@ -201,14 +188,14 @@ where
     }
 
     pub async fn send_network_config(
-        node_id: usize,
+        rank_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
     ) -> Result<(), TcpExchangerError> {
         tokio::time::timeout(
             exchanger_config.send_timeout,
-            Self::send_config_to_nodes_async(node_id, out_data, network_config, exchanger_config),
+            Self::send_config_to_nodes_async(rank_id, out_data, network_config, exchanger_config),
         )
         .await
         .unwrap_or_else(|_| {
@@ -222,13 +209,13 @@ where
     // Will loop retrying failed sends until all are finished successfully
     // Must be run with a timeout block to prevent infinite loop
     async fn send_config_to_nodes_async(
-        node_id: usize,
+        rank_id: usize,
         out_data: &T,
         network_config: &TcpExchangerNetworkConfig,
         exchanger_config: &TcpExchangerConfig,
     ) -> Result<(), TcpExchangerError> {
         let sent_data = TcpExchangedNodeData {
-            node_id,
+            rank_id,
             data: out_data.clone(),
         };
 
@@ -243,7 +230,7 @@ where
         let mut send_tasks = Vec::new();
 
         for node_config in network_config.iter() {
-            let target_node_id = node_config.node_id;
+            let target_node_id = node_config.rank_id;
             let address = node_config.hostname.clone();
             let tcp_port = node_config.port;
             let attempt_delay = exchanger_config.send_attempt_delay;
@@ -459,10 +446,12 @@ where
         println!("All {} nodes connected successfully!", total_nodes);
 
         // Sort input data by node id
-        in_data_vec.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+        in_data_vec.sort_by(|a, b| a.rank_id.cmp(&b.rank_id));
 
         // Create and return the ready network config
-        Ok(TcpExchangedData { nodes: in_data_vec })
+        Ok(TcpExchangedData {
+            nodes: in_data_vec.into_iter().map(|n| n.data).collect(),
+        })
     }
 
     async fn handle_connection(
@@ -482,7 +471,7 @@ where
             received_nodes
                 .lock()
                 .await
-                .insert(validated_ready_node.node_id());
+                .insert(validated_ready_node.rank_id);
 
             // Return the ready node config
             Ok(validated_ready_node)
@@ -502,7 +491,7 @@ where
         network_config: &TcpExchangerNetworkConfig,
         received_nodes: &Arc<Mutex<HashSet<usize>>>,
     ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
-        let node_id = ready_node.node_id();
+        let node_id = ready_node.rank_id;
 
         if received_nodes.lock().await.contains(&node_id) {
             return Err(TcpExchangerError::InvalidMessage(

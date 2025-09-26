@@ -21,7 +21,7 @@ pub struct UnconnectedIbvConnection {
     pub(super) cq: CompletionQueue,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct IbvConnectionConfig {
     qp_endpoint: QueuePairEndpoint,
 }

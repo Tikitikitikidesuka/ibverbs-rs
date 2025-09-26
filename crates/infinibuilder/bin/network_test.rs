@@ -1,6 +1,7 @@
 use infinibuilder::connect::Connect;
-use infinibuilder::network::ConnectedNetworkNode;
+use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::{NetworkConfig, RawNetworkConfig};
+use infinibuilder::rdma_traits::RdmaRendezvous;
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use std::str::FromStr;
 use std::time::Duration;
@@ -22,18 +23,31 @@ fn main() {
     )
     .unwrap();
 
-    let conn_conf = node.connection_config();
+    let out_conn_config = node.connection_config();
 
     let exchanger_network = TcpExchangerNetworkConfig::from_network(network_config).unwrap();
     let exchanged = TcpExchanger::await_exchange_network_config(
         run_params.rank_id,
-        &conn_conf,
+        &out_conn_config,
         &exchanger_network,
         &exchanger_config(),
     )
     .unwrap();
 
-    println!("{:?}", exchanged.iter());
+    let in_conn_config =
+        NetworkNodeConnectionConfig::gather(run_params.rank_id, exchanged.as_slice()).unwrap();
+
+    let mut node = node.connect(in_conn_config).unwrap();
+
+    match run_params.rank_id {
+        0 => {
+            node.connection(1).unwrap().rendezvous().unwrap();
+            node.connection(2).unwrap().rendezvous().unwrap();
+        }
+        _ => {
+            node.connection(0).unwrap().rendezvous().unwrap();
+        }
+    }
 }
 struct Args {
     rank_id: usize,

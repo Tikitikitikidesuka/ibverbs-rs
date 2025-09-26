@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
 use std::time::{Duration, Instant};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct SyncMode;
 
 impl Mode for SyncMode {
@@ -60,7 +60,7 @@ impl Connect for UnconnectedSyncMr {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncMrConnectionConfig {
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
