@@ -5,7 +5,7 @@ use std::ops::Deref;
 pub struct NodeConfig {
     pub hostname: String,
     pub port: u16,
-    pub ibvdev: String,
+    pub ibdev: String,
     pub rankid: usize,
 }
 
@@ -82,13 +82,13 @@ mod tests {
                 NodeConfig {
                     hostname: "tdeb02".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "tdeb02".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                 },
             ],
@@ -107,19 +107,19 @@ mod tests {
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                 },
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 2,
                 },
             ],
@@ -150,7 +150,7 @@ mod tests {
             hosts: vec![NodeConfig {
                 hostname: "single".to_string(),
                 port: 8080,
-                ibvdev: "mlx5_1".to_string(),
+                ibdev: "mlx5_1".to_string(),
                 rankid: 0,
             }],
         };
@@ -167,13 +167,13 @@ mod tests {
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 2,
                 },
             ],
@@ -192,13 +192,13 @@ mod tests {
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 2, // Missing rankid 1
                 },
             ],
@@ -219,19 +219,19 @@ mod tests {
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Gap: missing rankid 1 and 2
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Duplicate rankid 3
                 },
             ],
@@ -252,25 +252,25 @@ mod tests {
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1, // Duplicate rankid 1
                 },
                 NodeConfig {
                     hostname: "node4".to_string(),
                     port: 10003,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Gap: missing rankid 2
                 },
             ],
@@ -289,13 +289,13 @@ mod tests {
                 NodeConfig {
                     hostname: "test1".to_string(),
                     port: 9000,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                 },
                 NodeConfig {
                     hostname: "test2".to_string(),
                     port: 9001,
-                    ibvdev: "mlx5_0".to_string(),
+                    ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                 },
             ],

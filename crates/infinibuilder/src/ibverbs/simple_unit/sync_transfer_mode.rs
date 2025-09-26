@@ -13,6 +13,7 @@ use std::ops::RangeBounds;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub struct SyncTransferMode<const POLL_BUFF_SIZE: usize>;
 
 impl<const POLL_BUFF_SIZE: usize> Mode for SyncTransferMode<POLL_BUFF_SIZE> {

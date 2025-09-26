@@ -9,6 +9,7 @@ use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 
+#[derive(Debug)]
 pub struct TransferMode<const POLL_BUFF_SIZE: usize>;
 
 impl<const POLL_BUFF_SIZE: usize> Mode for TransferMode<POLL_BUFF_SIZE> {

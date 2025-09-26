@@ -1,102 +1,60 @@
-use infinibuilder::config_exchange::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
-use infinibuilder::network::{IBNetwork, IBNetworkBuilder, IBNodeBuilderConfig, IBNodeRole};
-use std::env;
+use infinibuilder::connect::Connect;
+use infinibuilder::network::ConnectedNetworkNode;
+use infinibuilder::network_config::{NetworkConfig, RawNetworkConfig};
+use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
+use std::str::FromStr;
 use std::time::Duration;
-
-//TODO: GATHER, SCATTER, POINT TO POINT SYNC SEND
+use std::{env, fs};
 
 fn main() {
-    let run_params = RunParams::from_args(env::args()).unwrap();
-    let network = network();
-    let node_idx = network.node(run_params.node_id.as_str()).unwrap().idx;
-    let exchanger_network = TcpExchangerNetworkConfig::from_network(network).unwrap();
+    let run_params = parse_args();
+    let json_network = fs::read_to_string(run_params.config_file).unwrap();
+    let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
+        .unwrap()
+        .validate()
+        .unwrap();
+    let memory = [0; 1024];
+
+    let node = ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
+        run_params.rank_id,
+        &network_config,
+        &memory,
+    )
+    .unwrap();
+
+    let conn_conf = node.connection_config();
+
+    let exchanger_network = TcpExchangerNetworkConfig::from_network(network_config).unwrap();
     let exchanged = TcpExchanger::await_exchange_network_config(
-        node_idx,
-        &"HELLO".to_owned(),
+        run_params.rank_id,
+        &conn_conf,
         &exchanger_network,
         &exchanger_config(),
-    );
+    )
+    .unwrap();
+
+    println!("{:?}", exchanged.iter());
+}
+struct Args {
+    rank_id: usize,
+    config_file: String,
 }
 
-#[derive(Debug)]
-struct RunParams {
-    node_id: String,
-    network_file: String,
-}
+fn parse_args() -> Args {
+    let args: Vec<String> = env::args().collect();
 
-impl RunParams {
-    fn from_args<I, T>(mut args: I) -> Result<Self, String>
-    where
-        I: Iterator<Item = T>,
-        T: Into<String>,
-    {
-        args.next(); // skip program name
-
-        let network_file = args.next().ok_or("Missing network_file argument")?.into();
-        let node_id = args.next().ok_or("Missing node_id argument")?.into();
-
-        if args.next().is_some() {
-            return Err("Too many arguments provided".into());
-        }
-
-        Ok(RunParams {
-            node_id,
-            network_file,
-        })
+    if args.len() != 3 {
+        eprintln!("Usage: {} config_file rank_id", args[0]);
+        std::process::exit(1);
     }
-}
 
-fn network() -> IBNetwork<&'static str> {
-    let mut network_builder = IBNetworkBuilder::new();
-    network_builder.insert_node(
-        "RU0",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb01".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.insert_node(
-        "RU1",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb01".to_string(),
-            port: 8001,
-        },
-    );
-    network_builder.insert_node(
-        "RU2",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb03".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.insert_node(
-        "BU0",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb05".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.insert_node(
-        "BU1",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb06".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.insert_node(
-        "BU2",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb07".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.build()
+    let config_file = args[1].parse().unwrap();
+    let rank_id = usize::from_str(args[2].as_str()).unwrap();
+
+    Args {
+        rank_id,
+        config_file,
+    }
 }
 
 fn exchanger_config() -> TcpExchangerConfig {

@@ -16,8 +16,9 @@ pub mod mode;
 pub mod sync_mode;
 pub mod sync_transfer_mode;
 pub mod transfer_mode;
+pub mod network;
 
-pub struct IbvUnconnectedSimpleUnit<M: Mode> {
+pub struct UnconnectedIbvSimpleUnit<M: Mode> {
     connection: UnconnectedIbvConnection,
     mr: M::UnconnectedMr,
 }
@@ -37,20 +38,20 @@ impl IbvSimpleUnit<TransferMode<0>> {
     pub unsafe fn new_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
         ibv_context: &Context,
         memory: &[u8],
-    ) -> std::io::Result<IbvUnconnectedSimpleUnit<TransferMode<POLL_BUFF_SIZE>>> {
+    ) -> std::io::Result<UnconnectedIbvSimpleUnit<TransferMode<POLL_BUFF_SIZE>>> {
         let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
         let mr = UnconnectedTransferMr::new(&mut connection, memory)?;
-        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+        Ok(UnconnectedIbvSimpleUnit { connection, mr })
     }
 }
 
 impl IbvSimpleUnit<SyncMode> {
     pub fn new_sync_unit(
         ibv_context: &Context,
-    ) -> std::io::Result<IbvUnconnectedSimpleUnit<SyncMode>> {
+    ) -> std::io::Result<UnconnectedIbvSimpleUnit<SyncMode>> {
         let mut connection = UnconnectedIbvConnection::new::<1>(ibv_context)?;
         let mr = UnconnectedSyncMr::new(&mut connection)?;
-        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+        Ok(UnconnectedIbvSimpleUnit { connection, mr })
     }
 }
 
@@ -58,14 +59,14 @@ impl IbvSimpleUnit<SyncTransferMode<0>> {
     pub unsafe fn new_sync_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
         ibv_context: &Context,
         memory: &[u8],
-    ) -> std::io::Result<IbvUnconnectedSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>> {
+    ) -> std::io::Result<UnconnectedIbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>> {
         let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
         let mr = unsafe { UnconnectedSyncTransferMr::new(&mut connection, memory)? };
-        Ok(IbvUnconnectedSimpleUnit { connection, mr })
+        Ok(UnconnectedIbvSimpleUnit { connection, mr })
     }
 }
 
-impl<M: Mode> Connect for IbvUnconnectedSimpleUnit<M> {
+impl<M: Mode> Connect for UnconnectedIbvSimpleUnit<M> {
     type ConnectionConfig = IbvSimpleUnitConnectionConfig<M>;
     type Connected = IbvSimpleUnit<M>;
 

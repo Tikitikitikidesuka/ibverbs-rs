@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
 use std::time::{Duration, Instant};
 
+#[derive(Debug)]
 pub struct SyncMode;
 
 impl Mode for SyncMode {

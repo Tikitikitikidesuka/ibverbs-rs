@@ -1,5 +1,7 @@
 use ibverbs::QueuePairEndpoint;
-use infinibuilder::config_exchange::{TcpExchanger, TcpExchangerConfig, TcpExchangerError, TcpExchangerNetworkConfig, TcpExchangerNodeConfig};
+use infinibuilder::tcp_exchanger::{
+    TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig, TcpExchangerNodeConfig,
+};
 use std::env;
 use std::time::Duration;
 
@@ -50,11 +52,7 @@ fn main() {
             println!("✅ Successfully exchanged network configuration!");
             println!("Complete network:");
             ready_network.iter().for_each(|node| {
-                println!(
-                    "  Node {}: {:?}",
-                    node.node_id,
-                    node.data,
-                );
+                println!("  Node {}: {:?}", node.node_id, node.data,);
             });
         }
         Err(e) => {

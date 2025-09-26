@@ -1,4 +1,4 @@
-use infinibuilder::config_exchange::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
+use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use infinibuilder::connect::Connect;
 use infinibuilder::ibverbs::simple_unit::IbvSimpleUnit;
 use infinibuilder::network::{IBNetwork, IBNetworkBuilder, IBNodeBuilderConfig, IBNodeRole};

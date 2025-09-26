@@ -1,4 +1,4 @@
-use infinibuilder::config_exchange::{
+use infinibuilder::tcp_exchanger::{
     TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig, TcpExchangerNodeConfig,
 };
 use std::env;
