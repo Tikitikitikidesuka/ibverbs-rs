@@ -1,7 +1,7 @@
 use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::synchronization::binary::BinaryTreeSync;
+use infinibuilder::synchronization::dissemination:: DisseminationSync;
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use rand::Rng;
 use std::str::FromStr;
@@ -40,11 +40,10 @@ fn main() {
 
     let mut node = node.connect(in_conn_config).unwrap();
 
-    let mut rng = rand::rng();
-    let delay_ms = rng.random_range(1000..=5000);
-    std::thread::sleep(Duration::from_millis(delay_ms));
-    println!("Sync sent");
-    node.run(&BinaryTreeSync {}, &node.group_all())
+    println!("Input anything to sync...");
+    std::io::stdin().read_line(&mut String::new()).expect("Failed to read line");
+    println!("Sending sync");
+    node.run(&DisseminationSync {}, &node.group_all())
         .unwrap()
         .unwrap();
     println!("Sync finished");

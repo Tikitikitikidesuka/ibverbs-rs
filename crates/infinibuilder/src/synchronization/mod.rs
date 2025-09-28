@@ -2,6 +2,7 @@ use thiserror::Error;
 
 pub mod binary;
 pub mod centralized;
+pub mod dissemination;
 
 #[derive(Debug, Error)]
 pub enum SyncError {
