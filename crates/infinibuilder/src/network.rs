@@ -202,9 +202,13 @@ impl NetworkGroup {
 pub trait NetworkOp {
     type Output;
 
-    fn run<'a, C: Iterator<Item = &'a mut T>, T: 'a + RdmaSendRecv + RdmaRendezvous>(
+    // Runs a network operation on a certain group
+    // If the current node is in the group, group_idx represents
+    // the index its own connection in  group_connections
+    fn run<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
         &self,
-        connections: C,
+        self_idx: Option<usize>,
+        group_connections: &mut [&'a mut T],
     ) -> Self::Output;
 }
 
@@ -216,7 +220,7 @@ impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
     pub fn connections<'a>(
         &'a mut self,
         group: &'a NetworkGroup,
-    ) -> Result<impl Iterator<Item = &'a mut T> + 'a, NonMatchingNetwork> {
+    ) -> Result<Vec<&'a mut T>, NonMatchingNetwork> {
         if self.rank_id != group.network_id {
             return Err(NonMatchingNetwork);
         }
@@ -225,7 +229,8 @@ impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
         Ok(group
             .rank_ids
             .iter()
-            .map(move |&rank_id| unsafe { &mut *ptr.add(rank_id) }))
+            .map(move |&rank_id| unsafe { &mut *ptr.add(rank_id) })
+            .collect())
     }
 
     pub fn group<I>(&self, rank_ids: I) -> Result<NetworkGroup, NodeNotInNetwork>
@@ -268,6 +273,7 @@ impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
         network_op: &O,
         group: &NetworkGroup,
     ) -> Result<O::Output, NonMatchingNetwork> {
-        Ok(network_op.run(self.connections(group)?))
+        let group_idx = group.rank_ids.binary_search(&self.rank_id).ok();
+        Ok(network_op.run(group_idx, self.connections(group)?.as_mut_slice()))
     }
 }

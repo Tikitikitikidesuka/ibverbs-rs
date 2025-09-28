@@ -1,8 +1,7 @@
 use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
-use infinibuilder::network_config::{NetworkConfig, RawNetworkConfig};
-use infinibuilder::rdma_traits::RdmaRendezvous;
-use infinibuilder::synchronization::centralized::CentralizedSync;
+use infinibuilder::network_config::RawNetworkConfig;
+use infinibuilder::synchronization::binary::BinaryTreeSync;
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use rand::Rng;
 use std::str::FromStr;
@@ -45,7 +44,7 @@ fn main() {
     let delay_ms = rng.random_range(1000..=5000);
     std::thread::sleep(Duration::from_millis(delay_ms));
     println!("Sync sent");
-    node.run(&CentralizedSync {}, &node.group_others())
+    node.run(&BinaryTreeSync {}, &node.group_all())
         .unwrap()
         .unwrap();
     println!("Sync finished");
