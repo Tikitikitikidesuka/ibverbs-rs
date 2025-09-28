@@ -2,11 +2,12 @@ use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::{NetworkConfig, RawNetworkConfig};
 use infinibuilder::rdma_traits::RdmaRendezvous;
+use infinibuilder::synchronization::centralized::CentralizedSync;
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
+use rand::Rng;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
-use infinibuilder::synchronization::centralized::CentralizedSync;
 
 fn main() {
     let run_params = parse_args();
@@ -40,7 +41,14 @@ fn main() {
 
     let mut node = node.connect(in_conn_config).unwrap();
 
-    node.run(&CentralizedSync {}, &node.group_others());
+    let mut rng = rand::rng();
+    let delay_ms = rng.random_range(1000..=5000);
+    std::thread::sleep(Duration::from_millis(delay_ms));
+    println!("Sync sent");
+    node.run(&CentralizedSync {}, &node.group_others())
+        .unwrap()
+        .unwrap();
+    println!("Sync finished");
 }
 struct Args {
     rank_id: usize,
