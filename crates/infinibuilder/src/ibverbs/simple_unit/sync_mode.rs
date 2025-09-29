@@ -4,8 +4,7 @@ use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConne
 use crate::ibverbs::simple_unit::mode::Mode;
 use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
-use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
-use ibverbs::{MemoryRegion, RemoteMemoryRegion};
+use crate::rdma_traits::{RdmaRendezvous, WorkRequest};use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
 use std::time::{Duration, Instant};
@@ -72,6 +71,36 @@ pub struct ConnectedSyncMr {
 }
 
 impl ConnectedSyncMr {
+    pub(super) fn is_peer_waiting(&self) -> bool {
+        self.rendezvous_state.is_remote_waiting()
+    }
+
+    pub(super) fn wait_for_peer_signal(&self) -> std::io::Result<()> {
+        while !self.is_peer_waiting() {
+            std::hint::spin_loop();
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
+        // Get start time
+        let init_time = Instant::now();
+
+        while !self.is_peer_waiting() {
+            if init_time.elapsed() > timeout {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "Timed out",
+                ));
+            }
+
+            std::hint::spin_loop();
+        }
+
+        Ok(())
+    }
+
     pub(super) fn rendezvous<const POLL_BUFF_SIZE: usize>(
         &mut self,
         connection: &mut IbvConnection,
@@ -92,8 +121,8 @@ impl ConnectedSyncMr {
         )?;
         CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone()).wait()?;
 
-        // Wait for peer to write their next_epoch
-        while !self.rendezvous_state.remote_synced() {
+        // Wait for peer to be synced
+        while !self.rendezvous_state.is_remote_ahead() {
             std::hint::spin_loop();
         }
 
@@ -105,9 +134,6 @@ impl ConnectedSyncMr {
         connection: &mut IbvConnection,
         timeout: Duration,
     ) -> std::io::Result<()> {
-        // Get start time
-        let init_time = Instant::now();
-
         // Increment local generation
         self.rendezvous_state.advance_epoch();
 
@@ -123,13 +149,15 @@ impl ConnectedSyncMr {
             None,
         )?;
 
-        // Wait send for timeout - elapsed
-        CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone())
-            .wait_timeout(timeout - init_time.elapsed())?;
+        // Get start time
+        let init_time = Instant::now();
 
-        // Wait for peer to write their next_epoch
-        while !self.rendezvous_state.remote_synced() {
-            // Return if timeout
+        // Wait write for timeout
+        CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone())
+            .wait_timeout(timeout)?;
+
+        // Wait for peer to be synced
+        while !self.rendezvous_state.is_remote_ahead() {
             if init_time.elapsed() > timeout {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -145,6 +173,18 @@ impl ConnectedSyncMr {
 }
 
 impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
+    fn is_peer_waiting(&self) -> bool {
+        self.mr.is_peer_waiting()
+    }
+
+    fn wait_for_peer_signal(&self) -> std::io::Result<()> {
+        self.mr.wait_for_peer_signal()
+    }
+
+    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
+        self.mr.wait_for_peer_signal_timeout(timeout)
+    }
+
     fn rendezvous(&mut self) -> std::io::Result<()> {
         self.mr.rendezvous::<1>(&mut self.connection)
     }
@@ -164,15 +204,19 @@ impl RendezvousMemoryRegion {
     const REMOTE_IDX: usize = 1;
 
     pub fn new() -> Self {
-        Self([0; 2])
+        Self([0, 0])
     }
 
     pub fn advance_epoch(&mut self) {
         self.0[Self::LOCAL_IDX] += 1;
     }
 
-    pub fn remote_synced(&self) -> bool {
+    fn is_remote_ahead(&self) -> bool {
         self.0[Self::REMOTE_IDX] >= self.0[Self::LOCAL_IDX]
+    }
+
+    pub fn is_remote_waiting(&self) -> bool {
+        self.0[Self::REMOTE_IDX] > self.0[Self::LOCAL_IDX]
     }
 
     pub fn remote_epoch_mr_range(&self) -> Range<usize> {

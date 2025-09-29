@@ -58,6 +58,9 @@ pub trait SafeRdmaReadWrite {
 }
 
 pub trait RdmaRendezvous {
+    fn is_peer_waiting(&self) -> bool;
+    fn wait_for_peer_signal(&self) -> std::io::Result<()>;
+    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()>;
     fn rendezvous(&mut self) -> std::io::Result<()>;
     fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()>;
 }

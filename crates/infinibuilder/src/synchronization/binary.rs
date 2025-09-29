@@ -1,10 +1,29 @@
+use std::time::Duration;
 use crate::network::NetworkOp;
 use crate::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
 use crate::synchronization::SyncError;
+use crate::synchronization::rendezvous_fn::{NoTimeoutRendezvousFn, RendezvousFn, TimeoutRendezvousFn};
 
-pub struct BinaryTreeSync;
+#[derive(Debug, Copy, Clone)]
+pub struct BinaryTreeSync<D: RendezvousFn> {
+    rendezvous_fn: D,
+}
 
-impl NetworkOp for BinaryTreeSync {
+impl BinaryTreeSync<NoTimeoutRendezvousFn> {
+    pub fn new() -> BinaryTreeSync<NoTimeoutRendezvousFn> {
+        BinaryTreeSync {
+            rendezvous_fn: NoTimeoutRendezvousFn,
+        }
+    }
+
+    pub fn with_timeout(timeout: Duration) -> BinaryTreeSync<TimeoutRendezvousFn> {
+        BinaryTreeSync {
+            rendezvous_fn: TimeoutRendezvousFn { timeout },
+        }
+    }
+}
+
+impl<D: RendezvousFn> NetworkOp for BinaryTreeSync<D> {
     type Output = Result<(), SyncError>;
 
     fn run<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
@@ -18,47 +37,57 @@ impl NetworkOp for BinaryTreeSync {
             return Err(SyncError::EmptyGroup);
         }
 
-        // First all nodes rendezvous with their child and propagate the rendezvous up the tree
-        Self::rendezvous_children(self_idx, group_connections)?;
-        Self::rendezvous_parent(self_idx, group_connections)?;
+        // Wait until children, if they exist, notify us
+        left_child_connection(self_idx, group_connections)
+            .map(|conn| self.rendezvous_fn.wait_for_peer_signal(conn))
+            .transpose()?;
+        right_child_connection(self_idx, group_connections)
+            .map(|conn| self.rendezvous_fn.wait_for_peer_signal(conn))
+            .transpose()?;
 
-        // After this, all nodes wait for a rendezvous from their parent and propagate downwards
-        // This guarantees the opposite side of the tree is also synced
-        Self::rendezvous_parent(self_idx, group_connections)?;
-        Self::rendezvous_children(self_idx, group_connections)?;
+        // Rendezvous with parent, if it exists
+        parent_connection(self_idx, group_connections)
+            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .transpose()?;
+
+        // Rendezvous with children, if they exist, to notify them back
+        left_child_connection(self_idx, group_connections)
+            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .transpose()?;
+        right_child_connection(self_idx, group_connections)
+            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .transpose()?;
 
         Ok(())
     }
 }
 
-impl BinaryTreeSync {
-    fn rendezvous_children<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
-        self_idx: usize,
-        group_connections: &mut [&'a mut T],
-    ) -> Result<(), SyncError> {
-        // First child rendezvous
-        if let Some(conn) = group_connections.get_mut(self_idx * 2 + 1) {
-            conn.rendezvous()?;
-        }
+fn left_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+    self_idx: usize,
+    group_connections: &'a mut [&mut T],
+) -> Option<&'a mut T> {
+    group_connections
+        .get_mut(self_idx * 2 + 1)
+        .map(|c| &mut **c)
+}
 
-        // Second child rendezvous
-        if let Some(conn) = group_connections.get_mut(self_idx * 2 + 2) {
-            conn.rendezvous()?;
-        }
+fn right_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+    self_idx: usize,
+    group_connections: &'a mut [&mut T],
+) -> Option<&'a mut T> {
+    group_connections
+        .get_mut(self_idx * 2 + 2)
+        .map(|c| &mut **c)
+}
 
-        Ok(())
-    }
-
-    fn rendezvous_parent<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
-        self_idx: usize,
-        group_connections: &mut [&'a mut T],
-    ) -> Result<(), SyncError> {
-        // Only rendezvous with parent if not root node
-        if self_idx != 0 {
-            let conn = group_connections.get_mut((self_idx - 1) / 2).unwrap();
-            conn.rendezvous()?;
-        }
-
-        Ok(())
+fn parent_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+    self_idx: usize,
+    group_connections: &'a mut [&mut T],
+) -> Option<&'a mut T> {
+    // No parent if root node
+    if self_idx != 0 {
+        Some(group_connections[(self_idx - 1) / 2])
+    } else {
+        None
     }
 }

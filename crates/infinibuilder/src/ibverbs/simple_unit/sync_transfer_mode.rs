@@ -136,6 +136,18 @@ impl<const POLL_BUFF_SIZE: usize> RdmaReadWrite
 impl<const POLL_BUFF_SIZE: usize> RdmaRendezvous
     for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>
 {
+    fn is_peer_waiting(&self) -> bool {
+        self.mr.sync_mr.is_peer_waiting()
+    }
+
+    fn wait_for_peer_signal(&self) -> std::io::Result<()> {
+        self.mr.sync_mr.wait_for_peer_signal()
+    }
+
+    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
+        self.mr.sync_mr.wait_for_peer_signal_timeout(timeout)
+    }
+
     fn rendezvous(&mut self) -> std::io::Result<()> {
         self.mr
             .sync_mr
