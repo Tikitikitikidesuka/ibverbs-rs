@@ -14,16 +14,15 @@ def parse_output_line(line):
     return None
 
 
-def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, iters):
+def run_benchmark(binary_path, config_file, role, message_size, batch_size, iters):
     """Run the benchmark and collect pps/gbps samples"""
     cmd = [
         str(binary_path),
         '--config-file', config_file,
-        '--rank-id', str(rank_id),
+        '--role', role,
         '--num-nodes', '2',
         '--message-size', str(message_size),
         '--batch-size', str(batch_size),
-        '--print-ms', '1000',
         '--iters', str(iters)
     ]
 
@@ -99,29 +98,29 @@ def generate_message_sizes(min_size, max_size, num_samples):
     return [int(2 ** log2_size) for log2_size in log2_sizes]
 
 
-def run_slave_mode(args):
+def run_receiver_mode(args):
     """Run as slave (rank 1)"""
     message_sizes = generate_message_sizes(args.min_msg_size, args.max_msg_size, args.num_samples)
 
-    print(f"Running as SLAVE (rank 1) - {len(message_sizes)} message sizes\n")
+    print(f"Running as RECEIVER (rank 1) - {len(message_sizes)} message sizes\n")
 
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
-        run_benchmark(args.binary, args.config_file, 1, msg_size, args.batch_size, args.max_samples)
+        run_benchmark(args.binary, args.config_file, "receiver", msg_size, args.batch_size, args.max_samples)
 
 
-def run_master_mode(args):
+def run_sender_mode(args):
     """Run as master (rank 0) and collect results"""
     message_sizes = generate_message_sizes(args.min_msg_size, args.max_msg_size, args.num_samples)
 
-    print(f"Running as MASTER (rank 0) - {len(message_sizes)} message sizes\n")
+    print(f"Running as SENDER (rank 0) - {len(message_sizes)} message sizes\n")
 
     results = []
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
 
         pps_samples, gbps_samples = collect_samples(
-            args.binary, args.config_file, 0, msg_size,
+            args.binary, args.config_file, "sender", msg_size,
             args.batch_size, args.max_samples, args.mean_window_size, args.std_threshold
         )
 
@@ -181,9 +180,9 @@ def main():
     args = parser.parse_args()
 
     if args.mode == 'slave':
-        run_slave_mode(args)
+        run_receiver_mode(args)
     else:
-        run_master_mode(args)
+        run_sender_mode(args)
 
 
 if __name__ == '__main__':

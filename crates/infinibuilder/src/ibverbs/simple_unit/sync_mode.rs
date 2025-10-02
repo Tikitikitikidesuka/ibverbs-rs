@@ -4,9 +4,12 @@ use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConne
 use crate::ibverbs::simple_unit::mode::Mode;
 use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
-use crate::rdma_traits::{RdmaRendezvous, WorkRequest};use ibverbs::{MemoryRegion, RemoteMemoryRegion};
+use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
+use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
+use std::pin::Pin;
+use std::ptr::{read_volatile, write_volatile};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Copy, Clone)]
@@ -19,17 +22,17 @@ impl Mode for SyncMode {
 }
 
 pub struct UnconnectedSyncMr {
-    rendezvous_state: Box<RendezvousMemoryRegion>,
+    rendezvous_state: Pin<Box<RendezvousMemoryRegion>>,
     rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
 }
 
 impl UnconnectedSyncMr {
     pub fn new(connection: &mut UnconnectedIbvConnection) -> std::io::Result<Self> {
         // Box to ensure stable location in heap memory for DMA
-        let rendezvous_state = Box::new(RendezvousMemoryRegion::new());
+        let rendezvous_state = Box::pin(RendezvousMemoryRegion::new());
         let rendezvous_mr = connection
             .pd
-            .register(unsafe { UnsafeSlice::new(rendezvous_state.as_ref()) })?;
+            .register(unsafe { UnsafeSlice::new(&*rendezvous_state) })?;
         Ok(Self {
             rendezvous_state,
             rendezvous_mr,
@@ -65,7 +68,7 @@ pub struct SyncMrConnectionConfig {
 }
 
 pub struct ConnectedSyncMr {
-    rendezvous_state: Box<RendezvousMemoryRegion>,
+    rendezvous_state: Pin<Box<RendezvousMemoryRegion>>,
     rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
@@ -208,15 +211,20 @@ impl RendezvousMemoryRegion {
     }
 
     pub fn advance_epoch(&mut self) {
-        self.0[Self::LOCAL_IDX] += 1;
+        let value = self.0[Self::LOCAL_IDX];
+        unsafe { write_volatile(self.0.as_mut_ptr(), value + 1) };
     }
 
     fn is_remote_ahead(&self) -> bool {
-        self.0[Self::REMOTE_IDX] >= self.0[Self::LOCAL_IDX]
+        let local = self.0[Self::LOCAL_IDX];
+        let remote = unsafe { read_volatile(self.0.as_ptr().add(1)) };
+        remote >= local
     }
 
     pub fn is_remote_waiting(&self) -> bool {
-        self.0[Self::REMOTE_IDX] > self.0[Self::LOCAL_IDX]
+        let local = self.0[Self::LOCAL_IDX];
+        let remote = unsafe { read_volatile(self.0.as_ptr().add(1)) };
+        remote > local
     }
 
     pub fn remote_epoch_mr_range(&self) -> Range<usize> {

@@ -6,8 +6,19 @@ use infinibuilder::rdma_traits::WorkRequest;
 use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use std::fs;
-use std::time::Duration;
-use tokio::time::Instant;
+use std::time::{Duration, Instant};
+
+/// This benchmark's objective is finding the throughput between two nodes, a sender and a receiver.
+/// A memory region with size `batch number of messages * message size`. During the execution,
+/// the sender node will send contiguous slices of size `message size` to the receiver node.
+/// The receiver will receive them in its memory region to their corresponding locations.
+///
+/// To check the correctness of the communication, the sender will fill its buffer with ascending numbers
+/// from zero in the body of unsigned eight bit integers (wrap at 256); the receiver, in turn, will
+/// check that the final values in its memory follow the same pattern.
+///
+/// The execution of the batch of sends will be repeated `iters` times before concluding the benchmark.
+/// If `iters` is `None` then the benchmark will run until killed.
 
 fn main() {
     let args = Args::parse();
@@ -17,10 +28,16 @@ fn main() {
         .take_nodes(args.num_nodes)
         .validate()
         .unwrap();
-    let memory = vec![0; args.message_size];
+
+    let memory_size = args.message_size * args.batch_size;
+    let mut memory = vec![0; memory_size];
+    let rank_id = match args.role {
+        Role::Sender => 0,
+        Role::Receiver => 1,
+    };
 
     let node = ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
-        args.rank_id,
+        rank_id,
         &network_config,
         &memory,
     )
@@ -30,7 +47,7 @@ fn main() {
 
     let exchanger_network = TcpExchangerNetworkConfig::from_network(network_config).unwrap();
     let exchanged = TcpExchanger::await_exchange_network_config(
-        args.rank_id,
+        rank_id,
         &out_conn_config,
         &exchanger_network,
         &exchanger_config(),
@@ -38,64 +55,101 @@ fn main() {
     .unwrap();
 
     let in_conn_config =
-        NetworkNodeConnectionConfig::gather(args.rank_id, exchanged.as_slice()).unwrap();
+        NetworkNodeConnectionConfig::gather(rank_id, exchanged.as_slice()).unwrap();
 
     let mut node = node.connect(in_conn_config).unwrap();
 
-    match args.rank_id {
-        0 => {
-            if let Some(iters) = args.iters {
-                for _ in 0..iters {
-                    master_batch(node.connection(1).unwrap(), &args);
-                }
-            } else {
-                loop {
-                    master_batch(node.connection(1).unwrap(), &args);
-                }
-            }
+    let mut task: Box<dyn FnMut(usize)> = match args.role {
+        Role::Sender => {
+            Box::new(|iter: usize| {
+                master_batch(iter, &mut memory, node.connection(1).unwrap(), &args);
+            })
         }
-        1 => {
-            if let Some(iters) = args.iters {
-                for _ in 0..iters {
-                    slave_batch(node.connection(0).unwrap(), &args);
-                }
-            } else {
-                loop {
-                    slave_batch(node.connection(0).unwrap(), &args);
-                }
-            }
+        Role::Receiver => Box::new(|iter: usize| {
+            slave_batch(iter, &memory, node.connection(0).unwrap(), &args);
+        }),
+    };
+
+    let mut iter = 0;
+    loop {
+        task(iter);
+
+        if let Some(done) = args.iters.map(|max_iters| iter >= max_iters) {
+            break;
         }
-        _ => panic!(
-            "Rank id {} does not participate in this benchmark",
-            args.rank_id
-        ),
+
+        iter += 1;
     }
 }
 
-fn master_batch(conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+    // Initialize memory for correctness check
+    memory
+        .iter_mut()
+        .enumerate()
+        .for_each(|(i, v)| *v = ((i + iter) % 256) as u8);
+
+    // Wait until receiver is ready to receive
+    conn.rendezvous().unwrap();
+
+    // Start timing
     let start = Instant::now();
 
-    for _ in 0..args.batch_size {
+    // Send all batches
+    for i in 0..args.batch_size {
         conn.rendezvous().unwrap();
-        unsafe { conn.post_send(0..args.message_size, None) }
+        unsafe { conn.post_send((i * args.message_size)..((i + 1) * args.message_size), None) }
             .unwrap()
             .wait()
             .unwrap();
     }
 
+    // Wait until receiver finishes receiving
+    conn.rendezvous().unwrap();
+
+    // Stop timing
     let elapsed = start.elapsed();
+
+    // Print results
     let pps = args.batch_size as f64 / elapsed.as_secs_f64();
     let gbps =
         (args.batch_size * args.message_size * 8) as f64 / (1000000000_f64 * elapsed.as_secs_f64());
     println!("pps: {pps:.2}, gbps: {gbps:.2}");
 }
 
-fn slave_batch(conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
-    for _ in 0..args.batch_size {
-        let wr = unsafe { conn.post_receive(0..args.message_size) }.unwrap();
+fn slave_batch(iter: usize, memory: &[u8], conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+    // Notify sender to start
+    conn.rendezvous().unwrap();
+
+    // Receive all batches
+    for i in 0..args.batch_size {
+        let wr =
+            unsafe { conn.post_receive((i * args.message_size)..((i + 1) * args.message_size)) }
+                .unwrap();
         conn.rendezvous().unwrap();
         wr.wait().unwrap();
     }
+
+    // Notify sender of finish
+    conn.rendezvous().unwrap();
+
+    // Validate transfer
+    println!("Memory: {:?}", &memory[..10]);
+    if !memory
+        .iter()
+        .enumerate()
+        .all(|(i, v)| *v == ((i + iter) % 256) as u8)
+    {
+        panic!("Memory not transferred correctly")
+    } else {
+        println!("Memory transfered corretly");
+    }
+}
+
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
+enum Role {
+    Sender,
+    Receiver,
 }
 
 #[derive(Parser, Debug)]
@@ -104,15 +158,13 @@ struct Args {
     #[arg(short, long)]
     config_file: String,
     #[arg(short, long)]
-    rank_id: usize,
+    role: Role,
     #[arg(short, long)]
     num_nodes: usize,
     #[arg(short, long)]
     message_size: usize,
     #[arg(short, long)]
     batch_size: usize,
-    #[arg(short, long)]
-    print_ms: u64,
     #[arg(short, long)]
     iters: Option<usize>,
 }
