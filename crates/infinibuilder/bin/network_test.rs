@@ -1,14 +1,12 @@
 use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::synchronization::centralized::CentralizedSync;
-use infinibuilder::synchronization::dissemination::DisseminationSync;
+use infinibuilder::synchronization::binary::BinaryTreeSync;
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use rand::Rng;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::{env, fs};
-use infinibuilder::synchronization::binary::BinaryTreeSync;
 
 fn main() {
     let run_params = parse_args();
@@ -46,15 +44,21 @@ fn main() {
     let delay_ms = rng.random_range(1000..=5000);
     std::thread::sleep(Duration::from_millis(delay_ms));
     println!("{} -> Sending first sync...", run_params.rank_id);
-    node.run(&BinaryTreeSync::with_timeout(Duration::from_millis(5000)), &node.group_all())
-        .unwrap()
-        .unwrap();
+    node.run(
+        &BinaryTreeSync::with_timeout(Duration::from_millis(5000)),
+        &node.group_all(),
+    )
+    .unwrap()
+    .unwrap();
     println!("{} -> First sync finished", run_params.rank_id);
     std::thread::sleep(Duration::from_millis(delay_ms));
     println!("{} -> Sending second sync...", run_params.rank_id);
-    node.run(&BinaryTreeSync::with_timeout(Duration::from_millis(5000)), &node.group_all())
-        .unwrap()
-        .unwrap();
+    node.run(
+        &BinaryTreeSync::with_timeout(Duration::from_millis(5000)),
+        &node.group_all(),
+    )
+    .unwrap()
+    .unwrap();
     println!("{} -> Second sync finished", run_params.rank_id);
 }
 struct Args {

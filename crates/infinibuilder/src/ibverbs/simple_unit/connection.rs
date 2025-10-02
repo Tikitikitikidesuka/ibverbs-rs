@@ -1,13 +1,12 @@
 use crate::connect::Connect;
-use crate::ibverbs::cached_cq::CachedCompletionQueue;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
     ibv_access_flags, ibv_qp_type,
 };
 use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
 use serde::{Deserialize, Serialize};
+use crate::ibverbs::cached_cq::CachedCompletionQueue;
 
 #[derive(Derivative)]
 #[derivative(Debug)]

@@ -8,6 +8,7 @@ use crate::rdma_traits::{RdmaReadWrite, RdmaSendRecv, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
+use std::pin::Pin;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TransferMode<const POLL_BUFF_SIZE: usize>;

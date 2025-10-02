@@ -1,9 +1,9 @@
-use crate::ibverbs::cached_cq::CachedCompletionQueue;
 use crate::ibverbs::ibv_wc_conversion::work_completion_from_ibv_wc;
 use crate::rdma_traits::{WorkCompletion, WorkRequest};
 use ibverbs::ibv_wc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use crate::ibverbs::cached_cq::CachedCompletionQueue;
 
 pub struct CachedWorkRequest<const POLL_BUFF_SIZE: usize> {
     wr_id: u64,
@@ -31,6 +31,7 @@ impl<const POLL_BUFF_SIZE: usize> WorkRequest for CachedWorkRequest<POLL_BUFF_SI
             if let Some(wc) = self.opt_wc {
                 return work_completion_from_ibv_wc(wc);
             }
+
             std::hint::spin_loop();
         }
     }

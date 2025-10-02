@@ -1,226 +1,109 @@
-use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use infinibuilder::connect::Connect;
-use infinibuilder::ibverbs::simple_unit::IbvSimpleUnit;
-use infinibuilder::network::{IBNetwork, IBNetworkBuilder, IBNodeBuilderConfig, IBNodeRole};
-use infinibuilder::rdma_traits::{RdmaRendezvous, WorkRequest};
-use infinibuilder::rdma_traits::{RdmaSendRecv, WorkCompletion};
-use std::env;
-use std::io::{Read, Write};
-use std::ops::RangeBounds;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
+use infinibuilder::network_config::RawNetworkConfig;
+use infinibuilder::rdma_traits::WorkRequest;
+use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
+use std::str::FromStr;
 use std::time::{Duration, Instant};
+use std::{env, fs, thread};
 
 fn main() {
-    let args = parse_args();
+    let run_params = parse_args();
+    let json_network = fs::read_to_string(run_params.config_file).unwrap();
+    let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
+        .unwrap()
+        .validate()
+        .unwrap();
+    let memory = vec![0; run_params.message_size];
 
-    let network = network();
-    let node_idx = network.node(args.node_id.as_str()).unwrap().idx;
-    let exchanger_network = TcpExchangerNetworkConfig::from_network(network).unwrap();
+    let node = ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
+        run_params.rank_id,
+        &network_config,
+        &memory.as_slice(),
+    )
+    .unwrap();
 
-    let ibv_context = ibverbs::devices().unwrap().get(0).unwrap().open().unwrap();
-    let memory = vec![170; args.message_length];
+    let out_conn_config = node.connection_config();
 
-    let conn =
-        unsafe { IbvSimpleUnit::new_sync_transfer_unit::<64, 64>(&ibv_context, &memory).unwrap() };
-
-    // Serialize local config → JSON
-    let local_config = conn.connection_config();
-    let local_config_json = serde_json::to_string(&local_config).unwrap();
-
-    // Exchange config
-    let remote_config_json = TcpExchanger::await_exchange_network_config(
-        node_idx,
-        &local_config_json,
+    let exchanger_network = TcpExchangerNetworkConfig::from_network(network_config).unwrap();
+    let exchanged = TcpExchanger::await_exchange_network_config(
+        run_params.rank_id,
+        &out_conn_config,
         &exchanger_network,
         &exchanger_config(),
     )
-    .unwrap()
-    .as_slice()[if node_idx == 0 { 1 } else { 0 }]
-    .data()
-    .clone();
-
-    // Read remote config JSON from stdin
-    let remote_config = serde_json::from_str(&remote_config_json).unwrap();
-
-    let mut conn = conn.connect(remote_config).unwrap();
-
-    println!("\n\n");
-
-    let message_length = args.message_length; // example
-    let num_messages = args.num_messages;
-    let mr_range = 0..message_length;
-
-    match args.mode {
-        Mode::SpinSender => benchmark(
-            || spin_send(&mut conn, mr_range.clone()),
-            message_length,
-            num_messages,
-            "SpinSender",
-        ),
-        Mode::SpinReceiver => benchmark(
-            || spin_receive(&mut conn, mr_range.clone()),
-            message_length,
-            num_messages,
-            "SpinReceiver",
-        ),
-        Mode::SyncSender => benchmark(
-            || sync_send(&mut conn, mr_range.clone()),
-            message_length,
-            num_messages,
-            "SyncSender",
-        ),
-        Mode::SyncReceiver => benchmark(
-            || sync_receive(&mut conn, mr_range.clone()),
-            message_length,
-            num_messages,
-            "SyncReceiver",
-        ),
-    }
     .unwrap();
-}
 
-fn benchmark<F>(
-    mut action: F,
-    msg_size: usize,
-    n_messages: usize,
-    label: &str,
-) -> std::io::Result<()>
-where
-    F: FnMut() -> std::io::Result<()>,
-{
-    let start = Instant::now();
-    let mut bytes = 0u64;
+    let in_conn_config =
+        NetworkNodeConnectionConfig::gather(run_params.rank_id, exchanged.as_slice()).unwrap();
 
-    for _ in 0..n_messages {
-        action()?;
-        bytes += msg_size as u64;
-    }
+    let mut node = node.connect(in_conn_config).unwrap();
 
-    let elapsed = start.elapsed().as_secs_f64();
-    let gbps = (bytes as f64 * 8.0) / elapsed / 1e9;
-    println!(
-        "{}: transferred {} bytes in {:.6} s → {:.2} Gbps",
-        label, bytes, elapsed, gbps
-    );
+    const AVG_ITERS: usize = 5;
+    const ITERS: usize = 1000;
 
-    Ok(())
-}
+    match run_params.rank_id {
+        0 => {
+            let start = Instant::now();
 
-fn spin_send<C: RdmaSendRecv, R: RangeBounds<usize> + Clone>(
-    conn: &mut C,
-    mr_range: R,
-) -> std::io::Result<()> {
-    loop {
-        let wr = unsafe { conn.post_send(mr_range.clone(), None)? };
-        if let Ok(_) = wr.wait() {
-            return Ok(());
+            for _ in 0..ITERS {
+                node.connection(1).unwrap().rendezvous().unwrap();
+                let wr = unsafe {
+                    node.connection(1)
+                        .unwrap()
+                        .post_send(0..run_params.message_size, None)
+                        .unwrap()
+                };
+                wr.wait().unwrap();
+            }
+
+            let time = start.elapsed();
+            let sent_bytes = ITERS * run_params.message_size;
+
+            let throughput_gbps =
+                (sent_bytes as f64 * 8.0) / (time.as_secs_f64() * 10f64.powf(9.0));
+            println!("Sender throughput: {throughput_gbps} Gbps");
         }
-    }
-}
-
-fn spin_receive<C: RdmaSendRecv, R: RangeBounds<usize> + Clone>(
-    conn: &mut C,
-    mr_range: R,
-) -> std::io::Result<()> {
-    loop {
-        let wr = unsafe { conn.post_receive(mr_range.clone())? };
-        if let Ok(_) = wr.wait() {
-            return Ok(());
+        1 => {
+            for _ in 0..ITERS {
+                let wr = unsafe {
+                    node.connection(0)
+                        .unwrap()
+                        .post_receive(0..run_params.message_size)
+                        .unwrap()
+                };
+                node.connection(0).unwrap().rendezvous().unwrap();
+                wr.wait().unwrap();
+            }
         }
+        _ => {}
     }
-}
-
-fn sync_send<C: RdmaSendRecv + RdmaRendezvous, R: RangeBounds<usize> + Clone>(
-    conn: &mut C,
-    mr_range: R,
-) -> std::io::Result<()> {
-    conn.rendezvous()?;
-    unsafe { conn.post_send(mr_range, None)?.wait()? };
-    Ok(())
-}
-
-fn sync_receive<C: RdmaSendRecv + RdmaRendezvous, R: RangeBounds<usize> + Clone>(
-    conn: &mut C,
-    mr_range: R,
-) -> std::io::Result<()> {
-    let wr = unsafe { conn.post_receive(mr_range)? };
-    conn.rendezvous()?;
-    wr.wait()?;
-    Ok(())
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Mode {
-    SpinSender,
-    SpinReceiver,
-    SyncSender,
-    SyncReceiver,
 }
 
 struct Args {
-    node_id: String,
-    num_messages: usize,
-    message_length: usize,
-    mode: Mode,
+    rank_id: usize,
+    config_file: String,
+    message_size: usize,
 }
 
 fn parse_args() -> Args {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 5 {
-        eprintln!(
-            "Usage: {} node_id num_messages message_length [spin_sender|spin_receiver|sync_sender|sync_receiver]",
-            args[0]
-        );
+    if args.len() != 4 {
+        eprintln!("Usage: {} config_file rank_id message_size", args[0]);
         std::process::exit(1);
     }
 
-    let node_id = args[1].clone();
-    let num_messages = args[2].parse().unwrap();
-    let message_length = args[3].parse().unwrap();
-
-    let mode = match args[4].as_str() {
-        "spin_sender" => Mode::SpinSender,
-        "spin_receiver" => Mode::SpinReceiver,
-        "sync_sender" => Mode::SyncSender,
-        "sync_receiver" => Mode::SyncReceiver,
-        other => {
-            eprintln!(
-                "Invalid mode: {}. Use 'spin_sender', 'spin_receiver', 'sync_sender' or 'sync_receiver'",
-                other
-            );
-            std::process::exit(1);
-        }
-    };
+    let config_file = args[1].parse().unwrap();
+    let rank_id = usize::from_str(args[2].as_str()).unwrap();
+    let message_size = usize::from_str(args[3].as_str()).unwrap();
 
     Args {
-        node_id,
-        num_messages,
-        message_length,
-        mode,
+        rank_id,
+        config_file,
+        message_size,
     }
-}
-
-fn network() -> IBNetwork<&'static str> {
-    let mut network_builder = IBNetworkBuilder::new();
-    network_builder.insert_node(
-        "A",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb01".to_string(),
-            port: 8000,
-        },
-    );
-    network_builder.insert_node(
-        "B",
-        IBNodeBuilderConfig {
-            role: IBNodeRole::Sender,
-            address: "tdeb05".to_string(),
-            port: 8001,
-        },
-    );
-    network_builder.build()
 }
 
 fn exchanger_config() -> TcpExchangerConfig {

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::ops::{Deref, RangeBounds};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -28,6 +28,12 @@ pub enum NetworkConfigError {
 }
 
 impl RawNetworkConfig {
+    pub fn take_nodes(&self, num_nodes: usize) -> Self {
+        Self {
+            hosts: self.hosts.iter().take(num_nodes).cloned().collect(),
+        }
+    }
+
     pub fn validate(mut self) -> Result<NetworkConfig, NetworkConfigError> {
         self.hosts.sort_by_key(|n| n.rankid);
 
@@ -53,9 +59,7 @@ impl RawNetworkConfig {
 
             // Rank ids must be sequential
             if node_config.rankid != i {
-                return Err(NetworkConfigError::NonSequentialRankIds {
-                    gap_rankid: i,
-                });
+                return Err(NetworkConfigError::NonSequentialRankIds { gap_rankid: i });
             }
         }
 
