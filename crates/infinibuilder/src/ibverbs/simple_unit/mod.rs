@@ -3,20 +3,22 @@ use crate::ibverbs::simple_unit::connection::{
     IbvConnection, IbvConnectionConfig, UnconnectedIbvConnection,
 };
 use crate::ibverbs::simple_unit::mode::Mode;
-use crate::ibverbs::simple_unit::sync_mode::{SyncMode, UnconnectedSyncMr};
-use crate::ibverbs::simple_unit::sync_transfer_mode::{
+use crate::ibverbs::simple_unit::rendezvous_mode::{SyncMode, UnconnectedSyncMr};
+use crate::ibverbs::simple_unit::rendezvous_transfer_mode::{
     SyncTransferMode, UnconnectedSyncTransferMr,
 };
 use crate::ibverbs::simple_unit::transfer_mode::{TransferMode, UnconnectedTransferMr};
 use ibverbs::Context;
 use serde::{Deserialize, Serialize};
+use std::ops::DerefMut;
 
 mod connection;
 pub mod mode;
-pub mod sync_mode;
-pub mod sync_transfer_mode;
-pub mod transfer_mode;
 pub mod network;
+pub mod rendezvous_mode;
+pub mod rendezvous_transfer_mode;
+pub mod transfer_mode;
+//mod sync_transfer_mode;
 
 pub struct UnconnectedIbvSimpleUnit<M: Mode> {
     connection: UnconnectedIbvConnection,
@@ -37,10 +39,11 @@ pub struct IbvSimpleUnit<M: Mode> {
 impl IbvSimpleUnit<TransferMode<0>> {
     pub unsafe fn new_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
         ibv_context: &Context,
-        memory: &[u8],
+        memory_ptr: *mut u8,
+        memory_length: usize,
     ) -> std::io::Result<UnconnectedIbvSimpleUnit<TransferMode<POLL_BUFF_SIZE>>> {
         let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
-        let mr = UnconnectedTransferMr::new(&mut connection, memory)?;
+        let mr = UnconnectedTransferMr::new(&mut connection, memory_ptr, memory_length)?;
         Ok(UnconnectedIbvSimpleUnit { connection, mr })
     }
 }
@@ -58,10 +61,12 @@ impl IbvSimpleUnit<SyncMode> {
 impl IbvSimpleUnit<SyncTransferMode<0>> {
     pub unsafe fn new_sync_transfer_unit<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
         ibv_context: &Context,
-        memory: &[u8],
+        memory_ptr: *mut u8,
+        memory_length: usize,
     ) -> std::io::Result<UnconnectedIbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>> {
         let mut connection = UnconnectedIbvConnection::new::<CQ_SIZE>(ibv_context)?;
-        let mr = unsafe { UnconnectedSyncTransferMr::new(&mut connection, memory)? };
+        let mr =
+            unsafe { UnconnectedSyncTransferMr::new(&mut connection, memory_ptr, memory_length)? };
         Ok(UnconnectedIbvSimpleUnit { connection, mr })
     }
 }

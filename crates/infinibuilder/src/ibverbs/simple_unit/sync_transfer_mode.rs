@@ -1,162 +1,120 @@
 use crate::connect::Connect;
-use crate::ibverbs::simple_unit::IbvSimpleUnit;
 use crate::ibverbs::simple_unit::connection::UnconnectedIbvConnection;
 use crate::ibverbs::simple_unit::mode::Mode;
-use crate::ibverbs::simple_unit::sync_mode::{
-    ConnectedSyncMr, SyncMrConnectionConfig, UnconnectedSyncMr,
-};
-use crate::ibverbs::simple_unit::transfer_mode::{
-    ConnectedTransferMr, TransferMrConnectionConfig, UnconnectedTransferMr,
-};
-use crate::rdma_traits::{RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkRequest};
+use ibverbs::MemoryRegion;
 use serde::{Deserialize, Serialize};
-use std::ops::RangeBounds;
-use std::time::Duration;
+use std::ptr::{read, read_volatile, write, write_volatile};
 
 #[derive(Debug, Copy, Clone)]
-pub struct SyncTransferMode<const POLL_BUFF_SIZE: usize>;
+pub struct SyncTransferMode;
 
-impl<const POLL_BUFF_SIZE: usize> Mode for SyncTransferMode<POLL_BUFF_SIZE> {
-    type UnconnectedMr = UnconnectedSyncTransferMr<POLL_BUFF_SIZE>;
-    type ConnectedMr = ConnectedSyncTransferMr<POLL_BUFF_SIZE>;
+impl Mode for SyncTransferMode {
+    type UnconnectedMr = UnconnectedSyncTransferMr;
+    type ConnectedMr = ConnectedSyncTransferMr;
     type MrConnectionConfig = SyncTransferMrConnectionConfig;
 }
 
-pub struct UnconnectedSyncTransferMr<const POLL_BUFF_SIZE: usize> {
-    transfer_mr: UnconnectedTransferMr<POLL_BUFF_SIZE>,
-    sync_mr: UnconnectedSyncMr,
+pub struct UnconnectedSyncTransferMr {
+    state: Box<SyncTransferState>,
+    mr: MemoryRegion,
 }
 
-impl<const POLL_BUFF_SIZE: usize> UnconnectedSyncTransferMr<POLL_BUFF_SIZE> {
-    pub unsafe fn new(
-        connection: &mut UnconnectedIbvConnection,
-        memory: &[u8],
-    ) -> std::io::Result<Self> {
-        Ok(Self {
-            transfer_mr: unsafe { UnconnectedTransferMr::new(connection, memory)? },
-            sync_mr: UnconnectedSyncMr::new(connection)?,
-        })
+impl UnconnectedSyncTransferMr {
+    pub fn new(connection: &mut UnconnectedIbvConnection) -> std::io::Result<Self> {
+        // Box to ensure stable location in heap memory for DMA
+        let mut state = Box::new(SyncTransferState::new());
+        let state_ptr = &mut state.raw as *mut u8;
+        let state_length = size_of::<SyncTransferState>();
+        let mr = connection.pd.register(state_ptr, state_length)?;
+        Ok(Self { state, mr })
     }
 }
 
-impl<const POLL_BUFF_SIZE: usize> Connect for UnconnectedSyncTransferMr<POLL_BUFF_SIZE> {
+impl Connect for UnconnectedSyncTransferMr {
     type ConnectionConfig = SyncTransferMrConnectionConfig;
-    type Connected = ConnectedSyncTransferMr<POLL_BUFF_SIZE>;
+    type Connected = ConnectedSyncTransferMr;
 
     fn connection_config(&self) -> Self::ConnectionConfig {
-        SyncTransferMrConnectionConfig {
-            transfer_mr_connection_config: self.transfer_mr.connection_config(),
-            sync_mr_connection_config: self.sync_mr.connection_config(),
-        }
+        todo!()
     }
 
     fn connect(
         self,
         connection_config: Self::ConnectionConfig,
     ) -> std::io::Result<Self::Connected> {
-        Ok(ConnectedSyncTransferMr {
-            transfer_mr: self
-                .transfer_mr
-                .connect(connection_config.transfer_mr_connection_config)?,
-            sync_mr: self
-                .sync_mr
-                .connect(connection_config.sync_mr_connection_config)?,
-        })
+        todo!()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncTransferMrConnectionConfig {
-    transfer_mr_connection_config: TransferMrConnectionConfig,
-    sync_mr_connection_config: SyncMrConnectionConfig,
+pub struct SyncTransferMrConnectionConfig {}
+
+pub struct ConnectedSyncTransferMr {}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct SyncTransferState {
+    raw: [u8; 3 * size_of::<u64>()],
+    // Raw data of:
+    // send_tokens: u64,
+    // issued_sends: u64,
+    // issued_recvs: u64,
 }
 
-pub struct ConnectedSyncTransferMr<const POLL_BUFF_SIZE: usize> {
-    transfer_mr: ConnectedTransferMr<POLL_BUFF_SIZE>,
-    sync_mr: ConnectedSyncMr,
-}
+impl SyncTransferState {
+    const SEND_TOKENS_BYTE_IDX: usize = 0 * size_of::<u64>();
+    const ISSUED_SENDS_BYTE_IDX: usize = 1 * size_of::<u64>();
+    const ISSUED_RECVS_BYTE_IDX: usize = 2 * size_of::<u64>();
 
-impl<const POLL_BUFF_SIZE: usize> RdmaSendRecv for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>> {
-    unsafe fn post_send(
-        &mut self,
-        mr_range: impl RangeBounds<usize>,
-        imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest + 'static> {
-        unsafe {
-            self.mr
-                .transfer_mr
-                .post_send(&mut self.connection, mr_range, imm_data)
+    pub fn new() -> Self {
+        Self {
+            raw: [0u8; 3 * size_of::<u64>()],
         }
     }
 
-    unsafe fn post_receive(
-        &mut self,
-        mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest + 'static> {
-        unsafe {
-            self.mr
-                .transfer_mr
-                .post_receive(&mut self.connection, mr_range)
-        }
+    #[inline(always)]
+    pub fn send_tokens(&self) -> u64 {
+        // Read volatile since it gets rdma written into by peer
+        unsafe { read_volatile(self.raw.as_ptr().add(Self::SEND_TOKENS_BYTE_IDX) as *const u64) }
     }
-}
 
-impl<const POLL_BUFF_SIZE: usize> RdmaReadWrite
-    for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>
-{
-    unsafe fn post_write(
-        &mut self,
-        mr_range: impl RangeBounds<usize>,
-        remote_mr_range: impl RangeBounds<usize>,
-        imm_data: Option<u32>,
-    ) -> std::io::Result<impl WorkRequest + 'static> {
+    #[inline(always)]
+    pub fn issued_sends(&self) -> u64 {
+        // Non volatile since only self writes to it
+        unsafe { read(self.raw.as_ptr().add(Self::ISSUED_SENDS_BYTE_IDX) as *const u64) }
+    }
+
+    #[inline(always)]
+    pub fn issued_recvs(&self) -> u64 {
+        // Non volatile since only self writes to it
+        unsafe { read(self.raw.as_ptr().add(Self::ISSUED_RECVS_BYTE_IDX) as *const u64) }
+    }
+
+    #[inline(always)]
+    pub fn issue_send(&mut self) {
+        // Non volatile since only self reads it
         unsafe {
-            self.mr.transfer_mr.post_write(
-                &mut self.connection,
-                mr_range,
-                remote_mr_range,
-                imm_data,
+            write(
+                self.raw.as_ptr().add(Self::ISSUED_SENDS_BYTE_IDX) as *mut u64,
+                self.issued_sends() + 1,
             )
         }
     }
 
-    unsafe fn post_read(
-        &mut self,
-        mr_range: impl RangeBounds<usize>,
-        remote_mr_range: impl RangeBounds<usize>,
-    ) -> std::io::Result<impl WorkRequest + 'static> {
+    #[inline(always)]
+    pub fn issue_recv(&mut self) {
+        // Volatile since its written to the peer through rdma
         unsafe {
-            self.mr
-                .transfer_mr
-                .post_read(&mut self.connection, mr_range, remote_mr_range)
+            write_volatile(
+                self.raw.as_mut_ptr().add(Self::ISSUED_RECVS_BYTE_IDX) as *mut u64,
+                self.issued_recvs() + 1,
+            )
         }
     }
 }
 
-impl<const POLL_BUFF_SIZE: usize> RdmaRendezvous
-    for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>
-{
-    fn is_peer_waiting(&self) -> bool {
-        self.mr.sync_mr.is_peer_waiting()
-    }
-
-    fn wait_for_peer_signal(&self) -> std::io::Result<()> {
-        self.mr.sync_mr.wait_for_peer_signal()
-    }
-
-    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
-        self.mr.sync_mr.wait_for_peer_signal_timeout(timeout)
-    }
-
-    fn rendezvous(&mut self) -> std::io::Result<()> {
-        self.mr
-            .sync_mr
-            .rendezvous::<POLL_BUFF_SIZE>(&mut self.connection)
-    }
-
-    fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
-        self.mr
-            .sync_mr
-            .rendezvous_timeout::<POLL_BUFF_SIZE>(&mut self.connection, timeout)
+impl AsMut<[u8]> for SyncTransferState {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.raw
     }
 }

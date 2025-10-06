@@ -36,11 +36,14 @@ fn main() {
         Role::Receiver => 1,
     };
 
-    let node = ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
-        rank_id,
-        &network_config,
-        &memory,
-    )
+    let node = unsafe {
+        ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
+            rank_id,
+            &network_config,
+            memory.as_mut_ptr(),
+            memory.len(),
+        )
+    }
     .unwrap();
 
     let out_conn_config = node.connection_config();
@@ -60,29 +63,27 @@ fn main() {
     let mut node = node.connect(in_conn_config).unwrap();
 
     let mut task: Box<dyn FnMut(usize)> = match args.role {
-        Role::Sender => {
-            Box::new(|iter: usize| {
-                master_batch(iter, &mut memory, node.connection(1).unwrap(), &args);
-            })
-        }
+        Role::Sender => Box::new(|iter: usize| {
+            master_batch(iter, &mut memory, node.connection(1).unwrap(), &args);
+        }),
         Role::Receiver => Box::new(|iter: usize| {
             slave_batch(iter, &memory, node.connection(0).unwrap(), &args);
         }),
     };
 
     let mut iter = 0;
-    loop {
+    while args.iters.map_or(true, |max| iter < max) {
         task(iter);
-
-        if let Some(done) = args.iters.map(|max_iters| iter >= max_iters) {
-            break;
-        }
-
         iter += 1;
     }
 }
 
-fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+fn master_batch(
+    iter: usize,
+    memory: &mut [u8],
+    conn: &mut (impl RdmaSendRecv + RdmaRendezvous),
+    args: &Args,
+) {
     // Initialize memory for correctness check
     memory
         .iter_mut()
@@ -90,6 +91,7 @@ fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + 
         .for_each(|(i, v)| *v = ((i + iter) % 256) as u8);
 
     // Wait until receiver is ready to receive
+    println!("Initial rendezvous...");
     conn.rendezvous().unwrap();
 
     // Start timing
@@ -97,7 +99,9 @@ fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + 
 
     // Send all batches
     for i in 0..args.batch_size {
+        println!("Rendezvous...");
         conn.rendezvous().unwrap();
+        println!("Sending...");
         unsafe { conn.post_send((i * args.message_size)..((i + 1) * args.message_size), None) }
             .unwrap()
             .wait()
@@ -105,6 +109,7 @@ fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + 
     }
 
     // Wait until receiver finishes receiving
+    println!("Final rendezvous...");
     conn.rendezvous().unwrap();
 
     // Stop timing
@@ -117,20 +122,29 @@ fn master_batch(iter: usize, memory: &mut [u8], conn: &mut (impl RdmaSendRecv + 
     println!("pps: {pps:.2}, gbps: {gbps:.2}");
 }
 
-fn slave_batch(iter: usize, memory: &[u8], conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+fn slave_batch(
+    iter: usize,
+    memory: &[u8],
+    conn: &mut (impl RdmaSendRecv + RdmaRendezvous),
+    args: &Args,
+) {
     // Notify sender to start
+    println!("Initial rendezvous...");
     conn.rendezvous().unwrap();
 
     // Receive all batches
     for i in 0..args.batch_size {
+        println!("Receiving...");
         let wr =
             unsafe { conn.post_receive((i * args.message_size)..((i + 1) * args.message_size)) }
                 .unwrap();
+        println!("Rendezvous...");
         conn.rendezvous().unwrap();
         wr.wait().unwrap();
     }
 
     // Notify sender of finish
+    println!("Final rendezvous...");
     conn.rendezvous().unwrap();
 
     // Validate transfer

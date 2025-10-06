@@ -16,14 +16,17 @@ fn main() {
         .take_nodes(args.num_nodes)
         .validate()
         .unwrap();
-    let mem = [0; 1024];
+    let mut mem = Box::new([0u8; 1024]);
 
-    let node = ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
-        args.rank_id,
-        &network_config,
-        &mem,
-    )
-        .unwrap();
+    let node = unsafe {
+        ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
+            args.rank_id,
+            &network_config,
+            &mut *mem as *mut u8,
+            mem.len(),
+        )
+    }
+    .unwrap();
 
     let out_conn_config = node.connection_config();
 
@@ -34,7 +37,7 @@ fn main() {
         &exchanger_network,
         &exchanger_config(),
     )
-        .unwrap();
+    .unwrap();
 
     let in_conn_config =
         NetworkNodeConnectionConfig::gather(args.rank_id, exchanged.as_slice()).unwrap();

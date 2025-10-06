@@ -9,7 +9,7 @@ use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
 use std::pin::Pin;
-use std::ptr::{read_volatile, write_volatile};
+use std::ptr::{read, read_volatile, write_volatile};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Copy, Clone)]
@@ -22,21 +22,18 @@ impl Mode for SyncMode {
 }
 
 pub struct UnconnectedSyncMr {
-    rendezvous_state: Pin<Box<RendezvousMemoryRegion>>,
-    rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
+    state: Box<RendezvousState>,
+    mr: MemoryRegion,
 }
 
 impl UnconnectedSyncMr {
     pub fn new(connection: &mut UnconnectedIbvConnection) -> std::io::Result<Self> {
         // Box to ensure stable location in heap memory for DMA
-        let rendezvous_state = Box::pin(RendezvousMemoryRegion::new());
-        let rendezvous_mr = connection
-            .pd
-            .register(unsafe { UnsafeSlice::new(&*rendezvous_state) })?;
-        Ok(Self {
-            rendezvous_state,
-            rendezvous_mr,
-        })
+        let mut state = Box::new(RendezvousState::new());
+        let state_ptr = &mut state.raw as *mut u8;
+        let state_length = size_of::<RendezvousState>();
+        let mr = connection.pd.register(state_ptr, state_length)?;
+        Ok(Self { state, mr })
     }
 }
 
@@ -46,7 +43,7 @@ impl Connect for UnconnectedSyncMr {
 
     fn connection_config(&self) -> Self::ConnectionConfig {
         SyncMrConnectionConfig {
-            remote_rendezvous_mr: self.rendezvous_mr.remote(),
+            remote_rendezvous_mr: self.mr.remote(),
         }
     }
 
@@ -55,8 +52,8 @@ impl Connect for UnconnectedSyncMr {
         connection_config: Self::ConnectionConfig,
     ) -> std::io::Result<Self::Connected> {
         Ok(ConnectedSyncMr {
-            rendezvous_state: self.rendezvous_state,
-            rendezvous_mr: self.rendezvous_mr,
+            rendezvous_state: self.state,
+            rendezvous_mr: self.mr,
             remote_rendezvous_mr: connection_config.remote_rendezvous_mr,
         })
     }
@@ -68,8 +65,8 @@ pub struct SyncMrConnectionConfig {
 }
 
 pub struct ConnectedSyncMr {
-    rendezvous_state: Pin<Box<RendezvousMemoryRegion>>,
-    rendezvous_mr: MemoryRegion<UnsafeSlice<u64>>,
+    rendezvous_state: Box<RendezvousState>,
+    rendezvous_mr: MemoryRegion,
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
 
@@ -200,46 +197,64 @@ impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
 
 #[repr(transparent)]
 #[derive(Debug)]
-struct RendezvousMemoryRegion([u64; 2]);
+struct RendezvousState {
+    raw: [u8; 2 * size_of::<u64>()],
+}
 
-impl RendezvousMemoryRegion {
-    const LOCAL_IDX: usize = 0;
-    const REMOTE_IDX: usize = 1;
+impl RendezvousState {
+    const LOCAL_BYTE_IDX: usize = 0 * size_of::<u64>();
+    const REMOTE_BYTE_IDX: usize = 1 * size_of::<u64>();
 
     pub fn new() -> Self {
-        Self([0, 0])
-    }
-
-    pub fn advance_epoch(&mut self) {
-        let value = self.0[Self::LOCAL_IDX];
-        unsafe { write_volatile(self.0.as_mut_ptr(), value + 1) };
-    }
-
-    fn is_remote_ahead(&self) -> bool {
-        let local = self.0[Self::LOCAL_IDX];
-        let remote = unsafe { read_volatile(self.0.as_ptr().add(1)) };
-        remote >= local
-    }
-
-    pub fn is_remote_waiting(&self) -> bool {
-        let local = self.0[Self::LOCAL_IDX];
-        let remote = unsafe { read_volatile(self.0.as_ptr().add(1)) };
-        remote > local
-    }
-
-    pub fn remote_epoch_mr_range(&self) -> Range<usize> {
-        Self::REMOTE_IDX * size_of::<u64>()..(Self::REMOTE_IDX + 1) * size_of::<u64>()
+        Self {
+            raw: [0u8; 2 * size_of::<u64>()],
+        }
     }
 
     pub fn local_epoch_mr_range(&self) -> Range<usize> {
-        Self::LOCAL_IDX * size_of::<u64>()..(Self::LOCAL_IDX + 1) * size_of::<u64>()
+        Self::LOCAL_BYTE_IDX..Self::LOCAL_BYTE_IDX + size_of::<u64>()
+    }
+
+    pub fn remote_epoch_mr_range(&self) -> Range<usize> {
+        Self::REMOTE_BYTE_IDX..Self::REMOTE_BYTE_IDX + size_of::<u64>()
+    }
+
+    pub fn advance_epoch(&mut self) {
+        // Non volatile read since only we modify it
+        let epoch = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
+        // Volatile read since the hardware must know it has been changed for rdma write
+        unsafe {
+            write_volatile(
+                self.raw.as_mut_ptr().add(Self::LOCAL_BYTE_IDX) as *mut u64,
+                epoch + 1,
+            )
+        };
+    }
+
+    fn is_remote_ahead(&self) -> bool {
+        // Non volatile read since only we modify it
+        let local = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
+        // Volatile read since it gets written into by the peer
+        let remote =
+            unsafe { read_volatile(self.raw.as_ptr().add(Self::REMOTE_BYTE_IDX) as *mut u64) };
+        remote >= local
+    }
+
+    #[inline(always)]
+    pub fn is_remote_waiting(&self) -> bool {
+        // Non volatile read since only we modify it
+        let local = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
+        // Volatile read since it gets written into by the peer
+        let remote =
+            unsafe { read_volatile(self.raw.as_ptr().add(Self::REMOTE_BYTE_IDX) as *mut u64) };
+        remote > local
     }
 }
 
-impl Deref for RendezvousMemoryRegion {
-    type Target = [u64];
+impl Deref for RendezvousState {
+    type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
+        self.raw.as_ref()
     }
 }

@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 /// This might actually not do exactly what I think it does.
 /// Rust makes optimizations based on the assumption that &mut []
 /// are unique references to memory (no aliasing) which this type
@@ -12,7 +13,7 @@ pub struct UnsafeSlice<T> {
 }
 
 impl<T> UnsafeSlice<T> {
-    pub unsafe fn new(slice: &[T]) -> Self {
+    pub fn new(slice: &[T]) -> Self {
         Self {
             ptr: NonNull::from(slice),
         }

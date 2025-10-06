@@ -1,4 +1,4 @@
-use crate::ibverbs::simple_unit::sync_transfer_mode::SyncTransferMode;
+use crate::ibverbs::simple_unit::rendezvous_transfer_mode::SyncTransferMode;
 use crate::ibverbs::simple_unit::{IbvSimpleUnit, UnconnectedIbvSimpleUnit};
 use crate::network::{ConnectedNetworkNode, UnconnectedNetworkNode};
 use crate::network_config::NetworkConfig;
@@ -15,10 +15,14 @@ pub enum IbvSimpleUnitNetworkCreationError {
 }
 
 impl ConnectedNetworkNode<IbvSimpleUnit<SyncTransferMode<0>>> {
-    pub fn new_ibv_simple_unit_network_node<const CQ_SIZE: usize, const POLL_BUFF_SIZE: usize>(
+    pub unsafe fn new_ibv_simple_unit_network_node<
+        const CQ_SIZE: usize,
+        const POLL_BUFF_SIZE: usize,
+    >(
         rank_id: usize,
         network_config: &NetworkConfig,
-        memory: &[u8],
+        memory_ptr: *mut u8,
+        memory_length: usize,
     ) -> Result<
         UnconnectedNetworkNode<UnconnectedIbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>>,
         IbvSimpleUnitNetworkCreationError,
@@ -47,7 +51,8 @@ impl ConnectedNetworkNode<IbvSimpleUnit<SyncTransferMode<0>>> {
                 .map(|_| unsafe {
                     IbvSimpleUnit::new_sync_transfer_unit::<CQ_SIZE, POLL_BUFF_SIZE>(
                         &ibv_context,
-                        &memory,
+                        memory_ptr,
+                        memory_length,
                     )
                 })
                 .collect::<Result<_, _>>()?,

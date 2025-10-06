@@ -2,13 +2,11 @@ use crate::connect::Connect;
 use crate::ibverbs::simple_unit::IbvSimpleUnit;
 use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConnection};
 use crate::ibverbs::simple_unit::mode::Mode;
-use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
 use crate::rdma_traits::{RdmaReadWrite, RdmaSendRecv, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
-use std::pin::Pin;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TransferMode<const POLL_BUFF_SIZE: usize>;
@@ -20,17 +18,16 @@ impl<const POLL_BUFF_SIZE: usize> Mode for TransferMode<POLL_BUFF_SIZE> {
 }
 
 pub struct UnconnectedTransferMr<const POLL_BUFF_SIZE: usize> {
-    mr: MemoryRegion<UnsafeSlice<u8>>,
+    mr: MemoryRegion,
 }
 
 impl<const POLL_BUFF_SIZE: usize> UnconnectedTransferMr<POLL_BUFF_SIZE> {
     pub(super) unsafe fn new(
         connection: &mut UnconnectedIbvConnection,
-        memory: &[u8],
+        memory_ptr: *mut u8,
+        memory_length: usize,
     ) -> std::io::Result<Self> {
-        let mr = connection
-            .pd
-            .register(unsafe { UnsafeSlice::new(memory) })?;
+        let mr = connection.pd.register(memory_ptr, memory_length)?;
         Ok(Self { mr })
     }
 }
@@ -62,7 +59,7 @@ pub struct TransferMrConnectionConfig {
 }
 
 pub struct ConnectedTransferMr<const POLL_BUFF_SIZE: usize> {
-    mr: MemoryRegion<UnsafeSlice<u8>>,
+    mr: MemoryRegion,
     remote_mr: RemoteMemoryRegion,
 }
 
