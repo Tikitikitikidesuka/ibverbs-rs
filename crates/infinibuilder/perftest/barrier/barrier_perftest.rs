@@ -67,7 +67,6 @@ fn barrier_batch<T: RdmaSendRecv + RdmaRendezvous>(
 ) {
     let group = node.group_all();
 
-    println!("Barrier before test");
     node.run(&CentralizedSync::new(), &group).unwrap().unwrap();
 
     let start = Instant::now();
