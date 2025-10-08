@@ -32,7 +32,7 @@ impl<const POLL_BUFF_SIZE: usize> WorkRequest for CachedWorkRequest<POLL_BUFF_SI
                 return work_completion_from_ibv_wc(wc);
             }
 
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
     }
 
@@ -61,7 +61,7 @@ impl<const POLL_BUFF_SIZE: usize> WorkRequest for CachedWorkRequest<POLL_BUFF_SI
                 return work_completion_from_ibv_wc(wc);
             }
 
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
     }
 }

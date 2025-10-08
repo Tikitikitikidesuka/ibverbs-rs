@@ -77,7 +77,7 @@ impl ConnectedSyncMr {
 
     pub(super) fn wait_for_peer_signal(&self) -> std::io::Result<()> {
         while !self.is_peer_waiting() {
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
 
         Ok(())
@@ -95,7 +95,7 @@ impl ConnectedSyncMr {
                 ));
             }
 
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
 
         Ok(())
@@ -123,7 +123,7 @@ impl ConnectedSyncMr {
 
         // Wait for peer to be synced
         while !self.rendezvous_state.is_remote_ahead() {
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
 
         Ok(())
@@ -165,7 +165,7 @@ impl ConnectedSyncMr {
                 ));
             }
 
-            std::hint::spin_loop();
+            //std::hint::spin_loop();
         }
 
         Ok(())
@@ -211,14 +211,17 @@ impl RendezvousState {
         }
     }
 
+    #[inline(always)]
     pub fn local_epoch_mr_range(&self) -> Range<usize> {
         Self::LOCAL_BYTE_IDX..Self::LOCAL_BYTE_IDX + size_of::<u64>()
     }
 
+    #[inline(always)]
     pub fn remote_epoch_mr_range(&self) -> Range<usize> {
         Self::REMOTE_BYTE_IDX..Self::REMOTE_BYTE_IDX + size_of::<u64>()
     }
 
+    #[inline(always)]
     pub fn advance_epoch(&mut self) {
         // Non volatile read since only we modify it
         let epoch = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
@@ -231,6 +234,7 @@ impl RendezvousState {
         };
     }
 
+    #[inline(always)]
     fn is_remote_ahead(&self) -> bool {
         // Non volatile read since only we modify it
         let local = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };

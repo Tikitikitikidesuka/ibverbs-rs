@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, RangeBounds};
+use std::ops::{Deref, Range, RangeBounds};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -72,6 +72,12 @@ impl Deref for NetworkConfig {
 
     fn deref(&self) -> &Self::Target {
         self.hosts.as_slice()
+    }
+}
+
+impl NetworkConfig {
+    pub fn rank_ids(&self) -> Range<usize> {
+        self.hosts.first().unwrap().rankid..self.hosts.last().unwrap().rankid
     }
 }
 

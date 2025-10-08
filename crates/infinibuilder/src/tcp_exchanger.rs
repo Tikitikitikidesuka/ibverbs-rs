@@ -493,17 +493,19 @@ where
     ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
         let node_id = ready_node.rank_id;
 
-        if received_nodes.lock().await.contains(&node_id) {
+        let mut received = received_nodes.lock().await;
+        if received.contains(&node_id) {
             return Err(TcpExchangerError::InvalidMessage(
                 serde_json::Error::custom("Node already received"),
             ));
         }
 
         // Check if node_id exists in network config
-        match network_config.get(&node_id) {
-            Some(_) => Ok(ready_node),
-            None => Err(TcpExchangerError::NonExistentRankId(node_id)),
-        }
+        network_config.get(&node_id)
+            .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
+
+        received.insert(node_id);  // Insert while still holding lock
+        Ok(ready_node)
     }
 
     async fn read_ready_node_from_stream(

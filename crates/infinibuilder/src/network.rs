@@ -212,6 +212,12 @@ pub trait NetworkOp {
     ) -> Self::Output;
 }
 
+impl<T> ConnectedNetworkNode<T> {
+    pub fn rank_id(&self) -> usize {
+        self.rank_id
+    }
+}
+
 impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
     pub fn connection(&mut self, rank_id: usize) -> Option<&mut T> {
         self.connections.get_mut(rank_id)
