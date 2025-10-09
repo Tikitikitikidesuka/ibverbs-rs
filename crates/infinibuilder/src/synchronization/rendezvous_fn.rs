@@ -1,35 +1,28 @@
+use crate::rdma_traits::{RdmaSync, SyncState, Timeout};
 use std::time::Duration;
-use crate::rdma_traits::RdmaRendezvous;
 
 #[derive(Debug, Copy, Clone)]
-pub struct NoTimeoutRendezvousFn;
+pub struct NoTimeoutSyncFn;
 
 #[derive(Debug, Copy, Clone)]
-pub struct TimeoutRendezvousFn {
+pub struct TimeoutSyncFn {
     pub(super) timeout: Duration,
 }
 
-pub trait RendezvousFn {
-    fn rendezvous<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()>;
-    fn wait_for_peer_signal<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()>;
+pub trait SyncFn {
+    fn synchronize<T: RdmaSync>(&self, conn: &mut T) -> Result<T::Result, Timeout>;
 }
 
-impl RendezvousFn for NoTimeoutRendezvousFn {
-    fn rendezvous<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()> {
-        conn.rendezvous()
-    }
-
-    fn wait_for_peer_signal<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()> {
-        conn.wait_for_peer_signal()
+impl SyncFn for NoTimeoutSyncFn {
+    #[inline(always)]
+    fn synchronize<T: RdmaSync>(&self, conn: &mut T) -> Result<T::Result, Timeout> {
+        Ok(conn.synchronize())
     }
 }
 
-impl RendezvousFn for TimeoutRendezvousFn {
-    fn rendezvous<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()> {
-        conn.rendezvous_timeout(self.timeout)
-    }
-
-    fn wait_for_peer_signal<T: RdmaRendezvous>(&self, conn: &mut T) -> std::io::Result<()> {
-        conn.wait_for_peer_signal_timeout(self.timeout)
+impl SyncFn for TimeoutSyncFn {
+    #[inline(always)]
+    fn synchronize<T: RdmaSync>(&self, conn: &mut T) -> Result<T::Result, Timeout> {
+        conn.synchronize_with_timeout(self.timeout)
     }
 }

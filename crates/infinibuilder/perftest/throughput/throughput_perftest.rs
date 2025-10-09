@@ -3,7 +3,7 @@ use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::rdma_traits::WorkRequest;
-use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use std::fs;
 use std::time::{Duration, Instant};
@@ -81,7 +81,7 @@ fn main() {
 fn master_batch(
     iter: usize,
     memory: &mut [u8],
-    conn: &mut (impl RdmaSendRecv + RdmaRendezvous),
+    conn: &mut (impl RdmaSendRecv + RdmaSync),
     args: &Args,
 ) {
     // Initialize memory for correctness check
@@ -125,7 +125,7 @@ fn master_batch(
 fn slave_batch(
     iter: usize,
     memory: &[u8],
-    conn: &mut (impl RdmaSendRecv + RdmaRendezvous),
+    conn: &mut (impl RdmaSendRecv + RdmaSync),
     args: &Args,
 ) {
     // Notify sender to start

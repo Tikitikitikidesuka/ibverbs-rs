@@ -2,7 +2,7 @@ use clap::Parser;
 use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use std::fs;
 use std::time::Duration;
@@ -74,7 +74,7 @@ fn main() {
     }
 }
 
-fn rendezvous_batch(conn: &mut (impl RdmaSendRecv + RdmaRendezvous), args: &Args) {
+fn rendezvous_batch(conn: &mut (impl RdmaSendRecv + RdmaSync), args: &Args) {
     let start = Instant::now();
 
     for _ in 0..args.batch_size {

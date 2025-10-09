@@ -2,7 +2,7 @@ use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::rdma_traits::WorkRequest;
-use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
 use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
 use std::str::FromStr;
 use std::time::{Duration, Instant};

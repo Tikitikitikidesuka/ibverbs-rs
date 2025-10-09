@@ -1,9 +1,9 @@
 use thiserror::Error;
 
-pub mod binary;
+//pub mod binary;
 pub mod centralized;
 pub mod dissemination;
-mod rendezvous_fn;
+//mod rendezvous_fn;
 
 #[derive(Debug, Error)]
 pub enum SyncError {

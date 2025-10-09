@@ -1,32 +1,32 @@
 use std::time::Duration;
 use crate::network::NetworkOp;
-use crate::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use crate::rdma_traits::{RdmaSync, RdmaSendRecv};
 use crate::synchronization::SyncError;
-use crate::synchronization::rendezvous_fn::{NoTimeoutRendezvousFn, RendezvousFn, TimeoutRendezvousFn};
+use crate::synchronization::rendezvous_fn::{NoTimeoutSyncFn, SyncFn, TimeoutSyncFn};
 
 #[derive(Debug, Copy, Clone)]
-pub struct BinaryTreeSync<D: RendezvousFn> {
+pub struct BinaryTreeSync<D: SyncFn> {
     rendezvous_fn: D,
 }
 
-impl BinaryTreeSync<NoTimeoutRendezvousFn> {
-    pub fn new() -> BinaryTreeSync<NoTimeoutRendezvousFn> {
+impl BinaryTreeSync<NoTimeoutSyncFn> {
+    pub fn new() -> BinaryTreeSync<NoTimeoutSyncFn> {
         BinaryTreeSync {
-            rendezvous_fn: NoTimeoutRendezvousFn,
+            rendezvous_fn: NoTimeoutSyncFn,
         }
     }
 
-    pub fn with_timeout(timeout: Duration) -> BinaryTreeSync<TimeoutRendezvousFn> {
+    pub fn with_timeout(timeout: Duration) -> BinaryTreeSync<TimeoutSyncFn> {
         BinaryTreeSync {
-            rendezvous_fn: TimeoutRendezvousFn { timeout },
+            rendezvous_fn: TimeoutSyncFn { timeout },
         }
     }
 }
 
-impl<D: RendezvousFn> NetworkOp for BinaryTreeSync<D> {
+impl<D: SyncFn> NetworkOp for BinaryTreeSync<D> {
     type Output = Result<(), SyncError>;
 
-    fn run<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
+    fn run<'a, T: 'a + RdmaSendRecv + RdmaSync>(
         &self,
         self_idx: Option<usize>,
         group_connections: &mut [&'a mut T],
@@ -62,7 +62,7 @@ impl<D: RendezvousFn> NetworkOp for BinaryTreeSync<D> {
     }
 }
 
-fn left_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+fn left_child_connection<'a, T: RdmaSendRecv + RdmaSync>(
     self_idx: usize,
     group_connections: &'a mut [&mut T],
 ) -> Option<&'a mut T> {
@@ -71,7 +71,7 @@ fn left_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
         .map(|c| &mut **c)
 }
 
-fn right_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+fn right_child_connection<'a, T: RdmaSendRecv + RdmaSync>(
     self_idx: usize,
     group_connections: &'a mut [&mut T],
 ) -> Option<&'a mut T> {
@@ -80,7 +80,7 @@ fn right_child_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
         .map(|c| &mut **c)
 }
 
-fn parent_connection<'a, T: RdmaSendRecv + RdmaRendezvous>(
+fn parent_connection<'a, T: RdmaSendRecv + RdmaSync>(
     self_idx: usize,
     group_connections: &'a mut [&mut T],
 ) -> Option<&'a mut T> {

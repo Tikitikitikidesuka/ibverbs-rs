@@ -4,9 +4,10 @@ use crate::ibverbs::simple_unit::connection::{IbvConnection, UnconnectedIbvConne
 use crate::ibverbs::simple_unit::mode::Mode;
 use crate::ibverbs::unsafe_slice::UnsafeSlice;
 use crate::ibverbs::work_request::CachedWorkRequest;
-use crate::rdma_traits::{RdmaRendezvous, WorkRequest};
+use crate::rdma_traits::{RdmaSync, SyncState, Timeout, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 use std::pin::Pin;
 use std::ptr::{read, read_volatile, write_volatile};
@@ -71,37 +72,55 @@ pub struct ConnectedSyncMr {
 }
 
 impl ConnectedSyncMr {
-    pub(super) fn is_peer_waiting(&self) -> bool {
-        self.rendezvous_state.is_remote_waiting()
-    }
-
-    pub(super) fn wait_for_peer_signal(&self) -> std::io::Result<()> {
-        while !self.is_peer_waiting() {
-            //std::hint::spin_loop();
+    pub(super) fn sync_state(&self) -> SyncState {
+        let local_epoch = self.rendezvous_state.local_epoch();
+        let remote_epoch = self.rendezvous_state.remote_epoch();
+        match local_epoch.cmp(&remote_epoch) {
+            Ordering::Less => SyncState::Behind,
+            Ordering::Equal => SyncState::Synced,
+            Ordering::Greater => SyncState::Ahead,
         }
-
-        Ok(())
     }
 
-    pub(super) fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
-        // Get start time
-        let init_time = Instant::now();
-
-        while !self.is_peer_waiting() {
-            if init_time.elapsed() > timeout {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "Timed out",
-                ));
+    pub(super) fn signal_peer<const POLL_BUFF_SIZE: usize>(
+        &mut self,
+        connection: &mut IbvConnection,
+    ) -> Option<std::io::Result<()>> {
+        match self.sync_state() {
+            SyncState::Behind | SyncState::Synced => {
+                Some(self.signal_peer_no_check::<POLL_BUFF_SIZE>(connection))
             }
-
-            //std::hint::spin_loop();
+            SyncState::Ahead => None,
         }
-
-        Ok(())
     }
 
-    pub(super) fn rendezvous<const POLL_BUFF_SIZE: usize>(
+    pub(super) fn synchronize<const POLL_BUFF_SIZE: usize>(
+        &mut self,
+        connection: &mut IbvConnection,
+    ) -> std::io::Result<()> {
+        match self.sync_state() {
+            SyncState::Synced => Ok(()),
+            SyncState::Ahead => {
+                self.wait_until_synced();
+                Ok(())
+            }
+            SyncState::Behind => self.signal_peer_no_check::<POLL_BUFF_SIZE>(connection),
+        }
+    }
+
+    pub(super) fn synchronize_with_timeout<const POLL_BUFF_SIZE: usize>(
+        &mut self,
+        connection: &mut IbvConnection,
+        timeout: Duration,
+    ) -> Result<std::io::Result<()>, Timeout> {
+        match self.sync_state() {
+            SyncState::Synced => Ok(Ok(())),
+            SyncState::Ahead => Ok(Ok(self.wait_until_synced_with_timeout(timeout)?)),
+            SyncState::Behind => Ok(self.signal_peer_no_check::<POLL_BUFF_SIZE>(connection)),
+        }
+    }
+
+    fn signal_peer_no_check<const POLL_BUFF_SIZE: usize>(
         &mut self,
         connection: &mut IbvConnection,
     ) -> std::io::Result<()> {
@@ -121,77 +140,42 @@ impl ConnectedSyncMr {
         )?;
         CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone()).wait()?;
 
-        // Wait for peer to be synced
-        while !self.rendezvous_state.is_remote_ahead() {
-            //std::hint::spin_loop();
-        }
-
         Ok(())
     }
 
-    pub(super) fn rendezvous_timeout<const POLL_BUFF_SIZE: usize>(
-        &mut self,
-        connection: &mut IbvConnection,
-        timeout: Duration,
-    ) -> std::io::Result<()> {
-        // Increment local generation
-        self.rendezvous_state.advance_epoch();
+    fn wait_until_synced(&self) {
+        while self.sync_state() != SyncState::Synced {}
+    }
 
-        // Write next_epoch to peer
-        let wr_id = connection.cached_cq.fetch_advance_next_wr_id();
-        connection.qp.post_write(
-            &[self
-                .rendezvous_mr
-                .slice(self.rendezvous_state.local_epoch_mr_range())],
-            self.remote_rendezvous_mr
-                .slice(self.rendezvous_state.remote_epoch_mr_range()),
-            wr_id,
-            None,
-        )?;
+    fn wait_until_synced_with_timeout(&self, timeout: Duration) -> Result<(), Timeout> {
+        let start_time = Instant::now();
 
-        // Get start time
-        let init_time = Instant::now();
-
-        // Wait write for timeout
-        CachedWorkRequest::<POLL_BUFF_SIZE>::new(wr_id, connection.cached_cq.clone())
-            .wait_timeout(timeout)?;
-
-        // Wait for peer to be synced
-        while !self.rendezvous_state.is_remote_ahead() {
-            if init_time.elapsed() > timeout {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "Timed out",
-                ));
+        while self.sync_state() != SyncState::Synced {
+            if start_time.elapsed() < timeout {
+                return Err(Timeout);
             }
-
-            //std::hint::spin_loop();
         }
 
         Ok(())
     }
 }
 
-impl RdmaRendezvous for IbvSimpleUnit<SyncMode> {
-    fn is_peer_waiting(&self) -> bool {
-        self.mr.is_peer_waiting()
+impl RdmaSync for IbvSimpleUnit<SyncMode> {
+    fn sync_state(&self) -> SyncState {
+        self.mr.sync_state()
     }
 
-    fn wait_for_peer_signal(&self) -> std::io::Result<()> {
-        self.mr.wait_for_peer_signal()
+    fn signal_peer(&mut self) -> Option<std::io::Result<()>> {
+        self.mr.signal_peer::<1>(&mut self.connection)
     }
 
-    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
-        self.mr.wait_for_peer_signal_timeout(timeout)
+    fn synchronize(&mut self) -> std::io::Result<()> {
+        self.mr.synchronize::<1>(&mut self.connection)
     }
 
-    fn rendezvous(&mut self) -> std::io::Result<()> {
-        self.mr.rendezvous::<1>(&mut self.connection)
-    }
-
-    fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
+    fn synchronize_with_timeout(&mut self, timeout: Duration) -> Result<std::io::Result<()>, Timeout> {
         self.mr
-            .rendezvous_timeout::<1>(&mut self.connection, timeout)
+            .synchronize_with_timeout::<1>(&mut self.connection, timeout)
     }
 }
 
@@ -235,23 +219,13 @@ impl RendezvousState {
     }
 
     #[inline(always)]
-    fn is_remote_ahead(&self) -> bool {
-        // Non volatile read since only we modify it
-        let local = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
-        // Volatile read since it gets written into by the peer
-        let remote =
-            unsafe { read_volatile(self.raw.as_ptr().add(Self::REMOTE_BYTE_IDX) as *mut u64) };
-        remote >= local
+    fn local_epoch(&self) -> u64 {
+        unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) }
     }
 
     #[inline(always)]
-    pub fn is_remote_waiting(&self) -> bool {
-        // Non volatile read since only we modify it
-        let local = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
-        // Volatile read since it gets written into by the peer
-        let remote =
-            unsafe { read_volatile(self.raw.as_ptr().add(Self::REMOTE_BYTE_IDX) as *mut u64) };
-        remote > local
+    fn remote_epoch(&self) -> u64 {
+        unsafe { read_volatile(self.raw.as_ptr().add(Self::REMOTE_BYTE_IDX) as *mut u64) }
     }
 }
 

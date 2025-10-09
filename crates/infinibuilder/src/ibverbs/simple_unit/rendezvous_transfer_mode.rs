@@ -8,7 +8,7 @@ use crate::ibverbs::simple_unit::rendezvous_mode::{
 use crate::ibverbs::simple_unit::transfer_mode::{
     ConnectedTransferMr, TransferMrConnectionConfig, UnconnectedTransferMr,
 };
-use crate::rdma_traits::{RdmaReadWrite, RdmaRendezvous, RdmaSendRecv, WorkRequest};
+use crate::rdma_traits::{RdmaReadWrite, RdmaSendRecv, RdmaSync, SyncState, Timeout, WorkRequest};
 use serde::{Deserialize, Serialize};
 use std::ops::RangeBounds;
 use std::time::Duration;
@@ -136,30 +136,29 @@ impl<const POLL_BUFF_SIZE: usize> RdmaReadWrite
     }
 }
 
-impl<const POLL_BUFF_SIZE: usize> RdmaRendezvous
-    for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>>
-{
-    fn is_peer_waiting(&self) -> bool {
-        self.mr.sync_mr.is_peer_waiting()
+impl<const POLL_BUFF_SIZE: usize> RdmaSync for IbvSimpleUnit<SyncTransferMode<POLL_BUFF_SIZE>> {
+    fn sync_state(&self) -> SyncState {
+        self.mr.sync_mr.sync_state()
     }
 
-    fn wait_for_peer_signal(&self) -> std::io::Result<()> {
-        self.mr.sync_mr.wait_for_peer_signal()
-    }
-
-    fn wait_for_peer_signal_timeout(&self, timeout: Duration) -> std::io::Result<()> {
-        self.mr.sync_mr.wait_for_peer_signal_timeout(timeout)
-    }
-
-    fn rendezvous(&mut self) -> std::io::Result<()> {
+    fn signal_peer(&mut self) -> Option<std::io::Result<()>> {
         self.mr
             .sync_mr
-            .rendezvous::<POLL_BUFF_SIZE>(&mut self.connection)
+            .signal_peer::<POLL_BUFF_SIZE>(&mut self.connection)
     }
 
-    fn rendezvous_timeout(&mut self, timeout: Duration) -> std::io::Result<()> {
+    fn synchronize(&mut self) -> std::io::Result<()> {
         self.mr
             .sync_mr
-            .rendezvous_timeout::<POLL_BUFF_SIZE>(&mut self.connection, timeout)
+            .synchronize::<POLL_BUFF_SIZE>(&mut self.connection)
+    }
+
+    fn synchronize_with_timeout(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<std::io::Result<()>, Timeout> {
+        self.mr
+            .sync_mr
+            .synchronize_with_timeout::<POLL_BUFF_SIZE>(&mut self.connection, timeout)
     }
 }

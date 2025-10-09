@@ -4,8 +4,8 @@ use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig, NetworkOp};
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::new_tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
-use infinibuilder::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
-use infinibuilder::synchronization::binary::BinaryTreeSync;
+use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
+//use infinibuilder::synchronization::binary::BinaryTreeSync;
 use infinibuilder::synchronization::centralized::CentralizedSync;
 use infinibuilder::synchronization::dissemination::DisseminationSync;
 use std::fs;
@@ -61,7 +61,7 @@ fn main() {
     }
 }
 
-fn barrier_batch<T: RdmaSendRecv + RdmaRendezvous>(
+fn barrier_batch<T: RdmaSendRecv + RdmaSync>(
     node: &mut ConnectedNetworkNode<T>,
     args: &Args,
 ) {
@@ -74,7 +74,7 @@ fn barrier_batch<T: RdmaSendRecv + RdmaRendezvous>(
     for _ in 0..args.batch_size {
         match args.algorithm {
             Centralized => node.run(&CentralizedSync::new(), &group),
-            BinaryTree => node.run(&BinaryTreeSync::new(), &group),
+            BinaryTree => {unreachable!("Binary not implemented")}//node.run(&BinaryTreeSync::new(), &group),
             Dissemination => node.run(&DisseminationSync::new(), &group),
         }
         .unwrap()

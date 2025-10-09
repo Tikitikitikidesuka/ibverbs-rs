@@ -1,7 +1,7 @@
 use infinibuilder::connect::Connect;
 use infinibuilder::ibverbs::simple_unit::IbvSimpleUnit;
 use infinibuilder::rdma_traits::{RdmaReadWrite, RdmaSendRecv};
-use infinibuilder::rdma_traits::{RdmaRendezvous, WorkRequest};
+use infinibuilder::rdma_traits::{RdmaSync, WorkRequest};
 use simple_logger::SimpleLogger;
 use std::thread;
 use std::time::Duration;

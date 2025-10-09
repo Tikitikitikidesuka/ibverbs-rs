@@ -17,6 +17,8 @@ parser.add_argument("--run-script", type=Path, required=True,
 parser.add_argument("--parse-script", type=Path, default=None,
                     help="Path to parse_barrier_results.py (optional, uses built-in parsing if not provided)")
 parser.add_argument("--binary", type=Path, help="Path to barrier_perftest binary")
+parser.add_argument("--config", type=Path, help="Config JSON file")
+parser.add_argument("--hostfile", type=Path, help="MPI hostfile")
 parser.add_argument("--algorithm", type=str, required=True, help="Algorithm to use")
 parser.add_argument("--iters", type=int, default=10, help="Iterations per test (default: 10)")
 parser.add_argument("--batch-size", type=int, default=1024, help="Batch size (default: 1024)")
@@ -70,6 +72,12 @@ for num_nodes in range(args.start, args.end + 1, args.step):
 
     if args.binary:
         cmd.extend(["--binary", str(args.binary)])
+
+    if args.config:
+        cmd.extend(["--config", str(args.config)])
+
+    if args.hostfile:
+        cmd.extend(["--hostfile", str(args.hostfile)])
 
     # Run the test
     try:

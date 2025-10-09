@@ -1,5 +1,5 @@
 use crate::connect::Connect;
-use crate::rdma_traits::{RdmaRendezvous, RdmaSendRecv};
+use crate::rdma_traits::{RdmaSync, RdmaSendRecv};
 use derivative::Derivative;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -205,7 +205,7 @@ pub trait NetworkOp {
     // Runs a network operation on a certain group
     // If the current node is in the group, group_idx represents
     // the index its own connection in  group_connections
-    fn run<'a, T: 'a + RdmaSendRecv + RdmaRendezvous>(
+    fn run<'a, T: 'a + RdmaSendRecv + RdmaSync>(
         &self,
         self_idx: Option<usize>,
         group_connections: &mut [&'a mut T],
@@ -218,7 +218,7 @@ impl<T> ConnectedNetworkNode<T> {
     }
 }
 
-impl<T: RdmaSendRecv + RdmaRendezvous> ConnectedNetworkNode<T> {
+impl<T: RdmaSendRecv + RdmaSync> ConnectedNetworkNode<T> {
     pub fn connection(&mut self, rank_id: usize) -> Option<&mut T> {
         self.connections.get_mut(rank_id)
     }
