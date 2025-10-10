@@ -1,29 +1,17 @@
-use std::time::Duration;
 use crate::network::NetworkOp;
-use crate::rdma_traits::{RdmaSync, RdmaSendRecv};
+use crate::rdma_traits::{RdmaSendRecv, RdmaSync};
 use crate::synchronization::SyncError;
-use crate::synchronization::rendezvous_fn::{NoTimeoutSyncFn, SyncFn, TimeoutSyncFn};
 
 #[derive(Debug, Copy, Clone)]
-pub struct BinaryTreeSync<D: SyncFn> {
-    rendezvous_fn: D,
-}
+pub struct BinaryTreeSync;
 
-impl BinaryTreeSync<NoTimeoutSyncFn> {
-    pub fn new() -> BinaryTreeSync<NoTimeoutSyncFn> {
-        BinaryTreeSync {
-            rendezvous_fn: NoTimeoutSyncFn,
-        }
-    }
-
-    pub fn with_timeout(timeout: Duration) -> BinaryTreeSync<TimeoutSyncFn> {
-        BinaryTreeSync {
-            rendezvous_fn: TimeoutSyncFn { timeout },
-        }
+impl BinaryTreeSync {
+    pub fn new() -> Self {
+        Self
     }
 }
 
-impl<D: SyncFn> NetworkOp for BinaryTreeSync<D> {
+impl NetworkOp for BinaryTreeSync {
     type Output = Result<(), SyncError>;
 
     fn run<'a, T: 'a + RdmaSendRecv + RdmaSync>(
@@ -38,24 +26,24 @@ impl<D: SyncFn> NetworkOp for BinaryTreeSync<D> {
         }
 
         // Wait until children, if they exist, notify us
-        left_child_connection(self_idx, group_connections)
-            .map(|conn| self.rendezvous_fn.wait_for_peer_signal(conn))
-            .transpose()?;
-        right_child_connection(self_idx, group_connections)
-            .map(|conn| self.rendezvous_fn.wait_for_peer_signal(conn))
-            .transpose()?;
+        left_child_connection(self_idx, group_connections).map(|conn| conn.wait_for_new_barrier());
+        right_child_connection(self_idx, group_connections).map(|conn| conn.wait_for_new_barrier());
 
         // Rendezvous with parent, if it exists
         parent_connection(self_idx, group_connections)
-            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .map(|conn| {
+                conn.signal_peer()
+                    .ok_or(std::io::Error::new(std::io::ErrorKind::Other, "Desync"))??;
+                conn.synchronize()
+            })
             .transpose()?;
 
         // Rendezvous with children, if they exist, to notify them back
         left_child_connection(self_idx, group_connections)
-            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .map(|conn| conn.synchronize())
             .transpose()?;
         right_child_connection(self_idx, group_connections)
-            .map(|conn| self.rendezvous_fn.rendezvous(conn))
+            .map(|conn| conn.synchronize())
             .transpose()?;
 
         Ok(())

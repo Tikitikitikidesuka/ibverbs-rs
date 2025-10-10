@@ -5,11 +5,10 @@ use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig, 
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::new_tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
 use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
-//use infinibuilder::synchronization::binary::BinaryTreeSync;
 use infinibuilder::synchronization::centralized::CentralizedSync;
-use infinibuilder::synchronization::dissemination::DisseminationSync;
 use std::fs;
 use tokio::time::Instant;
+use infinibuilder::synchronization::binary::BinaryTreeSync;
 
 fn main() {
     simple_logger::init().unwrap();
@@ -67,15 +66,16 @@ fn barrier_batch<T: RdmaSendRecv + RdmaSync>(
 ) {
     let group = node.group_all();
 
-    node.run(&CentralizedSync::new(), &group).unwrap().unwrap();
+    node.run(&BinaryTreeSync::new(), &group).unwrap().unwrap();
 
     let start = Instant::now();
 
-    for _ in 0..args.batch_size {
+    for i in 0..args.batch_size {
+        //println!("Sync {} starting", i + 1);
         match args.algorithm {
             Centralized => node.run(&CentralizedSync::new(), &group),
-            BinaryTree => {unreachable!("Binary not implemented")}//node.run(&BinaryTreeSync::new(), &group),
-            Dissemination => node.run(&DisseminationSync::new(), &group),
+            BinaryTree => node.run(&BinaryTreeSync::new(), &group),
+            //Dissemination => node.run(&Binar::new(), &group),
         }
         .unwrap()
         .unwrap();
@@ -94,7 +94,7 @@ fn barrier_batch<T: RdmaSendRecv + RdmaSync>(
 enum BarrierAlgorithm {
     Centralized,
     BinaryTree,
-    Dissemination,
+    //Dissemination,
 }
 
 #[derive(Parser, Debug)]

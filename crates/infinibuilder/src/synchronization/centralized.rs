@@ -27,7 +27,7 @@ impl NetworkOp for CentralizedSync {
             // First wait for each slave
             slave_connections(group_connections)
                 .iter_mut()
-                .for_each(|conn| spin_poll(|| conn.sync_state() == SyncState::Behind));
+                .for_each(|conn| conn.wait_for_new_barrier());
 
             // Then signal all slaves
             slave_connections(group_connections)

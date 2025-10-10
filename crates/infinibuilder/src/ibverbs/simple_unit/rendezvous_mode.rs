@@ -8,6 +8,7 @@ use crate::rdma_traits::{RdmaSync, SyncState, Timeout, WorkRequest};
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 use std::ops::{Deref, Range};
 use std::pin::Pin;
 use std::ptr::{read, read_volatile, write_volatile};
@@ -66,7 +67,7 @@ pub struct SyncMrConnectionConfig {
 }
 
 pub struct ConnectedSyncMr {
-    rendezvous_state: Box<RendezvousState>,
+    pub(crate) rendezvous_state: Box<RendezvousState>,
     rendezvous_mr: MemoryRegion,
     remote_rendezvous_mr: RemoteMemoryRegion,
 }
@@ -151,7 +152,7 @@ impl ConnectedSyncMr {
         let start_time = Instant::now();
 
         while self.sync_state() != SyncState::Synced {
-            if start_time.elapsed() < timeout {
+            if start_time.elapsed() > timeout {
                 return Err(Timeout);
             }
         }
@@ -181,8 +182,14 @@ impl RdmaSync for IbvSimpleUnit<SyncMode> {
 
 #[repr(transparent)]
 #[derive(Debug)]
-struct RendezvousState {
+pub(super) struct RendezvousState {
     raw: [u8; 2 * size_of::<u64>()],
+}
+
+impl Display for RendezvousState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RendezvousState(L[{}], R[{}])", self.local_epoch(), self.remote_epoch())
+    }
 }
 
 impl RendezvousState {
@@ -207,13 +214,11 @@ impl RendezvousState {
 
     #[inline(always)]
     pub fn advance_epoch(&mut self) {
-        // Non volatile read since only we modify it
-        let epoch = unsafe { read(self.raw.as_ptr().add(Self::LOCAL_BYTE_IDX) as *const u64) };
-        // Volatile read since the hardware must know it has been changed for rdma write
+        // Volatile write since the hardware must know it has been changed for rdma write
         unsafe {
             write_volatile(
                 self.raw.as_mut_ptr().add(Self::LOCAL_BYTE_IDX) as *mut u64,
-                epoch + 1,
+                self.local_epoch() + 1,
             )
         };
     }
