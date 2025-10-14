@@ -4,11 +4,10 @@ use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
 use crate::restructure::ibverbs::work_request::IbvWorkRequest;
 use crate::restructure::rdma_connection::RdmaConnection;
 use derivative::Derivative;
-use ibverbs::{
-    CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
-};
+use ibverbs::{CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use thiserror::Error;
@@ -29,6 +28,8 @@ pub enum IbvConnectionBuilderError {
     QueuePairCreationError(std::io::Error),
     #[error("Unable to register memory region")]
     MemoryRegionRegisterError(std::io::Error),
+    #[error("Memory region with id \"{0}\" already registered")]
+    MemoryRegionDuplicateRegister(String),
     #[error("Unable to connect: {0}")]
     ConnectionError(std::io::Error),
 }
@@ -42,6 +43,7 @@ pub struct IbvConnectionBuilder<CTX, QP, PD, CQ> {
     pd: PD,
     #[derivative(Debug = "ignore")]
     cq: CQ,
+    mr_endpoints: HashMap<String, IbvRemoteMemoryRegion>,
 }
 
 #[derive(Derivative)]
@@ -53,6 +55,7 @@ pub struct IbvPreparedConnection {
     #[derivative(Debug = "ignore")]
     pd: ProtectionDomain,
     cq: Rc<RefCell<CachedCompletionQueue>>,
+    mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
 }
 
 #[derive(Debug)]
@@ -87,6 +90,7 @@ impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
             qp: Uninit,
             pd: Uninit,
             cq: Uninit,
+            mr_endpoints: HashMap::new(),
         }
     }
 
@@ -119,6 +123,7 @@ impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
             qp: self.qp,
             pd: self.pd,
             cq: self.cq,
+            mr_endpoints: self.mr_endpoints,
         })
     }
 }
@@ -147,6 +152,7 @@ impl<PD> IbvConnectionBuilder<BuilderContext, Uninit, PD, Uninit> {
                 cache_capacity,
                 cq,
             },
+            mr_endpoints: self.mr_endpoints,
         })
     }
 }
@@ -169,22 +175,40 @@ impl<CQ> IbvConnectionBuilder<BuilderContext, Uninit, Uninit, CQ> {
             qp: self.qp,
             pd,
             cq: self.cq,
+            mr_endpoints: self.mr_endpoints,
         })
     }
 }
 
 impl<QP, CQ> IbvConnectionBuilder<BuilderContext, QP, ProtectionDomain, CQ> {
     pub fn register_mr(
-        &self,
+        &mut self,
+        id: impl Into<String>,
         ptr: *mut u8,
         length: usize,
     ) -> Result<IbvMemoryRegion, IbvConnectionBuilderError> {
-        Ok(IbvMemoryRegion {
-            mr: self
+        let id = id.into();
+        if self.mr_endpoints.contains_key(&id) {
+            // If mr with same id is already registered, fail
+            Err(IbvConnectionBuilderError::MemoryRegionDuplicateRegister(id))
+        } else {
+            // Otherwise, register memory
+            let mr = self
                 .pd
                 .register(ptr, length)
-                .map_err(|e| IbvConnectionBuilderError::MemoryRegionRegisterError(e))?,
-        })
+                .map_err(|e| IbvConnectionBuilderError::MemoryRegionRegisterError(e))?;
+
+            // And keep track of it
+            self.mr_endpoints.insert(
+                id,
+                IbvRemoteMemoryRegion {
+                    length,
+                    rmr: mr.remote(),
+                },
+            );
+
+            Ok(IbvMemoryRegion { length, mr })
+        }
     }
 }
 
@@ -220,6 +244,7 @@ impl IbvConnectionBuilder<BuilderContext, Uninit, ProtectionDomain, BuilderCompl
             qp: BuilderQueuePair { qp, qp_endpoint },
             pd: self.pd,
             cq: self.cq,
+            mr_endpoints: self.mr_endpoints,
         })
     }
 }
@@ -236,25 +261,29 @@ impl
                 self.cq.cq,
                 self.cq.cache_capacity,
             ))),
+            mr_endpoints: self.mr_endpoints.into_iter().map(|r| r.into()).collect(),
         }
     }
 }
 
 impl IbvPreparedConnection {
-    pub fn endpoint(&self) -> IbvConnectionConfig {
-        IbvConnectionConfig {
+    pub fn endpoint(&self) -> IbvConnectionEndpoint {
+        IbvConnectionEndpoint {
             qp_endpoint: self.local_qp_endpoint,
+            mr_endpoints: self.mr_endpoints.clone(),
         }
     }
 
     pub fn connect(
         self,
-        connection_config: IbvConnectionConfig,
+        connection_config: IbvConnectionEndpoint,
     ) -> Result<IbvConnection, IbvConnectionBuilderError> {
         let qp = self
             .qp
             .handshake(connection_config.qp_endpoint)
             .map_err(|e| IbvConnectionBuilderError::ConnectionError(e))?;
+
+        let mr_endpoints = connection_config.mr_endpoints.into_iter().collect();
 
         Ok(IbvConnection {
             local_qp_endpoint: self.local_qp_endpoint,
@@ -262,14 +291,16 @@ impl IbvPreparedConnection {
             qp,
             _pd: self.pd,
             cq: self.cq,
+            mr_endpoints,
             next_wr_id: 0,
         })
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct IbvConnectionConfig {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IbvConnectionEndpoint {
     qp_endpoint: QueuePairEndpoint,
+    mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
 }
 
 #[derive(Derivative)]
@@ -282,6 +313,7 @@ pub struct IbvConnection {
     #[derivative(Debug = "ignore")]
     _pd: ProtectionDomain,
     cq: Rc<RefCell<CachedCompletionQueue>>,
+    mr_endpoints: HashMap<String, IbvRemoteMemoryRegion>,
     next_wr_id: u64,
 }
 
@@ -290,6 +322,12 @@ impl IbvConnection {
         let wr_id = self.next_wr_id;
         self.next_wr_id += 1;
         wr_id
+    }
+}
+
+impl IbvConnection {
+    pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<IbvRemoteMemoryRegion> {
+        self.mr_endpoints.get(id.as_ref()).cloned()
     }
 }
 
@@ -361,6 +399,24 @@ impl RdmaConnection for IbvConnection {
             remote_memory_region.rmr.slice(remote_memory_range),
             wr_id,
         )?;
+        Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
+    }
+
+    fn post_send_immediate_data(&mut self, immediate_data: u32) -> Result<IbvWorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id();
+        unsafe {
+            self.qp
+                .post_send(&[], wr_id, Some(immediate_data))
+        }?;
+        Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
+    }
+
+    fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error> {
+        let wr_id = self.next_wr_id();
+        unsafe {
+            self.qp
+                .post_receive(&[], wr_id)
+        }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 }
