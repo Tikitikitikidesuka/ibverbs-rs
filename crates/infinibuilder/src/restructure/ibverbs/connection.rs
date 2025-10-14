@@ -44,6 +44,17 @@ pub struct IbvConnectionBuilder<CTX, QP, PD, CQ> {
     cq: CQ,
 }
 
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct IbvPreparedConnection {
+    local_qp_endpoint: QueuePairEndpoint,
+    #[derivative(Debug = "ignore")]
+    qp: PreparedQueuePair,
+    #[derivative(Debug = "ignore")]
+    pd: ProtectionDomain,
+    cq: Rc<RefCell<CachedCompletionQueue>>,
+}
+
 #[derive(Debug)]
 pub struct Uninit;
 #[derive(Derivative)]
@@ -216,9 +227,23 @@ impl IbvConnectionBuilder<BuilderContext, Uninit, ProtectionDomain, BuilderCompl
 impl
     IbvConnectionBuilder<BuilderContext, BuilderQueuePair, ProtectionDomain, BuilderCompletionQueue>
 {
+    pub fn build(self) -> IbvPreparedConnection {
+        IbvPreparedConnection {
+            local_qp_endpoint: self.qp.qp_endpoint,
+            qp: self.qp.qp,
+            pd: self.pd,
+            cq: Rc::new(RefCell::new(CachedCompletionQueue::new(
+                self.cq.cq,
+                self.cq.cache_capacity,
+            ))),
+        }
+    }
+}
+
+impl IbvPreparedConnection {
     pub fn endpoint(&self) -> IbvConnectionConfig {
         IbvConnectionConfig {
-            qp_endpoint: self.qp.qp_endpoint,
+            qp_endpoint: self.local_qp_endpoint,
         }
     }
 
@@ -228,17 +253,15 @@ impl
     ) -> Result<IbvConnection, IbvConnectionBuilderError> {
         let qp = self
             .qp
-            .qp
             .handshake(connection_config.qp_endpoint)
             .map_err(|e| IbvConnectionBuilderError::ConnectionError(e))?;
-        let cq = CachedCompletionQueue::new(self.cq.cq, self.cq.cache_capacity);
 
         Ok(IbvConnection {
-            local_qp_endpoint: self.qp.qp_endpoint,
+            local_qp_endpoint: self.local_qp_endpoint,
             remote_qp_endpoint: connection_config.qp_endpoint,
             qp,
             _pd: self.pd,
-            cq: Rc::new(RefCell::new(cq)),
+            cq: self.cq,
             next_wr_id: 0,
         })
     }
@@ -258,7 +281,6 @@ pub struct IbvConnection {
     qp: QueuePair,
     #[derivative(Debug = "ignore")]
     _pd: ProtectionDomain,
-    #[derivative(Debug = "ignore")]
     cq: Rc<RefCell<CachedCompletionQueue>>,
     next_wr_id: u64,
 }
