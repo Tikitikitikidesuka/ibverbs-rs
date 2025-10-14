@@ -6,4 +6,4 @@ pub mod rdma_traits;
 pub mod synchronization;
 pub mod tcp_exchanger;
 pub mod new_tcp_exchanger;
-mod restructure;
+pub mod restructure;

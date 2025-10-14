@@ -1,11 +1,11 @@
 use crate::restructure::ibverbs::completion_queue::CachedCompletionQueue;
+use crate::restructure::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
 use crate::restructure::ibverbs::work_request::IbvWorkRequest;
 use crate::restructure::rdma_connection::RdmaConnection;
 use derivative::Derivative;
 use ibverbs::{
-    CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
-    QueuePairEndpoint, RemoteMemoryRegion,
+    CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -45,24 +45,24 @@ pub struct IbvConnectionBuilder<CTX, QP, PD, CQ> {
 }
 
 #[derive(Debug)]
-struct Uninit;
+pub struct Uninit;
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct BuilderContext {
+pub struct BuilderContext {
     device_name: String,
     #[derivative(Debug = "ignore")]
     context: Context,
 }
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct BuilderQueuePair {
+pub struct BuilderQueuePair {
     qp_endpoint: QueuePairEndpoint,
     #[derivative(Debug = "ignore")]
     qp: PreparedQueuePair,
 }
 #[derive(Derivative)]
 #[derivative(Debug)]
-struct BuilderCompletionQueue {
+pub struct BuilderCompletionQueue {
     capacity: i32,
     cache_capacity: usize,
     #[derivative(Debug = "ignore")]
@@ -261,22 +261,6 @@ pub struct IbvConnection {
     #[derivative(Debug = "ignore")]
     cq: Rc<RefCell<CachedCompletionQueue>>,
     next_wr_id: u64,
-}
-
-pub struct IbvMemoryRegion {
-    mr: MemoryRegion,
-}
-
-pub struct IbvRemoteMemoryRegion {
-    rmr: RemoteMemoryRegion,
-}
-
-impl IbvMemoryRegion {
-    pub fn remote(&self) -> IbvRemoteMemoryRegion {
-        IbvRemoteMemoryRegion {
-            rmr: self.mr.remote(),
-        }
-    }
 }
 
 impl IbvConnection {

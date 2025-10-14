@@ -1,9 +1,10 @@
-use ibverbs::ibv_wc;
 use crate::restructure::rdma_connection::RdmaWorkCompletion;
+use ibverbs::ibv_wc;
+use std::fmt::Debug;
 
 #[derive(Debug, Copy, Clone)]
 pub struct IbvWorkCompletion {
-    wc: ibv_wc
+    wc: ibv_wc,
 }
 
 impl IbvWorkCompletion {
@@ -13,7 +14,7 @@ impl IbvWorkCompletion {
 }
 
 impl RdmaWorkCompletion for IbvWorkCompletion {
-    fn data_length(&self) -> usize {
+    fn local_modified_len(&self) -> usize {
         self.wc.len()
     }
 

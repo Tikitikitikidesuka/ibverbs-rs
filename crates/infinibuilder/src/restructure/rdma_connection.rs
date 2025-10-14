@@ -55,6 +55,6 @@ pub enum RdmaWorkRequestStatus<WC, E> {
 }
 
 pub trait RdmaWorkCompletion {
-    fn data_length(&self) -> usize;
+    fn local_modified_len(&self) -> usize;
     fn immediate_data(&self) -> Option<u32>;
 }
