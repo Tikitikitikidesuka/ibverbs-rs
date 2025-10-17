@@ -1,6 +1,7 @@
 use derivative::Derivative;
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
+
 // TODO: AS OF NOW, THERE IS NO WAY OF DEREGISTERING IN `rust-ibverbs`...
 // TODO: IT WOULD BE NICE TO ADD A DROP IMPL TO MR AND MAKE IT DEREGISTER
 

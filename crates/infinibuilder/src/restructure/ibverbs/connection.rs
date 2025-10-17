@@ -4,12 +4,16 @@ use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
 use crate::restructure::ibverbs::work_request::IbvWorkRequest;
 use crate::restructure::rdma_connection::RdmaConnection;
 use derivative::Derivative;
-use ibverbs::{CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion};
+use ibverbs::{
+    CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
+    RemoteMemoryRegion,
+};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::RangeBounds;
 use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -58,14 +62,12 @@ pub struct IbvPreparedConnection {
     mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
 }
 
-#[derive(Debug)]
-pub struct Uninit;
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Debug)]
 pub struct BuilderContext {
     device_name: String,
     #[derivative(Debug = "ignore")]
-    context: Context,
+    context: Arc<Context>, // Arc to make it cloneable
 }
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -83,13 +85,26 @@ pub struct BuilderCompletionQueue {
     cq: CompletionQueue,
 }
 
-impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
+// Allow cloning when context is initialized but the rest is not to avoid opening it multiple times
+impl Clone for IbvConnectionBuilder<BuilderContext, (), (), ()> {
+    fn clone(&self) -> Self {
+        Self {
+            ctx: self.ctx.clone(),
+            qp: (),
+            pd: (),
+            cq: (),
+            mr_endpoints: HashMap::new(),
+        }
+    }
+}
+
+impl IbvConnectionBuilder<(), (), (), ()> {
     pub fn new() -> Self {
         Self {
-            ctx: Uninit,
-            qp: Uninit,
-            pd: Uninit,
-            cq: Uninit,
+            ctx: (),
+            qp: (),
+            pd: (),
+            cq: (),
             mr_endpoints: HashMap::new(),
         }
     }
@@ -98,7 +113,7 @@ impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
         self,
         device_name: impl Into<String>,
     ) -> Result<
-        IbvConnectionBuilder<BuilderContext, Uninit, Uninit, Uninit>,
+        IbvConnectionBuilder<BuilderContext, (), (), ()>,
         IbvConnectionBuilderError,
     > {
         let device_name = device_name.into();
@@ -117,7 +132,7 @@ impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
 
         Ok(IbvConnectionBuilder {
             ctx: BuilderContext {
-                context,
+                context: Arc::new(context),
                 device_name,
             },
             qp: self.qp,
@@ -128,13 +143,13 @@ impl IbvConnectionBuilder<Uninit, Uninit, Uninit, Uninit> {
     }
 }
 
-impl<PD> IbvConnectionBuilder<BuilderContext, Uninit, PD, Uninit> {
+impl<PD> IbvConnectionBuilder<BuilderContext, (), PD, ()> {
     pub fn create_cq(
         self,
         capacity: i32,
         cache_capacity: usize,
     ) -> Result<
-        IbvConnectionBuilder<BuilderContext, Uninit, PD, BuilderCompletionQueue>,
+        IbvConnectionBuilder<BuilderContext, (), PD, BuilderCompletionQueue>,
         IbvConnectionBuilderError,
     > {
         let cq = self
@@ -157,11 +172,11 @@ impl<PD> IbvConnectionBuilder<BuilderContext, Uninit, PD, Uninit> {
     }
 }
 
-impl<CQ> IbvConnectionBuilder<BuilderContext, Uninit, Uninit, CQ> {
+impl<CQ> IbvConnectionBuilder<BuilderContext, (), (), CQ> {
     pub fn create_pd(
         self,
     ) -> Result<
-        IbvConnectionBuilder<BuilderContext, Uninit, ProtectionDomain, CQ>,
+        IbvConnectionBuilder<BuilderContext, (), ProtectionDomain, CQ>,
         IbvConnectionBuilderError,
     > {
         let pd = self
@@ -212,7 +227,7 @@ impl<QP, CQ> IbvConnectionBuilder<BuilderContext, QP, ProtectionDomain, CQ> {
     }
 }
 
-impl IbvConnectionBuilder<BuilderContext, Uninit, ProtectionDomain, BuilderCompletionQueue> {
+impl IbvConnectionBuilder<BuilderContext, (), ProtectionDomain, BuilderCompletionQueue> {
     pub fn create_qp(
         self,
     ) -> Result<
@@ -402,21 +417,18 @@ impl RdmaConnection for IbvConnection {
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
-    fn post_send_immediate_data(&mut self, immediate_data: u32) -> Result<IbvWorkRequest, std::io::Error> {
+    fn post_send_immediate_data(
+        &mut self,
+        immediate_data: u32,
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
-        unsafe {
-            self.qp
-                .post_send(&[], wr_id, Some(immediate_data))
-        }?;
+        unsafe { self.qp.post_send(&[], wr_id, Some(immediate_data)) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
     fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
-        unsafe {
-            self.qp
-                .post_receive(&[], wr_id)
-        }?;
+        unsafe { self.qp.post_receive(&[], wr_id) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 }

@@ -21,6 +21,10 @@ clap = { version = "4.5.48", features = ["derive"] }
 log = "0.4.27"
 
 [[bin]]
+name = "restructure_network_test"
+path = "bin/restructure_network_test.rs"
+
+[[bin]]
 name = "restructure_test"
 path = "bin/restructure_test.rs"
 
