@@ -3,7 +3,6 @@ use infinibuilder::restructure::rdma_connection::{
     RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus,
 };
 use infinibuilder::restructure::spin_poll::spin_poll_batched;
-use std::thread;
 use std::time::Duration;
 
 fn main() {
@@ -16,21 +15,12 @@ fn main() {
     let mem_id = "keo33";
     let mut mem = if id == 0 { vec![0u8; 8] } else { vec![1u8; 8] };
 
-    let mut conn_builder = IbvConnectionBuilder::new()
-        .with_ibv_device("mlx5_0")
-        .unwrap()
-        .create_pd()
-        .unwrap()
-        .create_cq(32, 512)
-        .unwrap()
-        .create_qp()
-        .unwrap();
-
-    let mr = conn_builder
+    let mut conn_prep = IbvConnectionBuilder::new()
+        .ibv_device("mlx5_0")
+        .cq_params(32, 512)
         .register_mr(mem_id, mem.as_mut_ptr(), mem.len())
+        .build()
         .unwrap();
-
-    let conn_prep = conn_builder.build();
 
     let local_endpoint = conn_prep.endpoint();
 
@@ -105,7 +95,7 @@ fn main() {
             Duration::from_millis(5000),
             1024,
         )
-            .unwrap();
+        .unwrap();
 
         match wc_result {
             Ok(wc) => println!("Success: {wc}"),

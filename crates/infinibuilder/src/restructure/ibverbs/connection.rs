@@ -6,18 +6,16 @@ use crate::restructure::rdma_connection::RdmaConnection;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
-    RemoteMemoryRegion,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::RangeBounds;
 use std::rc::Rc;
-use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum IbvConnectionBuilderError {
+pub enum IbvConnectionBuildError {
     #[error("Device list is unaccessible: {0}")]
     DeviceListUnaccessible(std::io::Error),
     #[error("Device is unaccessible: {0}")]
@@ -38,16 +36,233 @@ pub enum IbvConnectionBuilderError {
     ConnectionError(std::io::Error),
 }
 
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub struct IbvConnectionBuilder<CTX, QP, PD, CQ> {
-    ctx: CTX,
-    qp: QP,
-    #[derivative(Debug = "ignore")]
-    pd: PD,
-    #[derivative(Debug = "ignore")]
-    cq: CQ,
-    mr_endpoints: HashMap<String, IbvRemoteMemoryRegion>,
+#[derive(Debug)]
+pub struct IbvConnectionBuilder<IbvDevName, CqParams, Mrs> {
+    ibv_device_name: IbvDevName,
+    cq_params: CqParams,
+    mrs: Mrs,
+}
+
+#[derive(Debug, Clone)]
+pub struct BuilderIbvDeviceName {
+    ibv_device_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BuilderCqParams {
+    capacity: usize,
+    cache_capacity: usize,
+}
+
+#[derive(Debug)]
+pub struct BuilderMemoryRegions {
+    mrs: Vec<BuilderMemoryRegion>,
+}
+
+#[derive(Debug)]
+pub struct BuilderMemoryRegion {
+    id: String,
+    ptr: *mut u8,
+    length: usize,
+}
+
+// Builder is cloneable until memory regions are specified
+impl<IbvDevName: Clone, CqParams: Clone> Clone for IbvConnectionBuilder<IbvDevName, CqParams, ()> {
+    fn clone(&self) -> Self {
+        Self {
+            ibv_device_name: self.ibv_device_name.clone(),
+            cq_params: self.cq_params.clone(),
+            mrs: self.mrs,
+        }
+    }
+}
+
+impl IbvConnectionBuilder<(), (), ()> {
+    pub fn new() -> Self {
+        Self {
+            ibv_device_name: (),
+            cq_params: (),
+            mrs: (),
+        }
+    }
+}
+
+impl<CqParams, Mrs> IbvConnectionBuilder<(), CqParams, Mrs> {
+    pub fn ibv_device(
+        self,
+        device_name: impl Into<String>,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, CqParams, Mrs> {
+        IbvConnectionBuilder {
+            ibv_device_name: BuilderIbvDeviceName {
+                ibv_device_name: device_name.into(),
+            },
+            cq_params: self.cq_params,
+            mrs: self.mrs,
+        }
+    }
+}
+
+impl<IbvDevName, Mrs> IbvConnectionBuilder<IbvDevName, (), Mrs> {
+    pub fn cq_params(
+        self,
+        capacity: usize,
+        cache_capacity: usize,
+    ) -> IbvConnectionBuilder<IbvDevName, BuilderCqParams, Mrs> {
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: BuilderCqParams {
+                capacity,
+                cache_capacity,
+            },
+            mrs: self.mrs,
+        }
+    }
+}
+
+impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
+    pub fn register_mr(
+        self,
+        id: impl Into<String>,
+        mem_ptr: *mut u8,
+        mem_length: usize,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: self.cq_params,
+            mrs: BuilderMemoryRegions {
+                mrs: vec![BuilderMemoryRegion {
+                    id: id.into(),
+                    ptr: mem_ptr,
+                    length: mem_length,
+                }],
+            },
+        }
+    }
+}
+
+impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
+    pub fn build(self) -> Result<IbvPreparedConnection, IbvConnectionBuildError> {
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: self.cq_params,
+            mrs: BuilderMemoryRegions { mrs: vec![] },
+        }
+        .build()
+    }
+}
+
+impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+    pub fn build(self) -> Result<IbvPreparedConnection, IbvConnectionBuildError> {
+        let context = self.open_context()?;
+        let pd = self.create_pd(&context)?;
+        let cq = self.create_cq(&context)?;
+        let qp = self.create_qp(&pd, &cq)?;
+        let local_qp_endpoint = self.qp_endpoint(&qp)?;
+        let mr_endpoints = self.register_mrs(&pd)?;
+
+        let cq = Rc::new(RefCell::new(CachedCompletionQueue::new(
+            cq,
+            self.cq_params.cache_capacity,
+        )));
+
+        Ok(IbvPreparedConnection {
+            local_qp_endpoint,
+            qp,
+            pd,
+            cq,
+            mr_endpoints,
+        })
+    }
+
+    fn open_context(&self) -> Result<Context, IbvConnectionBuildError> {
+        ibverbs::devices()
+            .map_err(|e| IbvConnectionBuildError::DeviceListUnaccessible(e))?
+            .iter()
+            .find(|d| match d.name() {
+                None => false,
+                Some(name) => name.to_string_lossy() == self.ibv_device_name.ibv_device_name,
+            })
+            .ok_or(IbvConnectionBuildError::DeviceNameNotFound(
+                self.ibv_device_name.ibv_device_name.clone(),
+            ))?
+            .open()
+            .map_err(|e| IbvConnectionBuildError::DeviceUnaccessible(e))
+    }
+
+    fn create_cq(&self, context: &Context) -> Result<CompletionQueue, IbvConnectionBuildError> {
+        let capacity = match i32::try_from(self.cq_params.capacity) {
+            Ok(capacity) => capacity,
+            Err(_) => {
+                return Err(IbvConnectionBuildError::QueuePairCreationError(
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "asdf"),
+                ));
+            }
+        };
+
+        context
+            .create_cq(capacity, 0)
+            .map_err(|e| IbvConnectionBuildError::CompletionQueueCreationError(e))
+    }
+
+    fn create_pd(&self, context: &Context) -> Result<ProtectionDomain, IbvConnectionBuildError> {
+        context
+            .alloc_pd()
+            .map_err(|e| IbvConnectionBuildError::ProtectionDomainCreationError(e))
+    }
+
+    fn create_qp(
+        &self,
+        pd: &ProtectionDomain,
+        cq: &CompletionQueue,
+    ) -> Result<PreparedQueuePair, IbvConnectionBuildError> {
+        pd.create_qp(cq, cq, ibverbs::ibv_qp_type::IBV_QPT_RC)
+            .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))?
+            .set_access(
+                ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                    | ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
+                    | ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
+            )
+            .build()
+            .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))
+    }
+
+    fn qp_endpoint(
+        &self,
+        qp: &PreparedQueuePair,
+    ) -> Result<QueuePairEndpoint, IbvConnectionBuildError> {
+        qp.endpoint()
+            .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))
+    }
+
+    fn register_mrs(
+        &self,
+        pd: &ProtectionDomain,
+    ) -> Result<Vec<(String, IbvRemoteMemoryRegion)>, IbvConnectionBuildError> {
+        let mut mr_endpoints = Vec::new();
+        let mut registered_mr_ids = HashSet::new();
+        for mr in &self.mrs {
+            // Check id has not been previously registered
+            if !registered_mr_ids.contains(&mr.id) {
+                let mr_endpoint = pd
+                    .register(mr.ptr, mr.length)
+                    .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
+                registered_mr_ids.insert(mr.id.clone());
+                mr_endpoints.push((
+                    mr.id.clone(),
+                    IbvRemoteMemoryRegion {
+                        length: mr.length,
+                        rmr: mr_endpoint.remote(),
+                    },
+                ));
+            } else {
+                return Err(IbvConnectionBuildError::MemoryRegionDuplicateRegister(
+                    mr.id.clone(),
+                ));
+            }
+        }
+        mr_endpoints.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(mr_endpoints)
+    }
 }
 
 #[derive(Derivative)]
@@ -62,225 +277,6 @@ pub struct IbvPreparedConnection {
     mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
 }
 
-#[derive(Derivative, Clone)]
-#[derivative(Debug)]
-pub struct BuilderContext {
-    device_name: String,
-    #[derivative(Debug = "ignore")]
-    context: Arc<Context>, // Arc to make it cloneable
-}
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub struct BuilderQueuePair {
-    qp_endpoint: QueuePairEndpoint,
-    #[derivative(Debug = "ignore")]
-    qp: PreparedQueuePair,
-}
-#[derive(Derivative)]
-#[derivative(Debug)]
-pub struct BuilderCompletionQueue {
-    capacity: i32,
-    cache_capacity: usize,
-    #[derivative(Debug = "ignore")]
-    cq: CompletionQueue,
-}
-
-// Allow cloning when context is initialized but the rest is not to avoid opening it multiple times
-impl Clone for IbvConnectionBuilder<BuilderContext, (), (), ()> {
-    fn clone(&self) -> Self {
-        Self {
-            ctx: self.ctx.clone(),
-            qp: (),
-            pd: (),
-            cq: (),
-            mr_endpoints: HashMap::new(),
-        }
-    }
-}
-
-impl IbvConnectionBuilder<(), (), (), ()> {
-    pub fn new() -> Self {
-        Self {
-            ctx: (),
-            qp: (),
-            pd: (),
-            cq: (),
-            mr_endpoints: HashMap::new(),
-        }
-    }
-
-    pub fn with_ibv_device(
-        self,
-        device_name: impl Into<String>,
-    ) -> Result<
-        IbvConnectionBuilder<BuilderContext, (), (), ()>,
-        IbvConnectionBuilderError,
-    > {
-        let device_name = device_name.into();
-        let context = ibverbs::devices()
-            .map_err(|e| IbvConnectionBuilderError::DeviceListUnaccessible(e))?
-            .iter()
-            .find(|d| match d.name() {
-                None => false,
-                Some(name) => name.to_string_lossy() == device_name,
-            })
-            .ok_or(IbvConnectionBuilderError::DeviceNameNotFound(
-                device_name.clone(),
-            ))?
-            .open()
-            .map_err(|e| IbvConnectionBuilderError::DeviceUnaccessible(e))?;
-
-        Ok(IbvConnectionBuilder {
-            ctx: BuilderContext {
-                context: Arc::new(context),
-                device_name,
-            },
-            qp: self.qp,
-            pd: self.pd,
-            cq: self.cq,
-            mr_endpoints: self.mr_endpoints,
-        })
-    }
-}
-
-impl<PD> IbvConnectionBuilder<BuilderContext, (), PD, ()> {
-    pub fn create_cq(
-        self,
-        capacity: i32,
-        cache_capacity: usize,
-    ) -> Result<
-        IbvConnectionBuilder<BuilderContext, (), PD, BuilderCompletionQueue>,
-        IbvConnectionBuilderError,
-    > {
-        let cq = self
-            .ctx
-            .context
-            .create_cq(capacity, 0)
-            .map_err(|e| IbvConnectionBuilderError::CompletionQueueCreationError(e))?;
-
-        Ok(IbvConnectionBuilder {
-            ctx: self.ctx,
-            qp: self.qp,
-            pd: self.pd,
-            cq: BuilderCompletionQueue {
-                capacity,
-                cache_capacity,
-                cq,
-            },
-            mr_endpoints: self.mr_endpoints,
-        })
-    }
-}
-
-impl<CQ> IbvConnectionBuilder<BuilderContext, (), (), CQ> {
-    pub fn create_pd(
-        self,
-    ) -> Result<
-        IbvConnectionBuilder<BuilderContext, (), ProtectionDomain, CQ>,
-        IbvConnectionBuilderError,
-    > {
-        let pd = self
-            .ctx
-            .context
-            .alloc_pd()
-            .map_err(|e| IbvConnectionBuilderError::ProtectionDomainCreationError(e))?;
-
-        Ok(IbvConnectionBuilder {
-            ctx: self.ctx,
-            qp: self.qp,
-            pd,
-            cq: self.cq,
-            mr_endpoints: self.mr_endpoints,
-        })
-    }
-}
-
-impl<QP, CQ> IbvConnectionBuilder<BuilderContext, QP, ProtectionDomain, CQ> {
-    pub fn register_mr(
-        &mut self,
-        id: impl Into<String>,
-        ptr: *mut u8,
-        length: usize,
-    ) -> Result<IbvMemoryRegion, IbvConnectionBuilderError> {
-        let id = id.into();
-        if self.mr_endpoints.contains_key(&id) {
-            // If mr with same id is already registered, fail
-            Err(IbvConnectionBuilderError::MemoryRegionDuplicateRegister(id))
-        } else {
-            // Otherwise, register memory
-            let mr = self
-                .pd
-                .register(ptr, length)
-                .map_err(|e| IbvConnectionBuilderError::MemoryRegionRegisterError(e))?;
-
-            // And keep track of it
-            self.mr_endpoints.insert(
-                id,
-                IbvRemoteMemoryRegion {
-                    length,
-                    rmr: mr.remote(),
-                },
-            );
-
-            Ok(IbvMemoryRegion { length, mr })
-        }
-    }
-}
-
-impl IbvConnectionBuilder<BuilderContext, (), ProtectionDomain, BuilderCompletionQueue> {
-    pub fn create_qp(
-        self,
-    ) -> Result<
-        IbvConnectionBuilder<
-            BuilderContext,
-            BuilderQueuePair,
-            ProtectionDomain,
-            BuilderCompletionQueue,
-        >,
-        IbvConnectionBuilderError,
-    > {
-        let qp = self
-            .pd
-            .create_qp(&self.cq.cq, &self.cq.cq, ibverbs::ibv_qp_type::IBV_QPT_RC)
-            .map_err(|e| IbvConnectionBuilderError::QueuePairCreationError(e))?
-            .set_access(
-                ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
-                    | ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
-                    | ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
-            )
-            .build()
-            .map_err(|e| IbvConnectionBuilderError::QueuePairCreationError(e))?;
-        let qp_endpoint = qp
-            .endpoint()
-            .map_err(|e| IbvConnectionBuilderError::QueuePairCreationError(e))?;
-
-        Ok(IbvConnectionBuilder {
-            ctx: self.ctx,
-            qp: BuilderQueuePair { qp, qp_endpoint },
-            pd: self.pd,
-            cq: self.cq,
-            mr_endpoints: self.mr_endpoints,
-        })
-    }
-}
-
-impl
-    IbvConnectionBuilder<BuilderContext, BuilderQueuePair, ProtectionDomain, BuilderCompletionQueue>
-{
-    pub fn build(self) -> IbvPreparedConnection {
-        IbvPreparedConnection {
-            local_qp_endpoint: self.qp.qp_endpoint,
-            qp: self.qp.qp,
-            pd: self.pd,
-            cq: Rc::new(RefCell::new(CachedCompletionQueue::new(
-                self.cq.cq,
-                self.cq.cache_capacity,
-            ))),
-            mr_endpoints: self.mr_endpoints.into_iter().map(|r| r.into()).collect(),
-        }
-    }
-}
-
 impl IbvPreparedConnection {
     pub fn endpoint(&self) -> IbvConnectionEndpoint {
         IbvConnectionEndpoint {
@@ -292,11 +288,11 @@ impl IbvPreparedConnection {
     pub fn connect(
         self,
         connection_config: IbvConnectionEndpoint,
-    ) -> Result<IbvConnection, IbvConnectionBuilderError> {
+    ) -> Result<IbvConnection, IbvConnectionBuildError> {
         let qp = self
             .qp
             .handshake(connection_config.qp_endpoint)
-            .map_err(|e| IbvConnectionBuilderError::ConnectionError(e))?;
+            .map_err(|e| IbvConnectionBuildError::ConnectionError(e))?;
 
         let mr_endpoints = connection_config.mr_endpoints.into_iter().collect();
 
