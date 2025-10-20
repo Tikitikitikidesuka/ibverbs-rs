@@ -1,3 +1,4 @@
+use infinibuilder::restructure::barrier::centralized::RdmaNetworkCentralizedBarrier;
 use infinibuilder::restructure::ibverbs::network_node::IbvNetworkNodeBuilder;
 
 fn main() {
@@ -6,5 +7,7 @@ fn main() {
         .unwrap()
         .set_completion_queue_params(32, 512)
         .create_connections(4)
+        .unwrap()
+        .set_barrier(RdmaNetworkCentralizedBarrier::new())
         .unwrap();
 }

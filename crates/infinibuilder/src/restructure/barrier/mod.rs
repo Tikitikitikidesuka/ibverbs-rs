@@ -1,4 +1,4 @@
-mod centralized;
+pub mod centralized;
 
 use crate::restructure::rdma_connection::RdmaConnection;
 use crate::restructure::rdma_network_node::RdmaNetworkSelfGroupConnections;

@@ -16,9 +16,9 @@ pub struct RdmaNetworkCentralizedBarrier<MR, RMR> {
     mrs: Vec<(MR, RMR)>,
 }
 
-impl RdmaNetworkUnregisteredCentralizedBarrier {
-    pub fn new() -> Self {
-        Self { memory: vec![] }
+impl RdmaNetworkCentralizedBarrier<(), ()> {
+    pub fn new() -> RdmaNetworkUnregisteredCentralizedBarrier {
+        RdmaNetworkUnregisteredCentralizedBarrier { memory: vec![] }
     }
 }
 

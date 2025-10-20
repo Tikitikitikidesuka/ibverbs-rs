@@ -240,7 +240,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
     ) -> Result<Vec<(String, IbvRemoteMemoryRegion)>, IbvConnectionBuildError> {
         let mut mr_endpoints = Vec::new();
         let mut registered_mr_ids = HashSet::new();
-        for mr in &self.mrs {
+        for mr in &self.mrs.mrs {
             // Check id has not been previously registered
             if !registered_mr_ids.contains(&mr.id) {
                 let mr_endpoint = pd

@@ -1,148 +1,184 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::ibverbs::connection::{
-    BuilderCompletionQueue, BuilderContext, BuilderQueuePair, IbvConnection, IbvConnectionBuilder,
-    IbvConnectionBuilderError,
+    IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder,
 };
+use crate::restructure::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
     RdmaNetworkSelfGroupConnections, RdmaNetworkTransport,
 };
-use ibverbs::{ProtectionDomain, RemoteMemoryRegion};
 use std::time::Duration;
 use thiserror::Error;
-use crate::restructure::ibverbs::memory_region::IbvMemoryRegion;
 
 #[derive(Debug, Error)]
-pub enum IbvNetworkNodeBuilderError {
+pub enum IbvNetworkNodeBuildError {
     #[error("Connection builder error: {0}")]
-    ConnectionBuilderError(#[from] IbvConnectionBuilderError),
+    ConnectionBuilderError(#[from] IbvConnectionBuildError),
+    #[error("Barrier component memory register error: {0}")]
+    BarrierMemoryRegisterError(String),
 }
 
-pub struct IbvNetworkNodeBuilder<IB, VB, CQP, NB> {
-    builder: IB,
-    builders: VB,
-    cq_params: CQP,
-    barrier: NB,
+pub struct IbvNetworkNodeBuilder<IbvDevName, CqParams, NumConns, Barrier> {
+    ibv_device_name: IbvDevName,
+    completion_queue_params: CqParams,
+    num_connections: NumConns,
+    barrier: Barrier,
 }
 
-pub struct CompletionQueueParams {
-    capacity: i32,
+#[derive(Debug, Clone)]
+pub struct BuilderIbvDeviceName {
+    ibv_device_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BuilderCqParams {
+    capacity: usize,
     cache_capacity: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct BuilderNumConnections {
+    num_connections: usize,
+}
+
+#[derive(Debug)]
+pub struct BuilderBarrier<PreparedBarrier> {
+    barrier: PreparedBarrier,
 }
 
 impl IbvNetworkNodeBuilder<(), (), (), ()> {
     pub fn new() -> Self {
         Self {
-            builder: (),
-            builders: (),
-            cq_params: (),
+            ibv_device_name: (),
+            completion_queue_params: (),
+            num_connections: (),
+            barrier: (),
         }
-    }
-
-    pub fn with_ibv_device(
-        self,
-        device_name: impl Into<String>,
-    ) -> Result<
-        IbvNetworkNodeBuilder<IbvConnectionBuilder<BuilderContext, (), (), ()>, (), (), ()>,
-        IbvNetworkNodeBuilderError,
-    > {
-        Ok(IbvNetworkNodeBuilder {
-            builder: IbvConnectionBuilder::new().with_ibv_device(device_name)?,
-            builders: self.builders,
-            cq_params: self.cq_params,
-        })
     }
 }
 
-impl IbvNetworkNodeBuilder<IbvConnectionBuilder<BuilderContext, (), (), ()>, (), (), ()> {
-    pub fn set_completion_queue_params(
+impl<CqParams, NumConns, PreparedBarrier>
+    IbvNetworkNodeBuilder<(), CqParams, NumConns, PreparedBarrier>
+{
+    pub fn ibv_device(
         self,
-        capacity: i32,
-        cache_capacity: usize,
-    ) -> IbvNetworkNodeBuilder<
-        IbvConnectionBuilder<BuilderContext, (), (), ()>,
-        (),
-        CompletionQueueParams,
-        (),
-    > {
+        device_name: impl Into<String>,
+    ) -> IbvNetworkNodeBuilder<BuilderIbvDeviceName, CqParams, NumConns, PreparedBarrier> {
         IbvNetworkNodeBuilder {
-            builder: self.builder,
-            builders: self.builders,
-            cq_params: CompletionQueueParams {
+            ibv_device_name: BuilderIbvDeviceName {
+                ibv_device_name: device_name.into(),
+            },
+            completion_queue_params: self.completion_queue_params,
+            num_connections: self.num_connections,
+            barrier: self.barrier,
+        }
+    }
+}
+
+impl<IbvDevName, NumConns, PreparedBarrier>
+    IbvNetworkNodeBuilder<IbvDevName, (), NumConns, PreparedBarrier>
+{
+    pub fn cq_params(
+        self,
+        capacity: usize,
+        cache_capacity: usize,
+    ) -> IbvNetworkNodeBuilder<IbvDevName, BuilderCqParams, NumConns, PreparedBarrier> {
+        IbvNetworkNodeBuilder {
+            ibv_device_name: self.ibv_device_name,
+            completion_queue_params: BuilderCqParams {
                 capacity,
                 cache_capacity,
             },
+            num_connections: self.num_connections,
             barrier: self.barrier,
         }
     }
 }
 
-impl
-    IbvNetworkNodeBuilder<
-        IbvConnectionBuilder<BuilderContext, (), (), ()>,
-        (),
-        CompletionQueueParams,
-        (),
-    >
+impl<IbvDevName, CqParams, PreparedBarrier>
+    IbvNetworkNodeBuilder<IbvDevName, CqParams, (), PreparedBarrier>
 {
-    pub fn create_connections(
+    pub fn num_connections(
         self,
         num_connections: usize,
-    ) -> Result<
-        IbvNetworkNodeBuilder<
-            IbvConnectionBuilder<BuilderContext, (), (), ()>,
-            Vec<
-                IbvConnectionBuilder<
-                    BuilderContext,
-                    BuilderQueuePair,
-                    ProtectionDomain,
-                    BuilderCompletionQueue,
-                >,
-            >,
-            CompletionQueueParams,
-            (),
-        >,
-        IbvNetworkNodeBuilderError,
-    > {
-        Ok(IbvNetworkNodeBuilder {
-            builder: self.builder.clone(),
-            builders: (0..num_connections)
-                .into_iter()
-                .map(|_| {
-                    self.builder
-                        .clone()
-                        .create_pd()?
-                        .create_cq(self.cq_params.capacity, self.cq_params.cache_capacity)?
-                        .create_qp()
-                })
-                .collect::<Result<_, _>>()?,
-            cq_params: self.cq_params,
+    ) -> IbvNetworkNodeBuilder<IbvDevName, CqParams, BuilderNumConnections, PreparedBarrier> {
+        IbvNetworkNodeBuilder {
+            ibv_device_name: self.ibv_device_name,
+            completion_queue_params: self.completion_queue_params,
+            num_connections: BuilderNumConnections { num_connections },
             barrier: self.barrier,
-        })
+        }
     }
 }
 
-impl
+impl<IbvDevName, CqParams, NumConnections>
+    IbvNetworkNodeBuilder<IbvDevName, CqParams, NumConnections, ()>
+{
+    pub fn barrier<
+        Barrier: RdmaNetworkBarrier,
+        PreparedBarrier: RdmaNetworkMemoryRegionComponent<
+                IbvMemoryRegion,
+                IbvRemoteMemoryRegion,
+                Registered = Barrier,
+            >,
+    >(
+        self,
+        barrier: PreparedBarrier,
+    ) -> IbvNetworkNodeBuilder<IbvDevName, CqParams, NumConnections, BuilderBarrier<PreparedBarrier>>
+    {
+        IbvNetworkNodeBuilder {
+            ibv_device_name: self.ibv_device_name,
+            completion_queue_params: self.completion_queue_params,
+            num_connections: self.num_connections,
+            barrier: BuilderBarrier { barrier },
+        }
+    }
+}
+
+impl<
+    Barrier: RdmaNetworkBarrier,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
+>
     IbvNetworkNodeBuilder<
-        IbvConnectionBuilder<BuilderContext, (), (), ()>,
-        Vec<IbvConnectionBuilder<BuilderContext, (), (), ()>>,
-        CompletionQueueParams,
-        (),
+        BuilderIbvDeviceName,
+        BuilderCqParams,
+        BuilderNumConnections,
+        BuilderBarrier<PreparedBarrier>,
     >
 {
-    pub fn set_barrier<NB: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, RemoteMemoryRegion, Registered = >>(
-        self,
-        barrier: NB,
-    ) -> Result<
-        IbvNetworkNodeBuilder<
-            IbvConnectionBuilder<BuilderContext, (), (), ()>,
-            Vec<IbvConnectionBuilder<BuilderContext, (), (), ()>>,
-            CompletionQueueParams,
-            NB,
-        >,
-        IbvNetworkNodeBuilderError,
-    > {
+    pub fn build(mut self) -> Result<IbvPreparedNetworkNode, IbvNetworkNodeBuildError> {
+        let connection_builder = IbvConnectionBuilder::new()
+            .ibv_device(self.ibv_device_name.ibv_device_name)
+            .cq_params(
+                self.completion_queue_params.capacity,
+                self.completion_queue_params.cache_capacity,
+            );
 
+        let mem_vec = self
+            .barrier
+            .barrier
+            .memory(self.num_connections.num_connections);
+        if mem_vec.len() != self.num_connections.num_connections {
+            return Err(IbvNetworkNodeBuildError::BarrierMemoryRegisterError(
+                format!(
+                    "Non matching memory region number: {} regions returned by the barrier component for {} connections",
+                    mem_vec.len(),
+                    self.num_connections.num_connections
+                ),
+            ));
+        }
+
+        let mut connection_builders = Vec::with_capacity(self.num_connections.num_connections);
+        for conn_idx in 0..self.num_connections.num_connections {
+            let (mem_ptr, mem_length) = mem_vec[conn_idx];
+            connection_builders.push(connection_builder.clone().register_mr(
+                format!("{conn_idx}"),
+                mem_ptr,
+                mem_length,
+            ));
+        }
+
+        todo!()
     }
 }
 
