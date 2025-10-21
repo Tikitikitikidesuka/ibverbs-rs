@@ -1,5 +1,6 @@
 pub mod centralized;
 
+use std::error::Error;
 use crate::restructure::rdma_connection::RdmaConnection;
 use crate::restructure::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::time::Duration;
@@ -24,7 +25,7 @@ pub trait RdmaNetworkBarrier {
 /// Finally, it must allow giving the component the registered memory regions.
 pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
     type Registered;
-    type RegisterError;
+    type RegisterError: Error;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)>;
     fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError>;

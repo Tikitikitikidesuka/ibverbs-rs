@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeBounds;
 use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -158,7 +159,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
         let cq = self.create_cq(&context)?;
         let qp = self.create_qp(&pd, &cq)?;
         let local_qp_endpoint = self.qp_endpoint(&qp)?;
-        let mr_endpoints = self.register_mrs(&pd)?;
+        let mrs = self.register_mrs(&pd)?;
 
         let cq = Rc::new(RefCell::new(CachedCompletionQueue::new(
             cq,
@@ -170,7 +171,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
             qp,
             pd,
             cq,
-            mr_endpoints,
+            mrs,
         })
     }
 
@@ -237,7 +238,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
     fn register_mrs(
         &self,
         pd: &ProtectionDomain,
-    ) -> Result<Vec<(String, IbvRemoteMemoryRegion)>, IbvConnectionBuildError> {
+    ) -> Result<Vec<(String, IbvMemoryRegion)>, IbvConnectionBuildError> {
         let mut mr_endpoints = Vec::new();
         let mut registered_mr_ids = HashSet::new();
         for mr in &self.mrs.mrs {
@@ -249,9 +250,9 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                 registered_mr_ids.insert(mr.id.clone());
                 mr_endpoints.push((
                     mr.id.clone(),
-                    IbvRemoteMemoryRegion {
+                    IbvMemoryRegion {
                         length: mr.length,
-                        rmr: mr_endpoint.remote(),
+                        mr: Arc::new(mr_endpoint),
                     },
                 ));
             } else {
@@ -274,14 +275,18 @@ pub struct IbvPreparedConnection {
     #[derivative(Debug = "ignore")]
     pd: ProtectionDomain,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
+    mrs: Vec<(String, IbvMemoryRegion)>,
 }
 
 impl IbvPreparedConnection {
     pub fn endpoint(&self) -> IbvConnectionEndpoint {
         IbvConnectionEndpoint {
             qp_endpoint: self.local_qp_endpoint,
-            mr_endpoints: self.mr_endpoints.clone(),
+            mr_endpoints: self
+                .mrs
+                .iter()
+                .map(|(id, mr)| (id.clone(), mr.remote()))
+                .collect(),
         }
     }
 
@@ -294,7 +299,8 @@ impl IbvPreparedConnection {
             .handshake(connection_config.qp_endpoint)
             .map_err(|e| IbvConnectionBuildError::ConnectionError(e))?;
 
-        let mr_endpoints = connection_config.mr_endpoints.into_iter().collect();
+        let local_mrs = self.mrs.into_iter().collect();
+        let remote_mrs = connection_config.mr_endpoints.into_iter().collect();
 
         Ok(IbvConnection {
             local_qp_endpoint: self.local_qp_endpoint,
@@ -302,7 +308,8 @@ impl IbvPreparedConnection {
             qp,
             _pd: self.pd,
             cq: self.cq,
-            mr_endpoints,
+            local_mrs,
+            remote_mrs,
             next_wr_id: 0,
         })
     }
@@ -324,7 +331,8 @@ pub struct IbvConnection {
     #[derivative(Debug = "ignore")]
     _pd: ProtectionDomain,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    mr_endpoints: HashMap<String, IbvRemoteMemoryRegion>,
+    local_mrs: HashMap<String, IbvMemoryRegion>,
+    remote_mrs: HashMap<String, IbvRemoteMemoryRegion>,
     next_wr_id: u64,
 }
 
@@ -337,8 +345,12 @@ impl IbvConnection {
 }
 
 impl IbvConnection {
+    pub fn local_mr(&self, id: impl AsRef<str>) -> Option<IbvMemoryRegion> {
+        self.local_mrs.get(id.as_ref()).cloned()
+    }
+
     pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<IbvRemoteMemoryRegion> {
-        self.mr_endpoints.get(id.as_ref()).cloned()
+        self.remote_mrs.get(id.as_ref()).cloned()
     }
 }
 

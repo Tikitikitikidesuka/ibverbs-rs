@@ -1,16 +1,17 @@
 use derivative::Derivative;
 use ibverbs::{MemoryRegion, RemoteMemoryRegion};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // TODO: AS OF NOW, THERE IS NO WAY OF DEREGISTERING IN `rust-ibverbs`...
 // TODO: IT WOULD BE NICE TO ADD A DROP IMPL TO MR AND MAKE IT DEREGISTER
 
-#[derive(Derivative)]
+#[derive(Derivative, Clone)]
 #[derivative(Debug)]
 pub struct IbvMemoryRegion {
     pub(super) length: usize,
     #[derivative(Debug = "ignore")]
-    pub(super) mr: MemoryRegion,
+    pub(super) mr: Arc<MemoryRegion>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
