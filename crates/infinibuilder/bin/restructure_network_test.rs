@@ -1,14 +1,14 @@
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::new_tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
 use infinibuilder::restructure::barrier::centralized::RdmaNetworkCentralizedBarrier;
 use infinibuilder::restructure::ibverbs::network_node::{
     IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
 };
-use std::str::FromStr;
-use std::{env, fs};
-use std::io::Write;
-use std::time::Duration;
 use infinibuilder::restructure::rdma_network_node::RdmaNetworkNode;
+use infinibuilder::restructure::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
+use std::io::Write;
+use std::str::FromStr;
+use std::time::Duration;
+use std::{env, fs};
 
 fn main() {
     let args = parse_args();
@@ -21,8 +21,10 @@ fn main() {
         .validate()
         .unwrap();
 
+    let node_config = network_config.get(rank_id).unwrap();
+
     let prepared_node = IbvNetworkNodeBuilder::new()
-        .ibv_device("mlx5_0")
+        .ibv_device(&node_config.ibdev)
         .cq_params(32, 512)
         .barrier(RdmaNetworkCentralizedBarrier::new())
         .num_connections(network_config.len())
@@ -54,7 +56,8 @@ fn main() {
     let mut input = String::new();
     std::io::stdin().read_line(&mut input).unwrap();
 
-    node.barrier(&node.group_all(), Duration::from_millis(10000)).unwrap();
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
 }
 
 struct Args {

@@ -3,7 +3,7 @@ use clap::Parser;
 use infinibuilder::connect::Connect;
 use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig, NetworkOp};
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::new_tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
+use infinibuilder::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
 use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
 use infinibuilder::synchronization::centralized::CentralizedSync;
 use std::fs;

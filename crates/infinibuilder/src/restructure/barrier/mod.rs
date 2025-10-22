@@ -1,4 +1,5 @@
 pub mod centralized;
+pub mod binary_tree;
 
 use std::error::Error;
 use crate::restructure::rdma_connection::RdmaConnection;
