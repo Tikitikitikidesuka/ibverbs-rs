@@ -5,12 +5,12 @@ use crate::restructure::rdma_connection::RdmaConnection;
 use crate::restructure::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::time::Duration;
 
-pub trait RdmaNetworkBarrier {
+pub trait RdmaNetworkBarrier<MR, RemoteMR> {
     type Error;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,

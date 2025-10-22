@@ -2,8 +2,13 @@ use super::rdma_connection::RdmaConnection;
 use crate::restructure::barrier::RdmaNetworkBarrier;
 use std::time::Duration;
 
-pub trait RdmaNetworkNode<NB: RdmaNetworkBarrier, NT: RdmaNetworkTransport> {
-    type Conn: RdmaConnection;
+pub trait RdmaNetworkNode<
+    MR,
+    RemoteMR,
+    NB: RdmaNetworkBarrier<MR, RemoteMR>, /*, NT: RdmaNetworkTransport*/
+>
+{
+    type Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR>;
 
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
     where
@@ -46,7 +51,7 @@ pub trait RdmaNetworkSelfGroupConnections<'network, Conn: RdmaConnection + 'netw
     fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Conn>>;
 }
 
-pub(super) enum RdmaNetworkSelfGroupConnection<'network, Conn: RdmaConnection> {
+pub enum RdmaNetworkSelfGroupConnection<'network, Conn: RdmaConnection> {
     SelfConnection,
     PeerConnection(usize, &'network mut Conn),
 }

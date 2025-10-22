@@ -1,3 +1,4 @@
+use std::error::Error;
 use crate::restructure::ibverbs::work_request::IbvWorkRequest;
 use std::ops::RangeBounds;
 
@@ -6,12 +7,12 @@ pub trait RdmaConnection {
     type RemoteMR;
     type WR: RdmaWorkRequest;
     type WC: RdmaWorkCompletion;
-    type PostError;
+    type PostError: Error;
 
     // Posts a send operation. Will fail if the remote has not posted a receive operation before hand.
     fn post_send(
         &mut self,
-        memory_region: Self::MR,
+        memory_region: &Self::MR,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
@@ -19,7 +20,7 @@ pub trait RdmaConnection {
     // Posts a receive operation.
     fn post_receive(
         &mut self,
-        memory_region: Self::MR,
+        memory_region: &Self::MR,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 
@@ -28,9 +29,9 @@ pub trait RdmaConnection {
     // by calling post_receive_immediate
     fn post_write(
         &mut self,
-        local_memory_region: Self::MR,
+        local_memory_region: &Self::MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: Self::RemoteMR,
+        remote_memory_region: &Self::RemoteMR,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
@@ -38,9 +39,9 @@ pub trait RdmaConnection {
     // Posts a read operation.
     fn post_read(
         &mut self,
-        local_memory_region: Self::MR,
+        local_memory_region: &Self::MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: Self::RemoteMR,
+        remote_memory_region: &Self::RemoteMR,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 
@@ -57,8 +58,8 @@ pub trait RdmaConnection {
 
 pub trait RdmaWorkRequest {
     type WC: RdmaWorkCompletion;
-    type RdmaError;
-    type PollError;
+    type RdmaError: Error;
+    type PollError: Error;
 
     fn poll(&mut self)
     -> Result<RdmaWorkRequestStatus<Self::WC, Self::RdmaError>, Self::PollError>;

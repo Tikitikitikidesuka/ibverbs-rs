@@ -10,6 +10,7 @@ use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnections, RdmaNetworkTransport,
 };
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -149,7 +150,7 @@ impl<RankId, IbvDevName, CqParams, NumConnections>
     IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, ()>
 {
     pub fn barrier<
-        Barrier: RdmaNetworkBarrier,
+        Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
         PreparedBarrier: RdmaNetworkMemoryRegionComponent<
                 IbvMemoryRegion,
                 IbvRemoteMemoryRegion,
@@ -176,7 +177,7 @@ impl<RankId, IbvDevName, CqParams, NumConnections>
 }
 
 impl<
-    Barrier: RdmaNetworkBarrier,
+    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
     PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
 >
     IbvNetworkNodeBuilder<
@@ -235,7 +236,7 @@ impl<
 }
 
 pub struct IbvPreparedNetworkNode<
-    Barrier: RdmaNetworkBarrier,
+    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
     PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
 > {
     rank_id: usize,
@@ -244,7 +245,7 @@ pub struct IbvPreparedNetworkNode<
 }
 
 impl<
-    Barrier: RdmaNetworkBarrier,
+    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
     PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
 > IbvPreparedNetworkNode<Barrier, PreparedBarrier>
 {
@@ -263,6 +264,8 @@ impl<
         self,
         connection_config: IbvNetworkNodeEndpoint,
     ) -> Result<IbvNetworkNode<Barrier>, IbvNetworkNodeBuildError> {
+        let rank_ids = (0..self.prepared_connections.len()).collect();
+
         let connections = self
             .prepared_connections
             .into_iter()
@@ -294,7 +297,10 @@ impl<
         })?;
 
         Ok(IbvNetworkNode {
-            rank_id: self.rank_id,
+            nodes: IbvNetworkSelfGroup {
+                rank_id: self.rank_id,
+                rank_ids,
+            },
             connections,
             barrier,
         })
@@ -316,15 +322,16 @@ pub enum IbvNetworkNodeEndpointGatherError {
 impl IbvNetworkNodeEndpoint {
     /// Takes a vector of network node endpoints and generates a new one
     /// containing a connection for each of the gathered nodes
-    pub fn gather_endpoints<'a>(
+    pub fn gather<'a>(
         rank_id: usize,
-        endpoints: impl IntoIterator<Item = &'a IbvNetworkNodeEndpoint>,
+        endpoints: impl IntoIterator<Item = impl Borrow<IbvNetworkNodeEndpoint>>,
     ) -> Result<IbvNetworkNodeEndpoint, IbvNetworkNodeEndpointGatherError> {
         let connection_endpoints = endpoints
             .into_iter()
             .enumerate()
             .map(|(idx, node_endpoint)| {
                 node_endpoint
+                    .borrow()
                     .connection_endpoints
                     .get(rank_id)
                     .ok_or(IbvNetworkNodeEndpointGatherError::ConnectionMissing {
@@ -342,14 +349,16 @@ impl IbvNetworkNodeEndpoint {
     }
 }
 
+#[derive(Debug)]
 pub struct IbvNetworkNode<NB> {
-    rank_id: usize,
+    nodes: IbvNetworkSelfGroup,
     connections: Vec<IbvConnection>,
     barrier: NB,
 }
 
-impl<NB: RdmaNetworkBarrier, NT: RdmaNetworkTransport> RdmaNetworkNode<NB, NT>
-    for IbvNetworkNode<NB>
+impl<
+    NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>, /*, NT: RdmaNetworkTransport*/
+> RdmaNetworkNode<IbvMemoryRegion, IbvRemoteMemoryRegion, NB /*, NT*/> for IbvNetworkNode<NB>
 {
     type Conn = IbvConnection;
 
@@ -364,6 +373,57 @@ impl<NB: RdmaNetworkBarrier, NT: RdmaNetworkTransport> RdmaNetworkNode<NB, NT>
         };
 
         self.barrier.barrier(group_conns, timeout)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IbvNetworkGroup {
+    rank_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IbvNetworkSelfGroup {
+    rank_id: usize,
+    rank_ids: Vec<usize>,
+}
+
+impl RdmaNetworkGroup for IbvNetworkGroup {
+    fn len(&self) -> usize {
+        self.rank_ids.len()
+    }
+
+    fn rank_ids(&self) -> &[usize] {
+        self.rank_ids.as_slice()
+    }
+
+    fn rank_id(&self, idx: usize) -> Option<usize> {
+        self.rank_ids.get(idx).copied()
+    }
+}
+
+impl RdmaNetworkGroup for IbvNetworkSelfGroup {
+    fn len(&self) -> usize {
+        self.rank_ids.len()
+    }
+
+    fn rank_ids(&self) -> &[usize] {
+        self.rank_ids.as_slice()
+    }
+
+    fn rank_id(&self, idx: usize) -> Option<usize> {
+        self.rank_ids.get(idx).copied()
+    }
+}
+
+impl RdmaNetworkSelfGroup for IbvNetworkSelfGroup {
+    fn self_idx(&self) -> usize {
+        self.rank_id
+    }
+}
+
+impl<NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>> IbvNetworkNode<NB> {
+    pub fn group_all(&self) -> IbvNetworkSelfGroup {
+        self.nodes.clone()
     }
 }
 
@@ -399,7 +459,7 @@ impl<'network> RdmaNetworkSelfGroupConnections<'network, IbvConnection>
     fn connection_mut(
         &mut self,
         idx: usize,
-    ) -> Option<RdmaNetworkSelfGroupConnection<IbvConnection>> {
+    ) -> Option<RdmaNetworkSelfGroupConnection<'_, IbvConnection>> {
         let peer_rank_id = *self.rank_ids.get(idx)?;
         let self_rank_id = self.rank_ids.get(self.self_idx).cloned();
         self.connections.get_mut(peer_rank_id).map(|conn| {

@@ -363,7 +363,7 @@ impl RdmaConnection for IbvConnection {
 
     fn post_send(
         &mut self,
-        memory_region: Self::MR,
+        memory_region: &Self::MR,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError> {
@@ -380,7 +380,7 @@ impl RdmaConnection for IbvConnection {
 
     fn post_receive(
         &mut self,
-        memory_region: Self::MR,
+        memory_region: &Self::MR,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError> {
         let wr_id = self.next_wr_id();
@@ -393,9 +393,9 @@ impl RdmaConnection for IbvConnection {
 
     fn post_write(
         &mut self,
-        local_memory_region: Self::MR,
+        local_memory_region: &Self::MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: Self::RemoteMR,
+        remote_memory_region: &Self::RemoteMR,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError> {
@@ -411,9 +411,9 @@ impl RdmaConnection for IbvConnection {
 
     fn post_read(
         &mut self,
-        local_memory_region: Self::MR,
+        local_memory_region: &Self::MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: Self::RemoteMR,
+        remote_memory_region: &Self::RemoteMR,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError> {
         let wr_id = self.next_wr_id();

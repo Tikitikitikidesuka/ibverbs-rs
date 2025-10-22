@@ -1,5 +1,4 @@
 use crate::network_config::{NetworkConfig, NodeConfig};
-use crate::tcp_exchanger::TcpExchangerConfig;
 use TcpNetworkConfigExchangeError::*;
 use bincode::serde::{decode_from_slice, encode_to_vec};
 use log::{debug, warn};

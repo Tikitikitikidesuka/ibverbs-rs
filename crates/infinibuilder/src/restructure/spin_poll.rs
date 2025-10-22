@@ -19,18 +19,19 @@ pub struct Timeout(Duration);
 /// * `timeout` - The maximum duration to spin before returning a [`Timeout`] error.
 ///
 /// # Returns
-/// * `Ok(value)` - If `event` returns `Some(value)` before the timeout expires.
+/// * `Ok((value, duration))` - If `event` returns `Some(value)` before the timeout expires.
+/// The duration is the time elapsed since the call to the function.
 /// * `Err(Timeout)` - If the timeout duration elapses before a result is available.
 pub fn spin_poll<T>(
     mut event: impl FnMut() -> Option<T>,
     timeout: Duration,
-) -> Result<T, Timeout> {
+) -> Result<(T, Duration), Timeout> {
     let start_time = Instant::now();
 
     loop {
         let output = event();
         if let Some(output) = output {
-            return Ok(output);
+            return Ok((output, start_time.elapsed()));
         }
 
         if start_time.elapsed() > timeout {
@@ -54,20 +55,21 @@ pub fn spin_poll<T>(
 ///   the timeout.
 ///
 /// # Returns
-/// * `Ok(value)` - If `event` returns `Some(value)` before the timeout expires.
+/// * `Ok((value, duration))` - If `event` returns `Some(value)` before the timeout expires.
+/// The duration is the time elapsed since the call to the function.
 /// * `Err(Timeout)` - If the timeout duration elapses before a result is available.
 pub fn spin_poll_batched<T>(
     mut event: impl FnMut() -> Option<T>,
     timeout: Duration,
     batch_iters: usize,
-) -> Result<T, Timeout> {
+) -> Result<(T, Duration), Timeout> {
     let start_time = Instant::now();
     let mut batch_counter = 0;
 
     loop {
         let output = event();
         if let Some(output) = output {
-            return Ok(output);
+            return Ok((output, start_time.elapsed()));
         }
 
         if batch_counter >= batch_iters {

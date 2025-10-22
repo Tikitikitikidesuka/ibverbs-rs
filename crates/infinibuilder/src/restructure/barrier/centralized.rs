@@ -1,16 +1,18 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::rdma_connection::RdmaConnection;
+use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
-use std::ptr::read_volatile;
-use std::time::Duration;
+use crate::restructure::spin_poll::{Timeout, spin_poll_batched};
+use std::ptr::{read_volatile, write_volatile};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 pub struct RdmaNetworkUnregisteredCentralizedBarrier {
     memory: Vec<u8>,
 }
 
+#[derive(Debug)]
 pub struct RdmaNetworkCentralizedBarrier<MR, RMR> {
     memory: Vec<u8>,
     mrs: Vec<(MR, RMR)>,
@@ -42,14 +44,19 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-fn memory_of_connection(memory: &mut [u8], conn_idx: usize) -> (*mut u8, usize) {
-    let ptr = &mut memory[conn_idx * BYTES_PER_CONNECTION] as *mut u8;
+fn memory_of_connection(memory: &mut [u8], rank_id: usize) -> (*mut u8, usize) {
+    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
     (ptr, BYTES_PER_CONNECTION)
 }
 
-fn read_remote_peer_flag(memory: &[u8], conn_idx: usize) -> u8 {
-    let ptr = &memory[conn_idx * BYTES_PER_CONNECTION + 1] as *const u8;
+fn read_remote_peer_flag(memory: &[u8], rank_id: usize) -> u8 {
+    let ptr = &memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
     unsafe { read_volatile(ptr) }
+}
+
+fn reset_remote_peer_flag(memory: &mut [u8], rank_id: usize) {
+    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION + 1] as *mut u8;
+    unsafe { write_volatile(ptr, NOT_READY_FLAG) };
 }
 
 #[derive(Debug, Error)]
@@ -89,12 +96,14 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     }
 }
 
-impl<MR, RMR> RdmaNetworkBarrier for RdmaNetworkCentralizedBarrier<MR, RMR> {
-    type Error = ();
+impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
+    for RdmaNetworkCentralizedBarrier<MR, RemoteMR>
+{
+    type Error = Timeout;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -108,47 +117,139 @@ impl<MR, RMR> RdmaNetworkBarrier for RdmaNetworkCentralizedBarrier<MR, RMR> {
             self.coordinator_barrier(connections, timeout)
         } else {
             // Coordinated
-            // Groups can never be empty
-            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, master_conn) =
-                connections.connection_mut(0).unwrap()
-            {
-                self.coordinated_barrier(master_conn, timeout)
-            } else {
-                panic!(
-                    "Coordinator of centralized sync must always be group index zero. \
-                     Check group construction is being handled properly"
-                );
-            }
+            self.coordinated_barrier(connections, timeout)
         }
     }
 }
 
-impl<MR, RMR> RdmaNetworkCentralizedBarrier<MR, RMR> {
+impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
     fn coordinator_barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
-        &self,
+        &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), ()> {
+    ) -> Result<(), Timeout> {
+        let start_time = Instant::now();
+        let mut available_time = timeout;
+
         for idx in 0..connections.len() {
             if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, peer_conn) =
                 connections.connection_mut(idx).unwrap()
             {
-                println!("Connecting to peer {rank_id} as central barrier coordinator");
+                println!("Waiting for peer {rank_id} as central barrier coordinator");
+
+                // Wait until remote is ready
+                let (_, elapsed) = spin_poll_batched(
+                    || {
+                        (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
+                            .then_some(())
+                    },
+                    available_time,
+                    1024,
+                )?;
+                available_time -= elapsed;
+
+                // Reset remote peer flag
+                reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
             }
         }
-        todo!()
+
+        for idx in 0..connections.len() {
+            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, peer_conn) =
+                connections.connection_mut(idx).unwrap()
+            {
+                println!("Notifying peer {rank_id} as central barrier coordinator");
+
+                let (mr, rmr) = &self.mrs[rank_id];
+                let mut wr = peer_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
+                let (poll, elapsed) = spin_poll_batched(
+                    // Option<Result<Result<_, WR_ERROR>, POLL_ERROR>>
+                    || {
+                        let poll = wr.poll();
+                        match poll {
+                            Ok(status) => match status {
+                                RdmaWorkRequestStatus::Pending => None,
+                                RdmaWorkRequestStatus::Success(success) => Some(Ok(Ok(success))),
+                                RdmaWorkRequestStatus::Error(error) => Some(Ok(Err(error))),
+                            },
+                            Err(error) => Some(Err(error)),
+                        }
+                    },
+                    available_time,
+                    1024,
+                )?;
+                let wc = poll
+                    .unwrap() // Poll error
+                    .unwrap(); // Work request error
+                available_time -= elapsed;
+            }
+        }
+
+        Ok(())
     }
 
-    fn coordinated_barrier<Conn: RdmaConnection>(
-        &self,
-        master_conn: &mut Conn,
+    fn coordinated_barrier<
+        'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+    >(
+        &mut self,
+        mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), ()> {
+    ) -> Result<(), Timeout> {
         println!("Connecting to coordinator");
-        todo!()
+
+        // Groups can never be empty
+        if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, master_conn) =
+            connections.connection_mut(0).unwrap()
+        {
+            let (mr, rmr) = &self.mrs[rank_id];
+
+            println!("Notifying master at {rank_id}");
+            let mut wr = master_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
+            let (poll, elapsed) = spin_poll_batched(
+                // Option<Result<Result<_, WR_ERROR>, POLL_ERROR>>
+                || {
+                    let poll = wr.poll();
+                    match poll {
+                        Ok(status) => match status {
+                            RdmaWorkRequestStatus::Pending => None,
+                            RdmaWorkRequestStatus::Success(success) => Some(Ok(Ok(success))),
+                            RdmaWorkRequestStatus::Error(error) => Some(Ok(Err(error))),
+                        },
+                        Err(error) => Some(Err(error)),
+                    }
+                },
+                timeout,
+                1024,
+            )?;
+            let wc = poll
+                .unwrap() // Poll error
+                .unwrap(); // Work request error
+
+            println!("Waiting for master notification");
+            // Wait until remote is ready
+            let (_, elapsed) = spin_poll_batched(
+                || {
+                    (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
+                        .then_some(())
+                },
+                timeout - elapsed,
+                1024,
+            )?;
+
+            // Reset remote peer flag
+            reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
+        } else {
+            panic!(
+                "Coordinator of centralized sync must always be group index zero. \
+                     Check group construction is being handled properly"
+            );
+        }
+
+        Ok(())
     }
 }
