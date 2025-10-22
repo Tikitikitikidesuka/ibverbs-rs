@@ -1,5 +1,7 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus};
+use crate::restructure::rdma_connection::{
+    RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestSpinPollError,
+};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
@@ -7,6 +9,14 @@ use crate::restructure::spin_poll::{Timeout, spin_poll_batched};
 use std::ptr::{read_volatile, write_volatile};
 use std::time::{Duration, Instant};
 use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum RdmaNetworkCentralizedBarrierError {
+    #[error("Centralized barrier timeout: {0}:")]
+    Timeout(String),
+    #[error("Centralized barrier RDMA error: {0}")]
+    RdmaError(String),
+}
 
 pub struct RdmaNetworkUnregisteredCentralizedBarrier {
     memory: Vec<u8>,
@@ -99,7 +109,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
 impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
     for RdmaNetworkCentralizedBarrier<MR, RemoteMR>
 {
-    type Error = Timeout;
+    type Error = RdmaNetworkCentralizedBarrierError;
 
     fn barrier<
         'network,
@@ -131,8 +141,7 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), Timeout> {
-        let start_time = Instant::now();
+    ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
         let mut available_time = timeout;
 
         for idx in 0..connections.len() {
@@ -149,7 +158,12 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
                     },
                     available_time,
                     1024,
-                )?;
+                )
+                .map_err(|_| {
+                    RdmaNetworkCentralizedBarrierError::Timeout(
+                        "Timeout waiting for coordinated notification".to_string(),
+                    )
+                })?;
                 available_time -= elapsed;
 
                 // Reset remote peer flag
@@ -165,25 +179,20 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
 
                 let (mr, rmr) = &self.mrs[rank_id];
                 let mut wr = peer_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-                let (poll, elapsed) = spin_poll_batched(
-                    // Option<Result<Result<_, WR_ERROR>, POLL_ERROR>>
-                    || {
-                        let poll = wr.poll();
-                        match poll {
-                            Ok(status) => match status {
-                                RdmaWorkRequestStatus::Pending => None,
-                                RdmaWorkRequestStatus::Success(success) => Some(Ok(Ok(success))),
-                                RdmaWorkRequestStatus::Error(error) => Some(Ok(Err(error))),
-                            },
-                            Err(error) => Some(Err(error)),
-                        }
-                    },
-                    available_time,
-                    1024,
-                )?;
-                let wc = poll
-                    .unwrap() // Poll error
-                    .unwrap(); // Work request error
+                let (wc, elapsed) =
+                    wr.spin_poll_batched(timeout, 1024)
+                        .map_err(|error| match error {
+                            WorkRequestSpinPollError::Timeout(_) => {
+                                RdmaNetworkCentralizedBarrierError::Timeout(
+                                    "Timeout trying to notify coordinated".to_string(),
+                                )
+                            }
+                            WorkRequestSpinPollError::ExecutionError(error) => {
+                                RdmaNetworkCentralizedBarrierError::RdmaError(format!(
+                                    "RDMA error trying to notify coordinated: {error}"
+                                ))
+                            }
+                        })?;
                 available_time -= elapsed;
             }
         }
@@ -199,7 +208,7 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), Timeout> {
+    ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
         println!("Connecting to coordinator");
 
         // Groups can never be empty
@@ -208,38 +217,38 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         {
             let (mr, rmr) = &self.mrs[rank_id];
 
-            println!("Notifying master at {rank_id}");
+            println!("Notifying coordinator at {rank_id}");
             let mut wr = master_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-            let (poll, elapsed) = spin_poll_batched(
-                // Option<Result<Result<_, WR_ERROR>, POLL_ERROR>>
-                || {
-                    let poll = wr.poll();
-                    match poll {
-                        Ok(status) => match status {
-                            RdmaWorkRequestStatus::Pending => None,
-                            RdmaWorkRequestStatus::Success(success) => Some(Ok(Ok(success))),
-                            RdmaWorkRequestStatus::Error(error) => Some(Ok(Err(error))),
-                        },
-                        Err(error) => Some(Err(error)),
-                    }
-                },
-                timeout,
-                1024,
-            )?;
-            let wc = poll
-                .unwrap() // Poll error
-                .unwrap(); // Work request error
+            let (wc, elapsed) =
+                wr.spin_poll_batched(timeout, 1024)
+                    .map_err(|error| match error {
+                        WorkRequestSpinPollError::Timeout(_) => {
+                            RdmaNetworkCentralizedBarrierError::Timeout(
+                                "Timeout trying to notify coordinator".to_string(),
+                            )
+                        }
+                        WorkRequestSpinPollError::ExecutionError(error) => {
+                            RdmaNetworkCentralizedBarrierError::RdmaError(format!(
+                                "RDMA error trying to notify coordinator: {error}"
+                            ))
+                        }
+                    })?;
 
-            println!("Waiting for master notification");
+            println!("Waiting for coordinator notification");
             // Wait until remote is ready
-            let (_, elapsed) = spin_poll_batched(
+            spin_poll_batched(
                 || {
                     (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
                         .then_some(())
                 },
                 timeout - elapsed,
                 1024,
-            )?;
+            )
+            .map_err(|error| {
+                RdmaNetworkCentralizedBarrierError::Timeout(
+                    "Timeout waiting for coordinator notification".to_string(),
+                )
+            })?;
 
             // Reset remote peer flag
             reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
