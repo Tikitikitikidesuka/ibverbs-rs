@@ -1,6 +1,9 @@
-use std::error::Error;
 use crate::restructure::ibverbs::work_request::IbvWorkRequest;
+use crate::restructure::spin_poll::{Timeout, spin_poll, spin_poll_batched};
+use std::error::Error;
 use std::ops::RangeBounds;
+use std::time::Duration;
+use thiserror::Error;
 
 pub trait RdmaConnection {
     type MR;
@@ -61,8 +64,67 @@ pub trait RdmaWorkRequest {
     type RdmaError: Error;
     type PollError: Error;
 
-    fn poll(&mut self)
-    -> Result<RdmaWorkRequestStatus<Self::WC, Self::RdmaError>, Self::PollError>;
+    fn poll(
+        &mut self,
+    ) -> RdmaWorkRequestStatus<Self::WC, WorkRequestPollError<Self::PollError, Self::RdmaError>>;
+
+    fn spin_poll(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<(Self::WC, Duration), WorkRequestSpinPollError<Self::PollError, Self::RdmaError>>
+    {
+        match spin_poll(
+            || match self.poll() {
+                RdmaWorkRequestStatus::Pending => None,
+                RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
+                RdmaWorkRequestStatus::Error(err) => Some(Err(err)),
+            },
+            timeout,
+        ) {
+            Ok((inner, dur)) => inner
+                .map(|wc| (wc, dur))
+                .map_err(|error| WorkRequestSpinPollError::ExecutionError(error)),
+            Err(timeout) => Err(WorkRequestSpinPollError::Timeout(timeout)),
+        }
+    }
+
+    fn spin_poll_batched(
+        &mut self,
+        timeout: Duration,
+        batch_iters: usize,
+    ) -> Result<(Self::WC, Duration), WorkRequestSpinPollError<Self::PollError, Self::RdmaError>>
+    {
+        match spin_poll_batched(
+            || match self.poll() {
+                RdmaWorkRequestStatus::Pending => None,
+                RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
+                RdmaWorkRequestStatus::Error(err) => Some(Err(err)),
+            },
+            timeout,
+            batch_iters,
+        ) {
+            Ok((inner, dur)) => inner
+                .map(|wc| (wc, dur))
+                .map_err(|error| WorkRequestSpinPollError::ExecutionError(error)),
+            Err(timeout) => Err(WorkRequestSpinPollError::Timeout(timeout)),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum WorkRequestPollError<PollError: Error, RdmaError: Error> {
+    #[error("Work request poll error: {0}")]
+    PollError(PollError),
+    #[error("Work request poll rdma error: {0}")]
+    RdmaError(RdmaError),
+}
+
+#[derive(Debug, Error)]
+pub enum WorkRequestSpinPollError<PollError: Error, RdmaError: Error> {
+    #[error("Work request spin poll timeout: {0}")]
+    Timeout(Timeout),
+    #[error("Work request spin poll error: {0}")]
+    ExecutionError(#[from] WorkRequestPollError<PollError, RdmaError>),
 }
 
 #[derive(Debug, Clone)]

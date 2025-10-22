@@ -1,7 +1,9 @@
 use crate::restructure::ibverbs::completion_queue::{CachedCompletionQueue, PollError};
 use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
 use crate::restructure::ibverbs::work_error::{IbvWorkError, IbvWorkErrorCode};
-use crate::restructure::rdma_connection::{RdmaWorkRequest, RdmaWorkRequestStatus};
+use crate::restructure::rdma_connection::{
+    RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestPollError,
+};
 use ibverbs::ibv_wc_status;
 use log::warn;
 use std::cell::RefCell;
@@ -23,6 +25,19 @@ impl IbvWorkRequest {
             status: RdmaWorkRequestStatus::Pending,
         }
     }
+
+    fn map_cached_status(
+        status: &RdmaWorkRequestStatus<IbvWorkCompletion, IbvWorkError>,
+    ) -> RdmaWorkRequestStatus<IbvWorkCompletion, WorkRequestPollError<std::io::Error, IbvWorkError>>
+    {
+        match status {
+            RdmaWorkRequestStatus::Pending => RdmaWorkRequestStatus::Pending,
+            RdmaWorkRequestStatus::Success(wc) => RdmaWorkRequestStatus::Success(wc.clone()),
+            RdmaWorkRequestStatus::Error(err) => {
+                RdmaWorkRequestStatus::Error(WorkRequestPollError::RdmaError(err.clone()))
+            }
+        }
+    }
 }
 
 impl RdmaWorkRequest for IbvWorkRequest {
@@ -32,55 +47,54 @@ impl RdmaWorkRequest for IbvWorkRequest {
 
     fn poll(
         &mut self,
-    ) -> Result<RdmaWorkRequestStatus<Self::WC, Self::RdmaError>, Self::PollError> {
+    ) -> RdmaWorkRequestStatus<IbvWorkCompletion, WorkRequestPollError<std::io::Error, IbvWorkError>>
+    {
         const POLL_BUFFER_SIZE: usize = 32;
 
         // If completion already consumed from CQ, just return it
         if self.status.complete() {
-            return Ok(self.status.clone());
+            return Self::map_cached_status(&self.status);
         }
 
         // Otherwise poll from CQ
         let mut cq = self.cq.borrow_mut();
-        if let Err(poll_error) = cq.poll::<POLL_BUFFER_SIZE>() {
-            return match poll_error {
-                PollError::IoError(io_error) => Err(io_error),
-                PollError::CacheFull => {
-                    warn!(
-                        "Could not poll WR({}) due to completion cache overload",
-                        self.wr_id
-                    );
-                    Ok(RdmaWorkRequestStatus::Pending)
-                }
-            };
-        }
+        let num_found = match cq.poll::<POLL_BUFFER_SIZE>() {
+            Err(PollError::IoError(io_err)) => {
+                return RdmaWorkRequestStatus::Error(WorkRequestPollError::PollError(io_err));
+            }
+            Err(PollError::CacheFull) => {
+                warn!(
+                    "Could not poll WR({}) due to completion cache overload",
+                    self.wr_id
+                );
+                return RdmaWorkRequestStatus::Pending;
+            }
+            Ok(_) => {}
+        };
 
-        // Check if found in CQ poll
         if let Some(wc) = cq.consume(self.wr_id) {
-            let status = match wc.error() {
+            let new_status = match wc.error() {
                 None => RdmaWorkRequestStatus::Success(IbvWorkCompletion::new(wc)),
                 Some((status, vendor_code)) => match IbvWorkErrorCode::try_from(status as u32) {
-                    Ok(error_code) => {
-                        RdmaWorkRequestStatus::Error(IbvWorkError::new(error_code, vendor_code))
-                    }
+                    Ok(code) => RdmaWorkRequestStatus::Error(IbvWorkError::new(code, vendor_code)),
                     Err(()) => RdmaWorkRequestStatus::Success(IbvWorkCompletion::new(wc)),
                 },
             };
-            self.status = status.clone();
-            Ok(status)
+
+            self.status = new_status.clone();
+            Self::map_cached_status(&self.status)
         } else {
-            Ok(RdmaWorkRequestStatus::Pending)
+            RdmaWorkRequestStatus::Pending
         }
     }
 }
 
 impl Drop for IbvWorkRequest {
     fn drop(&mut self) {
-        // If dropped, it must be ensured that the work request is consumed
-        // from the completion queue, otherwise memory will leak
-        if let Ok(RdmaWorkRequestStatus::Pending) = self.poll() {
-            // Just add it to the ignore list of the cached CQ
-            self.cq.borrow_mut().ignore(self.wr_id)
+        // If dropped, ensure the work request has been consumed from the CQ
+        // (otherwise memory will leak due to unacknowledged completions)
+        if matches!(self.poll(), RdmaWorkRequestStatus::Pending) {
+            self.cq.borrow_mut().ignore(self.wr_id);
         }
     }
 }
