@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 multi-fragment-packet = { path = "../multi-fragment-packet" }
+bincode = { version = "2.0.1", optional = true }
+
+[features]
+bincode = ["dep:bincode"]

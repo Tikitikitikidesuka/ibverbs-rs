@@ -395,7 +395,7 @@ mod bincode {
             decoder.reader().read(&mut bytes)?;
             let header = Header { bytes };
 
-            // SAFETY: header has been received validly.
+            // SAFETY: header has been received validly, and its total size is packet_size in bytes!
             let mut data = vec![0u8; unsafe { header.typed.packet_size } as usize];
             // SAFETY: repr(C) type can safely be accessed as bytes.
             data[0..MultiFragmentPacketRef::HEADER_SIZE].copy_from_slice(unsafe { &header.bytes });

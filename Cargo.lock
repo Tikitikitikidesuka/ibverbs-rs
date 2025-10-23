@@ -180,6 +180,7 @@ dependencies = [
 name = "multi-event-packet"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "multi-fragment-packet",
 ]
 
