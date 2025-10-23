@@ -11,7 +11,6 @@ fn build_pcie40_bindings() {
     const PCIE40_BINDINGS: &str = "src/bindings.rs";
     const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
     const NO_BINDGEN: &str = "NO_BINDGEN";
-    
 
     println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
 
