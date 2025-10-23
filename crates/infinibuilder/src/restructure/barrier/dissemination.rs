@@ -1,4 +1,3 @@
-use std::ops::RangeBounds;
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::restructure::rdma_network_node::{
@@ -6,6 +5,7 @@ use crate::restructure::rdma_network_node::{
 };
 use crate::restructure::spin_poll::spin_poll_batched;
 use Direction::*;
+use std::ops::RangeBounds;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 use thiserror::Error;
@@ -159,7 +159,6 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for DisseminationBarrier<MR,
         let mut distance = 1;
         let max_distance = connections.len();
         while distance < max_distance {
-            println!("Doing distance {distance}");
             self.barrier_round(distance, &mut connections, timeout)?;
             distance *= 2;
         }
@@ -242,7 +241,6 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
         timeout: Duration,
     ) -> Result<Duration, DisseminationBarrierError> {
         let peer_rank_id = connections.rank_id(idx).unwrap();
-        println!("Waiting for peer {peer_rank_id}");
         let (_, elapsed) = spin_poll_batched(
             || (self.read_remote_peer_flag(peer_rank_id) == READY_FLAG).then_some(()),
             timeout,
@@ -268,8 +266,8 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
         timeout: Duration,
     ) -> Result<Duration, DisseminationBarrierError> {
         let peer_conn = connections.connection_mut(idx);
-        if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(peer_rank_id, conn)) = peer_conn {
-            println!("Notifying peer {peer_rank_id}");
+        if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(peer_rank_id, conn)) = peer_conn
+        {
             let (peer_mr, peer_remote_mr) = self.connection_mr(peer_rank_id);
             let mut wr = conn
                 .post_write(
