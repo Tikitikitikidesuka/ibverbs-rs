@@ -1,7 +1,4 @@
-use crate::restructure::barrier::centralized::{
-    RdmaNetworkCentralizedBarrier, RdmaNetworkUnregisteredCentralizedBarrier,
-};
-use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::restructure::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
@@ -10,15 +7,6 @@ use crate::restructure::spin_poll::spin_poll_batched;
 use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum RdmaNetworkBinaryTreeBarrierError {
-    #[error("Centralized barrier timeout: {0}:")]
-    Timeout(String),
-    #[error("Centralized barrier RDMA error: {0}")]
-    RdmaError(String),
-}
 
 pub struct RdmaNetworkUnregisteredBinaryTreeBarrier {
     memory: Vec<u8>,
@@ -124,13 +112,6 @@ impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
     }
 }
 
-#[derive(Debug, Error)]
-#[error("Non matching memory region count, expected {expected}, got {got}")]
-pub struct NonMatchingMemoryRegionCount {
-    expected: usize,
-    got: usize,
-}
-
 impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     for RdmaNetworkUnregisteredBinaryTreeBarrier
 {
@@ -164,7 +145,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
 }
 
 impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
-    type Error = RdmaNetworkBinaryTreeBarrierError;
+    type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
@@ -190,7 +171,7 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), RdmaNetworkBinaryTreeBarrierError> {
+    ) -> Result<(), RdmaNetworkBarrierError> {
         let mut available_time = timeout;
 
         // 1. Wait for the two children
@@ -219,7 +200,7 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         peer: PeerRole,
         connections: &GroupConns,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkBinaryTreeBarrierError> {
+    ) -> Result<Duration, RdmaNetworkBarrierError> {
         Ok(
             if let Some(group_idx) =
                 self.peer_group_idx(connections.self_idx(), connections.len(), peer)
@@ -231,7 +212,7 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
                     1024,
                 )
                 .map_err(|_| {
-                    RdmaNetworkBinaryTreeBarrierError::Timeout(format!(
+                    RdmaNetworkBarrierError::Timeout(format!(
                         "Timeout waiting for {peer:?} notification"
                     ))
                 })?;
@@ -252,7 +233,7 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         peer: PeerRole,
         connections: &mut GroupConns,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkBinaryTreeBarrierError> {
+    ) -> Result<Duration, RdmaNetworkBarrierError> {
         Ok(
             if let Some(group_idx) =
                 self.peer_group_idx(connections.self_idx(), connections.len(), peer)
@@ -266,12 +247,12 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
                     let mut wr = conn
                         .post_write(peer_mr, 0..=0, peer_remote_mr, 1..=1, None)
                         .map_err(|error| {
-                            RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            RdmaNetworkBarrierError::RdmaError(format!(
                                 "Error issuing RDMA write to {peer:?}: {error}"
                             ))
                         })?;
                     let (_, elapsed) = wr.spin_poll_batched(timeout, 1024).map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                        RdmaNetworkBarrierError::RdmaError(format!(
                             "Error during RDMA write to left child: {error}"
                         ))
                     })?;

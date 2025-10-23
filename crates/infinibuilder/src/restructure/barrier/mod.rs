@@ -6,6 +6,7 @@ use std::error::Error;
 use crate::restructure::rdma_connection::RdmaConnection;
 use crate::restructure::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::time::Duration;
+use thiserror::Error;
 
 pub trait RdmaNetworkBarrier<MR, RemoteMR> {
     type Error;
@@ -31,4 +32,19 @@ pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)>;
     fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError>;
+}
+
+#[derive(Debug, Error)]
+pub enum RdmaNetworkBarrierError {
+    #[error("Centralized barrier timeout: {0}:")]
+    Timeout(String),
+    #[error("Centralized barrier RDMA error: {0}")]
+    RdmaError(String),
+}
+
+#[derive(Debug, Error)]
+#[error("Non matching memory region count, expected {expected}, got {got}")]
+pub struct NonMatchingMemoryRegionCount {
+    expected: usize,
+    got: usize,
 }

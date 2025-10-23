@@ -1,4 +1,4 @@
-use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::restructure::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{
     RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError,
 };
@@ -8,15 +8,6 @@ use crate::restructure::rdma_network_node::{
 use crate::restructure::spin_poll::spin_poll_batched;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum RdmaNetworkCentralizedBarrierError {
-    #[error("Centralized barrier timeout: {0}:")]
-    Timeout(String),
-    #[error("Centralized barrier RDMA error: {0}")]
-    RdmaError(String),
-}
 
 pub struct RdmaNetworkUnregisteredCentralizedBarrier {
     memory: Vec<u8>,
@@ -61,13 +52,6 @@ impl RdmaNetworkUnregisteredCentralizedBarrier {
     }
 }
 
-#[derive(Debug, Error)]
-#[error("Non matching memory region count, expected {expected}, got {got}")]
-pub struct NonMatchingMemoryRegionCount {
-    expected: usize,
-    got: usize,
-}
-
 impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     for RdmaNetworkUnregisteredCentralizedBarrier
 {
@@ -101,7 +85,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
 impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
     for RdmaNetworkCentralizedBarrier<MR, RemoteMR>
 {
-    type Error = RdmaNetworkCentralizedBarrierError;
+    type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
@@ -139,14 +123,14 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         &mut self,
         rank_id: usize,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkCentralizedBarrierError> {
+    ) -> Result<Duration, RdmaNetworkBarrierError> {
         let (_, elapsed) = spin_poll_batched(
             || (self.read_remote_peer_flag(rank_id) == READY_FLAG).then_some(()),
             timeout,
             1024,
         )
         .map_err(|_| {
-            RdmaNetworkCentralizedBarrierError::Timeout(format!(
+            RdmaNetworkBarrierError::Timeout(format!(
                 "Timeout waiting for peer {rank_id}"
             ))
         })?;
@@ -159,22 +143,22 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         rank_id: usize,
         conn: &mut Conn,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkCentralizedBarrierError> {
+    ) -> Result<Duration, RdmaNetworkBarrierError> {
         let (mr, rmr) = &self.mrs[rank_id];
         let mut wr = conn.post_write(mr, 0..=0, rmr, 1..=1, None).map_err(|e| {
-            RdmaNetworkCentralizedBarrierError::RdmaError(format!("Write error: {e}"))
+            RdmaNetworkBarrierError::RdmaError(format!("Write error: {e}"))
         })?;
 
         let (_, elapsed) = wr
             .spin_poll_batched(timeout, 1024)
             .map_err(|error| match error {
                 WorkRequestSpinPollError::Timeout(_) => {
-                    RdmaNetworkCentralizedBarrierError::Timeout(format!(
+                    RdmaNetworkBarrierError::Timeout(format!(
                         "Timeout notifying peer {rank_id}"
                     ))
                 }
                 WorkRequestSpinPollError::ExecutionError(e) => {
-                    RdmaNetworkCentralizedBarrierError::RdmaError(format!("RDMA error: {e}"))
+                    RdmaNetworkBarrierError::RdmaError(format!("RDMA error: {e}"))
                 }
             })?;
         Ok(elapsed)
@@ -188,7 +172,7 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
+    ) -> Result<(), RdmaNetworkBarrierError> {
         let mut available_time = timeout;
 
         // Wait for all peers
@@ -220,7 +204,7 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         &mut self,
         mut connections: GroupConns,
         timeout: Duration,
-    ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
+    ) -> Result<(), RdmaNetworkBarrierError> {
         let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn) =
             connections.connection_mut(0).unwrap()
         else {
