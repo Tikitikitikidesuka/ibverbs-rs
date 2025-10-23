@@ -1,7 +1,5 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::rdma_connection::{
-    RdmaConnection, RdmaWorkRequest,
-};
+use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
@@ -9,6 +7,7 @@ use crate::restructure::spin_poll::spin_poll_batched;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 use thiserror::Error;
+use PeerRole::*;
 
 #[derive(Debug, Error)]
 pub enum RdmaNetworkBinaryTreeBarrierError {
@@ -56,78 +55,71 @@ fn setup_memory() -> Vec<u8> {
         .collect()
 }
 
-fn memory_of_parent(memory: &mut [u8]) -> (*mut u8, usize) {
-    memory_of_connection(memory, 0)
+impl RdmaNetworkUnregisteredBinaryTreeBarrier {
+    fn peer_memory(&mut self, peer: PeerRole) -> (*mut u8, usize) {
+        let ptr = &mut self.memory[peer.idx() * BYTES_PER_CONNECTION] as *mut u8;
+        (ptr, BYTES_PER_CONNECTION)
+    }
 }
 
-fn memory_of_left_child(memory: &mut [u8]) -> (*mut u8, usize) {
-    memory_of_connection(memory, 1)
+#[derive(Debug, Copy, Clone)]
+enum PeerRole {
+    Parent,
+    LeftChild,
+    RightChild,
 }
 
-fn memory_of_right_child(memory: &mut [u8]) -> (*mut u8, usize) {
-    memory_of_connection(memory, 2)
-}
-
-fn memory_of_connection(memory: &mut [u8], rank_id: usize) -> (*mut u8, usize) {
-    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
-    (ptr, BYTES_PER_CONNECTION)
-}
-
-fn read_remote_parent_flag(memory: &[u8]) -> u8 {
-    read_remote_peer_flag(memory, 0)
-}
-
-fn read_remote_left_child_flag(memory: &[u8]) -> u8 {
-    read_remote_peer_flag(memory, 1)
-}
-
-fn read_remote_right_child_flag(memory: &[u8]) -> u8 {
-    read_remote_peer_flag(memory, 2)
-}
-
-fn read_remote_peer_flag(memory: &[u8], rank_id: usize) -> u8 {
-    let ptr = &memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
-    unsafe { read_volatile(ptr) }
-}
-
-fn reset_remote_parent_flag(memory: &mut [u8]) {
-    reset_remote_peer_flag(memory, 0);
-}
-
-fn reset_remote_left_child_flag(memory: &mut [u8]) {
-    reset_remote_peer_flag(memory, 1);
-}
-
-fn reset_remote_right_child_flag(memory: &mut [u8]) {
-    reset_remote_peer_flag(memory, 2);
-}
-
-fn reset_remote_peer_flag(memory: &mut [u8], rank_id: usize) {
-    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION + 1] as *mut u8;
-    unsafe { write_volatile(ptr, NOT_READY_FLAG) };
+impl PeerRole {
+    pub fn idx(&self) -> usize {
+        match self {
+            Parent => 0,
+            LeftChild => 1,
+            RightChild => 2,
+        }
+    }
 }
 
 impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
-    fn parent_idx(&self, idx: usize) -> Option<usize> {
-        if idx == 0 { None } else { Some((idx - 1) / 2) }
-    }
-
-    fn left_child_idx(&self, idx: usize, group_size: usize) -> Option<usize> {
-        let lci = idx * 2 + 1;
-        if lci >= group_size {
-            None
-        } else {
-            Some(lci)
+    fn peer_group_idx(&self, idx: usize, group_size: usize, peer: PeerRole) -> Option<usize> {
+        match peer {
+            PeerRole::Parent => {
+                if idx == 0 {
+                    None
+                } else {
+                    Some((idx - 1) / 2)
+                }
+            }
+            PeerRole::LeftChild => {
+                let group_idx = idx * 2 + 1;
+                if group_idx >= group_size {
+                    None
+                } else {
+                    Some(group_idx)
+                }
+            }
+            PeerRole::RightChild => {
+                let group_idx = idx * 2 + 2;
+                if group_idx >= group_size {
+                    None
+                } else {
+                    Some(group_idx)
+                }
+            }
         }
     }
 
-    fn right_child_idx(&self, idx: usize, group_size: usize) -> Option<usize> {
-        let rci = idx * 2 + 2;
-        if rci >= group_size {
-            None
-        } else {
-            Some(rci)
-        }
+    fn peer_mr(&self, peer: PeerRole) -> &(MR, RMR) {
+        &self.mrs[peer.idx()]
+    }
+
+    fn reset_remote_peer_flag(&mut self, peer: PeerRole) {
+        let ptr = &mut self.memory[peer.idx() * BYTES_PER_CONNECTION + 1] as *mut u8;
+        unsafe { write_volatile(ptr, NOT_READY_FLAG) };
+    }
+
+    fn read_remote_peer_flag(&self, peer: PeerRole) -> u8 {
+        let ptr = &self.memory[peer.idx() * BYTES_PER_CONNECTION + 1] as *const u8;
+        unsafe { read_volatile(ptr) }
     }
 }
 
@@ -144,12 +136,13 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     type Registered = RdmaNetworkBinaryTreeBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
-    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
+    fn memory(&mut self, _num_connections: usize) -> Vec<(*mut u8, usize)> {
         self.memory = setup_memory();
-        (0..3)
-            .into_iter()
-            .map(|conn_idx| memory_of_connection(self.memory.as_mut_slice(), conn_idx))
-            .collect()
+        vec![
+            self.peer_memory(Parent),
+            self.peer_memory(LeftChild),
+            self.peer_memory(RightChild),
+        ]
     }
 
     fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError> {
@@ -198,133 +191,92 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         let mut available_time = timeout;
 
         // 1. Wait for the two children
-        if let Some(lci) = self.left_child_idx(connections.self_idx(), connections.len()) {
-            println!("Waiting for left child");
-            let (_, elapsed) = spin_poll_batched(
-                || {
-                    (read_remote_left_child_flag(self.memory.as_slice()) == READY_FLAG)
-                        .then_some(())
-                },
-                available_time,
-                1024,
-            )
-            .map_err(|_| {
-                RdmaNetworkBinaryTreeBarrierError::Timeout(
-                    "Timeout waiting for left children notification".to_string(),
-                )
-            })?;
-            reset_remote_left_child_flag(self.memory.as_mut_slice());
-            available_time -= elapsed;
-        }
-        if let Some(rci) = self.right_child_idx(connections.self_idx(), connections.len()) {
-            println!("Waiting for right child");
-            let (_, elapsed) = spin_poll_batched(
-                || {
-                    (read_remote_right_child_flag(self.memory.as_slice()) == READY_FLAG)
-                        .then_some(())
-                },
-                available_time,
-                1024,
-            )
-            .map_err(|_| {
-                RdmaNetworkBinaryTreeBarrierError::Timeout(
-                    "Timeout waiting for left children notification".to_string(),
-                )
-            })?;
-            reset_remote_right_child_flag(self.memory.as_mut_slice());
-            available_time -= elapsed;
-        }
+        available_time -= self.wait_for_peer(LeftChild, &connections, available_time)?;
+        available_time -= self.wait_for_peer(RightChild, &connections, available_time)?;
 
         // 2. Notify parent
-        if let Some(pi) = self.parent_idx(connections.self_idx()) {
-            println!("Notifying parent");
-            let parent_conn = connections.connection_mut(pi);
-            let (parent_mr, parent_remote_mr) = &self.mrs[0];
-            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) = parent_conn
-            {
-                let mut wr = conn
-                    .post_write(parent_mr, 0..=0, parent_remote_mr, 1..=1, None)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error issuing RDMA write to left child: {error}"
-                        ))
-                    })?;
-                let (_, elapsed) = wr
-                    .spin_poll_batched(available_time, 1024)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error during RDMA write to left child: {error}"
-                        ))
-                    })?;
-                available_time -= elapsed;
-            }
+        available_time -= self.notify_peer(Parent, &mut connections, available_time)?;
 
-            // 3. Wait for parent
-            println!("Waiting for parent");
-            let (_, elapsed) = spin_poll_batched(
-                || (read_remote_parent_flag(self.memory.as_slice()) == READY_FLAG).then_some(()),
-                available_time,
-                1024,
-            )
-            .map_err(|_| {
-                RdmaNetworkBinaryTreeBarrierError::Timeout(
-                    "Timeout waiting for left children notification".to_string(),
-                )
-            })?;
-            reset_remote_parent_flag(self.memory.as_mut_slice());
-            available_time -= elapsed;
-        }
+        // 3. Wait for parent
+        available_time -= self.wait_for_peer(Parent, &connections, available_time)?;
 
         // 4. Notify two children
-        if let Some(lci) = self.left_child_idx(connections.self_idx(), connections.len()) {
-            println!("Notifying left child");
-            let left_child_conn = connections.connection_mut(lci);
-            let (left_child_mr, left_child_remote_mr) = &self.mrs[1];
-            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) =
-                left_child_conn
-            {
-                let mut wr = conn
-                    .post_write(left_child_mr, 0..=0, left_child_remote_mr, 1..=1, None)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error issuing RDMA write to left child: {error}"
-                        ))
-                    })?;
-                let (_, elapsed) = wr
-                    .spin_poll_batched(available_time, 1024)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error during RDMA write to left child: {error}"
-                        ))
-                    })?;
-                available_time -= elapsed;
-            }
-        }
-        if let Some(rci) = self.right_child_idx(connections.self_idx(), connections.len()) {
-            println!("Notifying right child");
-            let right_child_conn = connections.connection_mut(rci);
-            let (right_child_mr, right_child_remote_mr) = &self.mrs[2];
-            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) =
-                right_child_conn
-            {
-                let mut wr = conn
-                    .post_write(right_child_mr, 0..=0, right_child_remote_mr, 1..=1, None)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error issuing RDMA write to left child: {error}"
-                        ))
-                    })?;
-                let (_, elapsed) = wr
-                    .spin_poll_batched(available_time, 1024)
-                    .map_err(|error| {
-                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                            "Error during RDMA write to left child: {error}"
-                        ))
-                    })?;
-                available_time -= elapsed;
-            }
-        }
+        available_time -= self.notify_peer(LeftChild, &mut connections, available_time)?;
+        available_time -= self.notify_peer(RightChild, &mut connections, available_time)?;
 
         Ok(())
+    }
+
+    fn wait_for_peer<
+        'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+    >(
+        &mut self,
+        peer: PeerRole,
+        connections: &GroupConns,
+        timeout: Duration,
+    ) -> Result<Duration, RdmaNetworkBinaryTreeBarrierError> {
+        Ok(
+            if let Some(_group_idx) =
+                self.peer_group_idx(connections.self_idx(), connections.len(), peer)
+            {
+                let (_, elapsed) = spin_poll_batched(
+                    || (self.read_remote_peer_flag(peer) == READY_FLAG).then_some(()),
+                    timeout,
+                    1024,
+                )
+                .map_err(|_| {
+                    RdmaNetworkBinaryTreeBarrierError::Timeout(format!(
+                        "Timeout waiting for {peer:?} notification"
+                    ))
+                })?;
+                self.reset_remote_peer_flag(peer);
+                elapsed
+            } else {
+                Duration::from_nanos(0)
+            },
+        )
+    }
+
+    fn notify_peer<
+        'network,
+        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+    >(
+        &mut self,
+        peer: PeerRole,
+        connections: &mut GroupConns,
+        timeout: Duration,
+    ) -> Result<Duration, RdmaNetworkBinaryTreeBarrierError> {
+        Ok(
+            if let Some(group_idx) =
+                self.peer_group_idx(connections.self_idx(), connections.len(), peer)
+            {
+                let peer_conn = connections.connection_mut(group_idx);
+                let (peer_mr, peer_remote_mr) = self.peer_mr(peer);
+                if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(_rank_id, conn)) =
+                    peer_conn
+                {
+                    let mut wr = conn
+                        .post_write(peer_mr, 0..=0, peer_remote_mr, 1..=1, None)
+                        .map_err(|error| {
+                            RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                                "Error issuing RDMA write to {peer:?}: {error}"
+                            ))
+                        })?;
+                    let (_, elapsed) = wr.spin_poll_batched(timeout, 1024).map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error during RDMA write to left child: {error}"
+                        ))
+                    })?;
+                    elapsed
+                } else {
+                    Duration::from_nanos(0)
+                }
+            } else {
+                Duration::from_nanos(0)
+            },
+        )
     }
 }
