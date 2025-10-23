@@ -9,19 +9,19 @@ use crate::spin_poll::spin_poll_batched;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
-pub struct RdmaNetworkUnregisteredCentralizedBarrier {
+pub struct UnregisteredCentralizedBarrier {
     memory: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub struct RdmaNetworkCentralizedBarrier<MR, RMR> {
+pub struct CentralizedBarrier<MR, RMR> {
     memory: Vec<u8>,
     mrs: Vec<(MR, RMR)>,
 }
 
-impl RdmaNetworkCentralizedBarrier<(), ()> {
-    pub fn new() -> RdmaNetworkUnregisteredCentralizedBarrier {
-        RdmaNetworkUnregisteredCentralizedBarrier { memory: vec![] }
+impl CentralizedBarrier<(), ()> {
+    pub fn new() -> UnregisteredCentralizedBarrier {
+        UnregisteredCentralizedBarrier { memory: vec![] }
     }
 }
 
@@ -45,7 +45,7 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-impl RdmaNetworkUnregisteredCentralizedBarrier {
+impl UnregisteredCentralizedBarrier {
     fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
         let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
         (ptr, BYTES_PER_CONNECTION)
@@ -53,9 +53,9 @@ impl RdmaNetworkUnregisteredCentralizedBarrier {
 }
 
 impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
-    for RdmaNetworkUnregisteredCentralizedBarrier
+    for UnregisteredCentralizedBarrier
 {
-    type Registered = RdmaNetworkCentralizedBarrier<MR, RMR>;
+    type Registered = CentralizedBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -75,7 +75,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
             });
         }
 
-        Ok(RdmaNetworkCentralizedBarrier {
+        Ok(CentralizedBarrier {
             memory: self.memory,
             mrs,
         })
@@ -83,7 +83,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
 }
 
 impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
-    for RdmaNetworkCentralizedBarrier<MR, RemoteMR>
+    for CentralizedBarrier<MR, RemoteMR>
 {
     type Error = RdmaNetworkBarrierError;
 
@@ -108,7 +108,7 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
+impl<MR, RemoteMR> CentralizedBarrier<MR, RemoteMR> {
     fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
         let ptr = &self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
         unsafe { read_volatile(ptr) }

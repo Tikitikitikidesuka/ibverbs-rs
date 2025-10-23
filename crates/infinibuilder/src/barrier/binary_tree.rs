@@ -8,19 +8,19 @@ use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
-pub struct RdmaNetworkUnregisteredBinaryTreeBarrier {
+pub struct UnregisteredBinaryTreeBarrier {
     memory: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub struct RdmaNetworkBinaryTreeBarrier<MR, RMR> {
+pub struct BinaryTreeBarrier<MR, RMR> {
     memory: Vec<u8>,
     mrs: Vec<(MR, RMR)>,
 }
 
-impl RdmaNetworkBinaryTreeBarrier<(), ()> {
-    pub fn new() -> RdmaNetworkUnregisteredBinaryTreeBarrier {
-        RdmaNetworkUnregisteredBinaryTreeBarrier { memory: vec![] }
+impl BinaryTreeBarrier<(), ()> {
+    pub fn new() -> UnregisteredBinaryTreeBarrier {
+        UnregisteredBinaryTreeBarrier { memory: vec![] }
     }
 }
 
@@ -44,7 +44,7 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-impl RdmaNetworkUnregisteredBinaryTreeBarrier {
+impl UnregisteredBinaryTreeBarrier {
     fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
         let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
         (ptr, BYTES_PER_CONNECTION)
@@ -68,7 +68,7 @@ impl PeerRole {
     }
 }
 
-impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
+impl<MR, RMR> BinaryTreeBarrier<MR, RMR> {
     fn peer_group_idx(&self, idx: usize, group_size: usize, peer: PeerRole) -> Option<usize> {
         match peer {
             Parent => {
@@ -113,9 +113,9 @@ impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
 }
 
 impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
-    for RdmaNetworkUnregisteredBinaryTreeBarrier
+    for UnregisteredBinaryTreeBarrier
 {
-    type Registered = RdmaNetworkBinaryTreeBarrier<MR, RMR>;
+    type Registered = BinaryTreeBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -137,14 +137,14 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
             );
         }
 
-        Ok(RdmaNetworkBinaryTreeBarrier {
+        Ok(BinaryTreeBarrier {
             memory: self.memory,
             mrs,
         })
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
+impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for BinaryTreeBarrier<MR, RemoteMR> {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
@@ -162,7 +162,7 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for RdmaNetworkBinaryTreeBar
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
+impl<MR, RemoteMR> BinaryTreeBarrier<MR, RemoteMR> {
     fn binary_tree_barrier<
         'network,
         Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
