@@ -1,4 +1,4 @@
-use crate::restructure::rdma_connection::RdmaWorkCompletion;
+use crate::rdma_connection::RdmaWorkCompletion;
 use ibverbs::ibv_wc;
 use std::fmt::{Debug, Display, Formatter};
 

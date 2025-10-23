@@ -1,16 +1,14 @@
+use infinibuilder::barrier::binary_tree::RdmaNetworkBinaryTreeBarrier;
+use infinibuilder::barrier::centralized::RdmaNetworkCentralizedBarrier;
+use infinibuilder::barrier::dissemination::DisseminationBarrier;
+use infinibuilder::ibverbs::network_node::{IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint};
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::restructure::barrier::binary_tree::RdmaNetworkBinaryTreeBarrier;
-use infinibuilder::restructure::barrier::centralized::RdmaNetworkCentralizedBarrier;
-use infinibuilder::restructure::ibverbs::network_node::{
-    IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
-};
-use infinibuilder::restructure::rdma_network_node::RdmaNetworkNode;
-use infinibuilder::restructure::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
+use infinibuilder::rdma_network_node::RdmaNetworkNode;
+use infinibuilder::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
 use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
-use infinibuilder::restructure::barrier::dissemination::{DisseminationBarrier, DisseminationBarrierError};
 
 fn main() {
     let args = parse_args();

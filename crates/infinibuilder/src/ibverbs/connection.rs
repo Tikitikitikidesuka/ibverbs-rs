@@ -1,8 +1,8 @@
-use crate::restructure::ibverbs::completion_queue::CachedCompletionQueue;
-use crate::restructure::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
-use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
-use crate::restructure::ibverbs::work_request::IbvWorkRequest;
-use crate::restructure::rdma_connection::RdmaConnection;
+use crate::ibverbs::completion_queue::CachedCompletionQueue;
+use crate::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
+use crate::ibverbs::work_completion::IbvWorkCompletion;
+use crate::ibverbs::work_request::IbvWorkRequest;
+use crate::rdma_connection::RdmaConnection;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,

@@ -1,10 +1,10 @@
-use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::ibverbs::connection::{
+use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::ibverbs::connection::{
     IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder, IbvConnectionEndpoint,
     IbvPreparedConnection,
 };
-use crate::restructure::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
-use crate::restructure::rdma_network_node::{
+use crate::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
+use crate::rdma_network_node::{
     RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
     RdmaNetworkSelfGroupConnections,
 };

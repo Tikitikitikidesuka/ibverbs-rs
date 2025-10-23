@@ -1,542 +1,272 @@
-use crate::network_config::NetworkConfig;
-use crate::tcp_exchanger::TcpExchangerError::DuplicatedNodeId;
-use futures::future::join_all;
-use futures::join;
-use serde::de::{DeserializeOwned, Error};
+use crate::network_config::{NetworkConfig, NodeConfig};
+use TcpNetworkConfigExchangeError::*;
+use bincode::serde::{decode_from_slice, encode_to_vec};
+use log::{debug, warn};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::ops::Deref;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::ops::Range;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::runtime::Runtime;
-use tokio::sync::{Mutex, mpsc};
-
-const MAX_MESSAGE_LENGTH: usize = 4096;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::time::timeout;
 
 #[derive(Debug, Error)]
-pub enum TcpExchangerError {
-    #[error("Error during incoming TCP connection: {0}")]
-    ConnectionError(std::io::Error),
-    #[error("Error during TCP communication: {0}")]
-    CommunicationError(std::io::Error),
-    #[error("Invalid message: {0}")]
-    InvalidMessage(serde_json::Error),
-    #[error("Message is too large (length = {0}; max_length = {MAX_MESSAGE_LENGTH})")]
-    MessageTooLarge(usize),
-    #[error("Runtime server error: {0}")]
-    RuntimeServerError(String),
-    #[error("Rank id is not in network config {0}")]
-    NonExistentRankId(usize),
-    #[error("Duplicated node id {0} on network config")]
-    DuplicatedNodeId(usize),
+pub enum TcpNetworkConfigExchangeError {
+    #[error("Rank id {rank_id} not in network")]
+    InvalidRankId { rank_id: usize },
+    #[error("Error decoding data ({0})")]
+    DecodeError(#[from] bincode::error::DecodeError),
+    #[error("Error encoding data ({0})")]
+    EncodeError(#[from] bincode::error::EncodeError),
+    #[error("Error during IO operation ({0})")]
+    IoError(#[from] std::io::Error),
+    #[error("")]
+    Timeout,
 }
 
-pub struct TcpExchanger<T: Serialize + DeserializeOwned> {
-    _marker: std::marker::PhantomData<T>,
+pub struct TcpExchangeConfig {
+    pub exchange_timeout: Duration, // Timeout for whole exchange
+    pub retry_delay: Duration,      // Time during operation retries
 }
 
-#[derive(Debug, Clone)]
-pub struct TcpExchangerNetworkConfig {
-    nodes: HashMap<usize, TcpExchangerNodeConfig>,
-    rank_ids: Vec<usize>, // To iterate efficiently
-}
-
-impl TcpExchangerNetworkConfig {
-    pub fn new() -> Self {
-        Self {
-            nodes: HashMap::new(),
-            rank_ids: Vec::new(),
-        }
-    }
-
-    pub fn from_network(network: NetworkConfig) -> Result<Self, TcpExchangerError> {
-        network
-            .iter()
-            .try_fold(Self::new(), |exchanger_network, node_config| {
-                exchanger_network.add_node(TcpExchangerNodeConfig::new(
-                    node_config.rankid,
-                    node_config.hostname.clone(),
-                    node_config.port,
-                ))
-            })
-    }
-
-    pub fn add_node(mut self, node: TcpExchangerNodeConfig) -> Result<Self, TcpExchangerError> {
-        if !self.nodes.contains_key(&node.rank_id) {
-            self.rank_ids.push(node.rank_id);
-            self.nodes.insert(node.rank_id, node);
-            Ok(self)
-        } else {
-            Err(DuplicatedNodeId(node.rank_id))
-        }
-    }
-
-    pub fn get(&self, rank_id: &usize) -> Option<&TcpExchangerNodeConfig> {
-        self.nodes.get(rank_id)
-    }
-
-    pub fn len(&self) -> usize {
-        self.rank_ids.len()
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &TcpExchangerNodeConfig> + '_ {
-        self.rank_ids
-            .iter()
-            .filter_map(move |id| self.nodes.get(id))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct TcpExchangerNodeConfig {
-    rank_id: usize,
-    hostname: String,
-    port: u16,
-}
-
-impl TcpExchangerNodeConfig {
-    pub fn new(rank_id: usize, address: String, port: u16) -> Self {
-        Self {
-            rank_id,
-            hostname: address,
-            port,
-        }
-    }
-}
-
-pub struct TcpExchangedData<T> {
-    nodes: Vec<T>,
-}
-
-impl<T> TcpExchangedData<T> {
-    pub fn as_slice(&self) -> &[T] {
-        self.nodes.as_ref()
-    }
-}
-
-pub struct TcpExchangerConfig {
-    pub send_timeout: Duration,               // Timeout for whole network send
-    pub send_attempt_delay: Duration,         // Delay between send attempts
-    pub receive_timeout: Duration,            // Timeout for whole network receive
-    pub receive_connection_timeout: Duration, // Timeout per connection in receive
-}
-
-impl Default for TcpExchangerConfig {
+impl Default for TcpExchangeConfig {
     fn default() -> Self {
         Self {
-            send_timeout: Duration::from_secs(30),
-            send_attempt_delay: Duration::from_secs(1),
-            receive_timeout: Duration::from_secs(60),
-            receive_connection_timeout: Duration::from_secs(10),
+            exchange_timeout: Duration::from_secs(60),
+            retry_delay: Duration::from_millis(1000),
         }
     }
 }
 
+pub struct TcpExchanger {}
+
 #[derive(Debug, Serialize, Deserialize)]
-struct TcpExchangedNodeData<T> {
+struct ExchangeMessage<T> {
     rank_id: usize,
     data: T,
 }
 
-impl<T> TcpExchanger<T>
-where
-    T: Serialize + DeserializeOwned + Send + Sync + 'static,
-{
-    pub fn await_exchange_network_config(
+impl TcpExchanger {
+    pub fn await_exchange_all<T: Serialize + DeserializeOwned + Clone>(
         rank_id: usize,
-        out_data: &T,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
-        Runtime::new()
-            .map_err(|error| TcpExchangerError::ConnectionError(error))?
-            .block_on(Self::exchange_network_config(
-                rank_id,
-                out_data,
-                network_config,
-                exchanger_config,
-            ))
+        network: &NetworkConfig,
+        data: &T,
+        config: &TcpExchangeConfig,
+    ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(Self::exchange_all(rank_id, network, data, config))
     }
 
-    pub async fn exchange_network_config(
+    pub async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(
         rank_id: usize,
-        out_data: &T,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
-        let send_fut =
-            Self::send_network_config(rank_id, out_data, network_config, exchanger_config);
-
-        let tcp_node_config = network_config
-            .get(&rank_id)
-            .ok_or(TcpExchangerError::NonExistentRankId(rank_id))?;
-        let socket_addr = format!("{}:{}", tcp_node_config.hostname, tcp_node_config.port);
-        println!("Receiving at {socket_addr}");
-
-        let recv_fut = Self::receive_network_config(socket_addr, network_config, exchanger_config);
-
-        let (send_result, recv_result) = join!(send_fut, recv_fut);
-
-        // Prioritize returning receive errors if they occur
-        match (send_result, recv_result) {
-            (Ok(_), Ok(ready_config)) => Ok(ready_config),
-            (_, Err(e)) => Err(e),
-            (Err(e), _) => Err(e),
-        }
-    }
-
-    pub async fn send_network_config(
-        rank_id: usize,
-        out_data: &T,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<(), TcpExchangerError> {
-        tokio::time::timeout(
-            exchanger_config.send_timeout,
-            Self::send_config_to_nodes_async(rank_id, out_data, network_config, exchanger_config),
+        network: &NetworkConfig,
+        data: &T,
+        config: &TcpExchangeConfig,
+    ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
+        timeout(
+            config.exchange_timeout,
+            Self::exchange_all_inner(rank_id, network, data, config),
         )
         .await
-        .unwrap_or_else(|_| {
-            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "Operation timed out",
-            )))
-        })
+        .unwrap_or(Err(Timeout))
     }
 
-    // Will loop retrying failed sends until all are finished successfully
-    // Must be run with a timeout block to prevent infinite loop
-    async fn send_config_to_nodes_async(
+    async fn exchange_all_inner<T: Serialize + DeserializeOwned + Clone>(
         rank_id: usize,
-        out_data: &T,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<(), TcpExchangerError> {
-        let sent_data = TcpExchangedNodeData {
-            rank_id,
-            data: out_data.clone(),
-        };
+        network: &NetworkConfig,
+        data: &T,
+        config: &TcpExchangeConfig,
+    ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
+        let self_node = network.get(rank_id).ok_or(InvalidRankId { rank_id })?;
+        let lower_rank_ids = network.rank_ids().start..self_node.rankid;
+        let greater_rank_ids = (self_node.rankid + 1)..(network.rank_ids().end + 1);
 
-        let message_payload =
-            serde_json::to_vec(&sent_data).map_err(TcpExchangerError::InvalidMessage)?;
+        debug!(
+            "Exchanging from {}:\n\tlower nodes -> {lower_rank_ids:?}\n\thigher nodes -> {greater_rank_ids:?}",
+            self_node.rankid,
+        );
 
-        if message_payload.len() > MAX_MESSAGE_LENGTH {
-            return Err(TcpExchangerError::MessageTooLarge(message_payload.len()));
+        // Exchange server to lower nodes
+        debug!("Serving exchange...");
+        let lower_nodes_data =
+            Self::exchange_all_serve(data, self_node, lower_rank_ids, &network, &config).await?;
+        debug!("Done serving");
+
+        // Exchange connect to greater nodes
+        debug!("Connecting exchange...");
+        let greater_nodes_data =
+            Self::exchange_all_connect(data, self_node, greater_rank_ids, &network, &config)
+                .await?;
+        debug!("Done connecting");
+
+        Ok(lower_nodes_data
+            .into_iter()
+            .chain(vec![data.to_owned()].into_iter())
+            .chain(greater_nodes_data.into_iter())
+            .collect())
+    }
+
+    async fn exchange_all_serve<T: Serialize + DeserializeOwned>(
+        data: &T,
+        self_node: &NodeConfig,
+        remote_rank_ids: Range<usize>,
+        network: &NetworkConfig,
+        config: &TcpExchangeConfig,
+    ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
+        let server = TcpListener::bind((self_node.hostname.as_str(), self_node.port)).await?;
+        let mut received = HashMap::new();
+
+        while received.len() < remote_rank_ids.len() {
+            let (mut stream, _) = server.accept().await?;
+            Self::exchange_serve(
+                data,
+                self_node.rankid,
+                remote_rank_ids.clone(),
+                &mut stream,
+                &mut received,
+            )
+            .await?;
         }
 
-        // Create tasks for sending to all nodes concurrently
-        let mut send_tasks = Vec::new();
+        // Iterating on a map directly is O(capacity) so iterate with indices instead
+        Ok(remote_rank_ids
+            .map(|rank_id| received.remove(&rank_id).unwrap())
+            .collect())
+    }
 
-        for node_config in network_config.iter() {
-            let target_node_id = node_config.rank_id;
-            let address = node_config.hostname.clone();
-            let tcp_port = node_config.port;
-            let attempt_delay = exchanger_config.send_attempt_delay;
-            let message_payload = message_payload.clone();
+    async fn exchange_all_connect<T: Serialize + DeserializeOwned>(
+        data: &T,
+        self_node: &NodeConfig,
+        remote_rank_ids: Range<usize>,
+        network: &NetworkConfig,
+        config: &TcpExchangeConfig,
+    ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
+        let mut received = HashMap::new();
 
-            let task = tokio::spawn(async move {
-                Self::loop_attempt_send_to_single_node(
-                    &address,
-                    tcp_port,
-                    &message_payload,
-                    attempt_delay,
-                    target_node_id,
-                )
-                .await
-            });
+        for remote_rank_id in remote_rank_ids.clone() {
+            let remote_node = network.get(remote_rank_id).ok_or(InvalidRankId {
+                rank_id: remote_rank_id,
+            })?;
 
-            send_tasks.push(task);
-        }
-
-        // Wait for all send operations to complete concurrently
-        // Since loop_attempt_send_to_single_node never returns Err, only check for join errors
-        let results = join_all(send_tasks).await;
-
-        for result in results {
-            if let Err(join_error) = result {
-                return Err(TcpExchangerError::RuntimeServerError(format!(
-                    "Task join error: {}",
-                    join_error
-                )));
+            let mut stream;
+            loop {
+                if let Ok(s) =
+                    TcpStream::connect((remote_node.hostname.as_str(), remote_node.port)).await
+                {
+                    stream = s;
+                    break;
+                }
+                tokio::time::sleep(config.retry_delay).await;
             }
+
+            Self::exchange_connect(
+                data,
+                self_node.rankid,
+                remote_rank_ids.clone(),
+                &mut stream,
+                &mut received,
+            )
+            .await?;
         }
 
-        Ok(())
+        // Iterating on a map directly is O(capacity) so iterate with indices instead
+        Ok(remote_rank_ids
+            .map(|rank_id| received.remove(&rank_id).unwrap())
+            .collect())
     }
 
-    async fn loop_attempt_send_to_single_node(
-        address: &str,
-        tcp_port: u16,
-        message_payload: &[u8],
-        attempt_delay: Duration,
-        node_id: usize,
-    ) -> Result<(), TcpExchangerError> {
-        let target_addr = format!("{}:{}", address, tcp_port);
-        let mut attempt = 1;
-
-        loop {
-            match Self::attempt_send(&target_addr, message_payload).await {
-                Ok(()) => {
-                    println!(
-                        "Successfully sent config to node {} ({})",
-                        node_id, target_addr
-                    );
-                    return Ok(());
-                }
-                Err(error) => {
-                    println!(
-                        "Failed to send to node {} (attempt {}): {}. Retrying in {:?}...",
-                        node_id, attempt, error, attempt_delay
-                    );
-                    tokio::time::sleep(attempt_delay).await;
-                    attempt += 1;
-                }
-            }
-        }
-    }
-
-    async fn attempt_send(
-        target_addr: &str,
-        message_payload: &[u8],
-    ) -> Result<(), TcpExchangerError> {
-        use tokio::io::AsyncWriteExt;
-
-        let mut stream = TcpStream::connect(target_addr)
-            .await
-            .map_err(TcpExchangerError::ConnectionError)?;
-
-        // Send 4-byte length header (little-endian)
-        let len_bytes = (message_payload.len() as usize).to_le_bytes();
-        stream
-            .write_all(&len_bytes)
-            .await
-            .map_err(TcpExchangerError::CommunicationError)?;
-
-        // Send the message payload
-        stream
-            .write_all(message_payload)
-            .await
-            .map_err(TcpExchangerError::CommunicationError)?;
-
-        // Ensure all data is sent
-        stream
-            .flush()
-            .await
-            .map_err(TcpExchangerError::CommunicationError)?;
-
-        Ok(())
-    }
-
-    pub async fn receive_network_config(
-        socket_addr: impl ToSocketAddrs,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
-        tokio::time::timeout(
-            exchanger_config.receive_timeout,
-            Self::run_network_config_server(socket_addr, network_config, exchanger_config),
-        )
-        .await
-        .unwrap_or_else(|_| {
-            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "Operation timed out",
-            )))
-        })
-    }
-
-    async fn run_network_config_server(
-        socket_addr: impl ToSocketAddrs,
-        network_config: &TcpExchangerNetworkConfig,
-        exchanger_config: &TcpExchangerConfig,
-    ) -> Result<TcpExchangedData<T>, TcpExchangerError> {
-        let listener = TcpListener::bind(socket_addr)
-            .await
-            .map_err(TcpExchangerError::ConnectionError)?;
-
-        let total_nodes = network_config.nodes.len();
-
-        // Shared state for tracking received nodes by node id
-        let received_node_ids = Arc::new(Mutex::new(HashSet::new()));
-        let network_config = Arc::new(network_config.clone());
-
-        // Channel for sending received ready nodes to main task
-        let (tx, mut rx) =
-            mpsc::channel::<Result<TcpExchangedNodeData<T>, TcpExchangerError>>(total_nodes);
-
-        // Spawn the connection acceptor task
-        let listener_task = {
-            let tx = tx.clone();
-            let network_config = Arc::clone(&network_config);
-            let received_node_ids = Arc::clone(&received_node_ids);
-            let connection_timeout = exchanger_config.receive_connection_timeout;
-
-            tokio::spawn(async move {
-                loop {
-                    match listener.accept().await {
-                        Ok((stream, peer_addr)) => {
-                            println!("Received connection from: {}", peer_addr);
-
-                            // Spawn a task to handle each connection in parallel
-                            let tx_clone = tx.clone();
-                            let network_config_clone = Arc::clone(&network_config);
-                            let received_node_ids_clone = Arc::clone(&received_node_ids);
-
-                            tokio::spawn(async move {
-                                let result = Self::handle_connection(
-                                    stream,
-                                    &network_config_clone,
-                                    &received_node_ids_clone,
-                                    connection_timeout,
-                                )
-                                .await;
-
-                                // Send result back to main task
-                                if tx_clone.send(result).await.is_err() {
-                                    println!(
-                                        "Failed to send result for connection from {}",
-                                        peer_addr
-                                    );
-                                }
-                            });
-                        }
-                        Err(accept_error) => {
-                            println!("Failed to accept connection: {}", accept_error);
-                            let _ = tx
-                                .send(Err(TcpExchangerError::ConnectionError(accept_error)))
-                                .await;
-                            break;
-                        }
-                    }
-                }
-            })
-        };
-
-        // Collect results from parallel connection handlers
-        let mut successful_nodes = 0;
-        let mut in_data_vec = Vec::new();
-
-        while successful_nodes < total_nodes {
-            match rx.recv().await {
-                Some(Ok(in_data)) => {
-                    successful_nodes += 1;
-                    in_data_vec.push(in_data);
-                    println!(
-                        "Successfully validated node ({}/{} nodes received)",
-                        successful_nodes, total_nodes
-                    );
-                }
-                Some(Err(error)) => {
-                    println!("Connection validation failed: {}", error);
-                    // Continue waiting for valid connections
-                }
-                None => {
-                    return Err(TcpExchangerError::RuntimeServerError(
-                        "Channel closed unexpectedly".to_string(),
-                    ));
-                }
-            }
-        }
-
-        // Cancel the listener task since we have all nodes
-        listener_task.abort();
-
-        println!("All {} nodes connected successfully!", total_nodes);
-
-        // Sort input data by node id
-        in_data_vec.sort_by(|a, b| a.rank_id.cmp(&b.rank_id));
-
-        // Create and return the ready network config
-        Ok(TcpExchangedData {
-            nodes: in_data_vec.into_iter().map(|n| n.data).collect(),
-        })
-    }
-
-    async fn handle_connection(
-        mut stream: TcpStream,
-        network_config: &TcpExchangerNetworkConfig,
-        received_nodes: &Arc<Mutex<HashSet<usize>>>,
-        timeout: Duration,
-    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
-        let result = tokio::time::timeout(timeout, async {
-            let mut buffer = [0u8; MAX_MESSAGE_LENGTH];
-            let ready_node = Self::read_ready_node_from_stream(&mut stream, &mut buffer).await?;
-            let validated_ready_node =
-                Self::validate_ready_node_from_config(ready_node, network_config, received_nodes)
-                    .await?;
-
-            // Add the node to received_nodes to prevent duplicates
-            received_nodes
-                .lock()
-                .await
-                .insert(validated_ready_node.rank_id);
-
-            // Return the ready node config
-            Ok(validated_ready_node)
-        })
-        .await;
-
-        result.unwrap_or_else(|_| {
-            Err(TcpExchangerError::CommunicationError(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "Operation timed out",
-            )))
-        })
-    }
-
-    async fn validate_ready_node_from_config(
-        ready_node: TcpExchangedNodeData<T>,
-        network_config: &TcpExchangerNetworkConfig,
-        received_nodes: &Arc<Mutex<HashSet<usize>>>,
-    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
-        let node_id = ready_node.rank_id;
-
-        let mut received = received_nodes.lock().await;
-        if received.contains(&node_id) {
-            return Err(TcpExchangerError::InvalidMessage(
-                serde_json::Error::custom("Node already received"),
-            ));
-        }
-
-        // Check if node_id exists in network config
-        network_config.get(&node_id)
-            .ok_or(TcpExchangerError::NonExistentRankId(node_id))?;
-
-        received.insert(node_id);  // Insert while still holding lock
-        Ok(ready_node)
-    }
-
-    async fn read_ready_node_from_stream(
+    async fn exchange_serve<T: Serialize + DeserializeOwned>(
+        data: &T,
+        self_rank_id: usize,
+        remote_rank_ids: Range<usize>,
         stream: &mut TcpStream,
-        buffer: &mut [u8],
-    ) -> Result<TcpExchangedNodeData<T>, TcpExchangerError> {
-        // Read message size from 4 byte header
-        let mut len_bytes = [0u8; size_of::<usize>()];
-        stream
-            .read_exact(&mut len_bytes)
-            .await
-            .map_err(TcpExchangerError::CommunicationError)?;
+        received: &mut HashMap<usize, T>,
+    ) -> Result<(), TcpNetworkConfigExchangeError> {
+        // Send self data
+        Self::write_stream(self_rank_id, data, stream).await?;
 
-        let len = usize::from_le_bytes(len_bytes);
+        // Read incoming data
+        let incoming_data = Self::read_stream::<T>(stream).await?;
+        Self::insert_if_valid(incoming_data, received, remote_rank_ids.clone());
 
-        // Check size is within buffer boundaries
-        if len > MAX_MESSAGE_LENGTH {
-            return Err(TcpExchangerError::MessageTooLarge(len));
+        Ok(())
+    }
+
+    async fn exchange_connect<T: Serialize + DeserializeOwned>(
+        data: &T,
+        self_rank_id: usize,
+        remote_rank_ids: Range<usize>,
+        stream: &mut TcpStream,
+        received: &mut HashMap<usize, T>,
+    ) -> Result<(), TcpNetworkConfigExchangeError> {
+        // Read incoming data
+        let incoming_data = Self::read_stream::<T>(stream).await?;
+        Self::insert_if_valid(incoming_data, received, remote_rank_ids.clone());
+
+        // Send self data
+        Self::write_stream(self_rank_id, data, stream).await?;
+
+        Ok(())
+    }
+
+    fn insert_if_valid<T: Serialize + DeserializeOwned>(
+        incoming_data: ExchangeMessage<T>,
+        received: &mut HashMap<usize, T>,
+        valid_range: Range<usize>,
+    ) -> bool {
+        // Validate rank id is in range
+        if valid_range.contains(&incoming_data.rank_id) {
+            // Insert incoming data to map
+            let out = received.insert(incoming_data.rank_id, incoming_data.data);
+            if out.is_some() {
+                // Warn if config already received for the specified rank id
+                warn!("Duplicate exchange from {}", incoming_data.rank_id,);
+            }
+            debug!("Exchange progress -> {}", received.len());
+            true
+        } else {
+            // Warn if exchange from invalid rank id received
+            warn!(
+                "Invalid rank id incoming exchange {}",
+                incoming_data.rank_id
+            );
+            false
         }
+    }
 
-        // Read only the required bytes from the stream
-        let msg_buffer = &mut buffer[..len];
+    async fn read_stream<T: DeserializeOwned>(
+        stream: &mut (impl AsyncReadExt + Unpin),
+    ) -> Result<ExchangeMessage<T>, TcpNetworkConfigExchangeError> {
+        let mut size_buf = [0u8; size_of::<u32>()];
+        stream.read_exact(&mut size_buf[..]).await?;
+        let msg_size = u32::from_be_bytes(size_buf);
+
+        let mut msg_buf = vec![0u8; msg_size as usize];
+        stream.read_exact(&mut msg_buf[..]).await?;
+        Ok(decode_from_slice(msg_buf.as_slice(), Self::bincode_config())?.0)
+    }
+
+    async fn write_stream<T: Serialize>(
+        rank_id: usize,
+        data: &T,
+        stream: &mut (impl AsyncWriteExt + Unpin),
+    ) -> Result<(), TcpNetworkConfigExchangeError> {
+        let encoded = encode_to_vec(ExchangeMessage { rank_id, data }, Self::bincode_config())?;
         stream
-            .read_exact(msg_buffer)
-            .await
-            .map_err(TcpExchangerError::CommunicationError)?;
+            .write_all((encoded.len() as u32).to_be_bytes().as_ref())
+            .await?;
+        stream.write_all(encoded.as_slice()).await?;
+        Ok(())
+    }
 
-        // Deserialize message payload
-        let config =
-            serde_json::from_slice(msg_buffer).map_err(TcpExchangerError::InvalidMessage)?;
-
-        Ok(config)
+    fn bincode_config() -> impl bincode::config::Config {
+        bincode::config::standard()
+            .with_big_endian()
+            .with_variable_int_encoding()
     }
 }

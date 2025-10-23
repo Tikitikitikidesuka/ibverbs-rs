@@ -1,5 +1,5 @@
-use crate::restructure::ibverbs::work_request::IbvWorkRequest;
-use crate::restructure::spin_poll::{Timeout, spin_poll, spin_poll_batched};
+use crate::ibverbs::work_request::IbvWorkRequest;
+use crate::spin_poll::{Timeout, spin_poll, spin_poll_batched};
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;

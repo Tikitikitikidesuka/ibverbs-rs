@@ -1,7 +1,7 @@
-use crate::restructure::ibverbs::completion_queue::{CachedCompletionQueue, PollError};
-use crate::restructure::ibverbs::work_completion::IbvWorkCompletion;
-use crate::restructure::ibverbs::work_error::{IbvWorkError, IbvWorkErrorCode};
-use crate::restructure::rdma_connection::{
+use crate::ibverbs::completion_queue::{CachedCompletionQueue, PollError};
+use crate::ibverbs::work_completion::IbvWorkCompletion;
+use crate::ibverbs::work_error::{IbvWorkError, IbvWorkErrorCode};
+use crate::rdma_connection::{
     RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestPollError,
 };
 use ibverbs::ibv_wc_status;

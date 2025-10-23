@@ -1,9 +1,9 @@
-use crate::restructure::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest};
-use crate::restructure::rdma_network_node::{
+use crate::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
+use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
+use crate::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
-use crate::restructure::spin_poll::spin_poll_batched;
+use crate::spin_poll::spin_poll_batched;
 use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;

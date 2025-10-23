@@ -1,4 +1,3 @@
-use ibverbs::ibv_wc_status;
 use thiserror::Error;
 
 #[derive(Debug, Copy, Clone, Error)]

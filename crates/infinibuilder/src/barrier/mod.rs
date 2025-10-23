@@ -3,8 +3,8 @@ pub mod binary_tree;
 pub mod dissemination;
 
 use std::error::Error;
-use crate::restructure::rdma_connection::RdmaConnection;
-use crate::restructure::rdma_network_node::RdmaNetworkSelfGroupConnections;
+use crate::rdma_connection::RdmaConnection;
+use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::time::Duration;
 use thiserror::Error;
 

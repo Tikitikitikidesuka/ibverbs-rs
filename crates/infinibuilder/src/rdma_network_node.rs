@@ -1,5 +1,5 @@
-use super::rdma_connection::RdmaConnection;
-use crate::restructure::barrier::RdmaNetworkBarrier;
+use crate::barrier::RdmaNetworkBarrier;
+use crate::rdma_connection::RdmaConnection;
 use std::time::Duration;
 
 pub trait RdmaNetworkNode<
