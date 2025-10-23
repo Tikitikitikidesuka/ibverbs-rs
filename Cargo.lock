@@ -177,6 +177,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "multi-event-packet"
+version = "0.1.0"
+dependencies = [
+ "multi-fragment-packet",
+]
+
+[[package]]
 name = "multi-fragment-packet"
 version = "0.1.0"
 dependencies = [
