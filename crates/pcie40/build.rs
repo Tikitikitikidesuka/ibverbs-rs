@@ -10,9 +10,18 @@ fn build_pcie40_bindings() {
     const PCIE40_WRAPPER_H: &str = "src/wrapper.h";
     const PCIE40_BINDINGS: &str = "src/bindings.rs";
     const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
-
     const NO_BINDGEN: &str = "NO_BINDGEN";
+    
 
+    println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
+
+    // Link to the p40 libraries
+    for lib in PCIE40_LIBS {
+        println!("cargo:rustc-link-lib={lib}");
+    }
+
+    // skip rest if running bindgen is disabled
+    println!("cargo::rerun-if-env-changed={NO_BINDGEN}");
     let run_bind = env::var_os(NO_BINDGEN).is_none_or(|v| v.eq_ignore_ascii_case("false"));
     if !run_bind {
         println!(
@@ -22,12 +31,6 @@ fn build_pcie40_bindings() {
     }
 
     // Tell cargo to re-run if the wrapper.h changes
-    println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
-
-    // Link to the p40 libraries
-    for lib in PCIE40_LIBS {
-        println!("cargo:rustc-link-lib={lib}");
-    }
 
     // Generate bindings using the wrapper header
     let bindings = bindgen::Builder::default()
