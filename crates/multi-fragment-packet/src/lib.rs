@@ -8,7 +8,6 @@ pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
 
-use alignment_utils;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
 use std::ops::Deref;
@@ -21,6 +20,7 @@ impl MultiFragmentPacketRef {
 }
 
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 pub struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
@@ -378,12 +378,29 @@ impl Display for FragmentRef<'_> {
 mod bincode {
     use super::*;
     use ::bincode;
+    use bincode::{de::read::Reader, enc::write::Writer};
     impl bincode::Decode<()> for MultiFragmentPacket {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            let vec = Vec::from(Box::<[u8]>::decode(decoder)?);
-            Ok(Self { data: vec })
+            union Header {
+                typed: MultiFragmentPacketHeader,
+                bytes: [u8; MultiFragmentPacketRef::HEADER_SIZE],
+            }
+
+            let mut bytes: [u8; _] = Default::default();
+            decoder.reader().read(&mut bytes)?;
+            let header = Header { bytes };
+
+            // SAFETY: header has been received validly.
+            let mut data = vec![0u8; unsafe { header.typed.packet_size } as usize];
+            // SAFETY: repr(C) type can safely be accessed as bytes.
+            data[0..MultiFragmentPacketRef::HEADER_SIZE].copy_from_slice(unsafe { &header.bytes });
+            decoder
+                .reader()
+                .read(&mut data[MultiFragmentPacketRef::HEADER_SIZE..])?;
+
+            Ok(Self { data })
         }
     }
 
@@ -392,7 +409,7 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.data.as_slice().encode(encoder)
+            encoder.writer().write(&self.data)
         }
     }
 
@@ -401,7 +418,7 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.raw_packet_data().encode(encoder)
+            encoder.writer().write(self.raw_packet_data())
         }
     }
 
@@ -411,7 +428,10 @@ mod bincode {
         ) -> Result<Self, bincode::error::DecodeError> {
             let fragment_type = bincode::Decode::decode(decoder)?;
             let fragment_size = bincode::Decode::decode(decoder)?;
-            let data = Vec::from(Box::<[u8]>::decode(decoder)?);
+
+            let mut data = vec![0u8; fragment_size as _];
+            decoder.reader().read(&mut data)?;
+
             Ok(Self {
                 fragment_type,
                 fragment_size,
@@ -427,7 +447,7 @@ mod bincode {
         ) -> Result<(), bincode::error::EncodeError> {
             self.fragment_type.encode(encoder)?;
             self.fragment_size.encode(encoder)?;
-            self.data().encode(encoder)
+            encoder.writer().write(self.data())
         }
     }
 
@@ -438,7 +458,7 @@ mod bincode {
         ) -> Result<(), bincode::error::EncodeError> {
             self.fragment_type.encode(encoder)?;
             self.fragment_size.encode(encoder)?;
-            self.data.encode(encoder)
+            encoder.writer().write(self.data())
         }
     }
 }
