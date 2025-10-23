@@ -11,6 +11,16 @@ fn build_pcie40_bindings() {
     const PCIE40_BINDINGS: &str = "src/bindings.rs";
     const PCIE40_LIBS: &[&str] = &["pcie40_daq", "pcie40_id"];
 
+    const NO_BINDGEN: &str = "NO_BINDGEN";
+
+    let run_bind = env::var_os(NO_BINDGEN).is_none_or(|v| v.eq_ignore_ascii_case("false"));
+    if !run_bind {
+        println!(
+            "cargo::warning=Running bindgen and linking to the pcie40 c libraries is **disabled**, as {NO_BINDGEN} is set (to true).\nThis is only useful for `cargo check`."
+        );
+        return;
+    }
+
     // Tell cargo to re-run if the wrapper.h changes
     println!("cargo:rerun-if-changed={PCIE40_WRAPPER_H}");
 
