@@ -4,6 +4,7 @@ pub mod work_completion;
 pub mod memory_region;
 pub mod work_error;
 pub mod network_node;
+pub mod init;
 
 mod completion_queue;
 
