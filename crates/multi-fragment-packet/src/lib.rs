@@ -374,6 +374,75 @@ impl Display for FragmentRef<'_> {
     }
 }
 
+#[cfg(feature = "bincode")]
+mod bincode {
+    use super::*;
+    use ::bincode;
+    impl bincode::Decode<()> for MultiFragmentPacket {
+        fn decode<D: bincode::de::Decoder<Context = ()>>(
+            decoder: &mut D,
+        ) -> Result<Self, bincode::error::DecodeError> {
+            let vec = Vec::from(Box::<[u8]>::decode(decoder)?);
+            Ok(Self { data: vec })
+        }
+    }
+
+    impl bincode::Encode for MultiFragmentPacket {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.data.as_slice().encode(encoder)
+        }
+    }
+
+    impl bincode::Encode for MultiFragmentPacketRef {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.raw_packet_data().encode(encoder)
+        }
+    }
+
+    impl bincode::Decode<()> for Fragment {
+        fn decode<D: bincode::de::Decoder<Context = ()>>(
+            decoder: &mut D,
+        ) -> Result<Self, bincode::error::DecodeError> {
+            let fragment_type = bincode::Decode::decode(decoder)?;
+            let fragment_size = bincode::Decode::decode(decoder)?;
+            let data = Vec::from(Box::<[u8]>::decode(decoder)?);
+            Ok(Self {
+                fragment_type,
+                fragment_size,
+                data,
+            })
+        }
+    }
+
+    impl bincode::Encode for Fragment {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.fragment_type.encode(encoder)?;
+            self.fragment_size.encode(encoder)?;
+            self.data().encode(encoder)
+        }
+    }
+
+    impl<'a> bincode::Encode for FragmentRef<'a> {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.fragment_type.encode(encoder)?;
+            self.fragment_size.encode(encoder)?;
+            self.data.encode(encoder)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

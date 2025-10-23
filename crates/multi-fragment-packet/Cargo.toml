@@ -10,10 +10,12 @@ pcie40 = { path = "../pcie40", optional = true }
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }
 shared-memory-buffer = { path = "../shared-memory-buffer", optional = true }
+bincode = { version = "2.0", optional = true }
 
 [features]
 pcie40-io = ["dep:pcie40"]
 shmem-io = ["dep:shared-memory-buffer"]
+bincode = ["dep:bincode"]
 
 [[example]]
 name = "mfp_shared_memory_example"
@@ -29,4 +31,3 @@ required-features = ["pcie40-readable"]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
 required-features = ["pcie40-readable"]
-
