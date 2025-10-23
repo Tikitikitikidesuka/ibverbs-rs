@@ -1,6 +1,6 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{
-    RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError,
+    RdmaConnection, RdmaWorkRequest,
 };
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
@@ -107,12 +107,28 @@ fn reset_remote_peer_flag(memory: &mut [u8], rank_id: usize) {
     unsafe { write_volatile(ptr, NOT_READY_FLAG) };
 }
 
-fn left_child_idx(idx: usize) -> usize {
-    idx * 2 + 1
-}
+impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
+    fn parent_idx(&self, idx: usize) -> Option<usize> {
+        if idx == 0 { None } else { Some((idx - 1) / 2) }
+    }
 
-fn right_child_idx(idx: usize) -> usize {
-    left_child_idx(idx) + 1
+    fn left_child_idx(&self, idx: usize, group_size: usize) -> Option<usize> {
+        let lci = idx * 2 + 1;
+        if lci >= group_size {
+            None
+        } else {
+            Some(lci)
+        }
+    }
+
+    fn right_child_idx(&self, idx: usize, group_size: usize) -> Option<usize> {
+        let rci = idx * 2 + 2;
+        if rci >= group_size {
+            None
+        } else {
+            Some(rci)
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -128,7 +144,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     type Registered = RdmaNetworkBinaryTreeBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
-    fn memory(&mut self, _num_connections: usize) -> Vec<(*mut u8, usize)> {
+    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
         self.memory = setup_memory();
         (0..3)
             .into_iter()
@@ -160,23 +176,17 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for RdmaNetworkBinaryTreeBar
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
-        mut connections: GroupConns,
+        connections: GroupConns,
         timeout: Duration,
     ) -> Result<(), Self::Error> {
         let idx = connections.self_idx();
 
-        if idx == 0 {
-            // Root
-            self.root_barrier(connections, timeout)
-        } else {
-            // Non root
-            self.non_root_barrier(connections, timeout)
-        }
+        self.binary_tree_barrier(connections, timeout)
     }
 }
 
 impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
-    fn root_barrier<
+    fn binary_tree_barrier<
         'network,
         Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
@@ -188,123 +198,131 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         let mut available_time = timeout;
 
         // 1. Wait for the two children
-        let (_, elapsed) = spin_poll_batched(
-            || (read_remote_left_child_flag(self.memory.as_slice()) == READY_FLAG).then_some(()),
-            available_time,
-            1024,
-        )
-        .map_err(|_| {
-            RdmaNetworkBinaryTreeBarrierError::Timeout(
-                "Timeout waiting for left children notification".to_string(),
+        if let Some(lci) = self.left_child_idx(connections.self_idx(), connections.len()) {
+            println!("Waiting for left child");
+            let (_, elapsed) = spin_poll_batched(
+                || {
+                    (read_remote_left_child_flag(self.memory.as_slice()) == READY_FLAG)
+                        .then_some(())
+                },
+                available_time,
+                1024,
             )
-        })?;
-        available_time -= elapsed;
-        let (_, elapsed) = spin_poll_batched(
-            || (read_remote_right_child_flag(self.memory.as_slice()) == READY_FLAG).then_some(()),
-            available_time,
-            1024,
-        )
-        .map_err(|_| {
-            RdmaNetworkBinaryTreeBarrierError::Timeout(
-                "Timeout waiting for left children notification".to_string(),
+            .map_err(|_| {
+                RdmaNetworkBinaryTreeBarrierError::Timeout(
+                    "Timeout waiting for left children notification".to_string(),
+                )
+            })?;
+            reset_remote_left_child_flag(self.memory.as_mut_slice());
+            available_time -= elapsed;
+        }
+        if let Some(rci) = self.right_child_idx(connections.self_idx(), connections.len()) {
+            println!("Waiting for right child");
+            let (_, elapsed) = spin_poll_batched(
+                || {
+                    (read_remote_right_child_flag(self.memory.as_slice()) == READY_FLAG)
+                        .then_some(())
+                },
+                available_time,
+                1024,
             )
-        })?;
-        available_time -= elapsed;
-
-        // 2. Notify two children
-        let mut left_child_conn = connections
-            .connection_mut(left_child_idx(connections.self_idx()));
-        if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) = left_child_conn {
-            let mut wr = conn.post_write()
+            .map_err(|_| {
+                RdmaNetworkBinaryTreeBarrierError::Timeout(
+                    "Timeout waiting for left children notification".to_string(),
+                )
+            })?;
+            reset_remote_right_child_flag(self.memory.as_mut_slice());
+            available_time -= elapsed;
         }
 
-
-        for idx in 0..connections.len() {
-            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, peer_conn) =
-                connections.connection_mut(idx).unwrap()
+        // 2. Notify parent
+        if let Some(pi) = self.parent_idx(connections.self_idx()) {
+            println!("Notifying parent");
+            let parent_conn = connections.connection_mut(pi);
+            let (parent_mr, parent_remote_mr) = &self.mrs[0];
+            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) = parent_conn
             {
-                println!("Notifying peer {rank_id} as central barrier coordinator");
+                let mut wr = conn
+                    .post_write(parent_mr, 0..=0, parent_remote_mr, 1..=1, None)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error issuing RDMA write to left child: {error}"
+                        ))
+                    })?;
+                let (_, elapsed) = wr
+                    .spin_poll_batched(available_time, 1024)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error during RDMA write to left child: {error}"
+                        ))
+                    })?;
+                available_time -= elapsed;
+            }
 
-                let (mr, rmr) = &self.mrs[rank_id];
-                let mut wr = peer_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-                let (wc, elapsed) =
-                    wr.spin_poll_batched(timeout, 1024)
-                        .map_err(|error| match error {
-                            WorkRequestSpinPollError::Timeout(_) => {
-                                RdmaNetworkBinaryTreeBarrierError::Timeout(
-                                    "Timeout trying to notify coordinated".to_string(),
-                                )
-                            }
-                            WorkRequestSpinPollError::ExecutionError(error) => {
-                                RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                                    "RDMA error trying to notify coordinated: {error}"
-                                ))
-                            }
-                        })?;
+            // 3. Wait for parent
+            println!("Waiting for parent");
+            let (_, elapsed) = spin_poll_batched(
+                || (read_remote_parent_flag(self.memory.as_slice()) == READY_FLAG).then_some(()),
+                available_time,
+                1024,
+            )
+            .map_err(|_| {
+                RdmaNetworkBinaryTreeBarrierError::Timeout(
+                    "Timeout waiting for left children notification".to_string(),
+                )
+            })?;
+            reset_remote_parent_flag(self.memory.as_mut_slice());
+            available_time -= elapsed;
+        }
+
+        // 4. Notify two children
+        if let Some(lci) = self.left_child_idx(connections.self_idx(), connections.len()) {
+            println!("Notifying left child");
+            let left_child_conn = connections.connection_mut(lci);
+            let (left_child_mr, left_child_remote_mr) = &self.mrs[1];
+            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) =
+                left_child_conn
+            {
+                let mut wr = conn
+                    .post_write(left_child_mr, 0..=0, left_child_remote_mr, 1..=1, None)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error issuing RDMA write to left child: {error}"
+                        ))
+                    })?;
+                let (_, elapsed) = wr
+                    .spin_poll_batched(available_time, 1024)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error during RDMA write to left child: {error}"
+                        ))
+                    })?;
                 available_time -= elapsed;
             }
         }
-
-        Ok(())
-    }
-
-    fn non_root_barrier<
-        'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
-    >(
-        &mut self,
-        mut connections: GroupConns,
-        timeout: Duration,
-    ) -> Result<(), RdmaNetworkBinaryTreeBarrierError> {
-        println!("Connecting to coordinator");
-
-        // Groups can never be empty
-        if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, master_conn) =
-            connections.connection_mut(0).unwrap()
-        {
-            let (mr, rmr) = &self.mrs[rank_id];
-
-            println!("Notifying coordinator at {rank_id}");
-            let mut wr = master_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-            let (wc, elapsed) =
-                wr.spin_poll_batched(timeout, 1024)
-                    .map_err(|error| match error {
-                        WorkRequestSpinPollError::Timeout(_) => {
-                            RdmaNetworkBinaryTreeBarrierError::Timeout(
-                                "Timeout trying to notify coordinator".to_string(),
-                            )
-                        }
-                        WorkRequestSpinPollError::ExecutionError(error) => {
-                            RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
-                                "RDMA error trying to notify coordinator: {error}"
-                            ))
-                        }
+        if let Some(rci) = self.right_child_idx(connections.self_idx(), connections.len()) {
+            println!("Notifying right child");
+            let right_child_conn = connections.connection_mut(rci);
+            let (right_child_mr, right_child_remote_mr) = &self.mrs[2];
+            if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn)) =
+                right_child_conn
+            {
+                let mut wr = conn
+                    .post_write(right_child_mr, 0..=0, right_child_remote_mr, 1..=1, None)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error issuing RDMA write to left child: {error}"
+                        ))
                     })?;
-
-            println!("Waiting for coordinator notification");
-            // Wait until remote is ready
-            spin_poll_batched(
-                || {
-                    (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
-                        .then_some(())
-                },
-                timeout - elapsed,
-                1024,
-            )
-            .map_err(|error| {
-                RdmaNetworkBinaryTreeBarrierError::Timeout(
-                    "Timeout waiting for coordinator notification".to_string(),
-                )
-            })?;
-
-            // Reset remote peer flag
-            reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
-        } else {
-            panic!(
-                "Coordinator of centralized sync must always be group index zero. \
-                     Check group construction is being handled properly"
-            );
+                let (_, elapsed) = wr
+                    .spin_poll_batched(available_time, 1024)
+                    .map_err(|error| {
+                        RdmaNetworkBinaryTreeBarrierError::RdmaError(format!(
+                            "Error during RDMA write to left child: {error}"
+                        ))
+                    })?;
+                available_time -= elapsed;
+            }
         }
 
         Ok(())

@@ -9,6 +9,7 @@ use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
+use infinibuilder::restructure::barrier::binary_tree::RdmaNetworkBinaryTreeBarrier;
 
 fn main() {
     let args = parse_args();
@@ -26,7 +27,7 @@ fn main() {
     let prepared_node = IbvNetworkNodeBuilder::new()
         .ibv_device(&node_config.ibdev)
         .cq_params(32, 512)
-        .barrier(RdmaNetworkCentralizedBarrier::new())
+        .barrier(RdmaNetworkBinaryTreeBarrier::new())
         .num_connections(network_config.len())
         .rank_id(rank_id)
         .build()
@@ -58,6 +59,25 @@ fn main() {
 
     node.barrier(&node.group_all(), Duration::from_millis(10000))
         .unwrap();
+    println!("Barrier 1 done!!!\n\n");
+
+    print!("Press Enter to enter barrier...");
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
+    println!("Barrier 2 done!!!\n\n");
+
+    print!("Press Enter to enter barrier...");
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
+    println!("Barrier 3 done!!!\n\n");
 }
 
 struct Args {
