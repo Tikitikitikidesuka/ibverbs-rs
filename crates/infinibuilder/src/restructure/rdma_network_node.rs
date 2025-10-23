@@ -10,6 +10,8 @@ pub trait RdmaNetworkNode<
 {
     type Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR>;
 
+    fn rank_id(&self) -> usize;
+
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
     where
         Group: RdmaNetworkSelfGroup;

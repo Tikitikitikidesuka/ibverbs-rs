@@ -1,5 +1,4 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::restructure::ibverbs::connection::IbvConnectionBuildError::MemoryRegionRegisterError;
 use crate::restructure::ibverbs::connection::{
     IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder, IbvConnectionEndpoint,
     IbvPreparedConnection,
@@ -7,7 +6,7 @@ use crate::restructure::ibverbs::connection::{
 use crate::restructure::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
-    RdmaNetworkSelfGroupConnections, RdmaNetworkTransport,
+    RdmaNetworkSelfGroupConnections,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -298,7 +297,7 @@ impl<
 
         Ok(IbvNetworkNode {
             nodes: IbvNetworkSelfGroup {
-                rank_id: self.rank_id,
+                self_idx: self.rank_id,
                 rank_ids,
             },
             connections,
@@ -362,6 +361,10 @@ impl<
 {
     type Conn = IbvConnection;
 
+    fn rank_id(&self) -> usize {
+        self.nodes.rank_ids[self.nodes.self_idx]
+    }
+
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
     where
         Group: RdmaNetworkSelfGroup,
@@ -383,7 +386,7 @@ pub struct IbvNetworkGroup {
 
 #[derive(Debug, Clone)]
 pub struct IbvNetworkSelfGroup {
-    rank_id: usize,
+    self_idx: usize,
     rank_ids: Vec<usize>,
 }
 
@@ -417,13 +420,31 @@ impl RdmaNetworkGroup for IbvNetworkSelfGroup {
 
 impl RdmaNetworkSelfGroup for IbvNetworkSelfGroup {
     fn self_idx(&self) -> usize {
-        self.rank_id
+        self.self_idx
     }
 }
 
 impl<NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>> IbvNetworkNode<NB> {
     pub fn group_all(&self) -> IbvNetworkSelfGroup {
         self.nodes.clone()
+    }
+
+    pub fn group(&self, filter: impl FnMut(&usize) -> bool) -> IbvNetworkGroup {
+        IbvNetworkGroup {
+            rank_ids: self.nodes.rank_ids.iter().cloned().filter(filter).collect(),
+        }
+    }
+
+    pub fn self_group(
+        &self,
+        filter: impl FnMut(&usize) -> bool,
+    ) -> Result<IbvNetworkSelfGroup, IbvNetworkGroup> {
+        let rank_ids: Vec<_> = self.nodes.rank_ids.iter().cloned().filter(filter).collect();
+        let self_idx = rank_ids.binary_search(&self.rank_id());
+        match self_idx {
+            Ok(self_idx) => Ok(IbvNetworkSelfGroup { self_idx, rank_ids }),
+            Err(_) => Err(IbvNetworkGroup { rank_ids }),
+        }
     }
 }
 
