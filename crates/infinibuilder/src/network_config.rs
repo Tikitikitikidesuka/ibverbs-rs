@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range, RangeBounds};
+use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeConfig {
@@ -19,11 +20,15 @@ pub struct NetworkConfig {
     hosts: Vec<NodeConfig>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Error)]
 pub enum NetworkConfigError {
+    #[error("Empty network")]
     EmptyNetwork,
+    #[error("First rank id is not zero")]
     FirstRankIdNotZero,
+    #[error("Rank ids are non sequential, {gap_rankid} is missing")]
     NonSequentialRankIds { gap_rankid: usize },
+    #[error("Rank id {dup_rankid} appears multiple times")]
     DuplicatedRankId { dup_rankid: usize },
 }
 
