@@ -1,13 +1,13 @@
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{
-    RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestSpinPollError,
+    RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError,
 };
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
-use crate::restructure::spin_poll::{Timeout, spin_poll_batched};
+use crate::restructure::spin_poll::spin_poll_batched;
 use std::ptr::{read_volatile, write_volatile};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -54,19 +54,11 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-fn memory_of_connection(memory: &mut [u8], rank_id: usize) -> (*mut u8, usize) {
-    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
-    (ptr, BYTES_PER_CONNECTION)
-}
-
-fn read_remote_peer_flag(memory: &[u8], rank_id: usize) -> u8 {
-    let ptr = &memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
-    unsafe { read_volatile(ptr) }
-}
-
-fn reset_remote_peer_flag(memory: &mut [u8], rank_id: usize) {
-    let ptr = &mut memory[rank_id * BYTES_PER_CONNECTION + 1] as *mut u8;
-    unsafe { write_volatile(ptr, NOT_READY_FLAG) };
+impl RdmaNetworkUnregisteredCentralizedBarrier {
+    fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
+        let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
+        (ptr, BYTES_PER_CONNECTION)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -86,7 +78,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
         self.memory = setup_memory(num_connections);
         (0..num_connections)
             .into_iter()
-            .map(|conn_idx| memory_of_connection(self.memory.as_mut_slice(), conn_idx))
+            .map(|conn_idx| self.memory_of_connection(conn_idx))
             .collect()
     }
 
@@ -117,7 +109,7 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
-        mut connections: GroupConns,
+        connections: GroupConns,
         timeout: Duration,
     ) -> Result<(), Self::Error> {
         let idx = connections.self_idx();
@@ -133,6 +125,61 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
 }
 
 impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
+    fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
+        let ptr = &self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
+        unsafe { read_volatile(ptr) }
+    }
+
+    fn reset_remote_peer_flag(&mut self, rank_id: usize) {
+        let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *mut u8;
+        unsafe { write_volatile(ptr, NOT_READY_FLAG) };
+    }
+
+    fn wait_for_peer(
+        &mut self,
+        rank_id: usize,
+        timeout: Duration,
+    ) -> Result<Duration, RdmaNetworkCentralizedBarrierError> {
+        let (_, elapsed) = spin_poll_batched(
+            || (self.read_remote_peer_flag(rank_id) == READY_FLAG).then_some(()),
+            timeout,
+            1024,
+        )
+        .map_err(|_| {
+            RdmaNetworkCentralizedBarrierError::Timeout(format!(
+                "Timeout waiting for peer {rank_id}"
+            ))
+        })?;
+        self.reset_remote_peer_flag(rank_id);
+        Ok(elapsed)
+    }
+
+    fn notify_peer<Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR>>(
+        &self,
+        rank_id: usize,
+        conn: &mut Conn,
+        timeout: Duration,
+    ) -> Result<Duration, RdmaNetworkCentralizedBarrierError> {
+        let (mr, rmr) = &self.mrs[rank_id];
+        let mut wr = conn.post_write(mr, 0..=0, rmr, 1..=1, None).map_err(|e| {
+            RdmaNetworkCentralizedBarrierError::RdmaError(format!("Write error: {e}"))
+        })?;
+
+        let (_, elapsed) = wr
+            .spin_poll_batched(timeout, 1024)
+            .map_err(|error| match error {
+                WorkRequestSpinPollError::Timeout(_) => {
+                    RdmaNetworkCentralizedBarrierError::Timeout(format!(
+                        "Timeout notifying peer {rank_id}"
+                    ))
+                }
+                WorkRequestSpinPollError::ExecutionError(e) => {
+                    RdmaNetworkCentralizedBarrierError::RdmaError(format!("RDMA error: {e}"))
+                }
+            })?;
+        Ok(elapsed)
+    }
+
     fn coordinator_barrier<
         'network,
         Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
@@ -144,56 +191,21 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
     ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
         let mut available_time = timeout;
 
+        // Wait for all peers
         for idx in 0..connections.len() {
-            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, peer_conn) =
+            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, _) =
                 connections.connection_mut(idx).unwrap()
             {
-                println!("Waiting for peer {rank_id} as central barrier coordinator");
-
-                // Wait until remote is ready
-                let (_, elapsed) = spin_poll_batched(
-                    || {
-                        (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
-                            .then_some(())
-                    },
-                    available_time,
-                    1024,
-                )
-                .map_err(|_| {
-                    RdmaNetworkCentralizedBarrierError::Timeout(
-                        "Timeout waiting for coordinated notification".to_string(),
-                    )
-                })?;
-                available_time -= elapsed;
-
-                // Reset remote peer flag
-                reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
+                available_time -= self.wait_for_peer(rank_id, available_time)?;
             }
         }
 
+        // Notify all peers
         for idx in 0..connections.len() {
-            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, peer_conn) =
+            if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn) =
                 connections.connection_mut(idx).unwrap()
             {
-                println!("Notifying peer {rank_id} as central barrier coordinator");
-
-                let (mr, rmr) = &self.mrs[rank_id];
-                let mut wr = peer_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-                let (wc, elapsed) =
-                    wr.spin_poll_batched(timeout, 1024)
-                        .map_err(|error| match error {
-                            WorkRequestSpinPollError::Timeout(_) => {
-                                RdmaNetworkCentralizedBarrierError::Timeout(
-                                    "Timeout trying to notify coordinated".to_string(),
-                                )
-                            }
-                            WorkRequestSpinPollError::ExecutionError(error) => {
-                                RdmaNetworkCentralizedBarrierError::RdmaError(format!(
-                                    "RDMA error trying to notify coordinated: {error}"
-                                ))
-                            }
-                        })?;
-                available_time -= elapsed;
+                available_time -= self.notify_peer(rank_id, conn, available_time)?;
             }
         }
 
@@ -209,56 +221,14 @@ impl<MR, RemoteMR> RdmaNetworkCentralizedBarrier<MR, RemoteMR> {
         mut connections: GroupConns,
         timeout: Duration,
     ) -> Result<(), RdmaNetworkCentralizedBarrierError> {
-        println!("Connecting to coordinator");
-
-        // Groups can never be empty
-        if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, master_conn) =
+        let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn) =
             connections.connection_mut(0).unwrap()
-        {
-            let (mr, rmr) = &self.mrs[rank_id];
+        else {
+            panic!("Coordinator must be at group index 0");
+        };
 
-            println!("Notifying coordinator at {rank_id}");
-            let mut wr = master_conn.post_write(mr, 0..=0, rmr, 1..=1, None).unwrap(); // TODO: BETTER HANDLING
-            let (wc, elapsed) =
-                wr.spin_poll_batched(timeout, 1024)
-                    .map_err(|error| match error {
-                        WorkRequestSpinPollError::Timeout(_) => {
-                            RdmaNetworkCentralizedBarrierError::Timeout(
-                                "Timeout trying to notify coordinator".to_string(),
-                            )
-                        }
-                        WorkRequestSpinPollError::ExecutionError(error) => {
-                            RdmaNetworkCentralizedBarrierError::RdmaError(format!(
-                                "RDMA error trying to notify coordinator: {error}"
-                            ))
-                        }
-                    })?;
-
-            println!("Waiting for coordinator notification");
-            // Wait until remote is ready
-            spin_poll_batched(
-                || {
-                    (read_remote_peer_flag(self.memory.as_slice(), rank_id) == READY_FLAG)
-                        .then_some(())
-                },
-                timeout - elapsed,
-                1024,
-            )
-            .map_err(|error| {
-                RdmaNetworkCentralizedBarrierError::Timeout(
-                    "Timeout waiting for coordinator notification".to_string(),
-                )
-            })?;
-
-            // Reset remote peer flag
-            reset_remote_peer_flag(self.memory.as_mut_slice(), rank_id);
-        } else {
-            panic!(
-                "Coordinator of centralized sync must always be group index zero. \
-                     Check group construction is being handled properly"
-            );
-        }
-
+        let elapsed = self.notify_peer(rank_id, conn, timeout)?;
+        self.wait_for_peer(rank_id, timeout - elapsed)?;
         Ok(())
     }
 }
