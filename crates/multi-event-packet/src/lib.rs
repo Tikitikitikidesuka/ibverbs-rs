@@ -1,7 +1,9 @@
 use core::slice;
-use std::ops::Deref;
+use std::{borrow::Borrow, ops::Deref};
 
 use multi_fragment_packet::MultiFragmentPacketRef;
+
+pub mod builder;
 
 pub struct MultiEventPacket {
     data: Box<[u8]>,
@@ -12,7 +14,7 @@ compile_error!("Only little endian supported!");
 
 #[derive(Copy, Clone)]
 #[repr(C, packed)]
-struct MultiEventPacketConstHeader {
+pub(crate) struct MultiEventPacketConstHeader {
     magic: u16,
     num_mfps: u16,
     packet_size: u32,
@@ -26,7 +28,7 @@ impl Deref for MultiEventPacket {
     type Target = MultiEventPacketRef;
 
     fn deref(&self) -> &Self::Target {
-        todo!()
+        self.as_ref()
     }
 }
 
@@ -38,9 +40,25 @@ impl AsRef<MultiEventPacketRef> for MultiEventPacket {
     }
 }
 
+impl Borrow<MultiEventPacketRef> for MultiEventPacket {
+    fn borrow(&self) -> &MultiEventPacketRef {
+        self
+    }
+}
+
 #[repr(C, packed)]
 pub struct MultiEventPacketRef {
     header: MultiEventPacketConstHeader,
+}
+
+impl ToOwned for MultiEventPacketRef {
+    type Owned = MultiEventPacket;
+
+    fn to_owned(&self) -> Self::Owned {
+        Self::Owned {
+            data: self.data().to_vec().into_boxed_slice(),
+        }
+    }
 }
 
 impl MultiEventPacketRef {
@@ -159,6 +177,7 @@ impl<'a> Iterator for MultiEventPacketIterator<'a> {
 
 impl<'a> ExactSizeIterator for MultiEventPacketIterator<'a> {}
 
+#[cfg(feature = "bincode")]
 mod bincode {
     use ::bincode;
     use bincode::{Decode, Encode, de::read::Reader, enc::write::Writer};

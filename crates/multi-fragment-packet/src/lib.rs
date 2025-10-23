@@ -8,6 +8,7 @@ pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
 
+use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
 use std::ops::Deref;
@@ -62,6 +63,22 @@ impl Deref for MultiFragmentPacket {
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
+    }
+}
+
+impl ToOwned for MultiFragmentPacketRef {
+    type Owned = MultiFragmentPacket;
+
+    fn to_owned(&self) -> Self::Owned {
+        Self::Owned {
+            data: self.raw_packet_data().to_vec(),
+        }
+    }
+}
+
+impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
+    fn borrow(&self) -> &MultiFragmentPacketRef {
+        self
     }
 }
 
@@ -196,6 +213,7 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().fragment_count }
     }
 
+    /// Packet size **in byets** including header.
     pub fn packet_size(&self) -> u32 {
         unsafe { self.header().packet_size }
     }
