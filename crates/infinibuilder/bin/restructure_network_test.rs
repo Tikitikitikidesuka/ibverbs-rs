@@ -1,10 +1,7 @@
-use infinibuilder::barrier::binary_tree::RdmaNetworkBinaryTreeBarrier;
-use infinibuilder::barrier::centralized::RdmaNetworkCentralizedBarrier;
-use infinibuilder::barrier::dissemination::DisseminationBarrier;
-use infinibuilder::ibverbs::network_node::{IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint};
+use infinibuilder::barrier::centralized::CentralizedBarrier;
+use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::rdma_network_node::RdmaNetworkNode;
-use infinibuilder::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
 use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
@@ -17,39 +14,16 @@ fn main() {
     let json_network = fs::read_to_string(args.config_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
         .unwrap()
-        .take_nodes(args.num_nodes)
-        .validate()
-        .unwrap();
+        .take_nodes(args.num_nodes);
 
-    let node_config = network_config.get(rank_id).unwrap();
-
-    let prepared_node = IbvNetworkNodeBuilder::new()
-        .ibv_device(&node_config.ibdev)
-        .cq_params(32, 512)
-        .barrier(DisseminationBarrier::new())
-        .num_connections(network_config.len())
-        .rank_id(rank_id)
-        .build()
-        .unwrap();
-
-    let endpoint = prepared_node.endpoint();
-    println!("Endpoint created...");
-
-    println!("Beginning exchange...");
-    let exchanged_endpoints = TcpExchanger::await_exchange_all(
+    let mut node = create_ibv_network_node(
         rank_id,
-        &network_config,
-        &endpoint,
-        &TcpExchangeConfig::default(),
+        32,
+        512,
+        network_config,
+        CentralizedBarrier::new(),
     )
     .unwrap();
-    println!("Exchange done...");
-
-    let remote_endpoint = IbvNetworkNodeEndpoint::gather(rank_id, exchanged_endpoints).unwrap();
-
-    let mut node = prepared_node.connect(remote_endpoint).unwrap();
-
-    println!("{node:?}");
 
     if rank_id != 0 {
         print!("Press Enter to enter barrier...");
