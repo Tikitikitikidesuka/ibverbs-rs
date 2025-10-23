@@ -19,6 +19,9 @@ impl MultiFragmentPacketRef {
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
 
+#[cfg(not(target_endian = "little"))]
+compile_error!("Only little endian supported!");
+
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct MultiFragmentPacketHeader {
@@ -95,7 +98,7 @@ impl Fragment {
         &self.data
     }
 
-    pub fn as_fragment_ref(&self) -> FragmentRef {
+    pub fn as_fragment_ref(&self) -> FragmentRef<'_> {
         FragmentRef {
             fragment_type: self.fragment_type,
             fragment_size: self.fragment_size,
@@ -239,11 +242,11 @@ impl MultiFragmentPacketRef {
     }
 
     /// No random access, O(n)
-    pub fn fragment(&self, index: usize) -> Option<FragmentRef> {
+    pub fn fragment(&self, index: usize) -> Option<FragmentRef<'_>> {
         self.iter().nth(index)
     }
 
-    pub fn iter(&self) -> MultiFragmentPacketIter {
+    pub fn iter(&self) -> MultiFragmentPacketIter<'_> {
         MultiFragmentPacketIter {
             packet: self,
             offset: 0,
