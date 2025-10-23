@@ -1,13 +1,16 @@
+use crate::restructure::barrier::centralized::{
+    RdmaNetworkCentralizedBarrier, RdmaNetworkUnregisteredCentralizedBarrier,
+};
 use crate::restructure::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::restructure::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::restructure::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
 use crate::restructure::spin_poll::spin_poll_batched;
+use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 use thiserror::Error;
-use PeerRole::*;
 
 #[derive(Debug, Error)]
 pub enum RdmaNetworkBinaryTreeBarrierError {
@@ -40,13 +43,11 @@ const BYTES_PER_CONNECTION: usize = 2;
 const NOT_READY_FLAG: u8 = 0b01010101;
 const READY_FLAG: u8 = 0b10101010;
 
-fn setup_memory() -> Vec<u8> {
-    // Create a vector wit 3 * BYTES_PER_CONNECTION bytes (parent and two children).
+fn setup_memory(num_connections: usize) -> Vec<u8> {
+    // Create a vector wit num_connections * BYTES_PER_CONNECTION bytes.
     // Even bytes, representing local flags, all set to READY.
     // Odd bytes, representing remote peer flags, all set to NOT_READY.
-    // First two bytes represent parent.
-    // The next are left and right children.
-    (0..(3 * BYTES_PER_CONNECTION))
+    (0..(num_connections * BYTES_PER_CONNECTION))
         .into_iter()
         .map(|byte_idx| match byte_idx % 2 == 0 {
             true => READY_FLAG,
@@ -56,8 +57,8 @@ fn setup_memory() -> Vec<u8> {
 }
 
 impl RdmaNetworkUnregisteredBinaryTreeBarrier {
-    fn peer_memory(&mut self, peer: PeerRole) -> (*mut u8, usize) {
-        let ptr = &mut self.memory[peer.idx() * BYTES_PER_CONNECTION] as *mut u8;
+    fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
+        let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
         (ptr, BYTES_PER_CONNECTION)
     }
 }
@@ -82,14 +83,14 @@ impl PeerRole {
 impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
     fn peer_group_idx(&self, idx: usize, group_size: usize, peer: PeerRole) -> Option<usize> {
         match peer {
-            PeerRole::Parent => {
+            Parent => {
                 if idx == 0 {
                     None
                 } else {
                     Some((idx - 1) / 2)
                 }
             }
-            PeerRole::LeftChild => {
+            LeftChild => {
                 let group_idx = idx * 2 + 1;
                 if group_idx >= group_size {
                     None
@@ -97,7 +98,7 @@ impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
                     Some(group_idx)
                 }
             }
-            PeerRole::RightChild => {
+            RightChild => {
                 let group_idx = idx * 2 + 2;
                 if group_idx >= group_size {
                     None
@@ -108,18 +109,18 @@ impl<MR, RMR> RdmaNetworkBinaryTreeBarrier<MR, RMR> {
         }
     }
 
-    fn peer_mr(&self, peer: PeerRole) -> &(MR, RMR) {
-        &self.mrs[peer.idx()]
+    fn connection_mr(&self, rank_id: usize) -> &(MR, RMR) {
+        &self.mrs[rank_id]
     }
 
-    fn reset_remote_peer_flag(&mut self, peer: PeerRole) {
-        let ptr = &mut self.memory[peer.idx() * BYTES_PER_CONNECTION + 1] as *mut u8;
-        unsafe { write_volatile(ptr, NOT_READY_FLAG) };
-    }
-
-    fn read_remote_peer_flag(&self, peer: PeerRole) -> u8 {
-        let ptr = &self.memory[peer.idx() * BYTES_PER_CONNECTION + 1] as *const u8;
+    fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
+        let ptr = &self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
         unsafe { read_volatile(ptr) }
+    }
+
+    fn reset_remote_peer_flag(&mut self, rank_id: usize) {
+        let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *mut u8;
+        unsafe { write_volatile(ptr, NOT_READY_FLAG) };
     }
 }
 
@@ -136,21 +137,23 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     type Registered = RdmaNetworkBinaryTreeBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
-    fn memory(&mut self, _num_connections: usize) -> Vec<(*mut u8, usize)> {
-        self.memory = setup_memory();
-        vec![
-            self.peer_memory(Parent),
-            self.peer_memory(LeftChild),
-            self.peer_memory(RightChild),
-        ]
+    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
+        self.memory = setup_memory(num_connections);
+        (0..num_connections)
+            .into_iter()
+            .map(|conn_idx| self.memory_of_connection(conn_idx))
+            .collect()
     }
 
     fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError> {
-        if mrs.len() != 3 {
-            return Err(NonMatchingMemoryRegionCount {
-                expected: 3,
-                got: mrs.len(),
-            });
+        let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
+        if mrs.len() != num_connections {
+            return Err(
+                NonMatchingMemoryRegionCount {
+                    expected: num_connections,
+                    got: mrs.len(),
+                },
+            );
         }
 
         Ok(RdmaNetworkBinaryTreeBarrier {
@@ -218,11 +221,12 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
         timeout: Duration,
     ) -> Result<Duration, RdmaNetworkBinaryTreeBarrierError> {
         Ok(
-            if let Some(_group_idx) =
+            if let Some(group_idx) =
                 self.peer_group_idx(connections.self_idx(), connections.len(), peer)
             {
+                let peer_rank_id = connections.rank_id(group_idx).unwrap();
                 let (_, elapsed) = spin_poll_batched(
-                    || (self.read_remote_peer_flag(peer) == READY_FLAG).then_some(()),
+                    || (self.read_remote_peer_flag(peer_rank_id) == READY_FLAG).then_some(()),
                     timeout,
                     1024,
                 )
@@ -231,7 +235,7 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
                         "Timeout waiting for {peer:?} notification"
                     ))
                 })?;
-                self.reset_remote_peer_flag(peer);
+                self.reset_remote_peer_flag(peer_rank_id);
                 elapsed
             } else {
                 Duration::from_nanos(0)
@@ -253,8 +257,9 @@ impl<MR, RemoteMR> RdmaNetworkBinaryTreeBarrier<MR, RemoteMR> {
             if let Some(group_idx) =
                 self.peer_group_idx(connections.self_idx(), connections.len(), peer)
             {
+                let peer_rank_id = connections.rank_id(group_idx).unwrap();
                 let peer_conn = connections.connection_mut(group_idx);
-                let (peer_mr, peer_remote_mr) = self.peer_mr(peer);
+                let (peer_mr, peer_remote_mr) = self.connection_mr(peer_rank_id);
                 if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(_rank_id, conn)) =
                     peer_conn
                 {
