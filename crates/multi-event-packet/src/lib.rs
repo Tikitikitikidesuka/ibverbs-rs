@@ -255,30 +255,36 @@ mod bincode {
 
     use crate::{MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef};
 
+    use super::slice_as_bytes_mut;
+
     impl Decode<()> for MultiEventPacket {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            const HEADER_SIZE: usize = size_of::<MultiEventPacketConstHeader>() / size_of::<u32>();
-            union Header {
-                typed: MultiEventPacketConstHeader,
-                bytes: [u32; HEADER_SIZE],
+            const HEADER_SIZE: usize = size_of::<MultiEventPacketConstHeader>();
+            let mut bytes: [u8; HEADER_SIZE] = Default::default();
+
+            decoder.reader().read(&mut bytes)?;
+
+            let header = unsafe { &*(bytes.as_ptr() as *const MultiEventPacketConstHeader) };
+
+            if header.magic != MultiEventPacketRef::MAGIC {
+                return Err(bincode::error::DecodeError::OtherString(format!(
+                    "Invalid magic number for `MultiEventPacket`: got {:#04X} but expected {:#04X}",
+                    header.magic,
+                    MultiEventPacketRef::MAGIC
+                )));
             }
 
-            let mut bytes: [u32; _] = Default::default();
-            decoder
-                .reader()
-                .read(super::slice_as_bytes_mut(&mut bytes))?;
-            let header = Header { bytes };
+            let mut data = vec![0u32; header.packet_size as usize];
 
-            // SAFETY: header has been received validly, packed size is size of entire packed in 32 bit words.
-            let mut data = vec![0u32; unsafe { header.typed.packet_size } as usize];
+            // copy in data
+            {
+                let data = slice_as_bytes_mut(data.as_mut_slice());
 
-            // SAFETY: repr(C) type can safely be accessed as bytes.
-            data[0..HEADER_SIZE].copy_from_slice(unsafe { &header.bytes });
-            decoder
-                .reader()
-                .read(super::slice_as_bytes_mut(&mut data[HEADER_SIZE..]))?;
+                data[0..HEADER_SIZE].copy_from_slice(&bytes);
+                decoder.reader().read(&mut data[HEADER_SIZE..])?;
+            }
 
             Ok(Self {
                 data: data.into_boxed_slice(),

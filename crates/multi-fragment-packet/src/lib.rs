@@ -407,22 +407,24 @@ mod bincode {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            union Header {
-                typed: MultiFragmentPacketHeader,
-                bytes: [u8; MultiFragmentPacketRef::HEADER_SIZE],
+            const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+
+            let mut bytes: [u8; HEADER_SIZE] = Default::default();
+            decoder.reader().read(&mut bytes)?;
+
+            let header = unsafe { &*(bytes.as_ptr() as *const MultiFragmentPacketHeader) };
+
+            if header.magic != MultiFragmentPacketRef::VALID_MAGIC {
+                let magic = header.magic;
+                return Err(bincode::error::DecodeError::OtherString(format!(
+                    "Invalid magic number for `MultiEventPacket`: got {magic:#04X} but expected {:#04X}",
+                    MultiFragmentPacketRef::VALID_MAGIC
+                )));
             }
 
-            let mut bytes: [u8; _] = Default::default();
-            decoder.reader().read(&mut bytes)?;
-            let header = Header { bytes };
-
-            // SAFETY: header has been received validly, and its total size is packet_size in bytes!
-            let mut data = vec![0u8; unsafe { header.typed.packet_size } as usize];
-            // SAFETY: repr(C) type can safely be accessed as bytes.
-            data[0..MultiFragmentPacketRef::HEADER_SIZE].copy_from_slice(unsafe { &header.bytes });
-            decoder
-                .reader()
-                .read(&mut data[MultiFragmentPacketRef::HEADER_SIZE..])?;
+            let mut data = vec![0u8; header.packet_size as usize];
+            data[0..HEADER_SIZE].copy_from_slice(&bytes);
+            decoder.reader().read(&mut data[HEADER_SIZE..])?;
 
             Ok(Self { data })
         }
