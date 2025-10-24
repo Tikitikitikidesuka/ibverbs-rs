@@ -19,6 +19,7 @@ parser.add_argument("--parse-script", type=Path, default=None,
 parser.add_argument("--binary", type=Path, help="Path to barrier_perftest binary")
 parser.add_argument("--config", type=Path, help="Config JSON file")
 parser.add_argument("--hostfile", type=Path, help="MPI hostfile")
+parser.add_argument("--rankfile", type=Path, help="MPI rankfile")
 parser.add_argument("--algorithm", type=str, required=True, help="Algorithm to use")
 parser.add_argument("--iters", type=int, default=10, help="Iterations per test (default: 10)")
 parser.add_argument("--batch-size", type=int, default=1024, help="Batch size (default: 1024)")
@@ -52,7 +53,7 @@ print(f"Running tests from {args.start} to {args.end} nodes (step={args.step})")
 print(f"Output directory: {args.output_dir}")
 if args.remove_outliers:
     print("Outlier removal: ENABLED")
-print("="*60)
+print("=" * 60)
 
 # Run tests for each node count
 for num_nodes in range(args.start, args.end + 1, args.step):
@@ -76,8 +77,11 @@ for num_nodes in range(args.start, args.end + 1, args.step):
     if args.config:
         cmd.extend(["--config", str(args.config)])
 
-    if args.hostfile:
-        cmd.extend(["--hostfile", str(args.hostfile)])
+    if args.rankfile:
+        cmd.extend(["--hostfile", str(args.rankfile)])
+
+    if args.rankfile:
+        cmd.extend(["--rankfile", str(args.rankfile)])
 
     # Run the test
     try:
@@ -173,7 +177,7 @@ summary_file = args.output_dir / "summary.json"
 with open(summary_file, "w") as f:
     json.dump(results, f, indent=2)
 
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 print(f"Summary saved to {summary_file}")
 print(f"Total tests completed: {len(results)}")
 

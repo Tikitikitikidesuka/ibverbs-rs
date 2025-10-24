@@ -4,6 +4,7 @@
 BINARY="./barrier_perftest"
 CONFIG="config.json"
 HOSTFILE="hosts.txt"
+RANKFILE="ranks.txt"
 BATCH_SIZE=1024
 ALGORITHM="centralized"
 ITERS=10
@@ -20,6 +21,7 @@ usage() {
     echo "  --binary <path>        Path to barrier_perftest binary (default: ./barrier_perftest)"
     echo "  --config <file>        Config JSON file (default: config.json)"
     echo "  --hostfile <file>      MPI hostfile (default: hosts.txt)"
+    echo "  --rankfile <file>      MPI rankfile (default: ranks.txt)"
     echo "  --batch-size <N>       Batch size (default: 1024)"
     echo "  --algorithm <name>     Algorithm name (default: centralized)"
     echo "  --iters <N>            Number of iterations (default: 10)"
@@ -48,6 +50,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --hostfile)
             HOSTFILE="$2"
+            shift 2
+            ;;
+        --rankfile)
+            RANKFILE="$2"
             shift 2
             ;;
         --batch-size)
@@ -80,6 +86,6 @@ if [ -z "$NUM_NODES" ] || [ -z "$OUTPUT_FILE" ]; then
 fi
 
 # Run the test
-mpirun -n $NUM_NODES -bind-to core --map-by node -hostfile "$HOSTFILE" bash -c "$BINARY --config-file $CONFIG --batch-size $BATCH_SIZE --num-nodes \$OMPI_COMM_WORLD_SIZE --rank-id \$OMPI_COMM_WORLD_RANK --algorithm $ALGORITHM --iters $ITERS" > "$OUTPUT_FILE"
+mpirun -n $NUM_NODES -bind-to core --hostfile "$HOSTFILE" --rankfile "$RANKFILE" bash -c "$BINARY --config-file $CONFIG --batch-size $BATCH_SIZE --num-nodes \$OMPI_COMM_WORLD_SIZE --rank-id \$OMPI_COMM_WORLD_RANK --algorithm $ALGORITHM --iters $ITERS" > "$OUTPUT_FILE"
 
 echo "Test completed. Output saved to $OUTPUT_FILE"
