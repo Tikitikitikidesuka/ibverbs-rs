@@ -116,7 +116,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 mod test {
     use multi_fragment_packet::{Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
 
-    use crate::MultiEventPacket;
+    use crate::{MultiEventPacket, MultiEventPacketRef};
 
     #[test]
     fn test_build_mep() {
@@ -136,13 +136,40 @@ mod test {
             )
             .add_fragment(Fragment::new(22, b"I do not exist, here is nothing to see!!!").unwrap())
             .build();
+        let mfp2 = MultiFragmentPacketBuilder::new()
+            .with_event_id(123456)
+            .with_align(align_of::<u64>().ilog2() as _)
+            .with_fragment_version(25)
+            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_source_id(21)
+            .lock_header()
+            .add_fragment(
+                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+            )
+            .build();
 
         let mut mep = MultiEventPacket::builder();
         mep.add_mfp_ref(&mfp);
         mep.add_mfp_ref(&mfp);
-        mep.add_mfp_ref(&mfp);
+        mep.add_mfp_ref(&mfp2);
         let mep = mep.build();
+
+        assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
+        assert_eq!(mep.num_mfps(), 3);
+        assert_eq!(mep.packet_size_u32(), 99);
+        assert_eq!(mep.mfp_source_ids(), &[21, 55555, 55555]);
+        assert_eq!(mep.mfp_offsets_u32(), &[7, 27, 63]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
+
+        assert_eq!(3, mep.mfp_iter().len());
+        assert_eq!(0, mep.mfp_iter_srcid_range(0..10).len());
+        assert_eq!(0, mep.mfp_iter_srcid_range(55555..55555).len());
+        assert_eq!(2, mep.mfp_iter_srcid_range(55555..55556).len());
+        assert_eq!(3, mep.mfp_iter_srcid_range(0..55556).len());
+        for fp in mep.mfp_iter() {
+            println!("{fp:?}");
+            assert_eq!(fp.magic(), MultiFragmentPacketRef::VALID_MAGIC);
+        }
     }
 }

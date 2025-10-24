@@ -1,4 +1,9 @@
-use std::{borrow::Borrow, fmt::Debug, ops::Deref, slice};
+use std::{
+    borrow::Borrow,
+    fmt::Debug,
+    ops::{Deref, Range},
+    slice,
+};
 
 use multi_fragment_packet::{MultiFragmentPacketRef, SourceId};
 
@@ -137,6 +142,18 @@ impl MultiEventPacketRef {
         MultiEventPacketIterator {
             mep: self,
             next_idx: 0,
+            end: None,
+        }
+    }
+
+    pub fn mfp_iter_srcid_range(&self, range: Range<SourceId>) -> MultiEventPacketIterator<'_> {
+        let start_idx = self.mfp_source_ids().partition_point(|v| *v < range.start);
+        let end_idx = self.mfp_source_ids().partition_point(|v| *v < range.end);
+
+        MultiEventPacketIterator {
+            mep: self,
+            next_idx: start_idx,
+            end: Some(end_idx),
         }
     }
 
@@ -202,20 +219,25 @@ pub(crate) fn header_size(num_mfps: usize) -> usize {
 pub struct MultiEventPacketIterator<'a> {
     mep: &'a MultiEventPacketRef,
     next_idx: usize,
+    end: Option<usize>,
 }
 
 impl<'a> Iterator for MultiEventPacketIterator<'a> {
     type Item = &'a MultiFragmentPacketRef;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let ret = self.mep.get_mep(self.next_idx);
-        self.next_idx += 1;
-        ret
+        if self.end.is_none_or(|end| self.next_idx < end) {
+            let ret = self.mep.get_mep(self.next_idx);
+            self.next_idx += 1;
+            ret
+        } else {
+            None
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.mep.num_mfps() as usize;
-        (len, Some(len))
+        let remain = self.end.unwrap_or(self.mep.num_mfps() as usize) - self.next_idx;
+        (remain, Some(remain))
     }
 }
 
