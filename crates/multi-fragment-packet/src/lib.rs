@@ -346,7 +346,7 @@ impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
 impl Debug for MultiFragmentPacketRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MultiFragmentPacketRef")
-            .field("magic", &format!("0x{:04X}", self.magic()))
+            .field("magic", &format!("{:#04X}", self.magic()))
             .field("fragment_count", &self.fragment_count())
             .field("packet_size", &self.packet_size())
             .field("event_id", &self.event_id())

@@ -4,7 +4,7 @@ use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketRef, SourceI
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef, Offset, header_size,
-    src_ids_size,
+    slice_as_bytes_mut, src_ids_size,
 };
 
 #[derive(Default)]
@@ -46,7 +46,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         // alloc data
         let mut total_size = 0;
         let _ = self.offsets_iter(&mut total_size).count(); // just iterate thorugh to get total size
-        let mut data = vec![0u8; total_size].into_boxed_slice();
+        let mut data = vec![0u32; total_size / size_of::<u32>()].into_boxed_slice();
 
         // set header
         {
@@ -86,6 +86,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
         // set mfps
         for (offset, mfp) in self.offsets_iter(&mut 0).zip(&self.mfps) {
+            let data = slice_as_bytes_mut(data.as_mut());
             let data = &mut data[offset..];
             let data = &mut data[..mfp.packet_size() as usize];
             data.copy_from_slice(mfp.raw_packet_data());
@@ -108,5 +109,40 @@ impl<'a> MultiEventPacketBuilder<'a> {
                 **sum += b;
                 Some(ret)
             })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use multi_fragment_packet::{Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+
+    use crate::MultiEventPacket;
+
+    #[test]
+    fn test_build_mep() {
+        let mfp = MultiFragmentPacketBuilder::new()
+            .with_event_id(123456)
+            .with_align(align_of::<u64>().ilog2() as _)
+            .with_fragment_version(22)
+            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_source_id(55555)
+            .lock_header()
+            .add_fragment(
+                Fragment::new(
+                    11,
+                    b"Hello, I am some data. I am trapped here, please free me!",
+                )
+                .unwrap(),
+            )
+            .add_fragment(Fragment::new(22, b"I do not exist, here is nothing to see!!!").unwrap())
+            .build();
+
+        let mut mep = MultiEventPacket::builder();
+        mep.add_mfp_ref(&mfp);
+        mep.add_mfp_ref(&mfp);
+        mep.add_mfp_ref(&mfp);
+        let mep = mep.build();
+        println!("{mep:?}");
+        println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
     }
 }

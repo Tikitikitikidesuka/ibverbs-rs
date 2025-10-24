@@ -1,23 +1,25 @@
-use core::slice;
-use std::{borrow::Borrow, ops::Deref};
+use std::{borrow::Borrow, fmt::Debug, ops::Deref, slice};
 
 use multi_fragment_packet::{MultiFragmentPacketRef, SourceId};
+
+use crate::builder::MultiEventPacketBuilder;
 
 pub mod builder;
 
 pub struct MultiEventPacket {
-    data: Box<[u8]>,
+    data: Box<[u32]>, // assures alignement of u32
 }
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
 #[derive(Copy, Clone)]
-#[repr(C, packed)]
+#[repr(C, packed(4))] // alignment of u32 ensured
 /// Just the constant-sized part of the MEP header.
 pub(crate) struct MultiEventPacketConstHeader {
     magic: u16,
     num_mfps: u16,
+    /// Packet size in 32 bit words
     packet_size: u32,
 }
 
@@ -47,6 +49,12 @@ impl Borrow<MultiEventPacketRef> for MultiEventPacket {
     }
 }
 
+impl MultiEventPacket {
+    pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
+        MultiEventPacketBuilder::new()
+    }
+}
+
 #[repr(C, packed)]
 pub struct MultiEventPacketRef {
     header: MultiEventPacketConstHeader,
@@ -57,7 +65,7 @@ impl ToOwned for MultiEventPacketRef {
 
     fn to_owned(&self) -> Self::Owned {
         Self::Owned {
-            data: self.data().to_vec().into_boxed_slice(),
+            data: self.data_aligned().to_vec().into_boxed_slice(),
         }
     }
 }
@@ -80,29 +88,18 @@ impl MultiEventPacketRef {
         self.packet_size_u32() as usize * size_of::<u32>()
     }
 
-    pub fn mfp_source_id(&self, idx: usize) -> Option<SourceId> {
-        if idx > self.num_mfps() as usize {
-            return None;
-        }
-
+    pub fn mfp_source_ids(&self) -> &[SourceId] {
         // SAFETY: Source ids start ofter constant sized header part.
         let src_ids = unsafe {
             (self as *const Self as *const SourceId)
                 .byte_add(size_of::<MultiEventPacketConstHeader>())
         };
-
-        // SAFETY: Source ids have have 16 bit size and are located here, idx is not too large.
-        let src_id = unsafe { *src_ids.add(idx) };
-
-        Some(src_id)
+        // SAFETY: Source ids have have 16 bit size and are located here sequentially, alignment is correct.
+        unsafe { slice::from_raw_parts(src_ids, self.num_mfps() as _) }
     }
 
     /// Offset of the mfps from the start of the header, **in 32 bit words!** (as stored in the header).
-    pub fn mfp_offset_u32(&self, idx: usize) -> Option<Offset> {
-        if idx > self.num_mfps() as usize {
-            return None;
-        }
-
+    pub fn mfp_offsets_u32(&self) -> &[Offset] {
         // SAFETY: Offsets are located after the constant header part and source ids, padded to an even number (32 bit).
         let offsets = unsafe {
             (self as *const Self as *const u32)
@@ -110,15 +107,14 @@ impl MultiEventPacketRef {
                 .byte_add(self.src_ids_size())
         };
 
-        // SAFETY: Offsets have 32 bit size and are located here, idx is not too large.
-        let offset = unsafe { *offsets.add(idx) };
-
-        Some(offset)
+        // SAFETY: Offsets have 32 bit size and are located here sequentially, alignment is correct.
+        unsafe { slice::from_raw_parts(offsets, self.num_mfps() as _) }
     }
 
     pub fn mfp_offset_bytes(&self, idx: usize) -> Option<usize> {
-        self.mfp_offset_u32(idx)
-            .map(|v| v as usize * size_of::<u32>())
+        self.mfp_offsets_u32()
+            .get(idx)
+            .map(|v| *v as usize * size_of::<u32>())
     }
 
     pub fn get_mep(&self, idx: usize) -> Option<&MultiFragmentPacketRef> {
@@ -146,13 +142,44 @@ impl MultiEventPacketRef {
 
     pub fn data(&self) -> &[u8] {
         // SAFETY: Data of length packet_size (in bytes!) belongs to this MEP. Returned lifetime is same as of self.
-        unsafe { slice::from_raw_parts(self as *const Self as _, self.packet_size_byets()) }
+        unsafe { slice::from_raw_parts(self as *const Self as *const u8, self.packet_size_byets()) }
     }
 
-    /// SAFETY: Assumes data contains a valid MEP.
-    unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
+    pub fn data_aligned(&self) -> &[u32] {
+        // SAFETY: Data of length packet_size (in u32!) belongs to this MEP. Returned lifetime is same as of self.
+        // SAFETY: Alignment is guaranteed to be of of u32.
+        unsafe {
+            slice::from_raw_parts(
+                self as *const Self as *const u32,
+                self.packet_size_u32() as _,
+            )
+        }
+    }
+
+    /// SAFETY: Assumes data contains a valid MEP, with MFPs sorted by srcid.
+    unsafe fn unchecked_ref_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
         unsafe { &*(data.as_ptr() as *const MultiEventPacketRef) }
+    }
+}
+
+impl Debug for MultiEventPacketRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mfps = self.mfp_iter().collect::<Vec<_>>();
+        f.debug_struct("MultiEventPacketRef")
+            .field("magic", &format!("{:#04X}", self.magic()))
+            .field("nmfps", &self.num_mfps())
+            .field("pwords", &self.packet_size_u32())
+            .field("srcids", &self.mfp_source_ids())
+            .field("offsets", &self.mfp_offsets_u32())
+            .field("mfps", &mfps.as_slice())
+            .finish()
+    }
+}
+
+impl Debug for MultiEventPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.deref().fmt(f)
     }
 }
 
@@ -194,6 +221,11 @@ impl<'a> Iterator for MultiEventPacketIterator<'a> {
 
 impl<'a> ExactSizeIterator for MultiEventPacketIterator<'a> {}
 
+pub(crate) fn slice_as_bytes_mut(data: &mut [u32]) -> &mut [u8] {
+    // SAFETY: slice is contigous without padding of correct length. Lifetime matches.
+    unsafe { slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, std::mem::size_of_val(data)) }
+}
+
 #[cfg(feature = "bincode")]
 mod bincode {
     use ::bincode;
@@ -205,23 +237,26 @@ mod bincode {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            const HEADER_SIZE: usize = size_of::<MultiEventPacketConstHeader>();
+            const HEADER_SIZE: usize = size_of::<MultiEventPacketConstHeader>() / size_of::<u32>();
             union Header {
                 typed: MultiEventPacketConstHeader,
-                bytes: [u8; HEADER_SIZE],
+                bytes: [u32; HEADER_SIZE],
             }
 
-            let mut bytes: [u8; _] = Default::default();
-            decoder.reader().read(&mut bytes)?;
+            let mut bytes: [u32; _] = Default::default();
+            decoder
+                .reader()
+                .read(super::slice_as_bytes_mut(&mut bytes))?;
             let header = Header { bytes };
 
             // SAFETY: header has been received validly, packed size is size of entire packed in 32 bit words.
-            let mut data =
-                vec![0u8; unsafe { header.typed.packet_size } as usize * size_of::<u32>()];
+            let mut data = vec![0u32; unsafe { header.typed.packet_size } as usize];
 
             // SAFETY: repr(C) type can safely be accessed as bytes.
             data[0..HEADER_SIZE].copy_from_slice(unsafe { &header.bytes });
-            decoder.reader().read(&mut data[HEADER_SIZE..])?;
+            decoder
+                .reader()
+                .read(super::slice_as_bytes_mut(&mut data[HEADER_SIZE..]))?;
 
             Ok(Self {
                 data: data.into_boxed_slice(),
