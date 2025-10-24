@@ -43,24 +43,9 @@ impl<'a> MultiEventPacketBuilder<'a> {
         self.mfps.sort_by_key(|m| m.source_id());
         let num_mfps = self.mfps.len();
 
-        let header_size = header_size(num_mfps);
-
-        // calculate offsets
-        let align = self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN);
-        let mut total_size = header_size;
-        let calculated_offsets = self
-            .mfps
-            .iter()
-            .map(|mfp| (mfp.packet_size() as usize).next_multiple_of(align))
-            .scan(&mut total_size, move |sum, b| {
-                let ret = **sum;
-                **sum += b;
-                Some(ret)
-            })
-            .collect::<Vec<_>>();
-        // todo avoid allocation
-        let total_size = total_size;
-
+        // alloc data
+        let mut total_size = 0;
+        let _ = self.offsets_iter(&mut total_size).count(); // just iterate thorugh to get total size
         let mut data = vec![0u8; total_size].into_boxed_slice();
 
         // set header
@@ -93,19 +78,35 @@ impl<'a> MultiEventPacketBuilder<'a> {
             };
             let offset_slots = unsafe { slice::from_raw_parts_mut(offset_slots, num_mfps) };
             for (offset_slot, offset_value) in
-                offset_slots.iter_mut().zip(calculated_offsets.iter())
+                offset_slots.iter_mut().zip(self.offsets_iter(&mut 0))
             {
-                *offset_slot = (*offset_value / size_of::<u32>()) as _;
+                *offset_slot = (offset_value / size_of::<u32>()) as _;
             }
         }
 
         // set mfps
-        for (offset, mfp) in calculated_offsets.iter().zip(self.mfps) {
-            let data = &mut data[*offset..];
+        for (offset, mfp) in self.offsets_iter(&mut 0).zip(&self.mfps) {
+            let data = &mut data[offset..];
             let data = &mut data[..mfp.packet_size() as usize];
             data.copy_from_slice(mfp.raw_packet_data());
         }
 
         MultiEventPacket { data }
+    }
+
+    /// Generates the MFP offsets in bytes from the start of the header.
+    /// Also stores the total size in the out parateter.
+    fn offsets_iter(&self, total_size: &mut usize) -> impl Iterator<Item = usize> {
+        let align = self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN);
+        *total_size = header_size(self.mfps.len());
+
+        self.mfps
+            .iter()
+            .map(move |mfp| (mfp.packet_size() as usize).next_multiple_of(align))
+            .scan(total_size, move |sum, b| {
+                let ret = **sum;
+                **sum += b;
+                Some(ret)
+            })
     }
 }
