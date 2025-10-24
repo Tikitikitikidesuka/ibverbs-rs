@@ -1,9 +1,20 @@
 use crate::barrier::RdmaNetworkBarrier;
-use crate::rdma_connection::RdmaConnection;
+use crate::rdma_connection::{RdmaConnection, RdmaWorkCompletion, RdmaWorkRequest};
 use std::time::Duration;
 
-pub trait RdmaNetworkNode<NB: RdmaNetworkBarrier /*, NT: RdmaNetworkTransport*/> {
+// TODO: SEPARATE RdmaNetworkNode TRAIT INTO:
+// - RdmaNetworkNode: rank_id()
+// - RdmaBarrierNetworkNode: barrier()
+// - RdmaSendReceiveNetworkNode: post_send(), post_receive()
+// - RdmaReadWriteNetworkNode: post_write(), post_read()
+// - RdmaImmDataNetworkNode: post_send_immediate_data(), post_receive_immediate_data()
+
+pub trait RdmaNetworkNode<NB: RdmaNetworkBarrier/*, NT: RdmaNetworkTransport*/> {
     type Conn: RdmaConnection;
+    /*
+    type WR: RdmaWorkRequest;
+    type WC: RdmaWorkCompletion;
+     */
 
     fn rank_id(&self) -> usize;
 
@@ -11,7 +22,57 @@ pub trait RdmaNetworkNode<NB: RdmaNetworkBarrier /*, NT: RdmaNetworkTransport*/>
     where
         Group: RdmaNetworkSelfGroup;
 
-    // TODO: Transport methods
+    /*
+    fn post_send(
+        &mut self,
+        peer_rank_id: usize,
+        memory_region: usize,
+        memory_range: impl RangeBounds<usize>,
+        immediate_data: Option<u32>,
+    ) -> Result<Self::WR, RdmaPostError>;
+
+    // Posts a receive operation.
+    fn post_receive(
+        &mut self,
+        peer_rank_id: usize,
+        memory_region: usize,
+        memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, RdmaPostError>;
+
+    // Posts a write operation.
+    // If sent with immediate data, the data must be obtained in the remote peer
+    // by calling post_receive_immediate
+    fn post_write(
+        &mut self,
+        peer_rank_id: usize,
+        local_memory_region: usize,
+        local_memory_range: impl RangeBounds<usize>,
+        remote_memory_region: usize,
+        remote_memory_range: impl RangeBounds<usize>,
+        immediate_data: Option<u32>,
+    ) -> Result<Self::WR, RdmaPostError>;
+
+    // Posts a read operation.
+    fn post_read(
+        &mut self,
+        peer_rank_id: usize,
+        local_memory_region: usize,
+        local_memory_range: impl RangeBounds<usize>,
+        remote_memory_region: usize,
+        remote_memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, RdmaPostError>;
+
+    fn post_send_immediate_data(
+        &mut self,
+        peer_rank_id: usize,
+        immediate_data: u32,
+    ) -> Result<IbvWorkRequest, std::io::Error>;
+
+    fn post_receive_immediate_data(
+        &mut self,
+        peer_rank_id: usize,
+    ) -> Result<IbvWorkRequest, std::io::Error>;
+    */
 }
 
 // A group of nodes of the network by rank id
@@ -52,5 +113,3 @@ pub enum RdmaNetworkSelfGroupConnection<'network, Conn: RdmaConnection> {
     SelfConnection,
     PeerConnection(usize, &'network mut Conn),
 }
-
-pub trait RdmaNetworkTransport {}
