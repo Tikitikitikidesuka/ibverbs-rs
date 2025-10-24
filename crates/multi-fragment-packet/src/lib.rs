@@ -433,7 +433,7 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            encoder.writer().write(&self.data)
+            self.as_ref().encode(encoder)
         }
     }
 

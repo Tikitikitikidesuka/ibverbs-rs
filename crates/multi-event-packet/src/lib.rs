@@ -294,4 +294,13 @@ mod bincode {
             encoder.writer().write(self.data())
         }
     }
+
+    impl Encode for MultiEventPacket {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.as_ref().encode(encoder)
+        }
+    }
 }
