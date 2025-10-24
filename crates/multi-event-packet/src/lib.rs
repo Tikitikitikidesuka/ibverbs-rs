@@ -1,7 +1,7 @@
 use core::slice;
 use std::{borrow::Borrow, ops::Deref};
 
-use multi_fragment_packet::MultiFragmentPacketRef;
+use multi_fragment_packet::{MultiFragmentPacketRef, SourceId};
 
 pub mod builder;
 
@@ -14,6 +14,7 @@ compile_error!("Only little endian supported!");
 
 #[derive(Copy, Clone)]
 #[repr(C, packed)]
+/// Just the constant-sized part of the MEP header.
 pub(crate) struct MultiEventPacketConstHeader {
     magic: u16,
     num_mfps: u16,
@@ -79,17 +80,15 @@ impl MultiEventPacketRef {
         self.packet_size_u32() as usize * size_of::<u32>()
     }
 
-    const SOURCE_ID_SIZE: usize = size_of::<u16>();
-    const OFFSET_SIZE: usize = size_of::<u32>();
-
-    pub fn mfp_source_id(&self, idx: usize) -> Option<u16> {
+    pub fn mfp_source_id(&self, idx: usize) -> Option<SourceId> {
         if idx > self.num_mfps() as usize {
             return None;
         }
 
         // SAFETY: Source ids start ofter constant sized header part.
         let src_ids = unsafe {
-            (self as *const Self as *const u16).byte_add(size_of::<MultiEventPacketConstHeader>())
+            (self as *const Self as *const SourceId)
+                .byte_add(size_of::<MultiEventPacketConstHeader>())
         };
 
         // SAFETY: Source ids have have 16 bit size and are located here, idx is not too large.
@@ -99,18 +98,16 @@ impl MultiEventPacketRef {
     }
 
     /// Offset of the mfps from the start of the header, **in 32 bit words!** (as stored in the header).
-    pub fn mfp_offset_u32(&self, idx: usize) -> Option<u32> {
+    pub fn mfp_offset_u32(&self, idx: usize) -> Option<Offset> {
         if idx > self.num_mfps() as usize {
             return None;
         }
-
-        let source_ids_size = self.num_mfps().next_multiple_of(2) as usize * Self::SOURCE_ID_SIZE;
 
         // SAFETY: Offsets are located after the constant header part and source ids, padded to an even number (32 bit).
         let offsets = unsafe {
             (self as *const Self as *const u32)
                 .byte_add(size_of::<MultiEventPacketConstHeader>())
-                .byte_add(source_ids_size)
+                .byte_add(self.src_ids_size())
         };
 
         // SAFETY: Offsets have 32 bit size and are located here, idx is not too large.
@@ -126,15 +123,18 @@ impl MultiEventPacketRef {
 
     pub fn get_mep(&self, idx: usize) -> Option<&MultiFragmentPacketRef> {
         // SAFETY: MFPs are located at the given offset (in bytes!) and expected to be valid.
+        // SAFETY: Returned lifetime is same as data
         self.mfp_offset_bytes(idx).map(|off| unsafe {
             &*(self as *const Self as *const MultiFragmentPacketRef).byte_add(off)
         })
     }
 
     pub fn header_size(&self) -> usize {
-        size_of::<MultiEventPacketConstHeader>()
-            + self.num_mfps().next_multiple_of(2) as usize * Self::SOURCE_ID_SIZE
-            + self.num_mfps() as usize * Self::OFFSET_SIZE
+        header_size(self.num_mfps() as _)
+    }
+
+    fn src_ids_size(&self) -> usize {
+        src_ids_size(self.num_mfps() as _)
     }
 
     pub fn mfp_iter(&self) -> MultiEventPacketIterator<'_> {
@@ -145,14 +145,31 @@ impl MultiEventPacketRef {
     }
 
     pub fn data(&self) -> &[u8] {
-        // SAFETY: Data of length packet_size (in bytes!) belongs to this MEP.
+        // SAFETY: Data of length packet_size (in bytes!) belongs to this MEP. Returned lifetime is same as of self.
         unsafe { slice::from_raw_parts(self as *const Self as _, self.packet_size_byets()) }
     }
 
+    /// SAFETY: Assumes data contains a valid MEP.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
-        // Cast to MEPRef type to read its attributes
+        // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
         unsafe { &*(data.as_ptr() as *const MultiEventPacketRef) }
     }
+}
+
+/// Type of MFP offsets as in the MEP header.
+pub type Offset = u32;
+
+pub(crate) fn src_ids_size(num_mfps: usize) -> usize {
+    const MFP_ROUNDING: usize = 2;
+    num_mfps.next_multiple_of(MFP_ROUNDING) * size_of::<SourceId>()
+}
+
+pub(crate) fn offsets_size(num_mfps: usize) -> usize {
+    num_mfps * size_of::<u32>()
+}
+
+pub(crate) fn header_size(num_mfps: usize) -> usize {
+    size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
 }
 
 pub struct MultiEventPacketIterator<'a> {

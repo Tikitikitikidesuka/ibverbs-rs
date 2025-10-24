@@ -20,6 +20,9 @@ impl MultiFragmentPacketRef {
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
 
+/// Type of a source id.
+pub type SourceId = u16;
+
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
@@ -30,7 +33,7 @@ pub struct MultiFragmentPacketHeader {
     fragment_count: u16,
     packet_size: u32,
     event_id: u64,
-    source_id: u16,
+    source_id: SourceId,
     align: u8,
     fragment_version: u8,
 }
@@ -222,7 +225,7 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().event_id }
     }
 
-    pub fn source_id(&self) -> u16 {
+    pub fn source_id(&self) -> SourceId {
         unsafe { self.header().source_id }
     }
 
