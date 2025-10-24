@@ -1,25 +1,25 @@
-use crate::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
-use crate::rdma_connection::{
-    RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError,
+use crate::barrier::{
+    MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
+    RdmaNetworkMemoryRegionComponent,
 };
-use crate::rdma_network_node::{
-    RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
-};
+use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError};
+use crate::rdma_network_node::{RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
 use crate::spin_poll::spin_poll_batched;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct UnregisteredCentralizedBarrier {
     memory: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub struct CentralizedBarrier<MR, RMR> {
+pub struct CentralizedBarrier {
     memory: Vec<u8>,
-    mrs: Vec<(MR, RMR)>,
+    mrs: Vec<MrPair>,
 }
 
-impl CentralizedBarrier<(), ()> {
+impl CentralizedBarrier {
     pub fn new() -> UnregisteredCentralizedBarrier {
         UnregisteredCentralizedBarrier { memory: vec![] }
     }
@@ -52,10 +52,8 @@ impl UnregisteredCentralizedBarrier {
     }
 }
 
-impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
-    for UnregisteredCentralizedBarrier
-{
-    type Registered = CentralizedBarrier<MR, RMR>;
+impl RdmaNetworkMemoryRegionComponent for UnregisteredCentralizedBarrier {
+    type Registered = CentralizedBarrier;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -66,7 +64,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
             .collect()
     }
 
-    fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MrPair>) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if mrs.len() != num_connections {
             return Err(NonMatchingMemoryRegionCount {
@@ -82,14 +80,12 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
-    for CentralizedBarrier<MR, RemoteMR>
-{
+impl RdmaNetworkBarrier for CentralizedBarrier {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -108,7 +104,7 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR>
     }
 }
 
-impl<MR, RemoteMR> CentralizedBarrier<MR, RemoteMR> {
+impl CentralizedBarrier {
     fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
         let ptr = &self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
         unsafe { read_volatile(ptr) }
@@ -130,32 +126,34 @@ impl<MR, RemoteMR> CentralizedBarrier<MR, RemoteMR> {
             1024,
         )
         .map_err(|_| {
-            RdmaNetworkBarrierError::Timeout(format!(
-                "Timeout waiting for peer {rank_id}"
-            ))
+            RdmaNetworkBarrierError::Timeout(format!("Timeout waiting for peer {rank_id}"))
         })?;
         self.reset_remote_peer_flag(rank_id);
         Ok(elapsed)
     }
 
-    fn notify_peer<Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR>>(
+    fn notify_peer<Conn: RdmaConnection>(
         &self,
         rank_id: usize,
         conn: &mut Conn,
         timeout: Duration,
     ) -> Result<Duration, RdmaNetworkBarrierError> {
-        let (mr, rmr) = &self.mrs[rank_id];
-        let mut wr = conn.post_write(mr, 0..=0, rmr, 1..=1, None).map_err(|e| {
-            RdmaNetworkBarrierError::RdmaError(format!("Write error: {e}"))
-        })?;
+        let peer_mr_pair = &self.mrs[rank_id];
+        let mut wr = conn
+            .post_write(
+                peer_mr_pair.local_mr_idx,
+                0..=0,
+                peer_mr_pair.remote_mr_idx,
+                1..=1,
+                None,
+            )
+            .map_err(|e| RdmaNetworkBarrierError::RdmaError(format!("Write error: {e}")))?;
 
         let (_, elapsed) = wr
             .spin_poll_batched(timeout, 1024)
             .map_err(|error| match error {
                 WorkRequestSpinPollError::Timeout(_) => {
-                    RdmaNetworkBarrierError::Timeout(format!(
-                        "Timeout notifying peer {rank_id}"
-                    ))
+                    RdmaNetworkBarrierError::Timeout(format!("Timeout notifying peer {rank_id}"))
                 }
                 WorkRequestSpinPollError::ExecutionError(e) => {
                     RdmaNetworkBarrierError::RdmaError(format!("RDMA error: {e}"))
@@ -166,7 +164,7 @@ impl<MR, RemoteMR> CentralizedBarrier<MR, RemoteMR> {
 
     fn coordinator_barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -198,7 +196,7 @@ impl<MR, RemoteMR> CentralizedBarrier<MR, RemoteMR> {
 
     fn coordinated_barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,

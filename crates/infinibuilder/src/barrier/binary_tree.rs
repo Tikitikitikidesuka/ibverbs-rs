@@ -1,24 +1,26 @@
-use crate::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
-use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
-use crate::rdma_network_node::{
-    RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
+use crate::barrier::{
+    MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
+    RdmaNetworkMemoryRegionComponent,
 };
+use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
+use crate::rdma_network_node::{RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
 use crate::spin_poll::spin_poll_batched;
 use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct UnregisteredBinaryTreeBarrier {
     memory: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub struct BinaryTreeBarrier<MR, RMR> {
+pub struct BinaryTreeBarrier {
     memory: Vec<u8>,
-    mrs: Vec<(MR, RMR)>,
+    mrs: Vec<MrPair>,
 }
 
-impl BinaryTreeBarrier<(), ()> {
+impl BinaryTreeBarrier {
     pub fn new() -> UnregisteredBinaryTreeBarrier {
         UnregisteredBinaryTreeBarrier { memory: vec![] }
     }
@@ -68,7 +70,7 @@ impl PeerRole {
     }
 }
 
-impl<MR, RMR> BinaryTreeBarrier<MR, RMR> {
+impl BinaryTreeBarrier {
     fn peer_group_idx(&self, idx: usize, group_size: usize, peer: PeerRole) -> Option<usize> {
         match peer {
             Parent => {
@@ -97,7 +99,7 @@ impl<MR, RMR> BinaryTreeBarrier<MR, RMR> {
         }
     }
 
-    fn connection_mr(&self, rank_id: usize) -> &(MR, RMR) {
+    fn connection_mr(&self, rank_id: usize) -> &MrPair {
         &self.mrs[rank_id]
     }
 
@@ -112,10 +114,8 @@ impl<MR, RMR> BinaryTreeBarrier<MR, RMR> {
     }
 }
 
-impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
-    for UnregisteredBinaryTreeBarrier
-{
-    type Registered = BinaryTreeBarrier<MR, RMR>;
+impl RdmaNetworkMemoryRegionComponent for UnregisteredBinaryTreeBarrier {
+    type Registered = BinaryTreeBarrier;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -126,15 +126,13 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
             .collect()
     }
 
-    fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MrPair>) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if mrs.len() != num_connections {
-            return Err(
-                NonMatchingMemoryRegionCount {
-                    expected: num_connections,
-                    got: mrs.len(),
-                },
-            );
+            return Err(NonMatchingMemoryRegionCount {
+                expected: num_connections,
+                got: mrs.len(),
+            });
         }
 
         Ok(BinaryTreeBarrier {
@@ -144,12 +142,12 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for BinaryTreeBarrier<MR, RemoteMR> {
+impl RdmaNetworkBarrier for BinaryTreeBarrier {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -162,10 +160,10 @@ impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for BinaryTreeBarrier<MR, Re
     }
 }
 
-impl<MR, RemoteMR> BinaryTreeBarrier<MR, RemoteMR> {
+impl BinaryTreeBarrier {
     fn binary_tree_barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -193,7 +191,7 @@ impl<MR, RemoteMR> BinaryTreeBarrier<MR, RemoteMR> {
 
     fn wait_for_peer<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -226,7 +224,7 @@ impl<MR, RemoteMR> BinaryTreeBarrier<MR, RemoteMR> {
 
     fn notify_peer<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -240,12 +238,18 @@ impl<MR, RemoteMR> BinaryTreeBarrier<MR, RemoteMR> {
             {
                 let peer_rank_id = connections.rank_id(group_idx).unwrap();
                 let peer_conn = connections.connection_mut(group_idx);
-                let (peer_mr, peer_remote_mr) = self.connection_mr(peer_rank_id);
+                let peer_mr_pair = self.connection_mr(peer_rank_id);
                 if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(_rank_id, conn)) =
                     peer_conn
                 {
                     let mut wr = conn
-                        .post_write(peer_mr, 0..=0, peer_remote_mr, 1..=1, None)
+                        .post_write(
+                            peer_mr_pair.local_mr_idx,
+                            0..=0,
+                            peer_mr_pair.remote_mr_idx,
+                            1..=1,
+                            None,
+                        )
                         .map_err(|error| {
                             RdmaNetworkBarrierError::RdmaError(format!(
                                 "Error issuing RDMA write to {peer:?}: {error}"

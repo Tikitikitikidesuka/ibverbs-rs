@@ -1,5 +1,4 @@
 use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::network_node::{
     IbvNetworkNode, IbvNetworkNodeBuildError, IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
     IbvNetworkNodeEndpointGatherError,
@@ -30,8 +29,8 @@ pub fn create_ibv_network_node<NB, UNB>(
     barrier: UNB,
 ) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
 where
-    UNB: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NB>,
-    NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
+    UNB: RdmaNetworkMemoryRegionComponent<Registered = NB>,
+    NB: RdmaNetworkBarrier,
 {
     let network_config = network_config.validate()?;
 

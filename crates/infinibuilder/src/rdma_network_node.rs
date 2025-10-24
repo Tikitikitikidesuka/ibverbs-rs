@@ -2,13 +2,8 @@ use crate::barrier::RdmaNetworkBarrier;
 use crate::rdma_connection::RdmaConnection;
 use std::time::Duration;
 
-pub trait RdmaNetworkNode<
-    MR,
-    RemoteMR,
-    NB: RdmaNetworkBarrier<MR, RemoteMR>, /*, NT: RdmaNetworkTransport*/
->
-{
-    type Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR>;
+pub trait RdmaNetworkNode<NB: RdmaNetworkBarrier /*, NT: RdmaNetworkTransport*/> {
+    type Conn: RdmaConnection;
 
     fn rank_id(&self) -> usize;
 

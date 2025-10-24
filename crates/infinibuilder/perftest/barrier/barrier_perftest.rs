@@ -1,14 +1,14 @@
 use BarrierAlgorithm::*;
 use clap::Parser;
-use infinibuilder::connect::Connect;
-use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig, NetworkOp};
+use infinibuilder::barrier::RdmaNetworkBarrier;
+use infinibuilder::barrier::all_enum::{AnyBarrier, AnyBarrierType};
+use infinibuilder::ibverbs::init::create_ibv_network_node;
+use infinibuilder::ibverbs::network_node::IbvNetworkNode;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
-use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
-use infinibuilder::synchronization::centralized::CentralizedSync;
+use infinibuilder::rdma_network_node::RdmaNetworkNode;
 use std::fs;
+use std::time::Duration;
 use tokio::time::Instant;
-use infinibuilder::synchronization::binary::BinaryTreeSync;
 
 fn main() {
     simple_logger::init().unwrap();
@@ -17,37 +17,16 @@ fn main() {
     let json_network = fs::read_to_string(&args.config_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
         .unwrap()
-        .take_nodes(args.num_nodes)
-        .validate()
-        .unwrap();
-    let mut mem = Box::new([0u8; 1024]);
+        .take_nodes(args.num_nodes);
 
-    let node = unsafe {
-        ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
-            args.rank_id,
-            &network_config,
-            &mut *mem as *mut u8,
-            mem.len(),
-        )
-    }
-    .unwrap();
-
-    let out_conn_config = node.connection_config();
-
-    println!("Exchanging...");
-    let exchanged = TcpExchanger::await_exchange_all(
+    let mut node = create_ibv_network_node(
         args.rank_id,
-        &network_config,
-        &out_conn_config,
-        &TcpExchangeConfig::default(),
-    ).unwrap();
-    println!("Exchanged!");
-
-    let in_conn_config =
-        NetworkNodeConnectionConfig::gather(args.rank_id, exchanged.as_slice()).unwrap();
-
-    let mut node = node.connect(in_conn_config).unwrap();
-    println!("Node ready!!!");
+        32,
+        512,
+        network_config,
+        AnyBarrier::new(args.algorithm.into()),
+    )
+    .unwrap();
 
     if let Some(iters) = args.iters {
         for _ in 0..iters {
@@ -60,25 +39,15 @@ fn main() {
     }
 }
 
-fn barrier_batch<T: RdmaSendRecv + RdmaSync>(
-    node: &mut ConnectedNetworkNode<T>,
-    args: &Args,
-) {
+fn barrier_batch<NB: RdmaNetworkBarrier>(node: &mut IbvNetworkNode<NB>, args: &Args) {
     let group = node.group_all();
-
-    node.run(&BinaryTreeSync::new(), &group).unwrap().unwrap();
+    node.barrier(&group, Duration::from_millis(200)).unwrap();
 
     let start = Instant::now();
 
     for i in 0..args.batch_size {
         //println!("Sync {} starting", i + 1);
-        match args.algorithm {
-            Centralized => node.run(&CentralizedSync::new(), &group),
-            BinaryTree => node.run(&BinaryTreeSync::new(), &group),
-            //Dissemination => node.run(&Binar::new(), &group),
-        }
-        .unwrap()
-        .unwrap();
+        node.barrier(&group, Duration::from_millis(200)).unwrap()
     }
 
     let elapsed = start.elapsed();
@@ -94,7 +63,17 @@ fn barrier_batch<T: RdmaSendRecv + RdmaSync>(
 enum BarrierAlgorithm {
     Centralized,
     BinaryTree,
-    //Dissemination,
+    Dissemination,
+}
+
+impl Into<AnyBarrierType> for BarrierAlgorithm {
+    fn into(self) -> AnyBarrierType {
+        match self {
+            Centralized => AnyBarrierType::Centralized,
+            BinaryTree => AnyBarrierType::BinaryTree,
+            Dissemination => AnyBarrierType::Dissemination,
+        }
+    }
 }
 
 #[derive(Parser, Debug)]

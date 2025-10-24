@@ -1,18 +1,17 @@
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
-use crate::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::work_completion::IbvWorkCompletion;
 use crate::ibverbs::work_request::IbvWorkRequest;
-use crate::rdma_connection::RdmaConnection;
+use crate::rdma_connection::{RdmaConnection, RdmaPostError};
 use derivative::Derivative;
 use ibverbs::{
-    CompletionQueue, Context, PreparedQueuePair, ProtectionDomain, QueuePair, QueuePairEndpoint,
+    CompletionQueue, Context, LocalMemorySlice, MemoryRegion, PreparedQueuePair, ProtectionDomain,
+    QueuePair, QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeBounds;
 use std::rc::Rc;
-use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -238,7 +237,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
     fn register_mrs(
         &self,
         pd: &ProtectionDomain,
-    ) -> Result<Vec<(String, IbvMemoryRegion)>, IbvConnectionBuildError> {
+    ) -> Result<Vec<(String, MemoryRegion)>, IbvConnectionBuildError> {
         let mut mr_endpoints = Vec::new();
         let mut registered_mr_ids = HashSet::new();
         for mr in &self.mrs.mrs {
@@ -248,13 +247,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                     .register(mr.ptr, mr.length)
                     .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
                 registered_mr_ids.insert(mr.id.clone());
-                mr_endpoints.push((
-                    mr.id.clone(),
-                    IbvMemoryRegion {
-                        length: mr.length,
-                        mr: Arc::new(mr_endpoint),
-                    },
-                ));
+                mr_endpoints.push((mr.id.clone(), mr_endpoint));
             } else {
                 return Err(IbvConnectionBuildError::MemoryRegionDuplicateRegister(
                     mr.id.clone(),
@@ -274,8 +267,10 @@ pub struct IbvPreparedConnection {
     qp: PreparedQueuePair,
     #[derivative(Debug = "ignore")]
     pd: ProtectionDomain,
+    #[derivative(Debug = "ignore")]
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    mrs: Vec<(String, IbvMemoryRegion)>,
+    #[derivative(Debug = "ignore")]
+    mrs: Vec<(String, MemoryRegion)>,
 }
 
 impl IbvPreparedConnection {
@@ -299,8 +294,32 @@ impl IbvPreparedConnection {
             .handshake(connection_config.qp_endpoint)
             .map_err(|e| IbvConnectionBuildError::ConnectionError(e))?;
 
-        let local_mrs = self.mrs.into_iter().collect();
-        let remote_mrs = connection_config.mr_endpoints.into_iter().collect();
+        let local_mr_count = self.mrs.len();
+        let (local_mr_ids, local_mrs) = self.mrs.into_iter().enumerate().fold(
+            (
+                HashMap::with_capacity(local_mr_count),
+                Vec::with_capacity(local_mr_count),
+            ),
+            |(mut map, mut vec), (mr_idx, (mr_id, mr))| {
+                map.insert(mr_id, mr_idx);
+                vec.push(mr);
+                (map, vec)
+            },
+        );
+
+        let remote_mr_count = connection_config.mr_endpoints.len();
+        let (remote_mr_ids, remote_mrs) =
+            connection_config.mr_endpoints.into_iter().enumerate().fold(
+                (
+                    HashMap::with_capacity(remote_mr_count),
+                    Vec::with_capacity(remote_mr_count),
+                ),
+                |(mut map, mut vec), (mr_idx, (mr_id, remote_mr))| {
+                    map.insert(mr_id, mr_idx);
+                    vec.push(remote_mr);
+                    (map, vec)
+                },
+            );
 
         Ok(IbvConnection {
             local_qp_endpoint: self.local_qp_endpoint,
@@ -308,7 +327,9 @@ impl IbvPreparedConnection {
             qp,
             _pd: self.pd,
             cq: self.cq,
+            local_mr_ids,
             local_mrs,
+            remote_mr_ids,
             remote_mrs,
             next_wr_id: 0,
         })
@@ -318,7 +339,7 @@ impl IbvPreparedConnection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IbvConnectionEndpoint {
     qp_endpoint: QueuePairEndpoint,
-    mr_endpoints: Vec<(String, IbvRemoteMemoryRegion)>,
+    mr_endpoints: Vec<(String, RemoteMemoryRegion)>,
 }
 
 #[derive(Derivative)]
@@ -331,8 +352,12 @@ pub struct IbvConnection {
     #[derivative(Debug = "ignore")]
     _pd: ProtectionDomain,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    local_mrs: HashMap<String, IbvMemoryRegion>,
-    remote_mrs: HashMap<String, IbvRemoteMemoryRegion>,
+    local_mr_ids: HashMap<String, usize>,
+    #[derivative(Debug = "ignore")]
+    local_mrs: Vec<MemoryRegion>,
+    remote_mr_ids: HashMap<String, usize>,
+    #[derivative(Debug = "ignore")]
+    remote_mrs: Vec<RemoteMemoryRegion>,
     next_wr_id: u64,
 }
 
@@ -345,81 +370,105 @@ impl IbvConnection {
 }
 
 impl IbvConnection {
-    pub fn local_mr(&self, id: impl AsRef<str>) -> Option<IbvMemoryRegion> {
-        self.local_mrs.get(id.as_ref()).cloned()
+    pub fn local_mr(&self, id: impl AsRef<str>) -> Option<usize> {
+        self.local_mr_ids.get(id.as_ref()).cloned()
     }
 
-    pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<IbvRemoteMemoryRegion> {
-        self.remote_mrs.get(id.as_ref()).cloned()
+    pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<usize> {
+        self.remote_mr_ids.get(id.as_ref()).cloned()
     }
 }
 
 impl RdmaConnection for IbvConnection {
-    type MR = IbvMemoryRegion;
-    type RemoteMR = IbvRemoteMemoryRegion;
     type WR = IbvWorkRequest;
     type WC = IbvWorkCompletion;
-    type PostError = std::io::Error;
 
     fn post_send(
         &mut self,
-        memory_region: &Self::MR,
+        memory_region: usize,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<Self::WR, RdmaPostError> {
+        let mr_slice = self
+            .local_mrs
+            .get(memory_region)
+            .ok_or(RdmaPostError::InvalidMemoryRegion(memory_region))?
+            .slice(memory_range);
+
         let wr_id = self.next_wr_id();
-        unsafe {
-            self.qp.post_send(
-                &[memory_region.mr.slice(memory_range)],
-                wr_id,
-                immediate_data,
-            )
-        }?;
+        unsafe { self.qp.post_send(&[mr_slice], wr_id, immediate_data) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
     fn post_receive(
         &mut self,
-        memory_region: &Self::MR,
+        memory_region: usize,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<Self::WR, RdmaPostError> {
+        let mr_slice = self
+            .local_mrs
+            .get(memory_region)
+            .ok_or(RdmaPostError::InvalidMemoryRegion(memory_region))?
+            .slice(memory_range);
+
         let wr_id = self.next_wr_id();
-        unsafe {
-            self.qp
-                .post_receive(&[memory_region.mr.slice(memory_range)], wr_id)
-        }?;
+        unsafe { self.qp.post_receive(&[mr_slice], wr_id) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
     fn post_write(
         &mut self,
-        local_memory_region: &Self::MR,
+        local_memory_region: usize,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &Self::RemoteMR,
+        remote_memory_region: usize,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<Self::WR, RdmaPostError> {
+        let local_mr_slice = self
+            .local_mrs
+            .get(local_memory_region)
+            .ok_or(RdmaPostError::InvalidMemoryRegion(local_memory_region))?
+            .slice(local_memory_range);
+
+        let remote_mr_slice = self
+            .remote_mrs
+            .get(remote_memory_region)
+            .ok_or(RdmaPostError::InvalidRemoteMemoryRegion(
+                local_memory_region,
+            ))?
+            .slice(remote_memory_range);
+
         let wr_id = self.next_wr_id();
-        self.qp.post_write(
-            &[local_memory_region.mr.slice(local_memory_range)],
-            remote_memory_region.rmr.slice(remote_memory_range),
-            wr_id,
-            immediate_data,
-        )?;
+        self.qp
+            .post_write(&[local_mr_slice], remote_mr_slice, wr_id, immediate_data)?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
     fn post_read(
         &mut self,
-        local_memory_region: &Self::MR,
+        local_memory_region: usize,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &Self::RemoteMR,
+        remote_memory_region: usize,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<Self::WR, RdmaPostError> {
+        let local_mr_slice = self
+            .local_mrs
+            .get(local_memory_region)
+            .ok_or(RdmaPostError::InvalidMemoryRegion(local_memory_region))?
+            .slice(local_memory_range);
+
+        let remote_mr_slice = self
+            .remote_mrs
+            .get(remote_memory_region)
+            .ok_or(RdmaPostError::InvalidRemoteMemoryRegion(
+                local_memory_region,
+            ))?
+            .slice(remote_memory_range);
+
         let wr_id = self.next_wr_id();
         self.qp.post_read(
-            &[local_memory_region.mr.slice(local_memory_range)],
-            remote_memory_region.rmr.slice(remote_memory_range),
+            &[local_mr_slice],
+            remote_mr_slice,
             wr_id,
         )?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))

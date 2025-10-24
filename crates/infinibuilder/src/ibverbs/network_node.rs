@@ -1,9 +1,8 @@
-use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::barrier::{MrPair, RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 use crate::ibverbs::connection::{
     IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder, IbvConnectionEndpoint,
     IbvPreparedConnection,
 };
-use crate::ibverbs::memory_region::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::rdma_network_node::{
     RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
     RdmaNetworkSelfGroupConnections,
@@ -149,12 +148,8 @@ impl<RankId, IbvDevName, CqParams, NumConnections>
     IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, ()>
 {
     pub fn barrier<
-        Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
-        PreparedBarrier: RdmaNetworkMemoryRegionComponent<
-                IbvMemoryRegion,
-                IbvRemoteMemoryRegion,
-                Registered = Barrier,
-            >,
+        Barrier: RdmaNetworkBarrier,
+        PreparedBarrier: RdmaNetworkMemoryRegionComponent<Registered = Barrier>,
     >(
         self,
         barrier: PreparedBarrier,
@@ -176,8 +171,8 @@ impl<RankId, IbvDevName, CqParams, NumConnections>
 }
 
 impl<
-    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
+    Barrier: RdmaNetworkBarrier,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<Registered = Barrier>,
 >
     IbvNetworkNodeBuilder<
         BuilderRankId,
@@ -235,8 +230,8 @@ impl<
 }
 
 pub struct IbvPreparedNetworkNode<
-    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
+    Barrier: RdmaNetworkBarrier,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<Registered = Barrier>,
 > {
     rank_id: usize,
     prepared_connections: Vec<IbvPreparedConnection>,
@@ -244,8 +239,8 @@ pub struct IbvPreparedNetworkNode<
 }
 
 impl<
-    Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
+    Barrier: RdmaNetworkBarrier,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<Registered = Barrier>,
 > IbvPreparedNetworkNode<Barrier, PreparedBarrier>
 {
     pub fn endpoint(&self) -> IbvNetworkNodeEndpoint {
@@ -276,18 +271,18 @@ impl<
             .iter()
             .enumerate()
             .map(|(idx, conn)| {
-                Ok((
-                    conn.local_mr(BARRIER_MEM_ID).ok_or(
+                Ok(MrPair {
+                    local_mr_idx: conn.local_mr(BARRIER_MEM_ID).ok_or(
                         IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
                             "Missing barrier local memory for conn {idx}"
                         )),
                     )?,
-                    conn.remote_mr(BARRIER_MEM_ID).ok_or(
+                    remote_mr_idx: conn.remote_mr(BARRIER_MEM_ID).ok_or(
                         IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
                             "Missing barrier remote memory for conn {idx}"
                         )),
                     )?,
-                ))
+                })
             })
             .collect::<Result<Vec<_>, IbvNetworkNodeBuildError>>()?;
 
@@ -355,9 +350,8 @@ pub struct IbvNetworkNode<NB> {
     barrier: NB,
 }
 
-impl<
-    NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>, /*, NT: RdmaNetworkTransport*/
-> RdmaNetworkNode<IbvMemoryRegion, IbvRemoteMemoryRegion, NB /*, NT*/> for IbvNetworkNode<NB>
+impl<NB: RdmaNetworkBarrier /*, NT: RdmaNetworkTransport*/> RdmaNetworkNode<NB /*, NT*/>
+    for IbvNetworkNode<NB>
 {
     type Conn = IbvConnection;
 
@@ -424,7 +418,7 @@ impl RdmaNetworkSelfGroup for IbvNetworkSelfGroup {
     }
 }
 
-impl<NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>> IbvNetworkNode<NB> {
+impl<NB: RdmaNetworkBarrier> IbvNetworkNode<NB> {
     pub fn group_all(&self) -> IbvNetworkSelfGroup {
         self.nodes.clone()
     }

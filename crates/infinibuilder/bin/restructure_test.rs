@@ -1,8 +1,6 @@
-use infinibuilder::restructure::ibverbs::connection::IbvConnectionBuilder;
-use infinibuilder::restructure::rdma_connection::{
-    RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus,
-};
-use infinibuilder::restructure::spin_poll::spin_poll_batched;
+use infinibuilder::ibverbs::connection::IbvConnectionBuilder;
+use infinibuilder::rdma_connection::{RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus};
+use infinibuilder::spin_poll::spin_poll_batched;
 use std::time::Duration;
 
 fn main() {

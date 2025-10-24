@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ibverbs = { git = "https://github.com/Tikitikitikidesuka/rust-ibverbs.git", rev = "4957c47", features = ["serde"] }
+ibverbs = { git = "https://github.com/Tikitikitikidesuka/rust-ibverbs.git", rev = "e3ffba3", features = ["serde"] }
 derivative = "2.2.0"
 thiserror = "2.0.12"
 serde_json = "1.0.141"

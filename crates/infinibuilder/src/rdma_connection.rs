@@ -5,48 +5,68 @@ use std::ops::RangeBounds;
 use std::time::Duration;
 use thiserror::Error;
 
+#[derive(Debug, Error)]
+pub enum RdmaPostError {
+    #[error("Memory region {0} not registered")]
+    InvalidMemoryRegion(usize),
+
+    #[error("Remote memory region {0} not registered")]
+    InvalidRemoteMemoryRegion(usize),
+
+    #[error("Invalid memory range {from}..={to_inclusive} for memory region {mr_idx}")]
+    InvalidRange {
+        from: usize,
+        to_inclusive: usize,
+        mr_idx: usize,
+    },
+
+    #[error("Transport error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    // Implementation-specific details
+    #[error("Implementation error")]
+    Implementation(#[source] Box<dyn Error + Send + Sync>),
+}
+
 pub trait RdmaConnection {
-    type MR;
-    type RemoteMR;
     type WR: RdmaWorkRequest;
     type WC: RdmaWorkCompletion;
-    type PostError: Error;
 
     // Posts a send operation. Will fail if the remote has not posted a receive operation before hand.
     fn post_send(
         &mut self,
-        memory_region: &Self::MR,
+        memory_region: usize,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WR, RdmaPostError>;
 
     // Posts a receive operation.
     fn post_receive(
         &mut self,
-        memory_region: &Self::MR,
+        memory_region: usize,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WR, RdmaPostError>;
 
     // Posts a write operation.
     // If sent with immediate data, the data must be obtained in the remote peer
     // by calling post_receive_immediate
     fn post_write(
         &mut self,
-        local_memory_region: &Self::MR,
+        local_memory_region: usize,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &Self::RemoteMR,
+        remote_memory_region: usize,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WR, RdmaPostError>;
 
     // Posts a read operation.
     fn post_read(
         &mut self,
-        local_memory_region: &Self::MR,
+        local_memory_region: usize,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &Self::RemoteMR,
+        remote_memory_region: usize,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WR, RdmaPostError>;
 
     fn post_send_immediate_data(
         &mut self,

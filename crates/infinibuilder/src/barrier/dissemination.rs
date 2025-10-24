@@ -1,4 +1,4 @@
-use crate::barrier::{NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
+use crate::barrier::{MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError, RdmaNetworkMemoryRegionComponent};
 use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::rdma_network_node::{
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
@@ -9,17 +9,19 @@ use std::ops::RangeBounds;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
+#[derive(Debug)]
 pub struct UnregisteredDisseminationBarrier {
     memory: Vec<u8>,
 }
 
 #[derive(Debug)]
-pub struct DisseminationBarrier<MR, RMR> {
+pub struct DisseminationBarrier {
     memory: Vec<u8>,
-    mrs: Vec<(MR, RMR)>,
+    mrs: Vec<MrPair>,
 }
 
-impl DisseminationBarrier<(), ()> {
+
+impl DisseminationBarrier {
     pub fn new() -> UnregisteredDisseminationBarrier {
         UnregisteredDisseminationBarrier { memory: vec![] }
     }
@@ -58,8 +60,8 @@ impl UnregisteredDisseminationBarrier {
     }
 }
 
-impl<MR, RMR> DisseminationBarrier<MR, RMR> {
-    fn connection_mr(&self, rank_id: usize) -> &(MR, RMR) {
+impl DisseminationBarrier {
+    fn connection_mr(&self, rank_id: usize) -> &MrPair {
         &self.mrs[rank_id]
     }
 
@@ -84,7 +86,7 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
 
     fn advance_parity_counter(&mut self, rank_id: usize) {
         let parity_cntr_idx = self.parity_counter_idx(rank_id);
-        self.memory[parity_cntr_idx] += 1;
+        self.memory[parity_cntr_idx] = (self.memory[parity_cntr_idx] + 1) % 2;
     }
 
     fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
@@ -100,8 +102,8 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
     }
 }
 
-impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredDisseminationBarrier {
-    type Registered = DisseminationBarrier<MR, RMR>;
+impl RdmaNetworkMemoryRegionComponent for UnregisteredDisseminationBarrier {
+    type Registered = DisseminationBarrier;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -112,7 +114,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredDissemin
             .collect()
     }
 
-    fn registered_mrs(self, mrs: Vec<(MR, RMR)>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MrPair>) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if mrs.len() != num_connections {
             return Err(NonMatchingMemoryRegionCount {
@@ -128,12 +130,12 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredDissemin
     }
 }
 
-impl<MR, RemoteMR> RdmaNetworkBarrier<MR, RemoteMR> for DisseminationBarrier<MR, RemoteMR> {
+impl RdmaNetworkBarrier for DisseminationBarrier {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -157,10 +159,10 @@ enum Direction {
     Left,
 }
 
-impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
+impl DisseminationBarrier {
     fn barrier_round<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -198,7 +200,7 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
 
     fn distance_idx<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &self,
@@ -216,7 +218,7 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
 
     fn wait_for_peer<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -241,7 +243,7 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
 
     fn notify_peer<
         'network,
-        Conn: RdmaConnection<MR = MR, RemoteMR = RemoteMR> + 'network,
+        Conn: RdmaConnection + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -252,12 +254,12 @@ impl<MR, RemoteMR> DisseminationBarrier<MR, RemoteMR> {
         let peer_conn = connections.connection_mut(idx);
         if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(peer_rank_id, conn)) = peer_conn
         {
-            let (peer_mr, peer_remote_mr) = self.connection_mr(peer_rank_id);
+            let peer_mr_pair = self.connection_mr(peer_rank_id);
             let mut wr = conn
                 .post_write(
-                    peer_mr,
+                    peer_mr_pair.local_mr_idx,
                     0..=0,
-                    peer_remote_mr,
+                    peer_mr_pair.remote_mr_idx,
                     self.remote_peer_flag_mr_range(peer_rank_id),
                     None,
                 )
