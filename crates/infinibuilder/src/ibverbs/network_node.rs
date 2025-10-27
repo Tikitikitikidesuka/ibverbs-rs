@@ -3,12 +3,21 @@ use crate::ibverbs::connection::{
     IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder, IbvConnectionEndpoint,
     IbvPreparedConnection,
 };
+use crate::ibverbs::work_completion::IbvWorkCompletion;
+use crate::ibverbs::work_request::IbvWorkRequest;
+use crate::rdma_connection::{
+    RdmaImmediateDataConnection, RdmaMemoryRegion, RdmaPostError, RdmaReadWriteConnection,
+    RdmaRemoteMemoryRegion, RdmaSendReceiveConnection,
+};
 use crate::rdma_network_node::{
     RdmaBarrierNetworkNode, RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup,
     RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
+    RdmaTransportImmediateDataNetworkNode, RdmaTransportReadWriteNetworkNode,
+    RdmaTransportSendReceiveNetworkNode,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
+use std::ops::RangeBounds;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -368,6 +377,159 @@ impl<NB: RdmaNetworkBarrier> RdmaBarrierNetworkNode<NB> for IbvNetworkNode<NB> {
         };
 
         self.barrier.barrier(group_conns, timeout)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ConnectionTransportPostError {
+    #[error("Invalid peer rank id {0}")]
+    InvalidPeerRankId(usize),
+    #[error("Transport to self is not allowed")]
+    SelfPeerRankId,
+    #[error("Rdma post error: {0}")]
+    RdmaPostError(#[from] RdmaPostError),
+}
+
+impl<NB> RdmaTransportSendReceiveNetworkNode for IbvNetworkNode<NB> {
+    type WR = IbvWorkRequest;
+    type PostError = ConnectionTransportPostError;
+
+    fn post_send(
+        &mut self,
+        peer_rank_id: usize,
+        memory_region: RdmaMemoryRegion,
+        memory_range: impl RangeBounds<usize>,
+        immediate_data: Option<u32>,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_send(memory_region, memory_range, immediate_data)?;
+
+        Ok(wr)
+    }
+
+    fn post_receive(
+        &mut self,
+        peer_rank_id: usize,
+        memory_region: RdmaMemoryRegion,
+        memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_receive(memory_region, memory_range)?;
+
+        Ok(wr)
+    }
+}
+
+impl<NB> RdmaTransportReadWriteNetworkNode for IbvNetworkNode<NB> {
+    type WR = IbvWorkRequest;
+    type PostError = ConnectionTransportPostError;
+
+    fn post_write(
+        &mut self,
+        peer_rank_id: usize,
+        local_memory_region: RdmaMemoryRegion,
+        local_memory_range: impl RangeBounds<usize>,
+        remote_memory_region: RdmaRemoteMemoryRegion,
+        remote_memory_range: impl RangeBounds<usize>,
+        immediate_data: Option<u32>,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_write(
+            local_memory_region,
+            local_memory_range,
+            remote_memory_region,
+            remote_memory_range,
+            immediate_data,
+        )?;
+
+        Ok(wr)
+    }
+
+    fn post_read(
+        &mut self,
+        peer_rank_id: usize,
+        local_memory_region: RdmaMemoryRegion,
+        local_memory_range: impl RangeBounds<usize>,
+        remote_memory_region: RdmaRemoteMemoryRegion,
+        remote_memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_read(
+            local_memory_region,
+            local_memory_range,
+            remote_memory_region,
+            remote_memory_range,
+        )?;
+
+        Ok(wr)
+    }
+}
+
+impl<NB> RdmaTransportImmediateDataNetworkNode for IbvNetworkNode<NB> {
+    type WR = IbvWorkRequest;
+    type PostError = ConnectionTransportPostError;
+
+    fn post_send_immediate_data(
+        &mut self,
+        peer_rank_id: usize,
+        immediate_data: u32,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_send_immediate_data(immediate_data)?;
+
+        Ok(wr)
+    }
+
+    fn post_receive_immediate_data(
+        &mut self,
+        peer_rank_id: usize,
+    ) -> Result<Self::WR, Self::PostError> {
+        if peer_rank_id == self.nodes.self_rank_id() {
+            return Err(ConnectionTransportPostError::SelfPeerRankId);
+        }
+
+        let connection = self.connections.get_mut(peer_rank_id).ok_or(
+            ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
+        )?;
+
+        let wr = connection.post_receive_immediate_data()?;
+
+        Ok(wr)
     }
 }
 

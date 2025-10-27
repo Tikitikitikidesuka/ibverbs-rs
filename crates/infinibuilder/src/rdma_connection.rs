@@ -95,9 +95,9 @@ pub trait RdmaImmediateDataConnection {
     fn post_send_immediate_data(
         &mut self,
         immediate_data: u32,
-    ) -> Result<Self::WR, std::io::Error>;
+    ) -> Result<Self::WR, RdmaPostError>;
 
-    fn post_receive_immediate_data(&mut self) -> Result<Self::WR, std::io::Error>;
+    fn post_receive_immediate_data(&mut self) -> Result<Self::WR, RdmaPostError>;
 }
 
 // No traits for QP, PD or CQ as those the user should not care about in this abstraction

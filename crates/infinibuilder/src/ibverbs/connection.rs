@@ -491,13 +491,13 @@ impl RdmaImmediateDataConnection for IbvConnection {
     fn post_send_immediate_data(
         &mut self,
         immediate_data: u32,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<IbvWorkRequest, RdmaPostError> {
         let wr_id = self.next_wr_id();
         unsafe { self.qp.post_send(&[], wr_id, Some(immediate_data)) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 
-    fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error> {
+    fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, RdmaPostError> {
         let wr_id = self.next_wr_id();
         unsafe { self.qp.post_receive(&[], wr_id) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))

@@ -1,6 +1,9 @@
-use std::ops::RangeBounds;
 use crate::barrier::RdmaNetworkBarrier;
-use crate::rdma_connection::{RdmaConnection, RdmaPostError, RdmaWorkCompletion, RdmaWorkRequest};
+use crate::rdma_connection::{
+    RdmaConnection, RdmaMemoryRegion, RdmaRemoteMemoryRegion, RdmaWorkRequest,
+};
+use std::error::Error;
+use std::ops::RangeBounds;
 use std::time::Duration;
 
 pub trait RdmaNetworkNode {
@@ -13,28 +16,30 @@ pub trait RdmaBarrierNetworkNode<NB: RdmaNetworkBarrier> {
         Group: RdmaNetworkSelfGroup;
 }
 
-pub trait RdmaSendReceiveNetworkNode {
+pub trait RdmaTransportSendReceiveNetworkNode {
     type WR: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_send(
         &mut self,
         peer_rank_id: usize,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, RdmaPostError>;
+    ) -> Result<Self::WR, Self::PostError>;
 
     // Posts a receive operation.
     fn post_receive(
         &mut self,
         peer_rank_id: usize,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, RdmaPostError>;
+    ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaReadWriteNetworkNode {
+pub trait RdmaTransportReadWriteNetworkNode {
     type WR: RdmaWorkRequest;
+    type PostError: Error;
 
     // Posts a write operation.
     // If sent with immediate data, the data must be obtained in the remote peer
@@ -42,37 +47,38 @@ pub trait RdmaReadWriteNetworkNode {
     fn post_write(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, RdmaPostError>;
+    ) -> Result<Self::WR, Self::PostError>;
 
     // Posts a read operation.
     fn post_read(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, RdmaPostError>;
+    ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaImmDataNetworkNode<NB: RdmaNetworkBarrier/*, NT: RdmaNetworkTransport*/> {
+pub trait RdmaTransportImmediateDataNetworkNode {
     type WR: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_send_immediate_data(
         &mut self,
         peer_rank_id: usize,
         immediate_data: u32,
-    ) -> Result<Self::WR, std::io::Error>;
+    ) -> Result<Self::WR, Self::PostError>;
 
     fn post_receive_immediate_data(
         &mut self,
         peer_rank_id: usize,
-    ) -> Result<Self::WR, std::io::Error>;
+    ) -> Result<Self::WR, Self::PostError>;
 }
 
 // A group of nodes of the network by rank id
