@@ -4,8 +4,8 @@ use crate::ibverbs::connection::{
     IbvPreparedConnection,
 };
 use crate::rdma_network_node::{
-    RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
-    RdmaNetworkSelfGroupConnections,
+    RdmaBarrierNetworkNode, RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup,
+    RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections,
 };
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -350,15 +350,13 @@ pub struct IbvNetworkNode<NB> {
     barrier: NB,
 }
 
-impl<NB: RdmaNetworkBarrier /*, NT: RdmaNetworkTransport*/> RdmaNetworkNode<NB /*, NT*/>
-    for IbvNetworkNode<NB>
-{
-    type Conn = IbvConnection;
-
+impl<NB> RdmaNetworkNode for IbvNetworkNode<NB> {
     fn rank_id(&self) -> usize {
         self.nodes.rank_ids[self.nodes.self_idx]
     }
+}
 
+impl<NB: RdmaNetworkBarrier> RdmaBarrierNetworkNode<NB> for IbvNetworkNode<NB> {
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
     where
         Group: RdmaNetworkSelfGroup,
