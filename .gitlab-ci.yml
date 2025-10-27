@@ -4,7 +4,7 @@ stages:
   - docs
 
 variables:
-  RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
+  RUST_IMAGE: "gitlab-registry.cern.ch/lhcb-online/rusteb:latest"
   RUST_BACKTRACE: 1
   #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
