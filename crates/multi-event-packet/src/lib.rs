@@ -58,6 +58,12 @@ impl MultiEventPacket {
     pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
         MultiEventPacketBuilder::new()
     }
+
+    /// # Safety
+    /// Data needs to be a valid [`MultiEventPacket`].
+    pub unsafe fn from_data(data: Box<[u32]>) -> Self {
+        Self { data }
+    }
 }
 
 #[repr(C, packed)]

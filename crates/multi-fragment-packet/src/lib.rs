@@ -45,6 +45,14 @@ pub struct MultiFragmentPacket {
     // Array of fragments is dynamically sized [Fragment ([u8])]
 }
 
+impl MultiFragmentPacket {
+    /// # Safety
+    /// Vec needs to contain a valid [`MultiFragmentPacket`].
+    pub unsafe fn from_data(data: Vec<u8>) -> Self {
+        Self { data }
+    }
+}
+
 #[repr(C, packed)]
 pub struct MultiFragmentPacketRef {
     header: MultiFragmentPacketHeader,
