@@ -46,7 +46,7 @@ pages:
   extends: .rust_template
   stage: docs
   script:
-    - cargo doc --no-deps --all-features --offline
+    - cargo doc --workspace --no-deps --all-features --offline
     - mkdir -p public
     - cp -r target/doc/* public/
     - echo '<meta http-equiv="refresh" content="0; url=rusteb/index.html">' > public/index.html
