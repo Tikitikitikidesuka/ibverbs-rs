@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/circular-buffer", "crates/mock-buffers", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
+members = ["crates/alignment-utils", "crates/circular-buffer", "crates/mock-buffers", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
 
 [package]
 name = "rusteb"
