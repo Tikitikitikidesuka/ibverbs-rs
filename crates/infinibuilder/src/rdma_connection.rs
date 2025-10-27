@@ -40,9 +40,13 @@ pub struct RdmaRemoteMemoryRegion {
     pub(super) idx: usize,
 }
 
-pub trait RdmaConnection {
+pub trait RdmaConnection:
+    RdmaSendReceiveConnection + RdmaReadWriteConnection + RdmaImmediateDataConnection
+{
+}
+
+pub trait RdmaSendReceiveConnection {
     type WR: RdmaWorkRequest;
-    type WC: RdmaWorkCompletion;
 
     // Posts a send operation. Will fail if the remote has not posted a receive operation before hand.
     fn post_send(
@@ -58,6 +62,10 @@ pub trait RdmaConnection {
         memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError>;
+}
+
+pub trait RdmaReadWriteConnection {
+    type WR: RdmaWorkRequest;
 
     // Posts a write operation.
     // If sent with immediate data, the data must be obtained in the remote peer
@@ -79,13 +87,17 @@ pub trait RdmaConnection {
         remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError>;
+}
+
+pub trait RdmaImmediateDataConnection {
+    type WR: RdmaWorkRequest;
 
     fn post_send_immediate_data(
         &mut self,
         immediate_data: u32,
-    ) -> Result<IbvWorkRequest, std::io::Error>;
+    ) -> Result<Self::WR, std::io::Error>;
 
-    fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error>;
+    fn post_receive_immediate_data(&mut self) -> Result<Self::WR, std::io::Error>;
 }
 
 // No traits for QP, PD or CQ as those the user should not care about in this abstraction

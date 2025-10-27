@@ -1,13 +1,13 @@
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
-use crate::ibverbs::work_completion::IbvWorkCompletion;
 use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
-    RdmaConnection, RdmaMemoryRegion, RdmaPostError, RdmaRemoteMemoryRegion,
+    RdmaConnection, RdmaImmediateDataConnection, RdmaMemoryRegion, RdmaPostError,
+    RdmaReadWriteConnection, RdmaRemoteMemoryRegion, RdmaSendReceiveConnection,
 };
 use derivative::Derivative;
 use ibverbs::{
-    CompletionQueue, Context, LocalMemorySlice, MemoryRegion, PreparedQueuePair, ProtectionDomain,
-    QueuePair, QueuePairEndpoint, RemoteMemoryRegion, RemoteMemorySlice,
+    CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
+    QueuePairEndpoint, RemoteMemoryRegion,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -387,9 +387,10 @@ impl IbvConnection {
     }
 }
 
-impl RdmaConnection for IbvConnection {
+impl RdmaConnection for IbvConnection {}
+
+impl RdmaSendReceiveConnection for IbvConnection {
     type WR = IbvWorkRequest;
-    type WC = IbvWorkCompletion;
 
     fn post_send(
         &mut self,
@@ -423,6 +424,10 @@ impl RdmaConnection for IbvConnection {
         unsafe { self.qp.post_receive(&[mr_slice], wr_id) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
+}
+
+impl RdmaReadWriteConnection for IbvConnection {
+    type WR = IbvWorkRequest;
 
     fn post_write(
         &mut self,
@@ -478,6 +483,10 @@ impl RdmaConnection for IbvConnection {
             .post_read(&[local_mr_slice], remote_mr_slice, wr_id)?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
+}
+
+impl RdmaImmediateDataConnection for IbvConnection {
+    type WR = IbvWorkRequest;
 
     fn post_send_immediate_data(
         &mut self,
