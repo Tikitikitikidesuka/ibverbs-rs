@@ -272,12 +272,12 @@ impl<
             .enumerate()
             .map(|(idx, conn)| {
                 Ok(MrPair {
-                    local_mr_idx: conn.local_mr(BARRIER_MEM_ID).ok_or(
+                    local_mr: conn.local_mr(BARRIER_MEM_ID).ok_or(
                         IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
                             "Missing barrier local memory for conn {idx}"
                         )),
                     )?,
-                    remote_mr_idx: conn.remote_mr(BARRIER_MEM_ID).ok_or(
+                    remote_mr: conn.remote_mr(BARRIER_MEM_ID).ok_or(
                         IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
                             "Missing barrier remote memory for conn {idx}"
                         )),

@@ -3,7 +3,7 @@ pub mod binary_tree;
 pub mod centralized;
 pub mod dissemination;
 
-use crate::rdma_connection::RdmaConnection;
+use crate::rdma_connection::{RdmaConnection, RdmaMemoryRegion, RdmaRemoteMemoryRegion};
 use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::error::Error;
 use std::time::Duration;
@@ -40,8 +40,8 @@ pub trait RdmaNetworkMemoryRegionComponent {
 
 #[derive(Debug, Copy, Clone)]
 pub struct MrPair {
-    pub local_mr_idx: usize,
-    pub remote_mr_idx: usize,
+    pub local_mr: RdmaMemoryRegion,
+    pub remote_mr: RdmaRemoteMemoryRegion,
 }
 
 #[derive(Debug, Error)]

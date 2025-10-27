@@ -1,7 +1,9 @@
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
 use crate::ibverbs::work_completion::IbvWorkCompletion;
 use crate::ibverbs::work_request::IbvWorkRequest;
-use crate::rdma_connection::{RdmaConnection, RdmaPostError};
+use crate::rdma_connection::{
+    RdmaConnection, RdmaMemoryRegion, RdmaPostError, RdmaRemoteMemoryRegion,
+};
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, Context, LocalMemorySlice, MemoryRegion, PreparedQueuePair, ProtectionDomain,
@@ -370,12 +372,18 @@ impl IbvConnection {
 }
 
 impl IbvConnection {
-    pub fn local_mr(&self, id: impl AsRef<str>) -> Option<usize> {
-        self.local_mr_ids.get(id.as_ref()).cloned()
+    pub fn local_mr(&self, id: impl AsRef<str>) -> Option<RdmaMemoryRegion> {
+        self.local_mr_ids
+            .get(id.as_ref())
+            .cloned()
+            .map(|idx| RdmaMemoryRegion { idx })
     }
 
-    pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<usize> {
-        self.remote_mr_ids.get(id.as_ref()).cloned()
+    pub fn remote_mr(&self, id: impl AsRef<str>) -> Option<RdmaRemoteMemoryRegion> {
+        self.remote_mr_ids
+            .get(id.as_ref())
+            .cloned()
+            .map(|idx| RdmaRemoteMemoryRegion { idx })
     }
 }
 
@@ -385,13 +393,13 @@ impl RdmaConnection for IbvConnection {
 
     fn post_send(
         &mut self,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, RdmaPostError> {
         let mr_slice = self
             .local_mrs
-            .get(memory_region)
+            .get(memory_region.idx)
             .ok_or(RdmaPostError::InvalidMemoryRegion(memory_region))?
             .slice(memory_range);
 
@@ -402,12 +410,12 @@ impl RdmaConnection for IbvConnection {
 
     fn post_receive(
         &mut self,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError> {
         let mr_slice = self
             .local_mrs
-            .get(memory_region)
+            .get(memory_region.idx)
             .ok_or(RdmaPostError::InvalidMemoryRegion(memory_region))?
             .slice(memory_range);
 
@@ -418,23 +426,23 @@ impl RdmaConnection for IbvConnection {
 
     fn post_write(
         &mut self,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, RdmaPostError> {
         let local_mr_slice = self
             .local_mrs
-            .get(local_memory_region)
+            .get(local_memory_region.idx)
             .ok_or(RdmaPostError::InvalidMemoryRegion(local_memory_region))?
             .slice(local_memory_range);
 
         let remote_mr_slice = self
             .remote_mrs
-            .get(remote_memory_region)
+            .get(remote_memory_region.idx)
             .ok_or(RdmaPostError::InvalidRemoteMemoryRegion(
-                local_memory_region,
+                remote_memory_region,
             ))?
             .slice(remote_memory_range);
 
@@ -446,31 +454,28 @@ impl RdmaConnection for IbvConnection {
 
     fn post_read(
         &mut self,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError> {
         let local_mr_slice = self
             .local_mrs
-            .get(local_memory_region)
+            .get(local_memory_region.idx)
             .ok_or(RdmaPostError::InvalidMemoryRegion(local_memory_region))?
             .slice(local_memory_range);
 
         let remote_mr_slice = self
             .remote_mrs
-            .get(remote_memory_region)
+            .get(remote_memory_region.idx)
             .ok_or(RdmaPostError::InvalidRemoteMemoryRegion(
-                local_memory_region,
+                remote_memory_region,
             ))?
             .slice(remote_memory_range);
 
         let wr_id = self.next_wr_id();
-        self.qp.post_read(
-            &[local_mr_slice],
-            remote_mr_slice,
-            wr_id,
-        )?;
+        self.qp
+            .post_read(&[local_mr_slice], remote_mr_slice, wr_id)?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
 

@@ -141,9 +141,9 @@ impl CentralizedBarrier {
         let peer_mr_pair = &self.mrs[rank_id];
         let mut wr = conn
             .post_write(
-                peer_mr_pair.local_mr_idx,
+                peer_mr_pair.local_mr,
                 0..=0,
-                peer_mr_pair.remote_mr_idx,
+                peer_mr_pair.remote_mr,
                 1..=1,
                 None,
             )

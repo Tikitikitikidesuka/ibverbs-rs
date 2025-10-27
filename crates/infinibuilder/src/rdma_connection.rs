@@ -7,11 +7,11 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum RdmaPostError {
-    #[error("Memory region {0} not registered")]
-    InvalidMemoryRegion(usize),
+    #[error("Memory region {0:?} not registered")]
+    InvalidMemoryRegion(RdmaMemoryRegion),
 
-    #[error("Remote memory region {0} not registered")]
-    InvalidRemoteMemoryRegion(usize),
+    #[error("Remote memory region {0:?} not registered")]
+    InvalidRemoteMemoryRegion(RdmaRemoteMemoryRegion),
 
     #[error("Invalid memory range {from}..={to_inclusive} for memory region {mr_idx}")]
     InvalidRange {
@@ -28,6 +28,18 @@ pub enum RdmaPostError {
     Implementation(#[source] Box<dyn Error + Send + Sync>),
 }
 
+/// Wrap Memory Region index to reduce valid mr input space
+#[derive(Debug, Copy, Clone)]
+pub struct RdmaMemoryRegion {
+    pub(super) idx: usize,
+}
+
+/// Wrap Remote Memory Region index to reduce valid mr input space
+#[derive(Debug, Copy, Clone)]
+pub struct RdmaRemoteMemoryRegion {
+    pub(super) idx: usize,
+}
+
 pub trait RdmaConnection {
     type WR: RdmaWorkRequest;
     type WC: RdmaWorkCompletion;
@@ -35,7 +47,7 @@ pub trait RdmaConnection {
     // Posts a send operation. Will fail if the remote has not posted a receive operation before hand.
     fn post_send(
         &mut self,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, RdmaPostError>;
@@ -43,7 +55,7 @@ pub trait RdmaConnection {
     // Posts a receive operation.
     fn post_receive(
         &mut self,
-        memory_region: usize,
+        memory_region: RdmaMemoryRegion,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError>;
 
@@ -52,9 +64,9 @@ pub trait RdmaConnection {
     // by calling post_receive_immediate
     fn post_write(
         &mut self,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, RdmaPostError>;
@@ -62,9 +74,9 @@ pub trait RdmaConnection {
     // Posts a read operation.
     fn post_read(
         &mut self,
-        local_memory_region: usize,
+        local_memory_region: RdmaMemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: usize,
+        remote_memory_region: RdmaRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, RdmaPostError>;
 
