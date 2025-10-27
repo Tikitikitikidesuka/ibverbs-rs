@@ -3,10 +3,10 @@ resolver = "3"
 members = ["crates/alignment-utils", "crates/circular-buffer", "crates/mock-buffers", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
 
 [package]
-name = "pcie40-rs"
+name = "rusteb"
 version = "0.1.0"
 edition = "2024"
-description = "Rust bindings for the PCIe40 drivers"
+description = "LHCb Event Builder in Rust"
 
 [dependencies]
 thiserror = "2.0.12"
