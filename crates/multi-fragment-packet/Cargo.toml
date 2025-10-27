@@ -5,7 +5,7 @@ edition = "2024"
 description = "Multi Fragment Packet structure for the LHCb Event Builder"
 
 [dependencies]
-thiserror = "2.0.12"
+thiserror.workspace = true
 pcie40 = { path = "../pcie40", optional = true }
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }

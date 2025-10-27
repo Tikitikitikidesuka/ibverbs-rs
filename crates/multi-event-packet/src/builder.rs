@@ -1,11 +1,26 @@
 use std::{borrow::Cow, slice};
 
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketRef, SourceId};
+use thiserror::Error;
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef, Offset, header_size,
     slice_as_bytes_mut, src_ids_size,
 };
+
+#[derive(Debug, Error)]
+pub enum EventBuilderError {
+    #[error(
+        "Trying to add a mfp with different event ID ({got}) than previously added ({expected})."
+    )]
+    MismatchingEventId { expected: u64, got: u64 },
+    #[error(
+        "Trying ot add an mfp with different number of fragments ({got}) than previously added ({expected})."
+    )]
+    MismatchingFragmentCount { expected: u16, got: u16 },
+}
+
+pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
 
 #[derive(Default)]
 pub struct MultiEventPacketBuilder<'a> {
@@ -27,12 +42,35 @@ impl<'a> MultiEventPacketBuilder<'a> {
         }
     }
 
-    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) {
-        self.mfps.push(Cow::Borrowed(mfp));
+    /// Checks wether the given mfp can be inserted into the same [`MultiEventPacket`]s as the previous, checking its number of fragments and event ids.
+    /// This is checked when adding an mft automatically.
+    pub fn check_mfp_event_compatiblity(&self, test_mfp: &MultiFragmentPacketRef) -> Result<()> {
+        if let Some(reference_mfp) = self.mfps.first() {
+            if test_mfp.event_id() != reference_mfp.event_id() {
+                return Err(EventBuilderError::MismatchingEventId {
+                    expected: reference_mfp.event_id(),
+                    got: test_mfp.event_id(),
+                });
+            } else if test_mfp.fragment_count() != reference_mfp.fragment_count() {
+                return Err(EventBuilderError::MismatchingFragmentCount {
+                    expected: reference_mfp.fragment_count(),
+                    got: test_mfp.fragment_count(),
+                });
+            }
+        }
+        Ok(())
     }
 
-    pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) {
+    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) -> Result<()> {
+        self.check_mfp_event_compatiblity(mfp)?;
+        self.mfps.push(Cow::Borrowed(mfp));
+        Ok(())
+    }
+
+    pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) -> Result<()> {
+        self.check_mfp_event_compatiblity(&mfp)?;
         self.mfps.push(Cow::Owned(mfp));
+        Ok(())
     }
 
     pub fn set_mfp_align(&mut self, align: usize) {
@@ -147,18 +185,33 @@ mod test {
                 Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
             )
             .build();
+        let mfp3 = MultiFragmentPacketBuilder::new()
+            .with_event_id(123456)
+            .with_align(align_of::<u64>().ilog2() as _)
+            .with_fragment_version(25)
+            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_source_id(21)
+            .lock_header()
+            .add_fragment(
+                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+            )
+            .add_fragment(
+                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+            )
+            .build();
 
         let mut mep = MultiEventPacket::builder();
-        mep.add_mfp_ref(&mfp);
-        mep.add_mfp_ref(&mfp);
-        mep.add_mfp_ref(&mfp2);
+        mep.add_mfp_ref(&mfp).unwrap();
+        mep.add_mfp_ref(&mfp).unwrap();
+        mep.add_mfp_ref(&mfp2).unwrap_err(); // expect errors as wrong num fragments
+        mep.add_mfp(mfp3).unwrap(); // expect errors as wrong num fragments
         let mep = mep.build();
 
         assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
-        assert_eq!(mep.packet_size_u32(), 99);
+        assert_eq!(mep.packet_size_u32(), 111);
         assert_eq!(mep.mfp_source_ids(), &[21, 55555, 55555]);
-        assert_eq!(mep.mfp_offsets_u32(), &[7, 27, 63]);
+        assert_eq!(mep.mfp_offsets_u32(), &[7, 39, 75]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
 

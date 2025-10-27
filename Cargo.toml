@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.dependencies]
-
+thiserror = "2.0"
 
 [package]
 name = "pcie40-rs"
@@ -12,7 +12,7 @@ edition = "2024"
 description = "Rust bindings for the PCIe40 drivers"
 
 [dependencies]
-thiserror = "2.0.12"
+thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
 alignment-utils = { path = "crates/alignment-utils" }
 circular-buffer = { path = "crates/circular-buffer" }
