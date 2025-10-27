@@ -49,7 +49,7 @@ pages:
     - cargo doc --no-deps --all-features
     - mkdir -p public
     - cp -r target/doc/* public/
-    - echo '<meta http-equiv="refresh" content="0; url=pcie40_rs/index.html">' > public/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=rusteb/index.html">' > public/index.html
   artifacts:
     paths:
       - public
