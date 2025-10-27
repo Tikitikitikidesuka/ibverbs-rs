@@ -18,8 +18,8 @@ rust-check:
   extends: .rust_template
   stage: check
   script:
-    - cargo check --all-features
-    - cargo clippy --all-features --no-deps # -- -D warnings
+    - cargo check --all-features --offline
+    - cargo clippy --all-features --no-deps --offline # -- -D warnings
     - cargo fmt -- --check
 
 # Run standard tests (excluding hardware tests)
@@ -27,7 +27,7 @@ rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all --all-features
+    - cargo test --all --all-features --offline
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
@@ -46,7 +46,7 @@ pages:
   extends: .rust_template
   stage: docs
   script:
-    - cargo doc --no-deps --all-features
+    - cargo doc --no-deps --all-features --offline
     - mkdir -p public
     - cp -r target/doc/* public/
     - echo '<meta http-equiv="refresh" content="0; url=pcie40_rs/index.html">' > public/index.html
