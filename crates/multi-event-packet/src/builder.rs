@@ -2,6 +2,7 @@ use std::{borrow::Cow, slice};
 
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketRef, SourceId};
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef, Offset, header_size,
@@ -77,6 +78,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         self.mfp_align = Some(align)
     }
 
+    #[instrument(skip(self))]
     pub fn build(mut self) -> MultiEventPacket {
         self.mfps.sort_by_key(|m| m.source_id());
         let num_mfps = self.mfps.len();

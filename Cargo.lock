@@ -183,6 +183,7 @@ dependencies = [
  "bincode",
  "multi-fragment-packet",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
