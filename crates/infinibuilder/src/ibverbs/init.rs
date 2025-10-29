@@ -26,6 +26,7 @@ pub fn create_ibv_network_node<NB, UNB>(
     cq_capacity: usize,
     cq_cache_capacity: usize,
     network_config: RawNetworkConfig,
+    mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
     barrier: UNB,
 ) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
 where
@@ -42,6 +43,7 @@ where
         .ibv_device(&node_config.ibdev)
         .cq_params(cq_capacity, cq_cache_capacity)
         .barrier(barrier)
+        .register_mrs(mrs)
         .num_connections(network_config.len())
         .rank_id(rank_id)
         .build()?;
