@@ -24,6 +24,7 @@ fn main() {
         32,
         512,
         network_config,
+        Vec::<(String, *mut u8, usize)>::new(),
         AnyBarrier::new(args.algorithm.into()),
     )
     .unwrap();

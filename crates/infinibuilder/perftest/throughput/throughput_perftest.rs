@@ -1,11 +1,14 @@
 use clap::Parser;
-use infinibuilder::connect::Connect;
-use infinibuilder::network::{ConnectedNetworkNode, NetworkNodeConnectionConfig};
+use infinibuilder::barrier::RdmaNetworkBarrier;
+use infinibuilder::barrier::centralized::CentralizedBarrier;
+use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_traits::WorkRequest;
-use infinibuilder::rdma_traits::{RdmaSync, RdmaSendRecv};
-use infinibuilder::tcp_exchanger::{TcpExchanger, TcpExchangerConfig, TcpExchangerNetworkConfig};
+use infinibuilder::rdma_connection::{RdmaMemoryRegion, RdmaWorkRequest};
+use infinibuilder::rdma_network_node::{
+    RdmaBarrierNetworkNode, RdmaNetworkNode, RdmaTransportSendReceiveNetworkNode,
+};
 use std::fs;
+use std::ptr::slice_from_raw_parts;
 use std::time::{Duration, Instant};
 
 /// This benchmark's objective is finding the throughput between two nodes, a sender and a receiver.
@@ -21,98 +24,103 @@ use std::time::{Duration, Instant};
 /// If `iters` is `None` then the benchmark will run until killed.
 
 fn main() {
+    simple_logger::init().unwrap();
+
     let args = Args::parse();
     let json_network = fs::read_to_string(&args.config_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
         .unwrap()
-        .take_nodes(args.num_nodes)
-        .validate()
-        .unwrap();
+        .take_nodes(args.num_nodes);
 
+    let mem_name = "foo";
     let memory_size = args.message_size * args.batch_size;
-    let mut memory = vec![0; memory_size];
-    let rank_id = match args.role {
-        Role::Sender => 0,
-        Role::Receiver => 1,
-    };
+    let mut memory = vec![0u8; memory_size];
 
-    let node = unsafe {
-        ConnectedNetworkNode::new_ibv_simple_unit_network_node::<64, 64>(
-            rank_id,
-            &network_config,
-            memory.as_mut_ptr(),
-            memory.len(),
-        )
-    }
-    .unwrap();
-
-    let out_conn_config = node.connection_config();
-
-    let exchanger_network = TcpExchangerNetworkConfig::from_network(network_config).unwrap();
-    let exchanged = TcpExchanger::await_exchange_network_config(
-        rank_id,
-        &out_conn_config,
-        &exchanger_network,
-        &exchanger_config(),
+    let mut node = create_ibv_network_node(
+        args.rank_id,
+        32,
+        512,
+        network_config,
+        vec![(mem_name, memory.as_mut_ptr(), memory.len())],
+        CentralizedBarrier::new(),
     )
     .unwrap();
 
-    let in_conn_config =
-        NetworkNodeConnectionConfig::gather(rank_id, exchanged.as_slice()).unwrap();
-
-    let mut node = node.connect(in_conn_config).unwrap();
-
-    let mut task: Box<dyn FnMut(usize)> = match args.role {
-        Role::Sender => Box::new(|iter: usize| {
-            master_batch(iter, &mut memory, node.connection(1).unwrap(), &args);
-        }),
-        Role::Receiver => Box::new(|iter: usize| {
-            slave_batch(iter, &memory, node.connection(0).unwrap(), &args);
-        }),
-    };
-
-    let mut iter = 0;
-    while args.iters.map_or(true, |max| iter < max) {
-        task(iter);
-        iter += 1;
+    let iters = args.iters.unwrap_or(usize::MAX);
+    for iter in 0..iters {
+        match args.rank_id {
+            0 => {
+                let local_mr = node.local_mr(1, mem_name).unwrap();
+                sender_batch(
+                    iter,
+                    memory.as_mut_ptr(),
+                    memory.len(),
+                    local_mr,
+                    &mut node,
+                    &args,
+                )
+            }
+            1 => {
+                let local_mr = node.local_mr(0, mem_name).unwrap();
+                receiver_batch(
+                    iter,
+                    memory.as_mut_ptr(),
+                    memory.len(),
+                    local_mr,
+                    &mut node,
+                    &args,
+                )
+            }
+            id => unreachable!("This node ({id}) does not participate in the benchmark"),
+        }
     }
 }
 
-fn master_batch(
+fn sender_batch<
+    NB: RdmaNetworkBarrier,
+    Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
+>(
     iter: usize,
-    memory: &mut [u8],
-    conn: &mut (impl RdmaSendRecv + RdmaSync),
+    mem_address: *mut u8,
+    mem_length: usize,
+    mr: RdmaMemoryRegion,
+    node: &mut Node,
     args: &Args,
 ) {
-    // Initialize memory for correctness check
-    memory
-        .iter_mut()
-        .enumerate()
-        .for_each(|(i, v)| *v = ((i + iter) % 256) as u8);
+    // Initialize memory for correctness check later on
+    (0..mem_length)
+        .for_each(|i| unsafe { mem_address.add(i).write_volatile(((i + iter) % 256) as u8) });
 
-    // Wait until receiver is ready to receive
+    // Wait until receiver is ready
     println!("Initial rendezvous...");
-    conn.rendezvous().unwrap();
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
 
     // Start timing
     let start = Instant::now();
 
     // Send all batches
     for i in 0..args.batch_size {
-        println!("Rendezvous...");
-        conn.rendezvous().unwrap();
-        println!("Sending...");
-        unsafe { conn.post_send((i * args.message_size)..((i + 1) * args.message_size), None) }
-            .unwrap()
-            .wait()
+        node.barrier(&node.group_all(), Duration::from_millis(1000))
+            .unwrap();
+        let mut wr = node
+            .post_send(
+                1,
+                mr,
+                (i * args.message_size)..((i + 1) * args.message_size),
+                None,
+            )
+            .unwrap();
+        let wc = wr
+            .spin_poll_batched(Duration::from_millis(5000), 1024)
             .unwrap();
     }
 
-    // Wait until receiver finishes receiving
-    println!("Final rendezvous...");
-    conn.rendezvous().unwrap();
+    // Wait until receiver finishes
+    node.barrier(&node.group_all(), Duration::from_millis(1000))
+        .unwrap();
 
-    // Stop timing
+    // Finish timing
     let elapsed = start.elapsed();
 
     // Print results
@@ -122,32 +130,44 @@ fn master_batch(
     println!("pps: {pps:.2}, gbps: {gbps:.2}");
 }
 
-fn slave_batch(
+fn receiver_batch<
+    NB: RdmaNetworkBarrier,
+    Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
+>(
     iter: usize,
-    memory: &[u8],
-    conn: &mut (impl RdmaSendRecv + RdmaSync),
+    mem_address: *mut u8,
+    mem_length: usize,
+    mr: RdmaMemoryRegion,
+    node: &mut Node,
     args: &Args,
 ) {
     // Notify sender to start
     println!("Initial rendezvous...");
-    conn.rendezvous().unwrap();
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
 
     // Receive all batches
     for i in 0..args.batch_size {
-        println!("Receiving...");
-        let wr =
-            unsafe { conn.post_receive((i * args.message_size)..((i + 1) * args.message_size)) }
-                .unwrap();
-        println!("Rendezvous...");
-        conn.rendezvous().unwrap();
-        wr.wait().unwrap();
+        let mut wr = node
+            .post_receive(
+                0,
+                mr,
+                (i * args.message_size)..((i + 1) * args.message_size),
+            )
+            .unwrap();
+        node.barrier(&node.group_all(), Duration::from_millis(1000))
+            .unwrap();
+        wr.spin_poll_batched(Duration::from_millis(5000), 1024)
+            .unwrap();
     }
 
     // Notify sender of finish
     println!("Final rendezvous...");
-    conn.rendezvous().unwrap();
+    node.barrier(&node.group_all(), Duration::from_millis(1000))
+        .unwrap();
 
     // Validate transfer
+    let memory = unsafe { &*slice_from_raw_parts(mem_address, mem_length) };
     println!("Memory: {:?}", &memory[..10]);
     if !memory
         .iter()
@@ -172,7 +192,7 @@ struct Args {
     #[arg(short, long)]
     config_file: String,
     #[arg(short, long)]
-    role: Role,
+    rank_id: usize,
     #[arg(short, long)]
     num_nodes: usize,
     #[arg(short, long)]
@@ -181,13 +201,4 @@ struct Args {
     batch_size: usize,
     #[arg(short, long)]
     iters: Option<usize>,
-}
-
-fn exchanger_config() -> TcpExchangerConfig {
-    TcpExchangerConfig {
-        send_timeout: Duration::from_secs(60),
-        send_attempt_delay: Duration::from_secs(1),
-        receive_timeout: Duration::from_secs(60),
-        receive_connection_timeout: Duration::from_secs(1),
-    }
 }
