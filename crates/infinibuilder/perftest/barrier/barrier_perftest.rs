@@ -5,7 +5,7 @@ use infinibuilder::barrier::all_enum::{AnyBarrier, AnyBarrierType};
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::ibverbs::network_node::IbvNetworkNode;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_network_node::RdmaNetworkNode;
+use infinibuilder::rdma_network_node::{RdmaBarrierNetworkNode, RdmaNetworkNode};
 use std::fs;
 use std::time::Duration;
 use tokio::time::Instant;

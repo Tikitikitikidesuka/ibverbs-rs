@@ -1,7 +1,7 @@
 use infinibuilder::barrier::centralized::CentralizedBarrier;
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_network_node::RdmaNetworkNode;
+use infinibuilder::rdma_network_node::{RdmaBarrierNetworkNode};
 use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
