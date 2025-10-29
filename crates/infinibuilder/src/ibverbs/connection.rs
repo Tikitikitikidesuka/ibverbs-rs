@@ -144,7 +144,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
 
     pub fn register_mrs(
         self,
-        mrs: impl IntoIterator<Item = impl Into<(String, *mut u8, usize)>>,
+        mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
@@ -152,9 +152,10 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
             mrs: BuilderMemoryRegions {
                 mrs: mrs
                     .into_iter()
-                    .map(|x| {
-                        let (id, ptr, length) = x.into();
-                        BuilderMemoryRegion { id, ptr, length }
+                    .map(|(id, ptr, length)| BuilderMemoryRegion {
+                        id: id.into(),
+                        ptr,
+                        length,
                     })
                     .collect(),
             },
@@ -185,12 +186,16 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
 
     pub fn register_mrs(
         mut self,
-        mrs: impl IntoIterator<Item = impl Into<(String, *mut u8, usize)>>,
+        mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
-        let mut new_mrs = mrs.into_iter().map(|x| {
-            let (id, ptr, length) = x.into();
-            BuilderMemoryRegion { id, ptr, length }
-        }).collect::<Vec<_>>();
+        let mut new_mrs = mrs
+            .into_iter()
+            .map(|(id, ptr, length)| BuilderMemoryRegion {
+                id: id.into(),
+                ptr,
+                length,
+            })
+            .collect::<Vec<_>>();
 
         self.mrs.mrs.append(&mut new_mrs);
 
