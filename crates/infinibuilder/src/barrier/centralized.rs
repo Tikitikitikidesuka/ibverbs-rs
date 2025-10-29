@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use crate::barrier::{
     MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
     RdmaNetworkMemoryRegionComponent,
@@ -9,19 +10,20 @@ use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
 #[derive(Debug)]
-pub struct UnregisteredCentralizedBarrier {
+pub struct UnregisteredCentralizedBarrier<MR, RMR> {
     memory: Vec<u8>,
+    phantom_data: PhantomData<(MR, RMR)>,
 }
 
 #[derive(Debug)]
-pub struct CentralizedBarrier {
+pub struct CentralizedBarrier<MR, RMR> {
     memory: Vec<u8>,
-    mrs: Vec<MrPair>,
+    mrs: Vec<MrPair<MR, RMR>>,
 }
 
-impl CentralizedBarrier {
-    pub fn new() -> UnregisteredCentralizedBarrier {
-        UnregisteredCentralizedBarrier { memory: vec![] }
+impl<MR, RMR> CentralizedBarrier<MR, RMR> {
+    pub fn new() -> UnregisteredCentralizedBarrier<MR, RMR> {
+        UnregisteredCentralizedBarrier { memory: vec![], phantom_data: Default::default() }
     }
 }
 
@@ -45,15 +47,15 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-impl UnregisteredCentralizedBarrier {
+impl<MR, RMR> UnregisteredCentralizedBarrier<MR, RMR> {
     fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
         let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
         (ptr, BYTES_PER_CONNECTION)
     }
 }
 
-impl RdmaNetworkMemoryRegionComponent for UnregisteredCentralizedBarrier {
-    type Registered = CentralizedBarrier;
+impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredCentralizedBarrier<MR, RMR> {
+    type Registered = CentralizedBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -64,7 +66,7 @@ impl RdmaNetworkMemoryRegionComponent for UnregisteredCentralizedBarrier {
             .collect()
     }
 
-    fn registered_mrs(self, mrs: Vec<MrPair>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MrPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if mrs.len() != num_connections {
             return Err(NonMatchingMemoryRegionCount {
@@ -80,12 +82,12 @@ impl RdmaNetworkMemoryRegionComponent for UnregisteredCentralizedBarrier {
     }
 }
 
-impl RdmaNetworkBarrier for CentralizedBarrier {
+impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for CentralizedBarrier<MR, RMR> {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR, RMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -104,7 +106,7 @@ impl RdmaNetworkBarrier for CentralizedBarrier {
     }
 }
 
-impl CentralizedBarrier {
+impl<MR, RMR> CentralizedBarrier<MR, RMR> {
     fn read_remote_peer_flag(&self, rank_id: usize) -> u8 {
         let ptr = &self.memory[rank_id * BYTES_PER_CONNECTION + 1] as *const u8;
         unsafe { read_volatile(ptr) }
@@ -132,7 +134,7 @@ impl CentralizedBarrier {
         Ok(elapsed)
     }
 
-    fn notify_peer<Conn: RdmaConnection>(
+    fn notify_peer<Conn: RdmaConnection<MR, RMR>>(
         &self,
         rank_id: usize,
         conn: &mut Conn,
@@ -141,9 +143,9 @@ impl CentralizedBarrier {
         let peer_mr_pair = &self.mrs[rank_id];
         let mut wr = conn
             .post_write(
-                peer_mr_pair.local_mr,
+                &peer_mr_pair.local_mr,
                 0..=0,
-                peer_mr_pair.remote_mr,
+                &peer_mr_pair.remote_mr,
                 1..=1,
                 None,
             )
@@ -164,7 +166,7 @@ impl CentralizedBarrier {
 
     fn coordinator_barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR, RMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -196,7 +198,7 @@ impl CentralizedBarrier {
 
     fn coordinated_barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR, RMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,

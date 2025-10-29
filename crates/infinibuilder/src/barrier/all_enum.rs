@@ -11,17 +11,17 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[derive(Debug)]
-pub enum AnyUnregisteredBarrier {
-    Centralized(UnregisteredCentralizedBarrier),
-    BinaryTree(UnregisteredBinaryTreeBarrier),
-    Dissemination(UnregisteredDisseminationBarrier),
+pub enum AnyUnregisteredBarrier<MR, RMR> {
+    Centralized(UnregisteredCentralizedBarrier<MR, RMR>),
+    BinaryTree(UnregisteredBinaryTreeBarrier<MR, RMR>),
+    Dissemination(UnregisteredDisseminationBarrier<MR, RMR>),
 }
 
 #[derive(Debug)]
-pub enum AnyBarrier {
-    Centralized(CentralizedBarrier),
-    BinaryTree(BinaryTreeBarrier),
-    Dissemination(DisseminationBarrier),
+pub enum AnyBarrier<MR, RMR> {
+    Centralized(CentralizedBarrier<MR, RMR>),
+    BinaryTree(BinaryTreeBarrier<MR, RMR>),
+    Dissemination(DisseminationBarrier<MR, RMR>),
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -31,8 +31,8 @@ pub enum AnyBarrierType {
     Dissemination,
 }
 
-impl RdmaNetworkMemoryRegionComponent for AnyUnregisteredBarrier {
-    type Registered = AnyBarrier;
+impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarrier<MR, RMR> {
+    type Registered = AnyBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
@@ -43,7 +43,7 @@ impl RdmaNetworkMemoryRegionComponent for AnyUnregisteredBarrier {
         }
     }
 
-    fn registered_mrs(self, mrs: Vec<MrPair>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MrPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
         match self {
             AnyUnregisteredBarrier::Centralized(barrier) => {
                 Ok(AnyBarrier::Centralized(barrier.registered_mrs(mrs)?))
@@ -58,28 +58,28 @@ impl RdmaNetworkMemoryRegionComponent for AnyUnregisteredBarrier {
     }
 }
 
-impl AnyBarrier {
-    pub fn new(barrier_type: AnyBarrierType) -> AnyUnregisteredBarrier {
+impl<MR, RMR> AnyBarrier<MR, RMR> {
+    pub fn new(barrier_type: AnyBarrierType) -> AnyUnregisteredBarrier<MR, RMR> {
         match barrier_type {
             AnyBarrierType::Centralized => {
-                AnyUnregisteredBarrier::Centralized(CentralizedBarrier::new())
+                AnyUnregisteredBarrier::Centralized(CentralizedBarrier::<MR, RMR>::new())
             }
             AnyBarrierType::BinaryTree => {
-                AnyUnregisteredBarrier::BinaryTree(BinaryTreeBarrier::new())
+                AnyUnregisteredBarrier::BinaryTree(BinaryTreeBarrier::<MR, RMR>::new())
             }
             AnyBarrierType::Dissemination => {
-                AnyUnregisteredBarrier::Dissemination(DisseminationBarrier::new())
+                AnyUnregisteredBarrier::Dissemination(DisseminationBarrier::<MR, RMR>::new())
             }
         }
     }
 }
 
-impl RdmaNetworkBarrier for AnyBarrier {
+impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for AnyBarrier<MR, RMR> {
     type Error = RdmaNetworkBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR, RMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,

@@ -3,18 +3,18 @@ pub mod binary_tree;
 pub mod centralized;
 pub mod dissemination;
 
-use crate::rdma_connection::{RdmaConnection, RdmaMemoryRegion, RdmaRemoteMemoryRegion};
 use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::error::Error;
 use std::time::Duration;
 use thiserror::Error;
+use crate::rdma_connection::RdmaConnection;
 
-pub trait RdmaNetworkBarrier {
+pub trait RdmaNetworkBarrier<MR, RMR> {
     type Error: Error;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection + 'network,
+        Conn: RdmaConnection<MR, RMR> + 'network,
         GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
     >(
         &mut self,
@@ -27,21 +27,21 @@ pub trait RdmaNetworkBarrier {
 /// It must make possible telling the component how many connections there are.
 /// It must the allow getting the memory for each of them.
 /// Finally, it must allow giving the component the registered memory regions.
-pub trait RdmaNetworkMemoryRegionComponent {
+pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
     type Registered;
     type RegisterError: Error;
 
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)>;
     fn registered_mrs(
         self,
-        mrs: Vec<MrPair>,
+        mrs: Vec<MrPair<MR, RMR>>,
     ) -> Result<Self::Registered, Self::RegisterError>;
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct MrPair {
-    pub local_mr: RdmaMemoryRegion,
-    pub remote_mr: RdmaRemoteMemoryRegion,
+pub struct MrPair<MR, RMR> {
+    pub local_mr: MR,
+    pub remote_mr: RMR,
 }
 
 #[derive(Debug, Error)]
