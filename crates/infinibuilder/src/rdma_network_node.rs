@@ -7,7 +7,16 @@ use std::ops::RangeBounds;
 use std::time::Duration;
 
 pub trait RdmaNetworkNode {
+    type Group: RdmaNetworkGroup;
+    type SelfGroup: RdmaNetworkSelfGroup;
+
     fn rank_id(&self) -> usize;
+
+    /// Group of all including self
+    fn group_all(&self) -> Self::SelfGroup;
+
+    /// Group of all except self
+    fn group_peers(&self) -> Self::Group;
 }
 
 pub trait RdmaBarrierNetworkNode<NB: RdmaNetworkBarrier> {
