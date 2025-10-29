@@ -10,6 +10,7 @@ use ibverbs::{
     QueuePairEndpoint, RemoteMemoryRegion,
 };
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeBounds;
@@ -140,6 +141,65 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
             },
         }
     }
+
+    pub fn register_mrs(
+        self,
+        mrs: impl IntoIterator<Item = impl Into<(String, *mut u8, usize)>>,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: self.cq_params,
+            mrs: BuilderMemoryRegions {
+                mrs: mrs
+                    .into_iter()
+                    .map(|x| {
+                        let (id, ptr, length) = x.into();
+                        BuilderMemoryRegion { id, ptr, length }
+                    })
+                    .collect(),
+            },
+        }
+    }
+}
+
+impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+    pub fn register_mr(
+        self,
+        id: impl Into<String>,
+        mem_ptr: *mut u8,
+        mem_length: usize,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+        let mut mrs = self.mrs;
+        mrs.mrs.push(BuilderMemoryRegion {
+            id: id.into(),
+            ptr: mem_ptr,
+            length: mem_length,
+        });
+
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: self.cq_params,
+            mrs,
+        }
+    }
+
+    pub fn register_mrs(
+        mut self,
+        mrs: impl IntoIterator<Item = impl Into<(String, *mut u8, usize)>>,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+        let mut new_mrs = mrs.into_iter().map(|x| {
+            let (id, ptr, length) = x.into();
+            BuilderMemoryRegion { id, ptr, length }
+        }).collect::<Vec<_>>();
+
+        self.mrs.mrs.append(&mut new_mrs);
+
+        IbvConnectionBuilder {
+            ibv_device_name: self.ibv_device_name,
+            cq_params: self.cq_params,
+            mrs: self.mrs,
+        }
+    }
 }
 
 impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
@@ -160,7 +220,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
         let cq = self.create_cq(&context)?;
         let qp = self.create_qp(&pd, &cq)?;
         let local_qp_endpoint = self.qp_endpoint(&qp)?;
-        let mrs = self.register_mrs(&pd)?;
+        let mrs = self.inner_register_mrs(&pd)?;
 
         let cq = Rc::new(RefCell::new(CachedCompletionQueue::new(
             cq,
@@ -236,7 +296,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
             .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))
     }
 
-    fn register_mrs(
+    fn inner_register_mrs(
         &self,
         pd: &ProtectionDomain,
     ) -> Result<Vec<(String, MemoryRegion)>, IbvConnectionBuildError> {
