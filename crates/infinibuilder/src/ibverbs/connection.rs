@@ -5,6 +5,7 @@ use crate::rdma_connection::{
     RdmaConnection, RdmaImmediateDataConnection, RdmaNamedMemoryRegionConnection,
     RdmaReadWriteConnection, RdmaSendReceiveConnection,
 };
+use crate::rdma_network_node::RdmaNamedMemory;
 use derivative::Derivative;
 use ibverbs::{
     CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
@@ -62,14 +63,7 @@ pub struct BuilderCqParams {
 
 #[derive(Debug)]
 pub struct BuilderMemoryRegions {
-    mrs: Vec<BuilderMemoryRegion>,
-}
-
-#[derive(Debug)]
-pub struct BuilderMemoryRegion {
-    id: String,
-    ptr: *mut u8,
-    length: usize,
+    mrs: Vec<RdmaNamedMemory>,
 }
 
 // Builder is cloneable until memory regions are specified
@@ -128,39 +122,24 @@ impl<IbvDevName, Mrs> IbvConnectionBuilder<IbvDevName, (), Mrs> {
 impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
     pub fn register_mr(
         self,
-        id: impl Into<String>,
-        mem_ptr: *mut u8,
-        mem_length: usize,
+        memory: RdmaNamedMemory,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
             cq_params: self.cq_params,
-            mrs: BuilderMemoryRegions {
-                mrs: vec![BuilderMemoryRegion {
-                    id: id.into(),
-                    ptr: mem_ptr,
-                    length: mem_length,
-                }],
-            },
+            mrs: BuilderMemoryRegions { mrs: vec![memory] },
         }
     }
 
     pub fn register_mrs(
         self,
-        mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
+        mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
             cq_params: self.cq_params,
             mrs: BuilderMemoryRegions {
-                mrs: mrs
-                    .into_iter()
-                    .map(|(id, ptr, length)| BuilderMemoryRegion {
-                        id: id.into(),
-                        ptr,
-                        length,
-                    })
-                    .collect(),
+                mrs: mrs.into_iter().collect(),
             },
         }
     }
@@ -169,16 +148,10 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
 impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
     pub fn register_mr(
         self,
-        id: impl Into<String>,
-        mem_ptr: *mut u8,
-        mem_length: usize,
+        memory: RdmaNamedMemory,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         let mut mrs = self.mrs;
-        mrs.mrs.push(BuilderMemoryRegion {
-            id: id.into(),
-            ptr: mem_ptr,
-            length: mem_length,
-        });
+        mrs.mrs.push(memory);
 
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
@@ -189,18 +162,11 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
 
     pub fn register_mrs(
         mut self,
-        mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
+        mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
-        let mut new_mrs = mrs
-            .into_iter()
-            .map(|(id, ptr, length)| BuilderMemoryRegion {
-                id: id.into(),
-                ptr,
-                length,
-            })
-            .collect::<Vec<_>>();
-
-        self.mrs.mrs.append(&mut new_mrs);
+        self.mrs
+            .mrs
+            .append(&mut mrs.into_iter().collect::<Vec<_>>());
 
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
@@ -370,7 +336,8 @@ impl IbvPreparedConnection {
             .map(|(id, mr)| (id.clone(), IbvMemoryRegion::new(id, mr)))
             .collect();
 
-        let remote_mrs = connection_config.mr_endpoints
+        let remote_mrs = connection_config
+            .mr_endpoints
             .into_iter()
             .map(|(id, rmr)| (id.clone(), IbvRemoteMemoryRegion::new(id, rmr)))
             .collect();

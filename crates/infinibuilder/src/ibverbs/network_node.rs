@@ -1,4 +1,5 @@
 use crate::barrier::{MemoryRegionPair, RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::ibverbs::Named;
 use crate::ibverbs::connection::{
     IbvConnection, IbvConnectionBuildError, IbvConnectionBuilder, IbvConnectionEndpoint,
     IbvMemoryRegion, IbvPostError, IbvPreparedConnection, IbvRemoteMemoryRegion,
@@ -9,10 +10,11 @@ use crate::rdma_connection::{
     RdmaSendReceiveConnection,
 };
 use crate::rdma_network_node::{
-    RdmaBarrierNetworkNode, RdmaGroupNetworkNode, RdmaNamedMemoryRegionNetworkNode,
-    RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup, RdmaNetworkSelfGroupConnection,
-    RdmaNetworkSelfGroupConnections, RdmaRankIdNetworkNode, RdmaTransportImmediateDataNetworkNode,
-    RdmaTransportReadWriteNetworkNode, RdmaTransportSendReceiveNetworkNode,
+    RdmaBarrierNetworkNode, RdmaGroupNetworkNode, RdmaNamedMemory,
+    RdmaNamedMemoryRegionNetworkNode, RdmaNetworkGroup, RdmaNetworkNode, RdmaNetworkSelfGroup,
+    RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections, RdmaRankIdNetworkNode,
+    RdmaTransportImmediateDataNetworkNode, RdmaTransportReadWriteNetworkNode,
+    RdmaTransportSendReceiveNetworkNode,
 };
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -23,7 +25,6 @@ use std::ops::RangeBounds;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use crate::ibverbs::Named;
 
 const BARRIER_MEM_ID: &str = "barrier";
 
@@ -43,7 +44,7 @@ pub struct IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConns, Barrier
     completion_queue_params: CqParams,
     num_connections: NumConns,
     barrier: Barrier,
-    transport_mrs: Vec<(String, *mut u8, usize)>,
+    transport_mrs: Vec<RdmaNamedMemory>,
 }
 
 #[derive(Debug, Clone)]
@@ -206,11 +207,9 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
 {
     pub fn register_mr(
         mut self,
-        id: impl Into<String>,
-        mem_ptr: *mut u8,
-        mem_length: usize,
+        memory: RdmaNamedMemory,
     ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier> {
-        self.transport_mrs.push((id.into(), mem_ptr, mem_length));
+        self.transport_mrs.push(memory);
 
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
@@ -224,13 +223,10 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
 
     pub fn register_mrs(
         mut self,
-        mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
+        mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier> {
-        let mut new_mrs = mrs
-            .into_iter()
-            .map(|(id, ptr, length)| (id.into(), ptr, length))
-            .collect();
-        self.transport_mrs.append(&mut new_mrs);
+        self.transport_mrs
+            .append(&mut mrs.into_iter().collect::<Vec<_>>());
 
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
@@ -286,11 +282,11 @@ impl<
         let mut connection_builders = Vec::with_capacity(self.num_connections.num_connections);
         for conn_idx in 0..self.num_connections.num_connections {
             let (mem_ptr, mem_length) = barrier_mem_vec[conn_idx];
-            connection_builders.push(connection_builder.clone().register_mr(
+            connection_builders.push(connection_builder.clone().register_mr(RdmaNamedMemory::new(
                 BARRIER_MEM_ID, // To mark it as the barrier mem of this connection
                 mem_ptr,
                 mem_length,
-            ));
+            )));
         }
 
         // Register the transport memory regions on every connection
@@ -320,7 +316,7 @@ pub struct IbvPreparedNetworkNode<
     rank_id: usize,
     prepared_connections: Vec<IbvPreparedConnection>,
     prepared_barrier: PreparedBarrier,
-    transport_mrs: Vec<(String, *mut u8, usize)>,
+    transport_mrs: Vec<RdmaNamedMemory>,
 }
 
 impl<
@@ -383,12 +379,12 @@ impl<
             .transport_mrs
             .iter()
             .enumerate()
-            .map(|(idx, (mr_id, mr_ptr, mr_length))| {
+            .map(|(idx, memory)| {
                 // Mrs named `mr_id` of each connection
                 let local_mrs: Vec<_> = connections
                     .iter()
                     .map(|conn| {
-                        conn.local_mr(mr_id).ok_or(
+                        conn.local_mr(&memory.id).ok_or(
                             IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
                                 "Missing transport local memory for conn {idx}"
                             )),
@@ -400,7 +396,7 @@ impl<
                 let remote_mrs: Vec<_> = connections
                     .iter()
                     .map(|conn| {
-                        conn.remote_mr(mr_id).ok_or(
+                        conn.remote_mr(&memory.id).ok_or(
                             IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
                                 "Missing transport remote memory for conn {idx}"
                             )),
@@ -409,13 +405,13 @@ impl<
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok((
-                    mr_id.clone(),
+                    memory.id.clone(),
                     MemoryRegionPair {
                         local_mr: IbvNetworkNodeMemoryRegion {
-                            conn_mrs: Arc::new(Named::new(mr_id.clone(), local_mrs)),
+                            conn_mrs: Arc::new(Named::new(memory.id.clone(), local_mrs)),
                         },
                         remote_mr: IbvNetworkNodeRemoteMemoryRegion {
-                            conn_mrs: Arc::new(Named::new(mr_id.clone(), remote_mrs)),
+                            conn_mrs: Arc::new(Named::new(memory.id.clone(), remote_mrs)),
                         },
                     },
                 ))
@@ -631,7 +627,8 @@ impl<NB> RdmaTransportSendReceiveNetworkNode<IbvNetworkNodeMemoryRegion> for Ibv
             ConnectionTransportPostError::InvalidPeerRankId(peer_rank_id),
         )?;
 
-        let wr = connection.post_receive(&memory_region.conn_mrs.data[peer_rank_id], memory_range)?;
+        let wr =
+            connection.post_receive(&memory_region.conn_mrs.data[peer_rank_id], memory_range)?;
 
         Ok(wr)
     }

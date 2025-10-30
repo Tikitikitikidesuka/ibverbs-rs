@@ -5,6 +5,7 @@ use crate::ibverbs::network_node::{
     IbvNetworkNodeEndpointGatherError,
 };
 use crate::network_config::{NetworkConfigError, RawNetworkConfig};
+use crate::rdma_network_node::RdmaNamedMemory;
 use crate::tcp_exchanger::{TcpExchangeConfig, TcpExchanger, TcpNetworkConfigExchangeError};
 use thiserror::Error;
 
@@ -27,7 +28,7 @@ pub fn create_ibv_network_node<NB, UNB>(
     cq_capacity: usize,
     cq_cache_capacity: usize,
     network_config: RawNetworkConfig,
-    mrs: impl IntoIterator<Item = (impl Into<String>, *mut u8, usize)>,
+    mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     barrier: UNB,
 ) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
 where

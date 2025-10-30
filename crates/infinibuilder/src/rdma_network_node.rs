@@ -1,5 +1,6 @@
 use crate::barrier::RdmaNetworkBarrier;
 use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
+use crate::rdma_network_node::RdmaNetworkSelfGroupConnection::SelfConnection;
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
@@ -104,6 +105,23 @@ pub trait RdmaTransportImmediateDataNetworkNode {
         &mut self,
         peer_rank_id: usize,
     ) -> Result<Self::WR, Self::PostError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct RdmaNamedMemory {
+    pub(super) id: String,
+    pub(super) ptr: *mut u8,
+    pub(super) length: usize,
+}
+
+impl RdmaNamedMemory {
+    pub fn new(id: impl Into<String>, ptr: *mut u8, length: usize) -> Self {
+        Self {
+            id: id.into(),
+            ptr,
+            length,
+        }
+    }
 }
 
 // A group of nodes of the network by rank id
