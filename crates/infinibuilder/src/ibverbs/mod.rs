@@ -9,11 +9,9 @@ pub mod init;
 
 mod completion_queue;
 
-#[derive(Derivative)]
-#[derivative(Debug)]
+#[derive(Debug)]
 pub(super) struct Named<T> {
     pub name: String,
-    #[derivative(Debug = "ignore")]
     pub data: T,
 }
 

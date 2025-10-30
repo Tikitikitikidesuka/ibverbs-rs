@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Formatter};
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -365,15 +366,17 @@ impl IbvPreparedConnection {
 
         let local_mrs = self
             .mrs
-            .iter()
-            .cloned()
+            .into_iter()
             .map(|(id, mr)| (id.clone(), IbvMemoryRegion::new(id, mr)))
             .collect();
-        let remote_mrs = self
-            .mrs
+
+        let remote_mrs = connection_config.mr_endpoints
             .into_iter()
-            .map(|(id, mr)| (id.clone(), IbvRemoteMemoryRegion::new(id, mr.remote())))
+            .map(|(id, rmr)| (id.clone(), IbvRemoteMemoryRegion::new(id, rmr)))
             .collect();
+
+        println!("Local mrs: {local_mrs:?}\n\n");
+        println!("Remote mrs: {remote_mrs:?}\n\n");
 
         Ok(IbvConnection {
             local_qp_endpoint: self.local_qp_endpoint,
@@ -412,7 +415,7 @@ pub struct IbvConnection {
     next_wr_id: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct IbvMemoryRegion {
     mr: Arc<Named<MemoryRegion>>,
 }

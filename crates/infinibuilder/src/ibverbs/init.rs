@@ -51,8 +51,6 @@ where
 
     let endpoint = prepared_node.endpoint();
 
-    println!("Local endpoint: {endpoint:?}");
-
     let exchanged_endpoints = TcpExchanger::await_exchange_all(
         rank_id,
         &network_config,
@@ -61,8 +59,6 @@ where
     )?;
 
     let remote_endpoint = IbvNetworkNodeEndpoint::gather(rank_id, exchanged_endpoints)?;
-
-    println!("Remote endpoint: {endpoint:?}");
 
     let node = prepared_node.connect(remote_endpoint)?;
 

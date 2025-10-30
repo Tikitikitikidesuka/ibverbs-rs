@@ -371,6 +371,7 @@ impl<
             })
             .collect::<Result<Vec<_>, IbvNetworkNodeBuildError>>()?;
 
+        println!("Barrier memory: {barrier_mrs:?}");
         let barrier = self
             .prepared_barrier
             .registered_mrs(barrier_mrs)
