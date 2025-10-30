@@ -1,3 +1,4 @@
+use crate::ibverbs::Named;
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
 use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
@@ -366,12 +367,12 @@ impl IbvPreparedConnection {
             .mrs
             .iter()
             .cloned()
-            .map(|(id, mr)| (id, IbvMemoryRegion::new(mr)))
+            .map(|(id, mr)| (id.clone(), IbvMemoryRegion::new(id, mr)))
             .collect();
         let remote_mrs = self
             .mrs
             .into_iter()
-            .map(|(id, mr)| (id, IbvRemoteMemoryRegion::new(mr.remote())))
+            .map(|(id, mr)| (id.clone(), IbvRemoteMemoryRegion::new(id, mr.remote())))
             .collect();
 
         Ok(IbvConnection {
@@ -411,25 +412,29 @@ pub struct IbvConnection {
     next_wr_id: u64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IbvMemoryRegion {
-    mr: Arc<MemoryRegion>,
+    mr: Arc<Named<MemoryRegion>>,
 }
 
 impl IbvMemoryRegion {
-    fn new(mr: MemoryRegion) -> Self {
-        Self { mr: Arc::new(mr) }
+    fn new(name: impl Into<String>, mr: MemoryRegion) -> Self {
+        Self {
+            mr: Arc::new(Named::new(name, mr)),
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IbvRemoteMemoryRegion {
-    mr: Arc<RemoteMemoryRegion>,
+    mr: Arc<Named<RemoteMemoryRegion>>,
 }
 
 impl IbvRemoteMemoryRegion {
-    fn new(mr: RemoteMemoryRegion) -> Self {
-        Self { mr: Arc::new(mr) }
+    fn new(name: impl Into<String>, mr: RemoteMemoryRegion) -> Self {
+        Self {
+            mr: Arc::new(Named::new(name, mr)),
+        }
     }
 }
 
@@ -474,7 +479,7 @@ impl RdmaSendReceiveConnection<IbvMemoryRegion> for IbvConnection {
         let wr_id = self.next_wr_id();
         unsafe {
             self.qp.post_send(
-                &[memory_region.mr.slice(memory_range)],
+                &[memory_region.mr.data.slice(memory_range)],
                 wr_id,
                 immediate_data,
             )
@@ -490,7 +495,7 @@ impl RdmaSendReceiveConnection<IbvMemoryRegion> for IbvConnection {
         let wr_id = self.next_wr_id();
         unsafe {
             self.qp
-                .post_receive(&[memory_region.mr.slice(memory_range)], wr_id)
+                .post_receive(&[memory_region.mr.data.slice(memory_range)], wr_id)
         }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
@@ -508,8 +513,8 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError> {
-        let local_mr_slice = local_memory_region.mr.slice(local_memory_range);
-        let remote_mr_slice = remote_memory_region.mr.slice(remote_memory_range);
+        let local_mr_slice = local_memory_region.mr.data.slice(local_memory_range);
+        let remote_mr_slice = remote_memory_region.mr.data.slice(remote_memory_range);
 
         let wr_id = self.next_wr_id();
         self.qp
@@ -524,8 +529,8 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
         remote_memory_region: &IbvRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError> {
-        let local_mr_slice = local_memory_region.mr.slice(local_memory_range);
-        let remote_mr_slice = remote_memory_region.mr.slice(remote_memory_range);
+        let local_mr_slice = local_memory_region.mr.data.slice(local_memory_range);
+        let remote_mr_slice = remote_memory_region.mr.data.slice(remote_memory_range);
 
         let wr_id = self.next_wr_id();
         self.qp

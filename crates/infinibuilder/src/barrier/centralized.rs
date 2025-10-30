@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use crate::barrier::{
-    MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
+    MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
     RdmaNetworkMemoryRegionComponent,
 };
 use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest, WorkRequestSpinPollError};
@@ -18,7 +18,7 @@ pub struct UnregisteredCentralizedBarrier<MR, RMR> {
 #[derive(Debug)]
 pub struct CentralizedBarrier<MR, RMR> {
     memory: Vec<u8>,
-    mrs: Vec<MrPair<MR, RMR>>,
+    mrs: Vec<MemoryRegionPair<MR, RMR>>,
 }
 
 impl<MR, RMR> CentralizedBarrier<MR, RMR> {
@@ -66,7 +66,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredCentrali
             .collect()
     }
 
-    fn registered_mrs(self, mrs: Vec<MrPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MemoryRegionPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if mrs.len() != num_connections {
             return Err(NonMatchingMemoryRegionCount {
@@ -88,7 +88,7 @@ impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for CentralizedBarrier<MR, RMR> {
     fn barrier<
         'network,
         Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
     >(
         &mut self,
         connections: GroupConns,
@@ -98,9 +98,11 @@ impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for CentralizedBarrier<MR, RMR> {
 
         if idx == 0 {
             // Coordinator
+            println!("Running coordinator");
             self.coordinator_barrier(connections, timeout)
         } else {
             // Coordinated
+            println!("Running coordinated");
             self.coordinated_barrier(connections, timeout)
         }
     }
@@ -167,7 +169,7 @@ impl<MR, RMR> CentralizedBarrier<MR, RMR> {
     fn coordinator_barrier<
         'network,
         Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
     >(
         &mut self,
         mut connections: GroupConns,
@@ -180,6 +182,7 @@ impl<MR, RMR> CentralizedBarrier<MR, RMR> {
             if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, _) =
                 connections.connection_mut(idx).unwrap()
             {
+                println!("Waiting for peer {idx}");
                 available_time -= self.wait_for_peer(rank_id, available_time)?;
             }
         }
@@ -189,6 +192,7 @@ impl<MR, RMR> CentralizedBarrier<MR, RMR> {
             if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn) =
                 connections.connection_mut(idx).unwrap()
             {
+                println!("Notifying peer {idx}");
                 available_time -= self.notify_peer(rank_id, conn, available_time)?;
             }
         }
@@ -199,7 +203,7 @@ impl<MR, RMR> CentralizedBarrier<MR, RMR> {
     fn coordinated_barrier<
         'network,
         Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
     >(
         &mut self,
         mut connections: GroupConns,
@@ -211,7 +215,9 @@ impl<MR, RMR> CentralizedBarrier<MR, RMR> {
             panic!("Coordinator must be at group index 0");
         };
 
+        println!("Notifying peer");
         let elapsed = self.notify_peer(rank_id, conn, timeout)?;
+        println!("Waiting for peer");
         self.wait_for_peer(rank_id, timeout - elapsed)?;
         Ok(())
     }

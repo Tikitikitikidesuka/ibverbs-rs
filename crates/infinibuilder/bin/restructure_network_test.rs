@@ -1,13 +1,16 @@
 use infinibuilder::barrier::centralized::CentralizedBarrier;
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_network_node::{RdmaBarrierNetworkNode};
+use infinibuilder::rdma_network_node::{RdmaBarrierNetworkNode, RdmaGroupNetworkNode};
 use std::io::Write;
 use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
+use infinibuilder::barrier::dissemination::DisseminationBarrier;
 
 fn main() {
+    const TRANSPORT_MR_ID: &str = "transport";
+
     let args = parse_args();
     let rank_id: usize = args.rank_id;
 
@@ -16,15 +19,20 @@ fn main() {
         .unwrap()
         .take_nodes(args.num_nodes);
 
+    let mut memory = vec![0u8; 1024];
+    let transport_mrs = Vec::<(String, *mut u8, usize)>::new();
+
     let mut node = create_ibv_network_node(
         rank_id,
         32,
         512,
         network_config,
-        CentralizedBarrier::new(),
+        transport_mrs, //vec![(TRANSPORT_MR_ID, memory.as_mut_ptr(), memory.len())],
+        DisseminationBarrier::new(),
     )
     .unwrap();
 
+    /*
     if rank_id != 0 {
         print!("Press Enter to enter barrier...");
         std::io::stdout().flush().unwrap();
@@ -56,6 +64,25 @@ fn main() {
         .unwrap();
         println!("Barrier 2 done!!!\n\n");
     }
+    */
+
+    print!("Press Enter to enter barrier...");
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
+    println!("Barrier 1 done!!!\n\n");
+
+    print!("Press Enter to enter barrier...");
+    std::io::stdout().flush().unwrap();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+
+    node.barrier(&node.group_all(), Duration::from_millis(10000))
+        .unwrap();
+    println!("Barrier 2 done!!!\n\n");
 
     print!("Press Enter to enter barrier...");
     std::io::stdout().flush().unwrap();

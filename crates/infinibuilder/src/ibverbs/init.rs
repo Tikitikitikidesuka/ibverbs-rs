@@ -1,4 +1,5 @@
 use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::ibverbs::connection::{IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::network_node::{
     IbvNetworkNode, IbvNetworkNodeBuildError, IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
     IbvNetworkNodeEndpointGatherError,
@@ -30,8 +31,8 @@ pub fn create_ibv_network_node<NB, UNB>(
     barrier: UNB,
 ) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
 where
-    UNB: RdmaNetworkMemoryRegionComponent<Registered = NB>,
-    NB: RdmaNetworkBarrier,
+    UNB: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NB>,
+    NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
 {
     let network_config = network_config.validate()?;
 
@@ -50,6 +51,8 @@ where
 
     let endpoint = prepared_node.endpoint();
 
+    println!("Local endpoint: {endpoint:?}");
+
     let exchanged_endpoints = TcpExchanger::await_exchange_all(
         rank_id,
         &network_config,
@@ -58,6 +61,8 @@ where
     )?;
 
     let remote_endpoint = IbvNetworkNodeEndpoint::gather(rank_id, exchanged_endpoints)?;
+
+    println!("Remote endpoint: {endpoint:?}");
 
     let node = prepared_node.connect(remote_endpoint)?;
 

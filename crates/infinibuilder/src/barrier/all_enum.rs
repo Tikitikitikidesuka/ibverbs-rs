@@ -2,7 +2,7 @@ use crate::barrier::binary_tree::{BinaryTreeBarrier, UnregisteredBinaryTreeBarri
 use crate::barrier::centralized::{CentralizedBarrier, UnregisteredCentralizedBarrier};
 use crate::barrier::dissemination::{DisseminationBarrier, UnregisteredDisseminationBarrier};
 use crate::barrier::{
-    MrPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
+    MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
     RdmaNetworkMemoryRegionComponent,
 };
 use crate::rdma_connection::RdmaConnection;
@@ -43,7 +43,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarri
         }
     }
 
-    fn registered_mrs(self, mrs: Vec<MrPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Vec<MemoryRegionPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
         match self {
             AnyUnregisteredBarrier::Centralized(barrier) => {
                 Ok(AnyBarrier::Centralized(barrier.registered_mrs(mrs)?))
@@ -80,7 +80,7 @@ impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for AnyBarrier<MR, RMR> {
     fn barrier<
         'network,
         Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
     >(
         &mut self,
         connections: GroupConns,

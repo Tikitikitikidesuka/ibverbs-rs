@@ -1,16 +1,27 @@
 use crate::barrier::RdmaNetworkBarrier;
-use crate::rdma_connection::{
-    RdmaConnection, RdmaMemoryRegion, RdmaRemoteMemoryRegion, RdmaWorkRequest,
-};
+use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
 
-pub trait RdmaNetworkNode {
+pub trait RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR, NB: RdmaNetworkBarrier<ConnMR, ConnRMR>>:
+    RdmaRankIdNetworkNode
+    + RdmaGroupNetworkNode
+    + RdmaBarrierNetworkNode<ConnMR, ConnRMR, NB>
+    + RdmaNamedMemoryRegionNetworkNode<MR, RMR>
+    + RdmaTransportSendReceiveNetworkNode<MR>
+    + RdmaTransportReadWriteNetworkNode<MR, RMR>
+    + RdmaTransportImmediateDataNetworkNode
+{
+}
+
+pub trait RdmaRankIdNetworkNode {
+    fn rank_id(&self) -> usize;
+}
+
+pub trait RdmaGroupNetworkNode {
     type Group: RdmaNetworkGroup;
     type SelfGroup: RdmaNetworkSelfGroup;
-
-    fn rank_id(&self) -> usize;
 
     /// Group of all including self
     fn group_all(&self) -> Self::SelfGroup;
@@ -19,20 +30,25 @@ pub trait RdmaNetworkNode {
     fn group_peers(&self) -> Self::Group;
 }
 
-pub trait RdmaBarrierNetworkNode<NB: RdmaNetworkBarrier> {
+pub trait RdmaBarrierNetworkNode<MR, RMR, NB: RdmaNetworkBarrier<MR, RMR>> {
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
     where
         Group: RdmaNetworkSelfGroup;
 }
 
-pub trait RdmaTransportSendReceiveNetworkNode {
+pub trait RdmaNamedMemoryRegionNetworkNode<MR, RMR> {
+    fn local_mr(&self, id: impl AsRef<str>) -> Option<MR>;
+    fn remote_mr(&self, id: impl AsRef<str>) -> Option<RMR>;
+}
+
+pub trait RdmaTransportSendReceiveNetworkNode<MR> {
     type WR: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_send(
         &mut self,
         peer_rank_id: usize,
-        memory_region: RdmaMemoryRegion,
+        memory_region: &MR,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
@@ -41,12 +57,12 @@ pub trait RdmaTransportSendReceiveNetworkNode {
     fn post_receive(
         &mut self,
         peer_rank_id: usize,
-        memory_region: RdmaMemoryRegion,
+        memory_region: &MR,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaTransportReadWriteNetworkNode {
+pub trait RdmaTransportReadWriteNetworkNode<MR, RMR> {
     type WR: RdmaWorkRequest;
     type PostError: Error;
 
@@ -56,9 +72,9 @@ pub trait RdmaTransportReadWriteNetworkNode {
     fn post_write(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: RdmaMemoryRegion,
+        local_memory_region: &MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: RdmaRemoteMemoryRegion,
+        remote_memory_region: &RMR,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
@@ -67,9 +83,9 @@ pub trait RdmaTransportReadWriteNetworkNode {
     fn post_read(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: RdmaMemoryRegion,
+        local_memory_region: &MR,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: RdmaRemoteMemoryRegion,
+        remote_memory_region: &RMR,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 }
@@ -112,19 +128,23 @@ pub trait RdmaNetworkSelfGroup: RdmaNetworkGroup {
     }
 }
 
-pub trait RdmaNetworkGroupConnections<'network, Conn: RdmaConnection + 'network>:
+pub trait RdmaNetworkGroupConnections<'network, MR, RMR, Conn: RdmaConnection<MR, RMR> + 'network>:
     RdmaNetworkGroup
 {
     fn connection_mut(&mut self, idx: usize) -> Option<&'network mut Conn>;
 }
 
-pub trait RdmaNetworkSelfGroupConnections<'network, Conn: RdmaConnection + 'network>:
-    RdmaNetworkSelfGroup
+pub trait RdmaNetworkSelfGroupConnections<
+    'network,
+    MR,
+    RMR,
+    Conn: RdmaConnection<MR, RMR> + 'network,
+>: RdmaNetworkSelfGroup
 {
     fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Conn>>;
 }
 
-pub enum RdmaNetworkSelfGroupConnection<'network, Conn: RdmaConnection> {
+pub enum RdmaNetworkSelfGroupConnection<'network, Conn> {
     SelfConnection,
     PeerConnection(usize, &'network mut Conn),
 }

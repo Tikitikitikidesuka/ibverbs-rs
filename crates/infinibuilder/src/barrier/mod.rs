@@ -5,17 +5,18 @@ pub mod dissemination;
 
 use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;
 use std::error::Error;
+use std::fmt::Debug;
 use std::time::Duration;
 use thiserror::Error;
 use crate::rdma_connection::RdmaConnection;
 
-pub trait RdmaNetworkBarrier<MR, RMR> {
+pub trait RdmaNetworkBarrier<ConnMR, ConnRMR> {
     type Error: Error;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, Conn>,
+        Conn: RdmaConnection<ConnMR, ConnRMR> + 'network,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, ConnMR, ConnRMR, Conn>,
     >(
         &mut self,
         connections: GroupConns,
@@ -34,12 +35,12 @@ pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
     fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)>;
     fn registered_mrs(
         self,
-        mrs: Vec<MrPair<MR, RMR>>,
+        mrs: Vec<MemoryRegionPair<MR, RMR>>,
     ) -> Result<Self::Registered, Self::RegisterError>;
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct MrPair<MR, RMR> {
+pub struct MemoryRegionPair<MR, RMR> {
     pub local_mr: MR,
     pub remote_mr: RMR,
 }

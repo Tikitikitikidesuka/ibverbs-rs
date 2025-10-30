@@ -1,3 +1,5 @@
+use derivative::Derivative;
+
 pub mod connection;
 pub mod work_request;
 pub mod work_completion;
@@ -7,3 +9,16 @@ pub mod init;
 
 mod completion_queue;
 
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub(super) struct Named<T> {
+    pub name: String,
+    #[derivative(Debug = "ignore")]
+    pub data: T,
+}
+
+impl<T> Named<T> {
+    pub fn new(name: impl Into<String>, data: T) -> Self {
+        Self { name: name.into(), data }
+    }
+}
