@@ -78,8 +78,9 @@ impl<'a> MultiEventPacketBuilder<'a> {
         self.mfp_align = Some(align)
     }
 
+    /// Resets the builder afterwards, so it can be reused without reallocating the internal buffer.
     #[instrument(skip(self))]
-    pub fn build(mut self) -> MultiEventPacket {
+    pub fn build(&mut self) -> MultiEventPacket {
         self.mfps.sort_by_key(|m| m.source_id());
         let num_mfps = self.mfps.len();
 
@@ -132,7 +133,14 @@ impl<'a> MultiEventPacketBuilder<'a> {
             data.copy_from_slice(mfp.raw_packet_data());
         }
 
+        self.reset_mfps();
+
         MultiEventPacket { data }
+    }
+
+    /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate
+    pub fn reset_mfps(&mut self) {
+        self.mfps.clear();
     }
 
     /// Generates the MFP offsets in bytes from the start of the header.
