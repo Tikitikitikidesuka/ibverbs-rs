@@ -1,5 +1,5 @@
 use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
-use crate::ibverbs::connection::{IbvMemoryRegion, IbvRemoteMemoryRegion};
+use crate::ibverbs::connection::{IbvConnection, IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::network_node::{
     IbvNetworkNode, IbvNetworkNodeBuildError, IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
     IbvNetworkNodeEndpointGatherError,
@@ -7,6 +7,7 @@ use crate::ibverbs::network_node::{
 use crate::network_config::{NetworkConfigError, RawNetworkConfig};
 use crate::rdma_network_node::RdmaNamedMemory;
 use crate::tcp_exchanger::{TcpExchangeConfig, TcpExchanger, TcpNetworkConfigExchangeError};
+use crate::transport::RdmaNetworkTransport;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -23,17 +24,20 @@ pub enum IbvNetworkNodeInitError {
     EndpointGatherError(#[from] IbvNetworkNodeEndpointGatherError),
 }
 
-pub fn create_ibv_network_node<NB, UNB>(
+pub fn create_ibv_network_node<NB, UNB, NT, UNT>(
     rank_id: usize,
     cq_capacity: usize,
     cq_cache_capacity: usize,
     network_config: RawNetworkConfig,
     mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     barrier: UNB,
+    transport: UNT,
 ) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
 where
     UNB: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NB>,
     NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
+    UNT: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NT>,
+    NT: RdmaNetworkTransport<IbvMemoryRegion, IbvRemoteMemoryRegion, IbvConnection>,
 {
     let network_config = network_config.validate()?;
 
@@ -48,6 +52,7 @@ where
         .register_mrs(mrs)
         .num_connections(network_config.len())
         .rank_id(rank_id)
+        .transport(transport)
         .build()?;
 
     let endpoint = prepared_node.endpoint();

@@ -32,10 +32,10 @@ pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
     type Registered;
     type RegisterError: Error;
 
-    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)>;
+    fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>>;
     fn registered_mrs(
         self,
-        mrs: Vec<MemoryRegionPair<MR, RMR>>,
+        mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
     ) -> Result<Self::Registered, Self::RegisterError>;
 }
 

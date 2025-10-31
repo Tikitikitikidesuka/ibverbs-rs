@@ -35,7 +35,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarri
     type Registered = AnyBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
-    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
+    fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
         match self {
             AnyUnregisteredBarrier::Centralized(barrier) => barrier.memory(num_connections),
             AnyUnregisteredBarrier::BinaryTree(barrier) => barrier.memory(num_connections),
@@ -43,7 +43,7 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarri
         }
     }
 
-    fn registered_mrs(self, mrs: Vec<MemoryRegionPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(self, mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>) -> Result<Self::Registered, Self::RegisterError> {
         match self {
             AnyUnregisteredBarrier::Centralized(barrier) => {
                 Ok(AnyBarrier::Centralized(barrier.registered_mrs(mrs)?))

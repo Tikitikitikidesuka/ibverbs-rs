@@ -9,6 +9,7 @@ use crate::spin_poll::spin_poll_batched;
 use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
+use crate::barrier::dissemination::DisseminationBarrier;
 
 #[derive(Debug)]
 pub struct UnregisteredBinaryTreeBarrier<MR, RMR> {
@@ -120,27 +121,40 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredBinaryTr
     type Registered = BinaryTreeBarrier<MR, RMR>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
-    fn memory(&mut self, num_connections: usize) -> Vec<(*mut u8, usize)> {
+
+    fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
         self.memory = setup_memory(num_connections);
-        (0..num_connections)
-            .into_iter()
-            .map(|conn_idx| self.memory_of_connection(conn_idx))
-            .collect()
+        Some(
+            (0..num_connections)
+                .into_iter()
+                .map(|conn_idx| self.memory_of_connection(conn_idx))
+                .collect(),
+        )
     }
 
-    fn registered_mrs(self, mrs: Vec<MemoryRegionPair<MR, RMR>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(
+        self,
+        mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
+    ) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
-        if mrs.len() != num_connections {
-            return Err(NonMatchingMemoryRegionCount {
-                expected: num_connections,
-                got: mrs.len(),
-            });
-        }
+        if let Some(mrs) = mrs {
+            if mrs.len() != num_connections {
+                return Err(NonMatchingMemoryRegionCount {
+                    expected: num_connections,
+                    got: mrs.len(),
+                });
+            }
 
-        Ok(BinaryTreeBarrier {
-            memory: self.memory,
-            mrs,
-        })
+            Ok(BinaryTreeBarrier {
+                memory: self.memory,
+                mrs,
+            })
+        } else {
+            Err(NonMatchingMemoryRegionCount {
+                expected: num_connections,
+                got: 0,
+            })
+        }
     }
 }
 

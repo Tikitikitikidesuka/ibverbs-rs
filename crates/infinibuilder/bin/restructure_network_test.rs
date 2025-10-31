@@ -11,6 +11,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use std::{env, fs};
 use infinibuilder::barrier::RdmaNetworkBarrier;
+use infinibuilder::transport::unimplemented::UnimplementedTransport;
 
 fn main() {
     const TRANSPORT_MR_ID: &str = "transport";
@@ -37,6 +38,7 @@ fn main() {
         network_config,
         transport_mrs, //vec![(TRANSPORT_MR_ID, memory.as_mut_ptr(), memory.len())],
         DisseminationBarrier::new(),
+        UnimplementedTransport::new(),
     )
         .unwrap();
 

@@ -12,6 +12,16 @@ pub trait RdmaConnection<MR, RMR>:
 {
 }
 
+// Blanket implementation
+impl<MR, RMR, T> RdmaConnection<MR, RMR> for T
+where
+    T: RdmaNamedMemoryRegionConnection<MR, RMR>
+    + RdmaSendReceiveConnection<MR>
+    + RdmaReadWriteConnection<MR, RMR>
+    + RdmaImmediateDataConnection,
+{
+}
+
 pub trait RdmaNamedMemoryRegionConnection<MR, RMR> {
     fn local_mr(&self, id: impl AsRef<str>) -> Option<MR>;
     fn remote_mr(&self, id: impl AsRef<str>) -> Option<RMR>;

@@ -16,6 +16,8 @@ use crate::rdma_network_node::{
     RdmaTransportImmediateDataNetworkNode, RdmaTransportReadWriteNetworkNode,
     RdmaTransportSendReceiveNetworkNode,
 };
+use crate::transport::RdmaNetworkTransport;
+use crate::transport::regular::Transport;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -38,12 +40,13 @@ pub enum IbvNetworkNodeBuildError {
     TransportMemoryRegisterError(String),
 }
 
-pub struct IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConns, Barrier> {
+pub struct IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConns, Barrier, Transport> {
     rank_id: RankId,
     ibv_device_name: IbvDevName,
     completion_queue_params: CqParams,
     num_connections: NumConns,
     barrier: Barrier,
+    transport: Transport,
     transport_mrs: Vec<RdmaNamedMemory>,
 }
 
@@ -71,6 +74,12 @@ pub struct BuilderNumConnections {
 #[derive(Debug)]
 pub struct BuilderBarrier<PreparedBarrier> {
     barrier: PreparedBarrier,
+    has_mrs: bool,
+}
+
+#[derive(Debug)]
+pub struct BuilderTransport<PreparedTransport> {
+    transport: PreparedTransport,
 }
 
 #[derive(Debug)]
@@ -78,7 +87,7 @@ pub struct BuilderTransportMrs {
     mrs: Vec<(String, *mut u8, usize)>,
 }
 
-impl IbvNetworkNodeBuilder<(), (), (), (), ()> {
+impl IbvNetworkNodeBuilder<(), (), (), (), (), ()> {
     pub fn new() -> Self {
         Self {
             rank_id: (),
@@ -86,37 +95,52 @@ impl IbvNetworkNodeBuilder<(), (), (), (), ()> {
             completion_queue_params: (),
             num_connections: (),
             barrier: (),
+            transport: (),
             transport_mrs: vec![],
         }
     }
 }
 
-impl<IbvDevName, CqParams, NumConns, PreparedBarrier>
-    IbvNetworkNodeBuilder<(), IbvDevName, CqParams, NumConns, PreparedBarrier>
+impl<IbvDevName, CqParams, NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<(), IbvDevName, CqParams, NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn rank_id(
         self,
         rank_id: usize,
-    ) -> IbvNetworkNodeBuilder<BuilderRankId, IbvDevName, CqParams, NumConns, PreparedBarrier> {
+    ) -> IbvNetworkNodeBuilder<
+        BuilderRankId,
+        IbvDevName,
+        CqParams,
+        NumConns,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         IbvNetworkNodeBuilder {
             rank_id: BuilderRankId { rank_id },
             ibv_device_name: self.ibv_device_name,
             completion_queue_params: self.completion_queue_params,
             num_connections: self.num_connections,
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
 }
 
-impl<RankId, CqParams, NumConns, PreparedBarrier>
-    IbvNetworkNodeBuilder<RankId, (), CqParams, NumConns, PreparedBarrier>
+impl<RankId, CqParams, NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, (), CqParams, NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn ibv_device(
         self,
         device_name: impl Into<String>,
-    ) -> IbvNetworkNodeBuilder<RankId, BuilderIbvDeviceName, CqParams, NumConns, PreparedBarrier>
-    {
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        BuilderIbvDeviceName,
+        CqParams,
+        NumConns,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
             ibv_device_name: BuilderIbvDeviceName {
@@ -125,19 +149,27 @@ impl<RankId, CqParams, NumConns, PreparedBarrier>
             completion_queue_params: self.completion_queue_params,
             num_connections: self.num_connections,
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
 }
 
-impl<RankId, IbvDevName, NumConns, PreparedBarrier>
-    IbvNetworkNodeBuilder<RankId, IbvDevName, (), NumConns, PreparedBarrier>
+impl<RankId, IbvDevName, NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, (), NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn cq_params(
         self,
         capacity: usize,
         cache_capacity: usize,
-    ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, BuilderCqParams, NumConns, PreparedBarrier> {
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        BuilderCqParams,
+        NumConns,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
             ibv_device_name: self.ibv_device_name,
@@ -147,32 +179,40 @@ impl<RankId, IbvDevName, NumConns, PreparedBarrier>
             },
             num_connections: self.num_connections,
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
 }
 
-impl<RankId, IbvDevName, CqParams, PreparedBarrier>
-    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, (), PreparedBarrier>
+impl<RankId, IbvDevName, CqParams, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, (), PreparedBarrier, PreparedTransport>
 {
     pub fn num_connections(
         self,
         num_connections: usize,
-    ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, BuilderNumConnections, PreparedBarrier>
-    {
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        BuilderNumConnections,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
             ibv_device_name: self.ibv_device_name,
             completion_queue_params: self.completion_queue_params,
             num_connections: BuilderNumConnections { num_connections },
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
 }
 
-impl<RankId, IbvDevName, CqParams, NumConnections>
-    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, ()>
+impl<RankId, IbvDevName, CqParams, NumConnections, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, (), PreparedTransport>
 {
     pub fn barrier<
         Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
@@ -190,25 +230,77 @@ impl<RankId, IbvDevName, CqParams, NumConnections>
         CqParams,
         NumConnections,
         BuilderBarrier<PreparedBarrier>,
+        PreparedTransport,
     > {
         IbvNetworkNodeBuilder {
             rank_id: self.rank_id,
             ibv_device_name: self.ibv_device_name,
             completion_queue_params: self.completion_queue_params,
             num_connections: self.num_connections,
-            barrier: BuilderBarrier { barrier },
+            barrier: BuilderBarrier {
+                barrier,
+                has_mrs: false,
+            },
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
 }
 
 impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
-    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
+IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier, ()>
+{
+    pub fn transport<
+        Transport: RdmaNetworkTransport<IbvMemoryRegion, IbvRemoteMemoryRegion, IbvConnection>,
+        PreparedTransport: RdmaNetworkMemoryRegionComponent<
+            IbvMemoryRegion,
+            IbvRemoteMemoryRegion,
+            Registered = Transport,
+        >,
+    >(
+        self,
+        transport: PreparedTransport,
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        NumConnections,
+        PreparedBarrier,
+        BuilderTransport<PreparedTransport>,
+    > {
+        IbvNetworkNodeBuilder {
+            rank_id: self.rank_id,
+            ibv_device_name: self.ibv_device_name,
+            completion_queue_params: self.completion_queue_params,
+            num_connections: self.num_connections,
+            barrier: self.barrier,
+            transport: BuilderTransport { transport },
+            transport_mrs: self.transport_mrs,
+        }
+    }
+}
+
+impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        NumConnections,
+        PreparedBarrier,
+        PreparedTransport,
+    >
 {
     pub fn register_mr(
         mut self,
         memory: RdmaNamedMemory,
-    ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier> {
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        NumConnections,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         self.transport_mrs.push(memory);
 
         IbvNetworkNodeBuilder {
@@ -217,6 +309,7 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
             completion_queue_params: self.completion_queue_params,
             num_connections: self.num_connections,
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
@@ -224,7 +317,14 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
     pub fn register_mrs(
         mut self,
         mrs: impl IntoIterator<Item = RdmaNamedMemory>,
-    ) -> IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier> {
+    ) -> IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        NumConnections,
+        PreparedBarrier,
+        PreparedTransport,
+    > {
         self.transport_mrs
             .append(&mut mrs.into_iter().collect::<Vec<_>>());
 
@@ -234,6 +334,7 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
             completion_queue_params: self.completion_queue_params,
             num_connections: self.num_connections,
             barrier: self.barrier,
+            transport: self.transport,
             transport_mrs: self.transport_mrs,
         }
     }
@@ -242,6 +343,12 @@ impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
 impl<
     Barrier: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
     PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
+    Transport: RdmaNetworkTransport<IbvMemoryRegion, IbvRemoteMemoryRegion, IbvConnection>,
+    PreparedTransport: RdmaNetworkMemoryRegionComponent<
+            IbvMemoryRegion,
+            IbvRemoteMemoryRegion,
+            Registered = Transport,
+        >,
 >
     IbvNetworkNodeBuilder<
         BuilderRankId,
@@ -249,6 +356,7 @@ impl<
         BuilderCqParams,
         BuilderNumConnections,
         BuilderBarrier<PreparedBarrier>,
+        BuilderTransport<PreparedTransport>,
     >
 {
     pub fn build(
@@ -262,32 +370,49 @@ impl<
                 self.completion_queue_params.cache_capacity,
             );
 
-        // Get memory regions from the barrier
-        let barrier_mem_vec = self
-            .barrier
-            .barrier
-            .memory(self.num_connections.num_connections);
-        // Check the number of memory region matches the number of connections
-        if barrier_mem_vec.len() != self.num_connections.num_connections {
-            return Err(IbvNetworkNodeBuildError::BarrierMemoryRegisterError(
-                format!(
-                    "Non matching memory region number: {} regions returned by the barrier component for {} connections",
-                    barrier_mem_vec.len(),
-                    self.num_connections.num_connections
-                ),
-            ));
-        }
+        // Clone connection builder for each connection
+        let mut connection_builders = (0..self.num_connections.num_connections)
+            .map(|_| connection_builder.clone().lock_clone())
+            .collect::<Vec<_>>();
 
-        // Register the barrier memory regions in their corresponding connections
-        let mut connection_builders = Vec::with_capacity(self.num_connections.num_connections);
-        for conn_idx in 0..self.num_connections.num_connections {
-            let (mem_ptr, mem_length) = barrier_mem_vec[conn_idx];
-            connection_builders.push(connection_builder.clone().register_mr(RdmaNamedMemory::new(
-                BARRIER_MEM_ID, // To mark it as the barrier mem of this connection
-                mem_ptr,
-                mem_length,
-            )));
-        }
+        // Get memory regions from the barrier
+        let connection_builders = if let Some(barrier_mem_vec) = self
+            .barrier
+            .barrier
+            .memory(self.num_connections.num_connections)
+        {
+            // To later register or not
+            self.barrier.has_mrs = true;
+
+            // Check the number of memory region matches the number of connections
+            if barrier_mem_vec.len() != self.num_connections.num_connections {
+                return Err(IbvNetworkNodeBuildError::BarrierMemoryRegisterError(
+                    format!(
+                        "Non matching memory region number: {} regions returned by the barrier component for {} connections",
+                        barrier_mem_vec.len(),
+                        self.num_connections.num_connections
+                    ),
+                ));
+            }
+
+            // Register the barrier memory regions in their corresponding connections
+            connection_builders
+                .into_iter()
+                .zip(barrier_mem_vec)
+                .map(|(conn_builder, (mem_ptr, mem_length))| {
+                    conn_builder.register_mr(RdmaNamedMemory::new(
+                        BARRIER_MEM_ID, // To mark it as the barrier mem of this connection
+                        mem_ptr,
+                        mem_length,
+                    ))
+                })
+                .collect()
+        } else {
+            // To later register or not
+            self.barrier.has_mrs = false;
+
+            connection_builders
+        };
 
         // Register the transport memory regions on every connection
         let connection_builders = connection_builders
@@ -304,6 +429,7 @@ impl<
             rank_id: self.rank_id.rank_id,
             prepared_connections,
             prepared_barrier: self.barrier.barrier,
+            barrier_has_mrs: self.barrier.has_mrs,
             transport_mrs: self.transport_mrs,
         })
     }
@@ -316,6 +442,7 @@ pub struct IbvPreparedNetworkNode<
     rank_id: usize,
     prepared_connections: Vec<IbvPreparedConnection>,
     prepared_barrier: PreparedBarrier,
+    barrier_has_mrs: bool,
     transport_mrs: Vec<RdmaNamedMemory>,
 }
 
@@ -367,10 +494,13 @@ impl<
             })
             .collect::<Result<Vec<_>, IbvNetworkNodeBuildError>>()?;
 
-        println!("Barrier memory: {barrier_mrs:?}");
         let barrier = self
             .prepared_barrier
-            .registered_mrs(barrier_mrs)
+            .registered_mrs(if self.barrier_has_mrs {
+                Some(barrier_mrs)
+            } else {
+                None
+            })
             .map_err(|error| {
                 IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
             })?;

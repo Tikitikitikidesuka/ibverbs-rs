@@ -120,27 +120,11 @@ impl<IbvDevName, Mrs> IbvConnectionBuilder<IbvDevName, (), Mrs> {
 }
 
 impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
-    pub fn register_mr(
-        self,
-        memory: RdmaNamedMemory,
-    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+    pub fn lock_clone(self) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
             cq_params: self.cq_params,
-            mrs: BuilderMemoryRegions { mrs: vec![memory] },
-        }
-    }
-
-    pub fn register_mrs(
-        self,
-        mrs: impl IntoIterator<Item = RdmaNamedMemory>,
-    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
-        IbvConnectionBuilder {
-            ibv_device_name: self.ibv_device_name,
-            cq_params: self.cq_params,
-            mrs: BuilderMemoryRegions {
-                mrs: mrs.into_iter().collect(),
-            },
+            mrs: BuilderMemoryRegions { mrs: vec![] },
         }
     }
 }
@@ -415,8 +399,6 @@ impl IbvConnection {
         wr_id
     }
 }
-
-impl RdmaConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConnection {}
 
 impl RdmaNamedMemoryRegionConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConnection {
     fn local_mr(&self, id: impl AsRef<str>) -> Option<IbvMemoryRegion> {
