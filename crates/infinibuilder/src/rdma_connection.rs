@@ -4,69 +4,106 @@ use std::ops::RangeBounds;
 use std::time::Duration;
 use thiserror::Error;
 
-pub trait RdmaConnection<MR, RMR>:
-    RdmaNamedMemoryRegionConnection<MR, RMR>
-    + RdmaSendReceiveConnection<MR>
-    + RdmaReadWriteConnection<MR, RMR>
-    + RdmaImmediateDataConnection
+pub trait RdmaConnection:
+    RdmaMemoryRegionConnection
+    + RdmaRemoteMemoryRegionConnection
+    + RdmaNamedMemoryRegionConnection
+    + RdmaNamedRemoteMemoryRegionConnection
+    + RdmaSendConnection
+    + RdmaReceiveConnection
+    + RdmaReadConnection
+    + RdmaWriteConnection
+    + RdmaImmediateDataSendConnection
+    + RdmaImmediateDataReceiveConnection
 {
 }
 
 // Blanket implementation
-impl<MR, RMR, T> RdmaConnection<MR, RMR> for T where
-    T: RdmaNamedMemoryRegionConnection<MR, RMR>
-        + RdmaSendReceiveConnection<MR>
-        + RdmaReadWriteConnection<MR, RMR>
-        + RdmaImmediateDataConnection
+impl<Connection> RdmaConnection for Connection where
+    Connection: RdmaMemoryRegionConnection
+        + RdmaRemoteMemoryRegionConnection
+        + RdmaNamedMemoryRegionConnection
+        + RdmaNamedRemoteMemoryRegionConnection
+        + RdmaSendConnection
+        + RdmaReceiveConnection
+        + RdmaReadConnection
+        + RdmaWriteConnection
+        + RdmaImmediateDataSendConnection
+        + RdmaImmediateDataReceiveConnection
 {
 }
 
-pub trait RdmaNamedMemoryRegionConnection<MR, RMR> {
-    fn local_mr(&self, id: impl AsRef<str>) -> Option<MR>;
-    fn remote_mr(&self, id: impl AsRef<str>) -> Option<RMR>;
+pub trait RdmaMemoryRegionConnection {
+    type MemoryRegion;
 }
 
-pub trait RdmaSendReceiveConnection<MR> {
+pub trait RdmaRemoteMemoryRegionConnection {
+    type RemoteMemoryRegion;
+}
+
+pub trait RdmaNamedMemoryRegionConnection: RdmaMemoryRegionConnection {
+    fn local_mr(&self, id: impl AsRef<str>) -> Option<Self::MemoryRegion>;
+}
+
+pub trait RdmaNamedRemoteMemoryRegionConnection: RdmaRemoteMemoryRegionConnection {
+    fn remote_mr(&self, id: impl AsRef<str>) -> Option<Self::RemoteMemoryRegion>;
+}
+
+pub trait RdmaSendConnection: RdmaMemoryRegionConnection {
     type PostError: Error;
     type WR: RdmaWorkRequest;
 
     fn post_send(
         &mut self,
-        memory_region: &MR,
+        memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
+}
+
+pub trait RdmaReceiveConnection: RdmaMemoryRegionConnection {
+    type PostError: Error;
+    type WR: RdmaWorkRequest;
 
     fn post_receive(
         &mut self,
-        memory_region: &MR,
+        memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaReadWriteConnection<MR, RMR> {
+pub trait RdmaReadConnection:
+    RdmaMemoryRegionConnection + RdmaRemoteMemoryRegionConnection
+{
+    type PostError: Error;
+    type WR: RdmaWorkRequest;
+
+    fn post_read(
+        &mut self,
+        local_memory_region: &Self::MemoryRegion,
+        local_memory_range: impl RangeBounds<usize>,
+        remote_memory_region: &Self::RemoteMemoryRegion,
+        remote_memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, Self::PostError>;
+}
+
+pub trait RdmaWriteConnection:
+    RdmaMemoryRegionConnection + RdmaRemoteMemoryRegionConnection
+{
     type PostError: Error;
     type WR: RdmaWorkRequest;
 
     fn post_write(
         &mut self,
-        local_memory_region: &MR,
+        local_memory_region: &Self::MemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &RMR,
+        remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
-
-    fn post_read(
-        &mut self,
-        local_memory_region: &MR,
-        local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &RMR,
-        remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaImmediateDataConnection {
+pub trait RdmaImmediateDataSendConnection {
     type PostError: Error;
     type WR: RdmaWorkRequest;
 
@@ -74,6 +111,11 @@ pub trait RdmaImmediateDataConnection {
         &mut self,
         immediate_data: u32,
     ) -> Result<Self::WR, Self::PostError>;
+}
+
+pub trait RdmaImmediateDataReceiveConnection {
+    type PostError: Error;
+    type WR: RdmaWorkRequest;
 
     fn post_receive_immediate_data(&mut self) -> Result<Self::WR, Self::PostError>;
 }

@@ -1,29 +1,42 @@
 use crate::barrier::RdmaNetworkBarrier;
-use crate::rdma_connection::{RdmaConnection, RdmaWorkCompletion, RdmaWorkRequest};
+use crate::rdma_connection::{
+    RdmaConnection, RdmaImmediateDataReceiveConnection, RdmaImmediateDataSendConnection,
+    RdmaWorkCompletion, RdmaWorkRequest,
+};
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
 
-pub trait RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR>:
+pub trait RdmaNetworkNode:
     RdmaRankIdNetworkNode
+    + RdmaMemoryRegionNetworkNode
+    + RdmaRemoteMemoryRegionNetworkNode
+    + RdmaNamedMemoryRegionNetworkNode
     + RdmaGroupNetworkNode
-    + RdmaBarrierNetworkNode<ConnMR, ConnRMR>
-    + RdmaNamedMemoryRegionNetworkNode<MR, RMR>
-    + RdmaTransportSendReceiveNetworkNode<MR>
-    + RdmaTransportReadWriteNetworkNode<MR, RMR>
-    + RdmaTransportImmediateDataNetworkNode
+    + RdmaBarrierNetworkNode
+    + RdmaTransportSendNetworkNode
+    + RdmaTransportReceiveNetworkNode
+    + RdmaTransportReadNetworkNode
+    + RdmaTransportWriteNetworkNode
+    + RdmaImmediateDataSendConnection
+    + RdmaImmediateDataReceiveConnection
 {
 }
 
 // Blanket implementation
-impl<MR, RMR, ConnMR, ConnRMR, T> RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR> for T where
-    T: RdmaRankIdNetworkNode
+impl<NetworkNode> RdmaNetworkNode for NetworkNode where
+    NetworkNode: RdmaRankIdNetworkNode
+        + RdmaMemoryRegionNetworkNode
+        + RdmaRemoteMemoryRegionNetworkNode
+        + RdmaNamedMemoryRegionNetworkNode
         + RdmaGroupNetworkNode
-        + RdmaBarrierNetworkNode<ConnMR, ConnRMR>
-        + RdmaNamedMemoryRegionNetworkNode<MR, RMR>
-        + RdmaTransportSendReceiveNetworkNode<MR>
-        + RdmaTransportReadWriteNetworkNode<MR, RMR>
-        + RdmaTransportImmediateDataNetworkNode
+        + RdmaBarrierNetworkNode
+        + RdmaTransportSendNetworkNode
+        + RdmaTransportReceiveNetworkNode
+        + RdmaTransportReadNetworkNode
+        + RdmaTransportWriteNetworkNode
+        + RdmaImmediateDataSendConnection
+        + RdmaImmediateDataReceiveConnection
 {
 }
 
@@ -42,7 +55,7 @@ pub trait RdmaGroupNetworkNode {
     fn group_peers(&self) -> Self::Group;
 }
 
-pub trait RdmaBarrierNetworkNode<MR, RMR> {
+pub trait RdmaBarrierNetworkNode {
     type BarrierError: Error;
 
     fn barrier<Group>(
@@ -54,61 +67,81 @@ pub trait RdmaBarrierNetworkNode<MR, RMR> {
         Group: RdmaNetworkSelfGroup;
 }
 
-pub trait RdmaNamedMemoryRegionNetworkNode<MR, RMR> {
-    fn local_mr(&self, id: impl AsRef<str>) -> Option<MR>;
-    fn remote_mr(&self, id: impl AsRef<str>) -> Option<RMR>;
+pub trait RdmaMemoryRegionNetworkNode {
+    type MemoryRegion;
 }
 
-pub trait RdmaTransportSendReceiveNetworkNode<MR> {
+pub trait RdmaNamedMemoryRegionNetworkNode: RdmaMemoryRegionNetworkNode {
+    fn local_mr(&self, id: impl AsRef<str>) -> Option<Self::MemoryRegion>;
+}
+
+pub trait RdmaRemoteMemoryRegionNetworkNode {
+    type RemoteMemoryRegion;
+}
+
+pub trait RdmaNamedRemoteMemoryRegionNetworkNode: RdmaRemoteMemoryRegionNetworkNode {
+    fn remote_mr(&self, id: impl AsRef<str>) -> Option<Self::RemoteMemoryRegion>;
+}
+
+pub trait RdmaTransportSendNetworkNode: RdmaMemoryRegionNetworkNode {
     type WR: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_send(
         &mut self,
         peer_rank_id: usize,
-        memory_region: &MR,
+        memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
-
-    // Posts a receive operation.
-    fn post_receive(
-        &mut self,
-        peer_rank_id: usize,
-        memory_region: &MR,
-        memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaTransportReadWriteNetworkNode<MR, RMR> {
+pub trait RdmaTransportReceiveNetworkNode: RdmaMemoryRegionNetworkNode {
     type WR: RdmaWorkRequest;
     type PostError: Error;
 
-    // Posts a write operation.
-    // If sent with immediate data, the data must be obtained in the remote peer
-    // by calling post_receive_immediate
+    fn post_receive(
+        &mut self,
+        peer_rank_id: usize,
+        memory_region: &Self::MemoryRegion,
+        memory_range: impl RangeBounds<usize>,
+    ) -> Result<Self::WR, Self::PostError>;
+}
+
+pub trait RdmaTransportWriteNetworkNode:
+    RdmaMemoryRegionNetworkNode + RdmaRemoteMemoryRegionNetworkNode
+{
+    type WR: RdmaWorkRequest;
+    type PostError: Error;
+
     fn post_write(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: &MR,
+        local_memory_region: &Self::MemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &RMR,
+        remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
     ) -> Result<Self::WR, Self::PostError>;
+}
 
-    // Posts a read operation.
+pub trait RdmaTransportReadNetworkNode:
+    RdmaMemoryRegionNetworkNode + RdmaRemoteMemoryRegionNetworkNode
+{
+    type WR: RdmaWorkRequest;
+    type PostError: Error;
+
     fn post_read(
         &mut self,
         peer_rank_id: usize,
-        local_memory_region: &MR,
+        local_memory_region: &Self::MemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &RMR,
+        remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
     ) -> Result<Self::WR, Self::PostError>;
 }
 
-pub trait RdmaTransportImmediateDataNetworkNode {
+pub trait RdmaTransportImmediateDataSendNetworkNode {
     type WR: RdmaWorkRequest;
     type PostError: Error;
 
@@ -117,6 +150,11 @@ pub trait RdmaTransportImmediateDataNetworkNode {
         peer_rank_id: usize,
         immediate_data: u32,
     ) -> Result<Self::WR, Self::PostError>;
+}
+
+pub trait RdmaTransportImmediateDataReceiveNetworkNode {
+    type WR: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_receive_immediate_data(
         &mut self,
@@ -141,6 +179,27 @@ impl RdmaNamedMemory {
     }
 }
 
+/// This trait is defined to be able to let a network component have memory regions for the connections.
+/// It must make possible telling the component how many connections there are.
+/// It must the allow getting the memory for each of them.
+/// Finally, it must allow giving the component the registered memory regions.
+pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
+    type Registered;
+    type RegisterError: Error;
+
+    fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>>;
+    fn registered_mrs(
+        self,
+        mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
+    ) -> Result<Self::Registered, Self::RegisterError>;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct MemoryRegionPair<MR, RMR> {
+    pub local_mr: MR,
+    pub remote_mr: RMR,
+}
+
 // A group of nodes of the network by rank id
 // Order of the rank ids matter since the nodes in a group are addressed by index
 // Two groups with the same rank ids but different order are not equivalent
@@ -163,20 +222,16 @@ pub trait RdmaNetworkSelfGroup: RdmaNetworkGroup {
     }
 }
 
-pub trait RdmaNetworkGroupConnections<'network, MR, RMR, Conn: RdmaConnection<MR, RMR> + 'network>:
-    RdmaNetworkGroup
-{
-    fn connection_mut(&mut self, idx: usize) -> Option<&'network mut Conn>;
+pub trait RdmaNetworkGroupConnections<'network>: RdmaNetworkGroup {
+    type Conn: RdmaConnection;
+
+    fn connection_mut(&mut self, idx: usize) -> Option<&'network mut Self::Conn>;
 }
 
-pub trait RdmaNetworkSelfGroupConnections<
-    'network,
-    MR,
-    RMR,
-    Conn: RdmaConnection<MR, RMR> + 'network,
->: RdmaNetworkSelfGroup
-{
-    fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Conn>>;
+pub trait RdmaNetworkSelfGroupConnections<'network>: RdmaNetworkSelfGroup {
+    type Conn: RdmaConnection;
+
+    fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Self::Conn>>;
 }
 
 pub enum RdmaNetworkSelfGroupConnection<'network, Conn> {
