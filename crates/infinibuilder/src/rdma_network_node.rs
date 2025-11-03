@@ -1,18 +1,29 @@
 use crate::barrier::RdmaNetworkBarrier;
-use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
-use crate::rdma_network_node::RdmaNetworkSelfGroupConnection::SelfConnection;
+use crate::rdma_connection::{RdmaConnection, RdmaWorkCompletion, RdmaWorkRequest};
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
 
-pub trait RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR, NB: RdmaNetworkBarrier<ConnMR, ConnRMR>>:
+pub trait RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR>:
     RdmaRankIdNetworkNode
     + RdmaGroupNetworkNode
-    + RdmaBarrierNetworkNode<ConnMR, ConnRMR, NB>
+    + RdmaBarrierNetworkNode<ConnMR, ConnRMR>
     + RdmaNamedMemoryRegionNetworkNode<MR, RMR>
     + RdmaTransportSendReceiveNetworkNode<MR>
     + RdmaTransportReadWriteNetworkNode<MR, RMR>
     + RdmaTransportImmediateDataNetworkNode
+{
+}
+
+// Blanket implementation
+impl<MR, RMR, ConnMR, ConnRMR, T> RdmaNetworkNode<MR, RMR, ConnMR, ConnRMR> for T where
+    T: RdmaRankIdNetworkNode
+        + RdmaGroupNetworkNode
+        + RdmaBarrierNetworkNode<ConnMR, ConnRMR>
+        + RdmaNamedMemoryRegionNetworkNode<MR, RMR>
+        + RdmaTransportSendReceiveNetworkNode<MR>
+        + RdmaTransportReadWriteNetworkNode<MR, RMR>
+        + RdmaTransportImmediateDataNetworkNode
 {
 }
 
@@ -31,8 +42,14 @@ pub trait RdmaGroupNetworkNode {
     fn group_peers(&self) -> Self::Group;
 }
 
-pub trait RdmaBarrierNetworkNode<MR, RMR, NB: RdmaNetworkBarrier<MR, RMR>> {
-    fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), NB::Error>
+pub trait RdmaBarrierNetworkNode<MR, RMR> {
+    type BarrierError: Error;
+
+    fn barrier<Group>(
+        &mut self,
+        group: &Group,
+        timeout: Duration,
+    ) -> Result<(), Self::BarrierError>
     where
         Group: RdmaNetworkSelfGroup;
 }
