@@ -109,7 +109,7 @@ impl IbvNetworkNodeBuilder<(), (), (), (), (), ()> {
 }
 
 impl<IbvDevName, CqParams, NumConns, PreparedBarrier, PreparedTransport>
-IbvNetworkNodeBuilder<(), IbvDevName, CqParams, NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<(), IbvDevName, CqParams, NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn rank_id(
         self,
@@ -135,7 +135,7 @@ IbvNetworkNodeBuilder<(), IbvDevName, CqParams, NumConns, PreparedBarrier, Prepa
 }
 
 impl<RankId, CqParams, NumConns, PreparedBarrier, PreparedTransport>
-IbvNetworkNodeBuilder<RankId, (), CqParams, NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, (), CqParams, NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn ibv_device(
         self,
@@ -163,7 +163,7 @@ IbvNetworkNodeBuilder<RankId, (), CqParams, NumConns, PreparedBarrier, PreparedT
 }
 
 impl<RankId, IbvDevName, NumConns, PreparedBarrier, PreparedTransport>
-IbvNetworkNodeBuilder<RankId, IbvDevName, (), NumConns, PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, (), NumConns, PreparedBarrier, PreparedTransport>
 {
     pub fn cq_params(
         self,
@@ -193,7 +193,7 @@ IbvNetworkNodeBuilder<RankId, IbvDevName, (), NumConns, PreparedBarrier, Prepare
 }
 
 impl<RankId, IbvDevName, CqParams, PreparedBarrier, PreparedTransport>
-IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, (), PreparedBarrier, PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, (), PreparedBarrier, PreparedTransport>
 {
     pub fn num_connections(
         self,
@@ -219,15 +219,15 @@ IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, (), PreparedBarrier, Prepare
 }
 
 impl<RankId, IbvDevName, CqParams, NumConnections, PreparedTransport>
-IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, (), PreparedTransport>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, (), PreparedTransport>
 {
     pub fn barrier<
         Barrier: RdmaNetworkNodeBarrier<IbvConnection>,
         PreparedBarrier: RdmaNetworkMemoryRegionComponent<
-            IbvMemoryRegion,
-            IbvRemoteMemoryRegion,
-            Registered=Barrier,
-        >,
+                IbvMemoryRegion,
+                IbvRemoteMemoryRegion,
+                Registered = Barrier,
+            >,
     >(
         self,
         barrier: PreparedBarrier,
@@ -255,15 +255,15 @@ IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, (), Prepared
 }
 
 impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier>
-IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier, ()>
+    IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier, ()>
 {
     pub fn transport<
         Transport: RdmaNetworkNodeTransport<IbvConnection>,
         PreparedTransport: RdmaNetworkMemoryRegionComponent<
-            IbvMemoryRegion,
-            IbvRemoteMemoryRegion,
-            Registered=Transport,
-        >,
+                IbvMemoryRegion,
+                IbvRemoteMemoryRegion,
+                Registered = Transport,
+            >,
     >(
         self,
         transport: PreparedTransport,
@@ -291,14 +291,14 @@ IbvNetworkNodeBuilder<RankId, IbvDevName, CqParams, NumConnections, PreparedBarr
 }
 
 impl<RankId, IbvDevName, CqParams, NumConnections, PreparedBarrier, PreparedTransport>
-IbvNetworkNodeBuilder<
-    RankId,
-    IbvDevName,
-    CqParams,
-    NumConnections,
-    PreparedBarrier,
-    PreparedTransport,
->
+    IbvNetworkNodeBuilder<
+        RankId,
+        IbvDevName,
+        CqParams,
+        NumConnections,
+        PreparedBarrier,
+        PreparedTransport,
+    >
 {
     pub fn register_mr(
         mut self,
@@ -326,7 +326,7 @@ IbvNetworkNodeBuilder<
 
     pub fn register_mrs(
         mut self,
-        mrs: impl IntoIterator<Item=RdmaNamedMemory>,
+        mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     ) -> IbvNetworkNodeBuilder<
         RankId,
         IbvDevName,
@@ -352,22 +352,22 @@ IbvNetworkNodeBuilder<
 
 impl<
     Barrier: RdmaNetworkNodeBarrier<IbvConnection>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered=Barrier>,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
     Transport: RdmaNetworkNodeTransport<IbvConnection>,
     PreparedTransport: RdmaNetworkMemoryRegionComponent<
-        IbvMemoryRegion,
-        IbvRemoteMemoryRegion,
-        Registered=Transport,
-    >,
+            IbvMemoryRegion,
+            IbvRemoteMemoryRegion,
+            Registered = Transport,
+        >,
 >
-IbvNetworkNodeBuilder<
-    BuilderRankId,
-    BuilderIbvDeviceName,
-    BuilderCqParams,
-    BuilderNumConnections,
-    BuilderBarrier<PreparedBarrier>,
-    BuilderTransport<PreparedTransport>,
->
+    IbvNetworkNodeBuilder<
+        BuilderRankId,
+        BuilderIbvDeviceName,
+        BuilderCqParams,
+        BuilderNumConnections,
+        BuilderBarrier<PreparedBarrier>,
+        BuilderTransport<PreparedTransport>,
+    >
 {
     pub fn build(
         mut self,
@@ -472,6 +472,7 @@ IbvNetworkNodeBuilder<
             .map(|conn_builder| conn_builder.register_mrs(self.transport_mrs.clone()))
             .collect::<Vec<_>>();
 
+        // Build all connections
         let prepared_connections = connection_builders
             .into_iter()
             .map(|conn_builder| conn_builder.build())
@@ -491,13 +492,13 @@ IbvNetworkNodeBuilder<
 
 pub struct IbvPreparedNetworkNode<
     Barrier: RdmaNetworkNodeBarrier<IbvConnection>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered=Barrier>,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
     Transport: RdmaNetworkNodeTransport<IbvConnection>,
     PreparedTransport: RdmaNetworkMemoryRegionComponent<
-        IbvMemoryRegion,
-        IbvRemoteMemoryRegion,
-        Registered=Transport,
-    >,
+            IbvMemoryRegion,
+            IbvRemoteMemoryRegion,
+            Registered = Transport,
+        >,
 > {
     rank_id: usize,
     prepared_connections: Vec<IbvPreparedConnection>,
@@ -510,13 +511,13 @@ pub struct IbvPreparedNetworkNode<
 
 impl<
     Barrier: RdmaNetworkNodeBarrier<IbvConnection>,
-    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered=Barrier>,
+    PreparedBarrier: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = Barrier>,
     Transport: RdmaNetworkNodeTransport<IbvConnection>,
     PreparedTransport: RdmaNetworkMemoryRegionComponent<
-        IbvMemoryRegion,
-        IbvRemoteMemoryRegion,
-        Registered=Transport,
-    >,
+            IbvMemoryRegion,
+            IbvRemoteMemoryRegion,
+            Registered = Transport,
+        >,
 > IbvPreparedNetworkNode<Barrier, PreparedBarrier, Transport, PreparedTransport>
 {
     pub fn endpoint(&self) -> IbvNetworkNodeEndpoint {
@@ -543,37 +544,46 @@ impl<
             .map(|(prepared_connection, endpoint)| prepared_connection.connect(endpoint))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let barrier_mrs = connections
-            .iter()
-            .enumerate()
-            .map(|(idx, conn)| {
-                Ok(MemoryRegionPair {
-                    local_mr: conn.local_mr(BARRIER_MEM_ID).ok_or(
-                        IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
-                            "Missing barrier local memory for conn {idx}"
-                        )),
-                    )?,
-                    remote_mr: conn.remote_mr(BARRIER_MEM_ID).ok_or(
-                        IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
-                            "Missing barrier remote memory for conn {idx}"
-                        )),
-                    )?,
+        let barrier = if self.barrier_has_mrs {
+            let barrier_mrs = connections
+                .iter()
+                .enumerate()
+                .map(|(idx, conn)| {
+                    Ok(MemoryRegionPair {
+                        local_mr: conn.local_mr(BARRIER_MEM_ID).ok_or(
+                            IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
+                                "Missing barrier local memory for conn {idx}"
+                            )),
+                        )?,
+                        remote_mr: conn.remote_mr(BARRIER_MEM_ID).ok_or(
+                            IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!(
+                                "Missing barrier remote memory for conn {idx}"
+                            )),
+                        )?,
+                    })
                 })
-            })
-            .collect::<Result<Vec<_>, IbvNetworkNodeBuildError>>()?;
+                .collect::<Result<Vec<_>, IbvNetworkNodeBuildError>>()?;
 
-        let barrier = self
-            .prepared_barrier
-            .registered_mrs(if self.barrier_has_mrs {
-                Some(barrier_mrs)
-            } else {
-                None
-            })
-            .map_err(|error| {
-                IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
-            })?;
+            let barrier = self
+                .prepared_barrier
+                .registered_mrs(Some(barrier_mrs))
+                .map_err(|error| {
+                    IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
+                })?;
 
-        let (transport, transport_mrs) = if self.transport_has_mrs {
+            barrier
+        } else {
+            let barrier = self
+                .prepared_barrier
+                .registered_mrs(None)
+                .map_err(|error| {
+                    IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
+                })?;
+
+            barrier
+        };
+
+        let transport = if self.transport_has_mrs {
             let transport_meta_mrs = connections
                 .iter()
                 .enumerate()
@@ -600,50 +610,7 @@ impl<
                     IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
                 })?;
 
-            let transport_mrs = self
-                .transport_mrs
-                .iter()
-                .enumerate()
-                .map(|(idx, memory)| {
-                    // Mrs named `mr_id` of each connection
-                    let local_mrs: Vec<_> = connections
-                        .iter()
-                        .map(|conn| {
-                            conn.local_mr(&memory.id).ok_or(
-                                IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
-                                    "Missing transport local memory for conn {idx}"
-                                )),
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    // Remote mrs named `mr_id` of each connection
-                    let remote_mrs: Vec<_> = connections
-                        .iter()
-                        .map(|conn| {
-                            conn.remote_mr(&memory.id).ok_or(
-                                IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
-                                    "Missing transport remote memory for conn {idx}"
-                                )),
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    Ok((
-                        memory.id.clone(),
-                        MemoryRegionPair {
-                            local_mr: IbvNetworkNodeMemoryRegion {
-                                conn_mrs: Arc::new(Named::new(memory.id.clone(), local_mrs)),
-                            },
-                            remote_mr: IbvNetworkNodeRemoteMemoryRegion {
-                                conn_mrs: Arc::new(Named::new(memory.id.clone(), remote_mrs)),
-                            },
-                        },
-                    ))
-                })
-                .collect::<Result<HashMap<_, _>, IbvNetworkNodeBuildError>>()?;
-
-            (transport, transport_mrs)
+            transport
         } else {
             let transport = self
                 .prepared_transport
@@ -652,8 +619,51 @@ impl<
                     IbvNetworkNodeBuildError::BarrierMemoryRegisterError(format!("{error}"))
                 })?;
 
-            (transport, HashMap::new())
+            transport
         };
+
+        let transport_mrs = self
+            .transport_mrs
+            .iter()
+            .enumerate()
+            .map(|(idx, memory)| {
+                // Mrs named `mr_id` of each connection
+                let local_mrs: Vec<_> = connections
+                    .iter()
+                    .map(|conn| {
+                        conn.local_mr(&memory.id).ok_or(
+                            IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
+                                "Missing transport local memory for conn {idx}"
+                            )),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                // Remote mrs named `mr_id` of each connection
+                let remote_mrs: Vec<_> = connections
+                    .iter()
+                    .map(|conn| {
+                        conn.remote_mr(&memory.id).ok_or(
+                            IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
+                                "Missing transport remote memory for conn {idx}"
+                            )),
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                Ok((
+                    memory.id.clone(),
+                    MemoryRegionPair {
+                        local_mr: IbvNetworkNodeMemoryRegion {
+                            conn_mrs: Arc::new(Named::new(memory.id.clone(), local_mrs)),
+                        },
+                        remote_mr: IbvNetworkNodeRemoteMemoryRegion {
+                            conn_mrs: Arc::new(Named::new(memory.id.clone(), remote_mrs)),
+                        },
+                    },
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, IbvNetworkNodeBuildError>>()?;
 
         Ok(IbvNetworkNode {
             rank_id: self.rank_id,
@@ -687,7 +697,7 @@ impl IbvNetworkNodeEndpoint {
     /// containing a connection for each of the gathered nodes
     pub fn gather<'a>(
         rank_id: usize,
-        endpoints: impl IntoIterator<Item=impl Borrow<IbvNetworkNodeEndpoint>>,
+        endpoints: impl IntoIterator<Item = impl Borrow<IbvNetworkNodeEndpoint>>,
     ) -> Result<IbvNetworkNodeEndpoint, IbvNetworkNodeEndpointGatherError> {
         let connection_endpoints = endpoints
             .into_iter()
@@ -781,7 +791,9 @@ impl<NB, NT> RdmaGroupNetworkNode for IbvNetworkNode<NB, NT> {
     }
 }
 
-impl<NB: RdmaNetworkNodeBarrier<IbvConnection>, NT> RdmaBarrierNetworkNode for IbvNetworkNode<NB, NT> {
+impl<NB: RdmaNetworkNodeBarrier<IbvConnection>, NT> RdmaBarrierNetworkNode
+    for IbvNetworkNode<NB, NT>
+{
     type BarrierError = NB::Error;
 
     fn barrier<Group>(&mut self, group: &Group, timeout: Duration) -> Result<(), Self::BarrierError>
@@ -809,7 +821,7 @@ pub enum ConnectionTransportPostError<PostError: Error> {
 }
 
 impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetworkNode
-for IbvNetworkNode<NB, NT>
+    for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -841,7 +853,7 @@ for IbvNetworkNode<NB, NT>
 }
 
 impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTransportNetworkNode
-for IbvNetworkNode<NB, NT>
+    for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -871,7 +883,7 @@ for IbvNetworkNode<NB, NT>
 }
 
 impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNetworkNode
-for IbvNetworkNode<NB, NT>
+    for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -907,7 +919,7 @@ for IbvNetworkNode<NB, NT>
 }
 
 impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetworkNode
-for IbvNetworkNode<NB, NT>
+    for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -941,7 +953,7 @@ for IbvNetworkNode<NB, NT>
 }
 
 impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
-RdmaSendImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
+    RdmaSendImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -968,7 +980,7 @@ RdmaSendImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 }
 
 impl<NB, NT: RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection>>
-RdmaReceiveImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
+    RdmaReceiveImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
     type WorkRequest = IbvWorkRequest;
     type PostError = ConnectionTransportPostError<std::io::Error>;
@@ -1097,7 +1109,7 @@ impl<'network> RdmaNetworkSelfGroup for IbvNetworkSelfGroupConnections<'network>
 }
 
 impl<'network> RdmaNetworkSelfGroupConnections<'network>
-for IbvNetworkSelfGroupConnections<'network>
+    for IbvNetworkSelfGroupConnections<'network>
 {
     type Connection = IbvConnection;
 
