@@ -1,6 +1,11 @@
-use std::{marker::PhantomData, mem, ptr::slice_from_raw_parts, slice};
+use std::{mem, slice};
 
-use crate::multi_purpose::MultiPurposeType;
+use crate::{fragment::MdfFragmentRef, multi_purpose::MultiPurposeType};
+
+pub mod fragment;
+
+#[cfg(not(target_endian = "little"))]
+compile_error!("Only little endian supported!");
 
 #[repr(C)]
 pub struct MdfGenericHeader {
@@ -8,10 +13,10 @@ pub struct MdfGenericHeader {
     length_2: u32,
     length_3: u32,
     checksum: u32,
-    _spare: u8,
+    compression: u8,
     data_type: u8,
     header_type: u8,
-    compression: u8,
+    _spare: u8,
 }
 
 mod internal {
@@ -19,25 +24,33 @@ mod internal {
 }
 
 #[allow(private_bounds)]
-pub trait SpecificHeaderType: internal::Sealed {}
+pub trait SpecificHeaderType: internal::Sealed {
+    const HEADER_VERSION: u8;
+}
 
 #[repr(C, packed(4))]
 pub struct SingleEvent {
-    event_mask: u128,
-    run_number: u32,
-    orbit_count: u32,
-    bunch_identifier: u32,
+    pub event_mask: u128,
+    pub run_number: u32,
+    pub orbit_count: u32,
+    pub bunch_identifier: u32,
 }
 impl internal::Sealed for SingleEvent {}
-impl SpecificHeaderType for SingleEvent {}
+impl SpecificHeaderType for SingleEvent {
+    const HEADER_VERSION: u8 = 3;
+}
 
-pub struct Unknown {}
-impl internal::Sealed for Unknown {}
-impl SpecificHeaderType for Unknown {}
+pub struct Unknown<const S: u8> {}
+impl<const S: u8> internal::Sealed for Unknown<S> {}
+impl<const S: u8> SpecificHeaderType for Unknown<S> {
+    const HEADER_VERSION: u8 = S;
+}
 
 pub struct MultiPurpose {}
 impl internal::Sealed for MultiPurpose {}
-impl SpecificHeaderType for MultiPurpose {}
+impl SpecificHeaderType for MultiPurpose {
+    const HEADER_VERSION: u8 = 4;
+}
 
 pub mod multi_purpose {
     #[repr(u8)]
@@ -59,18 +72,12 @@ pub mod multi_purpose {
     }
 }
 
-pub struct MdfRecordRef<H: SpecificHeaderType, R> {
+pub struct MdfRecordRef<H: SpecificHeaderType> {
     generic_header: MdfGenericHeader,
     specific_header: H,
-    _content_type: PhantomData<R>,
 }
 
-impl<H: SpecificHeaderType, R> MdfRecordRef<H, R> {
-    pub const SINGLE_EVENT_HEADER_VERSION: u8 = 3;
-    pub const SINGLE_EVENT_HEADER_SIZE_U32: u8 = 7;
-    pub const SINGLE_EVENT_HEADER_SIZE_BYTES: usize =
-        Self::SINGLE_EVENT_HEADER_SIZE_U32 as usize * size_of::<u32>();
-
+impl<H: SpecificHeaderType> MdfRecordRef<H> {
     /// Returns the entire record length in units of `u32`.
     pub fn size_u32(&self) -> u32 {
         assert_eq!(self.generic_header.length_1, self.generic_header.length_2);
@@ -101,23 +108,63 @@ impl<H: SpecificHeaderType, R> MdfRecordRef<H, R> {
         unsafe {
             slice::from_raw_parts(
                 (self as *const Self as *const u32).byte_add(size_of_val(&self.generic_header)),
-                self.specific_header_size_bytes(),
+                self.specific_header_size_bytes() / size_of::<u32>(),
             )
         }
     }
 
-    pub fn body(&self) -> &[u8] {
+    pub fn body_bytes(&self) -> &[u8] {
+        bytemuck::cast_slice(self.body_u32())
+    }
+
+    pub fn body_u32(&self) -> &[u32] {
         let offset = size_of_val(&self.generic_header) + self.specific_header_size_bytes();
+        assert!(offset.is_multiple_of(size_of::<u32>()));
+        let offset32 = offset / size_of::<u32>();
+
         unsafe {
             slice::from_raw_parts(
-                (self as *const Self as *const u8).byte_add(offset),
-                self.size_bytes() - offset,
+                (self as *const Self as *const u32).add(offset32),
+                self.size_u32() as usize - offset32,
             )
         }
     }
 }
 
-impl<R> MdfRecordRef<MultiPurpose, R> {
+impl MdfRecordRef<SingleEvent> {
+    pub const SINGLE_EVENT_HEADER_SIZE_U32: u8 = 7;
+    // pub const SINGLE_EVENT_HEADER_SIZE_BYTES: usize =
+    //     Self::SINGLE_EVENT_HEADER_SIZE_U32 as usize * size_of::<u32>();
+    pub fn fragments(&self) -> impl Iterator<Item = &MdfFragmentRef> {
+        MdfFragmentIterator {
+            remaining_data: self.body_u32(),
+        }
+    }
+}
+
+pub struct MdfFragmentIterator<'a> {
+    remaining_data: &'a [u32],
+}
+
+impl<'a> Iterator for MdfFragmentIterator<'a> {
+    type Item = &'a MdfFragmentRef;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.remaining_data.is_empty() {
+            let ret = unsafe { MdfFragmentRef::from_raw(self.remaining_data) };
+
+            let frag_size_32 = ret.size_bytes().div_ceil(size_of::<u32>());
+
+            self.remaining_data = &self.remaining_data[frag_size_32..];
+
+            Some(ret)
+        } else {
+            None
+        }
+    }
+}
+
+impl MdfRecordRef<MultiPurpose> {
     pub fn get_multi_purpose_type(&self) -> MultiPurposeType {
         // todo move assert to constructor
         assert!(
