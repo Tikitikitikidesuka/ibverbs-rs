@@ -2,10 +2,11 @@ use infinibuilder::barrier::RdmaNetworkNodeBarrier;
 use infinibuilder::barrier::centralized::CentralizedBarrier;
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_connection::RdmaConnection;
+use infinibuilder::rdma_connection::{RdmaWorkRequest};
 use infinibuilder::rdma_network_node::{
     RdmaBarrierNetworkNode, RdmaGroupNetworkNode, RdmaNamedMemory,
-    RdmaNamedMemoryRegionNetworkNode, RdmaSendTransportNetworkNode,
+    RdmaNamedMemoryRegionNetworkNode, RdmaReceiveTransportNetworkNode,
+    RdmaSendTransportNetworkNode,
 };
 use infinibuilder::transport::basic::BasicTransport;
 use std::io::Write;
@@ -42,7 +43,6 @@ fn main() {
     )
     .unwrap();
 
-    /*
     if rank_id != 0 {
         print!("Press Enter to enter barrier...");
         std::io::stdout().flush().unwrap();
@@ -74,9 +74,7 @@ fn main() {
         .unwrap();
         println!("Barrier 2 done!!!\n\n");
     }
-    */
 
-    /*
     let transport_mr = node.local_mr(TRANSPORT_MR_ID).unwrap();
 
     match rank_id {
@@ -87,25 +85,26 @@ fn main() {
             memory[0..16].copy_from_slice((0..16).collect::<Vec<_>>().as_slice());
             node.post_send(1, &transport_mr, 0..16, None)
                 .unwrap()
-                .spin_poll_batched(Duration::from_millis(1000), 1024).unwrap();
-        },
+                .spin_poll_batched(Duration::from_millis(1000), 1024)
+                .unwrap();
+        }
         1 => {
             println!("Memory before receive: {:?}", &memory[..16]);
 
             // Receiving...
-            let mut wr = node.post_receive(0, &transport_mr, 0..16)
-                .unwrap();
+            let mut wr = node.post_receive(0, &transport_mr, 0..16).unwrap();
 
             input_sync_all(&mut node);
 
-            wr.spin_poll_batched(Duration::from_millis(1000), 1024).unwrap();
+            wr.spin_poll_batched(Duration::from_millis(1000), 1024)
+                .unwrap();
 
             println!("Memory after receive: {:?}", &memory[..16]);
-        },
+        }
         _ => {}
     }
-    */
 
+    /*
     let transport_mr = node.local_mr(TRANSPORT_MR_ID).unwrap();
 
     match rank_id {
@@ -132,12 +131,12 @@ fn main() {
         }
         _ => {}
     }
+    */
 }
 
-fn input_sync_all<Connection: RdmaConnection, NB, Node>(node: &mut Node)
+fn input_sync_all<Node>(node: &mut Node)
 where
     Node: RdmaBarrierNetworkNode + RdmaGroupNetworkNode,
-    NB: RdmaNetworkNodeBarrier<Connection>,
 {
     print!("Press Enter to enter barrier...");
     std::io::stdout().flush().unwrap();

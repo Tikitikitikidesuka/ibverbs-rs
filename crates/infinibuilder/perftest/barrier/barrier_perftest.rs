@@ -1,11 +1,10 @@
 use BarrierAlgorithm::*;
 use clap::Parser;
-use infinibuilder::barrier::RdmaNetworkNodeBarrier;
 use infinibuilder::barrier::all_enum::{AnyBarrier, AnyBarrierType};
 use infinibuilder::ibverbs::init::create_ibv_network_node;
-use infinibuilder::ibverbs::network_node::IbvNetworkNode;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_network_node::{RdmaBarrierNetworkNode, RdmaNetworkNode};
+use infinibuilder::rdma_network_node::RdmaNetworkNode;
+use infinibuilder::transport::basic::BasicTransport;
 use std::fs;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -24,8 +23,9 @@ fn main() {
         32,
         512,
         network_config,
-        Vec::<(String, *mut u8, usize)>::new(),
+        Vec::new(),
         AnyBarrier::new(args.algorithm.into()),
+        BasicTransport::new(),
     )
     .unwrap();
 
@@ -40,7 +40,7 @@ fn main() {
     }
 }
 
-fn barrier_batch<NB: RdmaNetworkNodeBarrier>(node: &mut IbvNetworkNode<NB>, args: &Args) {
+fn barrier_batch(node: &mut impl RdmaNetworkNode, args: &Args) {
     let group = node.group_all();
     node.barrier(&group, Duration::from_millis(200)).unwrap();
 

@@ -1,12 +1,12 @@
 use clap::Parser;
-use infinibuilder::barrier::RdmaNetworkNodeBarrier;
 use infinibuilder::barrier::centralized::CentralizedBarrier;
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_connection::{RdmaMemoryRegion, RdmaWorkCompletion};
+use infinibuilder::rdma_connection::RdmaWorkRequest;
 use infinibuilder::rdma_network_node::{
-    RdmaBarrierNetworkNode, RdmaNetworkNode, RdmaTransportSendReceiveNetworkNode,
+    RdmaNamedMemory, RdmaNamedMemoryRegionNetworkNode, RdmaNetworkNode,
 };
+use infinibuilder::transport::basic::BasicTransport;
 use std::fs;
 use std::ptr::slice_from_raw_parts;
 use std::time::{Duration, Instant};
@@ -41,8 +41,13 @@ fn main() {
         32,
         512,
         network_config,
-        vec![(mem_name, memory.as_mut_ptr(), memory.len())],
+        vec![RdmaNamedMemory::new(
+            mem_name,
+            memory.as_mut_ptr(),
+            memory.len(),
+        )],
         CentralizedBarrier::new(),
+        BasicTransport::new(),
     )
     .unwrap();
 
@@ -50,23 +55,23 @@ fn main() {
     for iter in 0..iters {
         match args.rank_id {
             0 => {
-                let local_mr = node.local_mr(1, mem_name).unwrap();
+                let local_mr = node.local_mr(mem_name).unwrap();
                 sender_batch(
                     iter,
                     memory.as_mut_ptr(),
                     memory.len(),
-                    local_mr,
+                    &local_mr,
                     &mut node,
                     &args,
                 )
             }
             1 => {
-                let local_mr = node.local_mr(0, mem_name).unwrap();
+                let local_mr = node.local_mr(mem_name).unwrap();
                 receiver_batch(
                     iter,
                     memory.as_mut_ptr(),
                     memory.len(),
-                    local_mr,
+                    &local_mr,
                     &mut node,
                     &args,
                 )
@@ -76,15 +81,12 @@ fn main() {
     }
 }
 
-fn sender_batch<
-    NB: RdmaNetworkNodeBarrier,
-    Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
->(
+fn sender_batch<NetworkNode: RdmaNetworkNode>(
     iter: usize,
     mem_address: *mut u8,
     mem_length: usize,
-    mr: RdmaMemoryRegion,
-    node: &mut Node,
+    mr: &NetworkNode::MemoryRegion,
+    node: &mut NetworkNode,
     args: &Args,
 ) {
     // Initialize memory for correctness check later on
@@ -104,7 +106,7 @@ fn sender_batch<
         node.barrier(&node.group_all(), Duration::from_millis(1000))
             .unwrap();
         let mut wr = node
-            .send(
+            .post_send(
                 1,
                 mr,
                 (i * args.message_size)..((i + 1) * args.message_size),
@@ -130,15 +132,12 @@ fn sender_batch<
     println!("pps: {pps:.2}, gbps: {gbps:.2}");
 }
 
-fn receiver_batch<
-    NB: RdmaNetworkNodeBarrier,
-    Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
->(
+fn receiver_batch<NetworkNode: RdmaNetworkNode>(
     iter: usize,
     mem_address: *mut u8,
     mem_length: usize,
-    mr: RdmaMemoryRegion,
-    node: &mut Node,
+    mr: &NetworkNode::MemoryRegion,
+    node: &mut NetworkNode,
     args: &Args,
 ) {
     // Notify sender to start
@@ -149,7 +148,7 @@ fn receiver_batch<
     // Receive all batches
     for i in 0..args.batch_size {
         let mut wr = node
-            .receive(
+            .post_receive(
                 0,
                 mr,
                 (i * args.message_size)..((i + 1) * args.message_size),
