@@ -1,30 +1,37 @@
 use crate::barrier::{
-    MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
-    RdmaNetworkMemoryRegionComponent,
+    NonMatchingMemoryRegionCount, RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
 };
-use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
-use crate::rdma_network_node::{RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
+use crate::rdma_connection::{RdmaConnection, RdmaRemoteMemoryRegionConnection, RdmaWorkRequest};
+use crate::rdma_network_node::{
+    MemoryRegionPair, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnection,
+    RdmaNetworkSelfGroupConnections,
+};
 use crate::spin_poll::spin_poll_timeout_batched;
 use Direction::*;
+use derivative::Derivative;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
 
-#[derive(Debug)]
-pub struct UnregisteredDisseminationBarrier<MR, RMR> {
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct UnregisteredDisseminationBarrier<Connection: RdmaConnection> {
     memory: Vec<u8>,
-    phantom: PhantomData<(MR, RMR)>,
+    #[derivative(Debug = "ignore")]
+    phantom: PhantomData<Connection>,
 }
 
-#[derive(Debug)]
-pub struct DisseminationBarrier<MR, RMR> {
+#[derive(Derivative)]
+#[derivative(Debug)]
+pub struct DisseminationBarrier<Connection: RdmaConnection> {
     memory: Vec<u8>,
-    mrs: Vec<MemoryRegionPair<MR, RMR>>,
+    #[derivative(Debug = "ignore")]
+    mrs: Vec<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
 }
 
-impl<MR, RMR> DisseminationBarrier<MR, RMR> {
-    pub fn new() -> UnregisteredDisseminationBarrier<MR, RMR> {
+impl<Connection: RdmaConnection> DisseminationBarrier<Connection> {
+    pub fn new() -> UnregisteredDisseminationBarrier<Connection> {
         UnregisteredDisseminationBarrier {
             memory: vec![],
             phantom: Default::default(),
@@ -58,15 +65,18 @@ fn setup_memory(num_connections: usize) -> Vec<u8> {
         .collect()
 }
 
-impl<MR, RMR> UnregisteredDisseminationBarrier<MR, RMR> {
+impl<Connection: RdmaConnection> UnregisteredDisseminationBarrier<Connection> {
     fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
         let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
         (ptr, BYTES_PER_CONNECTION)
     }
 }
 
-impl<MR, RMR> DisseminationBarrier<MR, RMR> {
-    fn connection_mr(&self, rank_id: usize) -> &MemoryRegionPair<MR, RMR> {
+impl<Connection: RdmaConnection> DisseminationBarrier<Connection> {
+    fn connection_mr(
+        &self,
+        rank_id: usize,
+    ) -> &MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion> {
         &self.mrs[rank_id]
     }
 
@@ -107,10 +117,11 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
     }
 }
 
-impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
-    for UnregisteredDisseminationBarrier<MR, RMR>
+impl<Connection: RdmaConnection>
+    RdmaNetworkMemoryRegionComponent<Connection::MemoryRegion, Connection::RemoteMemoryRegion>
+    for UnregisteredDisseminationBarrier<Connection>
 {
-    type Registered = DisseminationBarrier<MR, RMR>;
+    type Registered = DisseminationBarrier<Connection>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
@@ -125,7 +136,9 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
 
     fn registered_mrs(
         self,
-        mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
+        mrs: Option<
+            Vec<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
+        >,
     ) -> Result<Self::Registered, Self::RegisterError> {
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;
         if let Some(mrs) = mrs {
@@ -149,13 +162,14 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR>
     }
 }
 
-impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for DisseminationBarrier<MR, RMR> {
-    type Error = RdmaNetworkBarrierError;
+impl<Connection: RdmaConnection> RdmaNetworkNodeBarrier<Connection>
+    for DisseminationBarrier<Connection>
+{
+    type Error = RdmaNetworkNodeBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &mut self,
         mut connections: GroupConns,
@@ -178,17 +192,16 @@ enum Direction {
     Left,
 }
 
-impl<MR, RMR> DisseminationBarrier<MR, RMR> {
+impl<Connection: RdmaConnection> DisseminationBarrier<Connection> {
     fn barrier_round<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &mut self,
         distance: usize,
         connections: &mut GroupConns,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkBarrierError> {
+    ) -> Result<Duration, RdmaNetworkNodeBarrierError> {
         let mut available_time = timeout;
 
         let right_idx = self.distance_idx(connections, distance, Right);
@@ -219,8 +232,7 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
 
     fn distance_idx<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &self,
         connections: &GroupConns,
@@ -237,22 +249,24 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
 
     fn wait_for_peer<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &mut self,
         idx: usize,
         connections: &GroupConns,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkBarrierError> {
+    ) -> Result<Duration, RdmaNetworkNodeBarrierError> {
         let peer_rank_id = connections.rank_id(idx).unwrap();
         let (_, elapsed) = spin_poll_timeout_batched(
-            || (self.read_remote_peer_flag(peer_rank_id) == READY_FLAG).then_some(()),
+            || match self.read_remote_peer_flag(peer_rank_id) == READY_FLAG {
+                true => Ok(()),
+                false => Err(()),
+            },
             timeout,
             1024,
         )
         .map_err(|_| {
-            RdmaNetworkBarrierError::Timeout(format!(
+            RdmaNetworkNodeBarrierError::Timeout(format!(
                 "Timeout waiting for {peer_rank_id:?} notification"
             ))
         })?;
@@ -262,14 +276,13 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
 
     fn notify_peer<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &mut self,
         idx: usize,
         connections: &mut GroupConns,
         timeout: Duration,
-    ) -> Result<Duration, RdmaNetworkBarrierError> {
+    ) -> Result<Duration, RdmaNetworkNodeBarrierError> {
         let peer_conn = connections.connection_mut(idx);
         if let Some(RdmaNetworkSelfGroupConnection::PeerConnection(peer_rank_id, conn)) = peer_conn
         {
@@ -283,12 +296,12 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
                     None,
                 )
                 .map_err(|error| {
-                    RdmaNetworkBarrierError::RdmaError(format!(
+                    RdmaNetworkNodeBarrierError::RdmaError(format!(
                         "Error issuing RDMA write to {peer_rank_id:?}: {error}"
                     ))
                 })?;
             let (_, elapsed) = wr.spin_poll_batched(timeout, 1024).map_err(|error| {
-                RdmaNetworkBarrierError::RdmaError(format!(
+                RdmaNetworkNodeBarrierError::RdmaError(format!(
                     "Error during RDMA write to left child: {error}"
                 ))
             })?;

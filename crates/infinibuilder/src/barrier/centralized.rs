@@ -13,17 +13,21 @@ use crate::spin_poll::spin_poll_timeout_batched;
 use std::marker::PhantomData;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
+use derivative::Derivative;
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct UnregisteredCentralizedBarrier<Connection: RdmaConnection> {
     memory: Vec<u8>,
-    phantom_data:
-        PhantomData<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
+    #[derivative(Debug = "ignore")]
+    phantom_data: PhantomData<Connection>,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct CentralizedBarrier<Connection: RdmaConnection> {
     memory: Vec<u8>,
+    #[derivative(Debug = "ignore")]
     mrs: Vec<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
 }
 
@@ -108,7 +112,9 @@ impl<Connection: RdmaConnection>
     }
 }
 
-impl<Connection: RdmaConnection> RdmaNetworkNodeBarrier<Connection> for CentralizedBarrier<Connection> {
+impl<Connection: RdmaConnection> RdmaNetworkNodeBarrier<Connection>
+    for CentralizedBarrier<Connection>
+{
     type Error = RdmaNetworkNodeBarrierError;
 
     fn barrier<
@@ -123,11 +129,9 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeBarrier<Connection> for Centrali
 
         if idx == 0 {
             // Coordinator
-            println!("Running coordinator");
             self.coordinator_barrier(connections, timeout)
         } else {
             // Coordinated
-            println!("Running coordinated");
             self.coordinated_barrier(connections, timeout)
         }
     }
@@ -209,7 +213,6 @@ impl<Connection: RdmaConnection> CentralizedBarrier<Connection> {
             if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, _) =
                 connections.connection_mut(idx).unwrap()
             {
-                println!("Waiting for peer {idx}");
                 available_time -= self.wait_for_peer(rank_id, available_time)?;
             }
         }
@@ -219,7 +222,6 @@ impl<Connection: RdmaConnection> CentralizedBarrier<Connection> {
             if let RdmaNetworkSelfGroupConnection::PeerConnection(rank_id, conn) =
                 connections.connection_mut(idx).unwrap()
             {
-                println!("Notifying peer {idx}");
                 available_time -= self.notify_peer(rank_id, conn, available_time)?;
             }
         }
@@ -241,9 +243,7 @@ impl<Connection: RdmaConnection> CentralizedBarrier<Connection> {
             panic!("Coordinator must be at group index 0");
         };
 
-        println!("Notifying peer");
         let elapsed = self.notify_peer(rank_id, conn, timeout)?;
-        println!("Waiting for peer");
         self.wait_for_peer(rank_id, timeout - elapsed)?;
         Ok(())
     }

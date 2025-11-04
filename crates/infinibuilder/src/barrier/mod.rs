@@ -1,7 +1,7 @@
-//pub mod all_enum;
-//pub mod binary_tree;
+pub mod all_enum;
+pub mod binary_tree;
 pub mod centralized;
-//pub mod dissemination;
+pub mod dissemination;
 
 use crate::rdma_connection::RdmaConnection;
 use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;

@@ -2,26 +2,27 @@ use crate::barrier::binary_tree::{BinaryTreeBarrier, UnregisteredBinaryTreeBarri
 use crate::barrier::centralized::{CentralizedBarrier, UnregisteredCentralizedBarrier};
 use crate::barrier::dissemination::{DisseminationBarrier, UnregisteredDisseminationBarrier};
 use crate::barrier::{
-    MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkBarrierError,
-    RdmaNetworkMemoryRegionComponent,
+    NonMatchingMemoryRegionCount, RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
 };
 use crate::rdma_connection::RdmaConnection;
-use crate::rdma_network_node::RdmaNetworkSelfGroupConnections;
+use crate::rdma_network_node::{
+    MemoryRegionPair, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnections,
+};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[derive(Debug)]
-pub enum AnyUnregisteredBarrier<MR, RMR> {
-    Centralized(UnregisteredCentralizedBarrier<MR, RMR>),
-    BinaryTree(UnregisteredBinaryTreeBarrier<MR, RMR>),
-    Dissemination(UnregisteredDisseminationBarrier<MR, RMR>),
+pub enum AnyUnregisteredBarrier<Connection: RdmaConnection> {
+    Centralized(UnregisteredCentralizedBarrier<Connection>),
+    BinaryTree(UnregisteredBinaryTreeBarrier<Connection>),
+    Dissemination(UnregisteredDisseminationBarrier<Connection>),
 }
 
 #[derive(Debug)]
-pub enum AnyBarrier<MR, RMR> {
-    Centralized(CentralizedBarrier<MR, RMR>),
-    BinaryTree(BinaryTreeBarrier<MR, RMR>),
-    Dissemination(DisseminationBarrier<MR, RMR>),
+pub enum AnyBarrier<Connection: RdmaConnection> {
+    Centralized(CentralizedBarrier<Connection>),
+    BinaryTree(BinaryTreeBarrier<Connection>),
+    Dissemination(DisseminationBarrier<Connection>),
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -31,8 +32,11 @@ pub enum AnyBarrierType {
     Dissemination,
 }
 
-impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarrier<MR, RMR> {
-    type Registered = AnyBarrier<MR, RMR>;
+impl<Connection: RdmaConnection>
+    RdmaNetworkMemoryRegionComponent<Connection::MemoryRegion, Connection::RemoteMemoryRegion>
+    for AnyUnregisteredBarrier<Connection>
+{
+    type Registered = AnyBarrier<Connection>;
     type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
@@ -43,7 +47,12 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarri
         }
     }
 
-    fn registered_mrs(self, mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(
+        self,
+        mrs: Option<
+            Vec<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
+        >,
+    ) -> Result<Self::Registered, Self::RegisterError> {
         match self {
             AnyUnregisteredBarrier::Centralized(barrier) => {
                 Ok(AnyBarrier::Centralized(barrier.registered_mrs(mrs)?))
@@ -58,29 +67,28 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for AnyUnregisteredBarri
     }
 }
 
-impl<MR, RMR> AnyBarrier<MR, RMR> {
-    pub fn new(barrier_type: AnyBarrierType) -> AnyUnregisteredBarrier<MR, RMR> {
+impl<Connection: RdmaConnection> AnyBarrier<Connection> {
+    pub fn new(barrier_type: AnyBarrierType) -> AnyUnregisteredBarrier<Connection> {
         match barrier_type {
             AnyBarrierType::Centralized => {
-                AnyUnregisteredBarrier::Centralized(CentralizedBarrier::<MR, RMR>::new())
+                AnyUnregisteredBarrier::Centralized(CentralizedBarrier::<Connection>::new())
             }
             AnyBarrierType::BinaryTree => {
-                AnyUnregisteredBarrier::BinaryTree(BinaryTreeBarrier::<MR, RMR>::new())
+                AnyUnregisteredBarrier::BinaryTree(BinaryTreeBarrier::<Connection>::new())
             }
             AnyBarrierType::Dissemination => {
-                AnyUnregisteredBarrier::Dissemination(DisseminationBarrier::<MR, RMR>::new())
+                AnyUnregisteredBarrier::Dissemination(DisseminationBarrier::<Connection>::new())
             }
         }
     }
 }
 
-impl<MR, RMR> RdmaNetworkBarrier<MR, RMR> for AnyBarrier<MR, RMR> {
-    type Error = RdmaNetworkBarrierError;
+impl<Connection: RdmaConnection> RdmaNetworkNodeBarrier<Connection> for AnyBarrier<Connection> {
+    type Error = RdmaNetworkNodeBarrierError;
 
     fn barrier<
         'network,
-        Conn: RdmaConnection<MR, RMR> + 'network,
-        GroupConns: RdmaNetworkSelfGroupConnections<'network, MR, RMR, Conn>,
+        GroupConns: RdmaNetworkSelfGroupConnections<'network, Connection = Connection>,
     >(
         &mut self,
         connections: GroupConns,
