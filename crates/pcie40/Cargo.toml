@@ -5,7 +5,7 @@ edition = "2024"
 description = "Safe Rust PCIe40 bindings wrapper for the LHCb Event Builder"
 
 [dependencies]
-thiserror = "2.0.12"
+thiserror.workspace = true
 tracing = "0.1.41"
 alignment-utils = { path = "../alignment-utils" }
 circular-buffer = { path = "../circular-buffer" }

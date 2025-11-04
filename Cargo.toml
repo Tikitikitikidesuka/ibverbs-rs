@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/alignment-utils", "crates/circular-buffer", "crates/mock-buffers", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
+members = ["crates/*"]
+
+[workspace.dependencies]
+thiserror = "2.0"
 
 [package]
 name = "rusteb"
@@ -9,12 +12,15 @@ edition = "2024"
 description = "LHCb Event Builder in Rust"
 
 [dependencies]
-thiserror = "2.0.12"
+thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
 alignment-utils = { path = "crates/alignment-utils" }
 circular-buffer = { path = "crates/circular-buffer" }
 shared-memory-buffer = { path = "crates/shared-memory-buffer" }
-multi-fragment-packet = { path = "crates/multi-fragment-packet", features = ["pcie40-io", "shmem-io"] }
+multi-fragment-packet = { path = "crates/multi-fragment-packet", features = [
+    "pcie40-io",
+    "shmem-io",
+] }
 # Setting feature "release_max_level_info" makes sure compiled release binaries
 # do not contain traces on levels higher than Info. Its important for performance.
 tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
@@ -36,5 +42,3 @@ path = "bin/pcie40_to_shmem_receiver.rs"
 [[bin]]
 name = "mock_pcie40_to_shmem_reader"
 path = "bin/mock_pcie40_to_shmem_reader.rs"
-
-

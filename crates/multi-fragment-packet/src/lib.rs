@@ -8,7 +8,7 @@ pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
 
-use alignment_utils;
+use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
 use std::ops::Deref;
@@ -20,13 +20,20 @@ impl MultiFragmentPacketRef {
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
 
+/// Type of a source id.
+pub type SourceId = u16;
+
+#[cfg(not(target_endian = "little"))]
+compile_error!("Only little endian supported!");
+
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 pub struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
     event_id: u64,
-    source_id: u16,
+    source_id: SourceId,
     align: u8,
     fragment_version: u8,
 }
@@ -36,6 +43,14 @@ pub struct MultiFragmentPacket {
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
+}
+
+impl MultiFragmentPacket {
+    /// # Safety
+    /// Vec needs to contain a valid [`MultiFragmentPacket`].
+    pub unsafe fn from_data(data: Vec<u8>) -> Self {
+        Self { data }
+    }
 }
 
 #[repr(C, packed)]
@@ -59,6 +74,22 @@ impl Deref for MultiFragmentPacket {
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
+    }
+}
+
+impl ToOwned for MultiFragmentPacketRef {
+    type Owned = MultiFragmentPacket;
+
+    fn to_owned(&self) -> Self::Owned {
+        Self::Owned {
+            data: self.raw_packet_data().to_vec(),
+        }
+    }
+}
+
+impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
+    fn borrow(&self) -> &MultiFragmentPacketRef {
+        self
     }
 }
 
@@ -95,7 +126,7 @@ impl Fragment {
         &self.data
     }
 
-    pub fn as_fragment_ref(&self) -> FragmentRef {
+    pub fn as_fragment_ref(&self) -> FragmentRef<'_> {
         FragmentRef {
             fragment_type: self.fragment_type,
             fragment_size: self.fragment_size,
@@ -193,6 +224,7 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().fragment_count }
     }
 
+    /// Packet size **in byets** including header.
     pub fn packet_size(&self) -> u32 {
         unsafe { self.header().packet_size }
     }
@@ -201,7 +233,7 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().event_id }
     }
 
-    pub fn source_id(&self) -> u16 {
+    pub fn source_id(&self) -> SourceId {
         unsafe { self.header().source_id }
     }
 
@@ -239,11 +271,11 @@ impl MultiFragmentPacketRef {
     }
 
     /// No random access, O(n)
-    pub fn fragment(&self, index: usize) -> Option<FragmentRef> {
+    pub fn fragment(&self, index: usize) -> Option<FragmentRef<'_>> {
         self.iter().nth(index)
     }
 
-    pub fn iter(&self) -> MultiFragmentPacketIter {
+    pub fn iter(&self) -> MultiFragmentPacketIter<'_> {
         MultiFragmentPacketIter {
             packet: self,
             offset: 0,
@@ -322,7 +354,7 @@ impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
 impl Debug for MultiFragmentPacketRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MultiFragmentPacketRef")
-            .field("magic", &format!("0x{:04X}", self.magic()))
+            .field("magic", &format!("{:#04X}", self.magic()))
             .field("fragment_count", &self.fragment_count())
             .field("packet_size", &self.packet_size())
             .field("event_id", &self.event_id())
@@ -378,12 +410,31 @@ impl Display for FragmentRef<'_> {
 mod bincode {
     use super::*;
     use ::bincode;
+    use bincode::{de::read::Reader, enc::write::Writer};
     impl bincode::Decode<()> for MultiFragmentPacket {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            let vec = Vec::from(Box::<[u8]>::decode(decoder)?);
-            Ok(Self { data: vec })
+            const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+
+            let mut bytes: [u8; HEADER_SIZE] = Default::default();
+            decoder.reader().read(&mut bytes)?;
+
+            let header = unsafe { &*(bytes.as_ptr() as *const MultiFragmentPacketHeader) };
+
+            if header.magic != MultiFragmentPacketRef::VALID_MAGIC {
+                let magic = header.magic;
+                return Err(bincode::error::DecodeError::OtherString(format!(
+                    "Invalid magic number for `MultiEventPacket`: got {magic:#04X} but expected {:#04X}",
+                    MultiFragmentPacketRef::VALID_MAGIC
+                )));
+            }
+
+            let mut data = vec![0u8; header.packet_size as usize];
+            data[0..HEADER_SIZE].copy_from_slice(&bytes);
+            decoder.reader().read(&mut data[HEADER_SIZE..])?;
+
+            Ok(Self { data })
         }
     }
 
@@ -392,7 +443,7 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.data.as_slice().encode(encoder)
+            self.as_ref().encode(encoder)
         }
     }
 
@@ -401,7 +452,7 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.raw_packet_data().encode(encoder)
+            encoder.writer().write(self.raw_packet_data())
         }
     }
 
@@ -411,7 +462,10 @@ mod bincode {
         ) -> Result<Self, bincode::error::DecodeError> {
             let fragment_type = bincode::Decode::decode(decoder)?;
             let fragment_size = bincode::Decode::decode(decoder)?;
-            let data = Vec::from(Box::<[u8]>::decode(decoder)?);
+
+            let mut data = vec![0u8; fragment_size as _];
+            decoder.reader().read(&mut data)?;
+
             Ok(Self {
                 fragment_type,
                 fragment_size,
@@ -427,7 +481,7 @@ mod bincode {
         ) -> Result<(), bincode::error::EncodeError> {
             self.fragment_type.encode(encoder)?;
             self.fragment_size.encode(encoder)?;
-            self.data().encode(encoder)
+            encoder.writer().write(self.data())
         }
     }
 
@@ -438,7 +492,7 @@ mod bincode {
         ) -> Result<(), bincode::error::EncodeError> {
             self.fragment_type.encode(encoder)?;
             self.fragment_size.encode(encoder)?;
-            self.data.encode(encoder)
+            encoder.writer().write(self.data())
         }
     }
 }

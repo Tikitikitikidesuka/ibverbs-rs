@@ -1,0 +1,13 @@
+[package]
+name = "multi-event-packet"
+version = "0.1.1"
+edition = "2024"
+
+[dependencies]
+multi-fragment-packet = { path = "../multi-fragment-packet" }
+bincode = { version = "2.0.1", optional = true }
+thiserror.workspace = true
+tracing = "0.1.41"
+
+[features]
+bincode = ["dep:bincode"]

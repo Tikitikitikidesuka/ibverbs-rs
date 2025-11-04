@@ -1,7 +1,6 @@
 use crate::bindings::*;
 use crate::stream::mapped_stream::PCIe40MappedStream;
 use crate::stream::stream::{PCIe40Stream, PCIe40StreamError};
-use std::mem::ManuallyDrop;
 use std::slice;
 use tracing::instrument;
 use tracing::{debug, trace, warn};

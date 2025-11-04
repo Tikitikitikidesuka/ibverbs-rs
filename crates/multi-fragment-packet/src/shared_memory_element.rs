@@ -33,7 +33,7 @@ impl ReadableSharedMemoryBufferElement for MultiFragmentPacketRef {
             return Err(SharedMemoryTypedReadError::CorruptData);
         }
 
-        Ok(&mfp)
+        Ok(mfp)
     }
 
     fn check_wrap_flag(bytes: &[u8]) -> Result<bool, SharedMemoryTypedReadError> {

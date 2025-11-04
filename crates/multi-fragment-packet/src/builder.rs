@@ -1,5 +1,4 @@
 use crate::{Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
-use alignment_utils;
 use std::marker::PhantomData;
 
 pub struct MagicDefault;
