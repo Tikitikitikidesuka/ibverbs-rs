@@ -1,7 +1,7 @@
-use crate::barrier::RdmaNetworkBarrier;
+use crate::barrier::RdmaNetworkNodeBarrier;
 use crate::rdma_connection::{
-    RdmaConnection, RdmaImmediateDataReceiveConnection, RdmaImmediateDataSendConnection,
-    RdmaWorkCompletion, RdmaWorkRequest,
+    RdmaConnection, RdmaPostReceiveImmediateDataConnection, RdmaPostSendImmediateDataConnection,
+    RdmaWorkRequest,
 };
 use std::error::Error;
 use std::ops::RangeBounds;
@@ -14,12 +14,12 @@ pub trait RdmaNetworkNode:
     + RdmaNamedMemoryRegionNetworkNode
     + RdmaGroupNetworkNode
     + RdmaBarrierNetworkNode
-    + RdmaTransportSendNetworkNode
-    + RdmaTransportReceiveNetworkNode
-    + RdmaTransportReadNetworkNode
-    + RdmaTransportWriteNetworkNode
-    + RdmaImmediateDataSendConnection
-    + RdmaImmediateDataReceiveConnection
+    + RdmaSendTransportNetworkNode
+    + RdmaReceiveTransportNetworkNode
+    + RdmaReadTransportNetworkNode
+    + RdmaWriteTransportNetworkNode
+    + RdmaSendImmediateDataTransportNetworkNode
+    + RdmaReceiveImmediateDataTransportNetworkNode
 {
 }
 
@@ -31,12 +31,12 @@ impl<NetworkNode> RdmaNetworkNode for NetworkNode where
         + RdmaNamedMemoryRegionNetworkNode
         + RdmaGroupNetworkNode
         + RdmaBarrierNetworkNode
-        + RdmaTransportSendNetworkNode
-        + RdmaTransportReceiveNetworkNode
-        + RdmaTransportReadNetworkNode
-        + RdmaTransportWriteNetworkNode
-        + RdmaImmediateDataSendConnection
-        + RdmaImmediateDataReceiveConnection
+        + RdmaSendTransportNetworkNode
+        + RdmaReceiveTransportNetworkNode
+        + RdmaReadTransportNetworkNode
+        + RdmaWriteTransportNetworkNode
+        + RdmaSendImmediateDataTransportNetworkNode
+        + RdmaReceiveImmediateDataTransportNetworkNode
 {
 }
 
@@ -83,8 +83,10 @@ pub trait RdmaNamedRemoteMemoryRegionNetworkNode: RdmaRemoteMemoryRegionNetworkN
     fn remote_mr(&self, id: impl AsRef<str>) -> Option<Self::RemoteMemoryRegion>;
 }
 
-pub trait RdmaTransportSendNetworkNode: RdmaMemoryRegionNetworkNode {
-    type WR: RdmaWorkRequest;
+pub trait RdmaSendTransportNetworkNode:
+    RdmaMemoryRegionNetworkNode
+{
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_send(
@@ -93,11 +95,13 @@ pub trait RdmaTransportSendNetworkNode: RdmaMemoryRegionNetworkNode {
         memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
-pub trait RdmaTransportReceiveNetworkNode: RdmaMemoryRegionNetworkNode {
-    type WR: RdmaWorkRequest;
+pub trait RdmaReceiveTransportNetworkNode:
+    RdmaMemoryRegionNetworkNode
+{
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_receive(
@@ -105,13 +109,13 @@ pub trait RdmaTransportReceiveNetworkNode: RdmaMemoryRegionNetworkNode {
         peer_rank_id: usize,
         memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
-pub trait RdmaTransportWriteNetworkNode:
+pub trait RdmaWriteTransportNetworkNode:
     RdmaMemoryRegionNetworkNode + RdmaRemoteMemoryRegionNetworkNode
 {
-    type WR: RdmaWorkRequest;
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_write(
@@ -122,13 +126,13 @@ pub trait RdmaTransportWriteNetworkNode:
         remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
-pub trait RdmaTransportReadNetworkNode:
+pub trait RdmaReadTransportNetworkNode:
     RdmaMemoryRegionNetworkNode + RdmaRemoteMemoryRegionNetworkNode
 {
-    type WR: RdmaWorkRequest;
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_read(
@@ -138,28 +142,28 @@ pub trait RdmaTransportReadNetworkNode:
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
-pub trait RdmaTransportImmediateDataSendNetworkNode {
-    type WR: RdmaWorkRequest;
+pub trait RdmaSendImmediateDataTransportNetworkNode {
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_send_immediate_data(
         &mut self,
         peer_rank_id: usize,
         immediate_data: u32,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
-pub trait RdmaTransportImmediateDataReceiveNetworkNode {
-    type WR: RdmaWorkRequest;
+pub trait RdmaReceiveImmediateDataTransportNetworkNode {
+    type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
     fn post_receive_immediate_data(
         &mut self,
         peer_rank_id: usize,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 #[derive(Debug, Clone)]
@@ -223,15 +227,15 @@ pub trait RdmaNetworkSelfGroup: RdmaNetworkGroup {
 }
 
 pub trait RdmaNetworkGroupConnections<'network>: RdmaNetworkGroup {
-    type Conn: RdmaConnection;
+    type Connection: RdmaConnection;
 
-    fn connection_mut(&mut self, idx: usize) -> Option<&'network mut Self::Conn>;
+    fn connection_mut(&mut self, idx: usize) -> Option<&'network mut Self::Connection>;
 }
 
 pub trait RdmaNetworkSelfGroupConnections<'network>: RdmaNetworkSelfGroup {
-    type Conn: RdmaConnection;
+    type Connection: RdmaConnection;
 
-    fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Self::Conn>>;
+    fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Self::Connection>>;
 }
 
 pub enum RdmaNetworkSelfGroupConnection<'network, Conn> {

@@ -2,8 +2,10 @@ use crate::ibverbs::Named;
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
 use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
-    RdmaConnection, RdmaImmediateDataConnection, RdmaNamedMemoryRegionConnection,
-    RdmaReadWriteConnection, RdmaSendReceiveConnection,
+    RdmaMemoryRegionConnection, RdmaNamedMemoryRegionConnection,
+    RdmaNamedRemoteMemoryRegionConnection, RdmaPostReadConnection,
+    RdmaPostReceiveConnection, RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
+    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection,
 };
 use crate::rdma_network_node::RdmaNamedMemory;
 use derivative::Derivative;
@@ -12,10 +14,9 @@ use ibverbs::{
     QueuePairEndpoint, RemoteMemoryRegion,
 };
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -120,7 +121,9 @@ impl<IbvDevName, Mrs> IbvConnectionBuilder<IbvDevName, (), Mrs> {
 }
 
 impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, ()> {
-    pub fn lock_clone(self) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
+    pub fn lock_clone(
+        self,
+    ) -> IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRegions> {
         IbvConnectionBuilder {
             ibv_device_name: self.ibv_device_name,
             cq_params: self.cq_params,
@@ -400,11 +403,21 @@ impl IbvConnection {
     }
 }
 
-impl RdmaNamedMemoryRegionConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConnection {
+impl RdmaMemoryRegionConnection for IbvConnection {
+    type MemoryRegion = IbvMemoryRegion;
+}
+
+impl RdmaRemoteMemoryRegionConnection for IbvConnection {
+    type RemoteMemoryRegion = IbvRemoteMemoryRegion;
+}
+
+impl RdmaNamedMemoryRegionConnection for IbvConnection {
     fn local_mr(&self, id: impl AsRef<str>) -> Option<IbvMemoryRegion> {
         self.local_mrs.get(id.as_ref()).cloned()
     }
+}
 
+impl RdmaNamedRemoteMemoryRegionConnection for IbvConnection {
     fn remote_mr(&self, id: impl AsRef<str>) -> Option<IbvRemoteMemoryRegion> {
         self.remote_mrs.get(id.as_ref()).cloned()
     }
@@ -418,16 +431,16 @@ pub enum IbvPostError {
     InvalidRemoteMemoryRegion,
 }
 
-impl RdmaSendReceiveConnection<IbvMemoryRegion> for IbvConnection {
+impl RdmaPostSendConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
     type PostError = std::io::Error;
-    type WR = IbvWorkRequest;
 
     fn post_send(
         &mut self,
         memory_region: &IbvMemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
         unsafe {
             self.qp.post_send(
@@ -438,12 +451,17 @@ impl RdmaSendReceiveConnection<IbvMemoryRegion> for IbvConnection {
         }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
+}
+
+impl RdmaPostReceiveConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_receive(
         &mut self,
         memory_region: &IbvMemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
         unsafe {
             self.qp
@@ -453,9 +471,9 @@ impl RdmaSendReceiveConnection<IbvMemoryRegion> for IbvConnection {
     }
 }
 
-impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConnection {
+impl RdmaPostWriteConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
     type PostError = std::io::Error;
-    type WR = IbvWorkRequest;
 
     fn post_write(
         &mut self,
@@ -464,7 +482,7 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
         remote_memory_region: &IbvRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let local_mr_slice = local_memory_region.mr.data.slice(local_memory_range);
         let remote_mr_slice = remote_memory_region.mr.data.slice(remote_memory_range);
 
@@ -473,6 +491,11 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
             .post_write(&[local_mr_slice], remote_mr_slice, wr_id, immediate_data)?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
+}
+
+impl RdmaPostReadConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_read(
         &mut self,
@@ -480,7 +503,7 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &IbvRemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let local_mr_slice = local_memory_region.mr.data.slice(local_memory_range);
         let remote_mr_slice = remote_memory_region.mr.data.slice(remote_memory_range);
 
@@ -491,20 +514,25 @@ impl RdmaReadWriteConnection<IbvMemoryRegion, IbvRemoteMemoryRegion> for IbvConn
     }
 }
 
-impl RdmaImmediateDataConnection for IbvConnection {
+impl RdmaPostSendImmediateDataConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
     type PostError = std::io::Error;
-    type WR = IbvWorkRequest;
 
     fn post_send_immediate_data(
         &mut self,
         immediate_data: u32,
-    ) -> Result<Self::WR, Self::PostError> {
+    ) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
         unsafe { self.qp.post_send(&[], wr_id, Some(immediate_data)) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))
     }
+}
 
-    fn post_receive_immediate_data(&mut self) -> Result<Self::WR, Self::PostError> {
+impl RdmaPostReceiveImmediateDataConnection for IbvConnection {
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
+
+    fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
         unsafe { self.qp.post_receive(&[], wr_id) }?;
         Ok(IbvWorkRequest::new(wr_id, self.cq.clone()))

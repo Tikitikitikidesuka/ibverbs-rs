@@ -4,7 +4,7 @@ use crate::barrier::{
 };
 use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::rdma_network_node::{RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
-use crate::spin_poll::spin_poll_batched;
+use crate::spin_poll::spin_poll_timeout_batched;
 use Direction::*;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
@@ -246,7 +246,7 @@ impl<MR, RMR> DisseminationBarrier<MR, RMR> {
         timeout: Duration,
     ) -> Result<Duration, RdmaNetworkBarrierError> {
         let peer_rank_id = connections.rank_id(idx).unwrap();
-        let (_, elapsed) = spin_poll_batched(
+        let (_, elapsed) = spin_poll_timeout_batched(
             || (self.read_remote_peer_flag(peer_rank_id) == READY_FLAG).then_some(()),
             timeout,
             1024,

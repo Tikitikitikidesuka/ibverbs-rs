@@ -1,6 +1,6 @@
 use infinibuilder::ibverbs::connection::IbvConnectionBuilder;
-use infinibuilder::rdma_connection::{RdmaConnection, RdmaWorkRequest, RdmaWorkRequestStatus};
-use infinibuilder::spin_poll::spin_poll_batched;
+use infinibuilder::rdma_connection::{RdmaConnection, RdmaWorkCompletion, RdmaWorkRequestStatus};
+use infinibuilder::spin_poll::spin_poll_timeout_batched;
 use std::time::Duration;
 
 fn main() {
@@ -66,7 +66,7 @@ fn main() {
         let rmr = conn.remote_mr(mem_id).unwrap();
         let mut wr = conn.post_send_immediate_data(42).unwrap();
 
-        let wc_result = spin_poll_batched(
+        let wc_result = spin_poll_timeout_batched(
             || match wr.poll().unwrap() {
                 RdmaWorkRequestStatus::Pending => None,
                 RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
@@ -84,7 +84,7 @@ fn main() {
     } else {
         let mut wr = conn.post_receive_immediate_data().unwrap();
 
-        let wc_result = spin_poll_batched(
+        let wc_result = spin_poll_timeout_batched(
             || match wr.poll().unwrap() {
                 RdmaWorkRequestStatus::Pending => None,
                 RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),

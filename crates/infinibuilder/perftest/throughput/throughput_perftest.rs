@@ -1,9 +1,9 @@
 use clap::Parser;
-use infinibuilder::barrier::RdmaNetworkBarrier;
+use infinibuilder::barrier::RdmaNetworkNodeBarrier;
 use infinibuilder::barrier::centralized::CentralizedBarrier;
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
-use infinibuilder::rdma_connection::{RdmaMemoryRegion, RdmaWorkRequest};
+use infinibuilder::rdma_connection::{RdmaMemoryRegion, RdmaWorkCompletion};
 use infinibuilder::rdma_network_node::{
     RdmaBarrierNetworkNode, RdmaNetworkNode, RdmaTransportSendReceiveNetworkNode,
 };
@@ -77,7 +77,7 @@ fn main() {
 }
 
 fn sender_batch<
-    NB: RdmaNetworkBarrier,
+    NB: RdmaNetworkNodeBarrier,
     Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
 >(
     iter: usize,
@@ -104,7 +104,7 @@ fn sender_batch<
         node.barrier(&node.group_all(), Duration::from_millis(1000))
             .unwrap();
         let mut wr = node
-            .post_send(
+            .send(
                 1,
                 mr,
                 (i * args.message_size)..((i + 1) * args.message_size),
@@ -131,7 +131,7 @@ fn sender_batch<
 }
 
 fn receiver_batch<
-    NB: RdmaNetworkBarrier,
+    NB: RdmaNetworkNodeBarrier,
     Node: RdmaNetworkNode + RdmaTransportSendReceiveNetworkNode + RdmaBarrierNetworkNode<NB>,
 >(
     iter: usize,
@@ -149,7 +149,7 @@ fn receiver_batch<
     // Receive all batches
     for i in 0..args.batch_size {
         let mut wr = node
-            .post_receive(
+            .receive(
                 0,
                 mr,
                 (i * args.message_size)..((i + 1) * args.message_size),

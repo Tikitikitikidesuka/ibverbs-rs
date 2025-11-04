@@ -1,13 +1,9 @@
 use crate::ibverbs::completion_queue::{CachedCompletionQueue, PollError};
 use crate::ibverbs::work_completion::IbvWorkCompletion;
 use crate::ibverbs::work_error::{IbvWorkError, IbvWorkErrorCode};
-use crate::rdma_connection::{
-    RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestPollError,
-};
-use ibverbs::ibv_wc_status;
+use crate::rdma_connection::{RdmaWorkRequest, RdmaWorkRequestStatus, WorkRequestPollError};
 use log::warn;
 use std::cell::RefCell;
-use std::convert::Infallible;
 use std::rc::Rc;
 
 #[derive(Debug)]

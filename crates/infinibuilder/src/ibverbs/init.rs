@@ -1,13 +1,13 @@
-use crate::barrier::{RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
+use crate::barrier::RdmaNetworkNodeBarrier;
 use crate::ibverbs::connection::{IbvConnection, IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::network_node::{
     IbvNetworkNode, IbvNetworkNodeBuildError, IbvNetworkNodeBuilder, IbvNetworkNodeEndpoint,
     IbvNetworkNodeEndpointGatherError,
 };
 use crate::network_config::{NetworkConfigError, RawNetworkConfig};
-use crate::rdma_network_node::RdmaNamedMemory;
+use crate::rdma_network_node::{RdmaNamedMemory, RdmaNetworkMemoryRegionComponent};
 use crate::tcp_exchanger::{TcpExchangeConfig, TcpExchanger, TcpNetworkConfigExchangeError};
-use crate::transport::RdmaNetworkTransport;
+use crate::transport::RdmaNetworkNodeTransport;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -32,12 +32,12 @@ pub fn create_ibv_network_node<NB, UNB, NT, UNT>(
     mrs: impl IntoIterator<Item = RdmaNamedMemory>,
     barrier: UNB,
     transport: UNT,
-) -> Result<IbvNetworkNode<NB>, IbvNetworkNodeInitError>
+) -> Result<IbvNetworkNode<NB, NT>, IbvNetworkNodeInitError>
 where
     UNB: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NB>,
-    NB: RdmaNetworkBarrier<IbvMemoryRegion, IbvRemoteMemoryRegion>,
+    NB: RdmaNetworkNodeBarrier<IbvConnection>,
     UNT: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NT>,
-    NT: RdmaNetworkTransport<IbvMemoryRegion, IbvRemoteMemoryRegion, IbvConnection>,
+    NT: RdmaNetworkNodeTransport<IbvConnection>,
 {
     let network_config = network_config.validate()?;
 

@@ -5,7 +5,7 @@ use crate::barrier::{
 };
 use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
 use crate::rdma_network_node::{RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
-use crate::spin_poll::spin_poll_batched;
+use crate::spin_poll::spin_poll_timeout_batched;
 use PeerRole::*;
 use std::ptr::{read_volatile, write_volatile};
 use std::time::Duration;
@@ -220,7 +220,7 @@ impl<MR, RMR> BinaryTreeBarrier<MR, RMR> {
                 self.peer_group_idx(connections.self_idx(), connections.len(), peer)
             {
                 let peer_rank_id = connections.rank_id(group_idx).unwrap();
-                let (_, elapsed) = spin_poll_batched(
+                let (_, elapsed) = spin_poll_timeout_batched(
                     || (self.read_remote_peer_flag(peer_rank_id) == READY_FLAG).then_some(()),
                     timeout,
                     1024,

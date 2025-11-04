@@ -1,6 +1,6 @@
 use BarrierAlgorithm::*;
 use clap::Parser;
-use infinibuilder::barrier::RdmaNetworkBarrier;
+use infinibuilder::barrier::RdmaNetworkNodeBarrier;
 use infinibuilder::barrier::all_enum::{AnyBarrier, AnyBarrierType};
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::ibverbs::network_node::IbvNetworkNode;
@@ -40,7 +40,7 @@ fn main() {
     }
 }
 
-fn barrier_batch<NB: RdmaNetworkBarrier>(node: &mut IbvNetworkNode<NB>, args: &Args) {
+fn barrier_batch<NB: RdmaNetworkNodeBarrier>(node: &mut IbvNetworkNode<NB>, args: &Args) {
     let group = node.group_all();
     node.barrier(&group, Duration::from_millis(200)).unwrap();
 

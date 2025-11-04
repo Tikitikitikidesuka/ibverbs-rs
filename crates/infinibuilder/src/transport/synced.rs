@@ -1,7 +1,10 @@
 // Communicates when a receive has been issued and waits for its signal
 
+use crate::barrier::{
+    MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkNodeBarrier,
+    RdmaNetworkMemoryRegionComponent,
+};
 use std::marker::PhantomData;
-use crate::barrier::{MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkBarrier, RdmaNetworkMemoryRegionComponent};
 
 #[derive(Debug)]
 pub struct UnregisteredSyncedTransfer<MR, RMR> {
@@ -17,7 +20,10 @@ pub struct SyncedTransfer<MR, RMR> {
 
 impl<MR, RMR> SyncedTransfer<MR, RMR> {
     pub fn new() -> UnregisteredSyncedTransfer<MR, RMR> {
-        UnregisteredSyncedTransfer { memory: vec![], phantom_data: Default::default() }
+        UnregisteredSyncedTransfer {
+            memory: vec![],
+            phantom_data: Default::default(),
+        }
     }
 }
 
@@ -30,13 +36,21 @@ impl<MR, RMR> SyncedTransfer<MR, RMR> {
 /// is higher than the counter of issued sends.
 /// When it sends, it adds one to its counter of issued sends.
 
+const BYTES_PER_CONNECTION: usize = 3 * size_of::<u64>();
+
 fn setup_memory(num_connections: usize) -> Vec<u8> {
-    todo!()
+    // Assumes all machines in network have same endianness...
+    // All counters initialized to zero
+    vec![0u64.to_ne_bytes(); num_connections]
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 impl<MR, RMR> UnregisteredSyncedTransfer<MR, RMR> {
     fn memory_of_connection(&mut self, rank_id: usize) -> (*mut u8, usize) {
-        todo!()
+        let ptr = &mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8;
+        (ptr, BYTES_PER_CONNECTION)
     }
 }
 
@@ -55,7 +69,10 @@ impl<MR, RMR> RdmaNetworkMemoryRegionComponent<MR, RMR> for UnregisteredSyncedTr
         */
     }
 
-    fn registered_mrs(self, mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>) -> Result<Self::Registered, Self::RegisterError> {
+    fn registered_mrs(
+        self,
+        mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
+    ) -> Result<Self::Registered, Self::RegisterError> {
         todo!()
         /*
         let num_connections = self.memory.len() / BYTES_PER_CONNECTION;

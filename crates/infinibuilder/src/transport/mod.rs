@@ -1,11 +1,12 @@
 pub mod basic;
 //pub mod retry;
-pub mod synced;
+//pub mod synced;
 
 use crate::rdma_connection::{
-    RdmaConnection, RdmaImmediateDataReceiveConnection, RdmaImmediateDataSendConnection,
-    RdmaNamedMemoryRegionConnection, RdmaReadConnection, RdmaReceiveConnection, RdmaSendConnection,
-    RdmaWorkCompletion, RdmaWorkRequest, RdmaWriteConnection,
+    RdmaConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
+    RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
+    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaWorkCompletion,
+    RdmaWorkRequest,
 };
 use std::error::Error;
 use std::ops::RangeBounds;
@@ -15,8 +16,8 @@ pub trait RdmaNetworkNodeTransport<Connection: RdmaConnection>:
     + RdmaNetworkNodeReceiveTransport<Connection>
     + RdmaNetworkNodeReadTransport<Connection>
     + RdmaNetworkNodeWriteTransport<Connection>
-    + RdmaNetworkNodeImmediateDataSendTransport<Connection>
-    + RdmaNetworkNodeImmediateDataReceiveTransport<Connection>
+    + RdmaNetworkNodeSendImmediateDataTransport<Connection>
+    + RdmaNetworkNodeReceiveImmediateDataTransport<Connection>
 {
 }
 
@@ -26,40 +27,34 @@ impl<Connection: RdmaConnection, Transport> RdmaNetworkNodeTransport<Connection>
         + RdmaNetworkNodeReceiveTransport<Connection>
         + RdmaNetworkNodeReadTransport<Connection>
         + RdmaNetworkNodeWriteTransport<Connection>
-        + RdmaNetworkNodeImmediateDataSendTransport<Connection>
-        + RdmaNetworkNodeImmediateDataReceiveTransport<Connection>
+        + RdmaNetworkNodeSendImmediateDataTransport<Connection>
+        + RdmaNetworkNodeReceiveImmediateDataTransport<Connection>
 {
 }
 
-pub trait RdmaNetworkNodeSendTransport<Connection: RdmaSendConnection> {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
+pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection>:
+{
     fn post_send(
         &mut self,
         conn: &mut Connection,
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
 
-pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaReceiveConnection> {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
+pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection>:
+{
     fn post_receive(
         &mut self,
         conn: &mut Connection,
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
 
-pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaWriteConnection> {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
+pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection>:
+{
     fn post_write(
         &mut self,
         conn: &mut Connection,
@@ -68,13 +63,11 @@ pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaWriteConnection> {
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
 
-pub trait RdmaNetworkNodeReadTransport<Connection: RdmaReadConnection> {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
+pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection>:
+{
     fn post_read(
         &mut self,
         conn: &mut Connection,
@@ -82,29 +75,24 @@ pub trait RdmaNetworkNodeReadTransport<Connection: RdmaReadConnection> {
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
 
-pub trait RdmaNetworkNodeImmediateDataSendTransport<Connection: RdmaImmediateDataSendConnection> {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
+pub trait RdmaNetworkNodeSendImmediateDataTransport<Connection: RdmaPostSendImmediateDataConnection>:
+{
     fn post_send_immediate_data(
         &mut self,
         conn: &mut Connection,
         immediate_data: u32,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
 
-pub trait RdmaNetworkNodeImmediateDataReceiveTransport<
-    Connection: RdmaImmediateDataReceiveConnection,
+pub trait RdmaNetworkNodeReceiveImmediateDataTransport<
+    Connection: RdmaPostReceiveImmediateDataConnection,
 >
 {
-    type WR: RdmaWorkRequest;
-    type PostError: Error;
-
     fn post_receive_immediate_data(
         &mut self,
         conn: &mut Connection,
-    ) -> Result<Self::WR, Self::PostError>;
+    ) -> Result<Connection::WorkRequest, Connection::PostError>;
 }
