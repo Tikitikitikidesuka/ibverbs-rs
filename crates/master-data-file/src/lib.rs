@@ -1,22 +1,66 @@
 use std::{mem, slice};
 
-use crate::{fragment::MdfFragmentRef, multi_purpose::MultiPurposeType};
+use bytemuck::{NoUninit, bytes_of};
 
+use crate::{fragment::MdfFragmentRef, multi_purpose::MultiPurposeType};
+pub mod builder;
 pub mod fragment;
+// mod transpose;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
-#[repr(C)]
-pub struct MdfGenericHeader {
+#[repr(C, packed(4))]
+#[derive(Copy, Clone)]
+pub struct MdfHeader<H: SpecificHeaderType> {
+    /// in units of u32
     length_1: u32,
     length_2: u32,
     length_3: u32,
     checksum: u32,
     compression: u8,
-    data_type: u8,
     header_type: u8,
+    data_type: u8,
     _spare: u8,
+    specific_header: H,
+}
+
+/// SAFETY: no padding, also not for generic field `H`.
+unsafe impl<H: SpecificHeaderType> NoUninit for MdfHeader<H> {}
+
+pub fn header_type(header_type: u8, header_size_u32: u8) -> u8 {
+    assert!(header_size_u32 < 0xF);
+    assert!(header_type < 0xF);
+    header_type << 4 | header_size_u32
+}
+
+impl<H: SpecificHeaderType> MdfHeader<H> {
+    pub fn as_byets(&self) -> &[u8] {
+        bytes_of(self)
+    }
+}
+
+impl MdfHeader<SingleEvent> {
+    pub fn new(payload_size: usize) -> Self {
+        let length_32 = (payload_size + size_of::<Self>()).div_ceil(size_of::<u32>()) as u32;
+        MdfHeader {
+            length_1: length_32,
+            length_2: length_32,
+            length_3: length_32,
+            checksum: 0,
+            compression: 0,
+            header_type: SingleEvent::header_type(),
+            data_type: 0,
+            _spare: 0,
+            specific_header: SingleEvent {
+                event_mask: 0,
+                // todo for now zero: populate from odin fragment later
+                run_number: 0,
+                orbit_count: 0,
+                bunch_identifier: 0,
+            },
+        }
+    }
 }
 
 mod internal {
@@ -24,11 +68,13 @@ mod internal {
 }
 
 #[allow(private_bounds)]
-pub trait SpecificHeaderType: internal::Sealed {
-    const HEADER_VERSION: u8;
+pub trait SpecificHeaderType: internal::Sealed + Copy + NoUninit {
+    const HEADER_TYPE: u8;
+    fn header_type() -> u8;
 }
 
 #[repr(C, packed(4))]
+#[derive(Clone, Copy, NoUninit)]
 pub struct SingleEvent {
     pub event_mask: u128,
     pub run_number: u32,
@@ -37,19 +83,33 @@ pub struct SingleEvent {
 }
 impl internal::Sealed for SingleEvent {}
 impl SpecificHeaderType for SingleEvent {
-    const HEADER_VERSION: u8 = 3;
+    const HEADER_TYPE: u8 = 3;
+
+    fn header_type() -> u8 {
+        header_type(Self::HEADER_TYPE, Self::HEADER_SIZE_U32)
+    }
+}
+impl SingleEvent {
+    pub const HEADER_SIZE_U32: u8 = 7;
+    // pub const SINGLE_EVENT_HEADER_SIZE_BYTES: usize =
+    // Self::SINGLE_EVENT_HEADER_SIZE_U32 as usize * size_of::<u32>();
 }
 
-pub struct Unknown<const S: u8> {}
-impl<const S: u8> internal::Sealed for Unknown<S> {}
-impl<const S: u8> SpecificHeaderType for Unknown<S> {
-    const HEADER_VERSION: u8 = S;
-}
+// pub struct Unknown<const S: u8> {}
+// impl<const S: u8> internal::Sealed for Unknown<S> {}
+// impl<const S: u8> SpecificHeaderType for Unknown<S> {
+//     const HEADER_TYPE: u8 = S;
+// }
 
+#[derive(Clone, Copy, NoUninit)]
+#[repr(C)]
 pub struct MultiPurpose {}
 impl internal::Sealed for MultiPurpose {}
 impl SpecificHeaderType for MultiPurpose {
-    const HEADER_VERSION: u8 = 4;
+    const HEADER_TYPE: u8 = 4;
+    fn header_type() -> u8 {
+        header_type(Self::HEADER_TYPE, 0)
+    }
 }
 
 pub mod multi_purpose {
@@ -73,8 +133,7 @@ pub mod multi_purpose {
 }
 
 pub struct MdfRecordRef<H: SpecificHeaderType> {
-    generic_header: MdfGenericHeader,
-    specific_header: H,
+    generic_header: MdfHeader<H>,
 }
 
 impl<H: SpecificHeaderType> MdfRecordRef<H> {
@@ -100,8 +159,8 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
         (self.generic_header.header_type & 0xF) as usize * size_of::<u32>()
     }
 
-    pub fn specific_header(&self) -> &H {
-        &self.specific_header
+    pub fn specific_header(&self) -> H {
+        self.generic_header.specific_header
     }
 
     pub fn specific_header_raw(&self) -> &[u32] {
@@ -132,9 +191,6 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
 }
 
 impl MdfRecordRef<SingleEvent> {
-    pub const SINGLE_EVENT_HEADER_SIZE_U32: u8 = 7;
-    // pub const SINGLE_EVENT_HEADER_SIZE_BYTES: usize =
-    //     Self::SINGLE_EVENT_HEADER_SIZE_U32 as usize * size_of::<u32>();
     pub fn fragments(&self) -> impl Iterator<Item = &MdfFragmentRef> {
         MdfFragmentIterator {
             remaining_data: self.body_u32(),

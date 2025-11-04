@@ -2,6 +2,8 @@
 
 use core::slice;
 
+use multi_fragment_packet::SourceId;
+
 #[repr(C, align(4))]
 pub struct MdfFragmentHeader {
     magic: u16,
@@ -9,7 +11,7 @@ pub struct MdfFragmentHeader {
     size: u16,
     bank_type: u8,
     version: u8,
-    source_id: u16,
+    source_id: SourceId,
 }
 
 #[repr(align(4))]
@@ -36,7 +38,7 @@ impl MdfFragmentRef {
         self.header.version
     }
 
-    pub fn source_id(&self) -> u16 {
+    pub fn source_id(&self) -> SourceId {
         self.header.source_id
     }
 

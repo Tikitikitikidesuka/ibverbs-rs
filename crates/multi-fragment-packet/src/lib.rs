@@ -147,6 +147,7 @@ impl FragmentRef<'_> {
         self.fragment_type
     }
 
+    /// in bytes, excluding the header
     pub fn fragment_size(&self) -> u16 {
         self.fragment_size
     }
