@@ -1,9 +1,7 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use multi_fragment_packet::{
-    MultiFragmentPacketBuilder, MultiFragmentPacketRef, builder::BuilderFragmentData,
-};
+use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
 };
@@ -26,8 +24,7 @@ fn main() {
         .with_event_id(0)
         .with_source_id(1)
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(BuilderFragmentData::new(1, (0..190).collect::<Vec<_>>()).unwrap())
+        .add_fragment(1, (0..190).collect::<Vec<_>>())
         .build();
     mfp_0_256.write(&mut writer).unwrap();
     println!(
@@ -53,8 +50,7 @@ fn main() {
         .with_event_id(2)
         .with_source_id(1)
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(BuilderFragmentData::new(1, (40..255).collect::<Vec<_>>()).unwrap())
+        .add_fragment(1, (40..255).collect::<Vec<_>>())
         .build();
     mfp_2_256.write(&mut writer).unwrap();
     println!(
@@ -83,8 +79,7 @@ fn main() {
         .with_event_id(3)
         .with_source_id(1)
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(BuilderFragmentData::new(1, (0..255).collect::<Vec<_>>()).unwrap())
+        .add_fragment(1, (0..255).collect::<Vec<_>>())
         .build();
     mfp_3_512.write(&mut writer).unwrap();
     println!(

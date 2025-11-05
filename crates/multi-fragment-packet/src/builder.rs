@@ -1,312 +1,63 @@
+use typed_builder::TypedBuilder;
+
 use crate::{EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
-use std::marker::PhantomData;
 
-pub struct MagicDefault;
-pub struct MagicSet;
-pub struct EventIdNotSet;
-pub struct EventIdSet;
-pub struct SourceIdNotSet;
-pub struct SourceIdSet;
-pub struct AlignNotSet;
-pub struct AlignSet;
-pub struct FragmentVersionNotSet;
-pub struct FragmentVersionSet;
-pub struct HeaderUnlocked;
-pub struct HeaderLocked;
+#[derive(TypedBuilder)]
+#[builder(build_method(into = crate::MultiFragmentPacket),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
+    pub fn add_fragment(&mut self, fragment_type: u8, data: impl Into<Vec<u8>>) {
+        self.fragments.push(BuildFragmentData {
+            fragment_type,
+            data: data.into()
+        });
+    }
 
-pub struct MultiFragmentPacketBuilder<
-    MagicStatus,
-    EventIdStatus,
-    SourceIdStatus,
-    AlignStatus,
-    FragmentVersionStatus,
-    HeaderLockStatus,
-> {
+    /// Add fragments by iterator of `(fragment_type, data)`.
+    pub fn add_fragments(&mut self, iter: impl IntoIterator<Item=(u8, impl Into<Vec<u8>>)>) {
+        self.fragments.extend(iter.into_iter().map(|(ty, dat)| BuildFragmentData { fragment_type: ty, data: dat.into()}));
+    }
+    ))]
+struct MultiFragmentPacketBuilderInternal {
+    #[builder(default = MultiFragmentPacketRef::VALID_MAGIC, setter(prefix="with_"))]
     magic: u16,
+    #[builder(setter(prefix = "with_"))]
     event_id: EventId,
+    #[builder(setter(prefix = "with_"))]
     source_id: u16,
+    #[builder(setter(prefix = "with_"))]
     align: u8,
+    #[builder(setter(prefix = "with_"))]
     fragment_version: u8,
-    fragments: Vec<BuilderFragmentData>,
-    _typestate_phantom: PhantomData<(
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderLockStatus,
-    )>,
+    #[builder(default, via_mutators)]
+    fragments: Vec<BuildFragmentData>,
 }
 
-impl
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdNotSet,
-        SourceIdNotSet,
-        AlignNotSet,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn new() -> Self {
-        Self {
-            magic: MultiFragmentPacketRef::VALID_MAGIC,
-            event_id: 0,
-            source_id: 0,
-            align: 0,
-            fragment_version: 0,
-            fragments: Vec::new(),
-            _typestate_phantom: PhantomData,
-        }
-    }
+pub struct BuildFragmentData {
+    fragment_type: u8,
+    data: Vec<u8>,
 }
 
-impl Default
-    for MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdNotSet,
-        SourceIdNotSet,
-        AlignNotSet,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
+impl Default for MultiFragmentPacketBuilder {
     fn default() -> Self {
-        Self::new()
+        MultiFragmentPacketBuilderInternal::builder()
     }
 }
 
-impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_magic(
-        self,
-        magic: u16,
-    ) -> MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
+impl MultiFragmentPacketBuilder {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
-impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdNotSet,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_event_id(
-        self,
-        event_id: EventId,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdSet,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdNotSet,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_source_id(
-        self,
-        source_id: u16,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdSet,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, SourceIdStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignNotSet,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_align(
-        self,
-        align: u8,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignSet,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, SourceIdStatus, AlignStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_fragment_version(
-        self,
-        fragment_version: u8,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionSet,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn lock_header(
-        self,
-    ) -> MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderLocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl
-    MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderLocked,
-    >
-{
-    pub fn add_fragment(mut self, fragment: BuilderFragmentData) -> Self {
-        self.fragments.push(fragment);
-        self
-    }
-
-    pub fn add_fragments<I>(mut self, fragments: I) -> Self
-    where
-        I: IntoIterator<Item = BuilderFragmentData>,
-    {
-        self.fragments.extend(fragments);
-        self
-    }
-
-    // Method can be easily parallelized by calculating indexes instead of extending the vector
-    // Probably not worth doing. Overhead will most likely make it slower for average sized MFPs
-    pub fn build(self) -> MultiFragmentPacket {
+impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
+    fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         let header_size = size_of::<MultiFragmentPacketHeader>();
-        let fragment_count = self.fragments.len();
+        let fragment_count = other.fragments.len();
         let fragment_types_size =
             alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
         let fragment_sizes_size =
             alignment_utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
-        let fragments_size = self.fragments.iter().fold(0, |acc, fragment| {
-            acc + alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align)
+        let fragments_size = other.fragments.iter().fold(0, |acc, fragment| {
+            acc + alignment_utils::align_up_pow2(fragment.data.len(), other.align)
         });
         let packet_size = header_size + fragment_types_size + fragment_sizes_size + fragments_size;
 
@@ -321,24 +72,28 @@ impl
             *offset = end;
         };
 
-        write_bytes(&mut data, &mut cursor, &self.magic.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.magic.to_le_bytes());
         write_bytes(
             &mut data,
             &mut cursor,
             &(fragment_count as u16).to_le_bytes(),
         );
         write_bytes(&mut data, &mut cursor, &(packet_size as u32).to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.event_id.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.source_id.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.align.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.fragment_version.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.event_id.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.source_id.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.align.to_le_bytes());
+        write_bytes(
+            &mut data,
+            &mut cursor,
+            &other.fragment_version.to_le_bytes(),
+        );
 
         // Write fragment types
-        self.fragments.iter().for_each(|fragment| {
+        other.fragments.iter().for_each(|fragment| {
             write_bytes(
                 &mut data,
                 &mut cursor,
-                &fragment.fragment_type().to_le_bytes(),
+                &fragment.fragment_type.to_le_bytes(),
             );
         });
 
@@ -346,11 +101,11 @@ impl
         cursor = header_size + fragment_types_size;
 
         // Write fragment sizes
-        self.fragments.iter().for_each(|fragment| {
+        other.fragments.iter().for_each(|fragment| {
             write_bytes(
                 &mut data,
                 &mut cursor,
-                &fragment.fragment_size().to_le_bytes(),
+                &(fragment.data.len() as u16).to_le_bytes(),
             );
         });
 
@@ -358,48 +113,16 @@ impl
         cursor = header_size + fragment_types_size + fragment_sizes_size;
 
         // Write fragment data
-        self.fragments.iter().for_each(|fragment| {
-            let fragment_data = fragment.data();
+        other.fragments.iter().for_each(|fragment| {
+            let fragment_data = &fragment.data;
             write_bytes(&mut data, &mut cursor, fragment_data);
 
             // Skip padding (already zeroed)
-            let aligned_size =
-                alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align);
+            let aligned_size = alignment_utils::align_up_pow2(fragment.data.len(), other.align);
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
         MultiFragmentPacket { data }
-    }
-}
-
-pub struct BuilderFragmentData {
-    fragment_type: u8,
-    data: Vec<u8>,
-}
-
-impl BuilderFragmentData {
-    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<BuilderFragmentData> {
-        let data = data.into();
-        if data.len() > u16::MAX as usize {
-            None
-        } else {
-            Some(BuilderFragmentData {
-                fragment_type,
-                data,
-            })
-        }
-    }
-
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
-    }
-
-    pub fn fragment_size(&self) -> u16 {
-        self.data.len() as _
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
     }
 }
 
@@ -416,14 +139,11 @@ mod tests {
             .with_source_id(1)
             .with_align(3)
             .with_fragment_version(1)
-            .lock_header()
-            .add_fragment(BuilderFragmentData::new(0, vec![0, 1, 2, 3]).unwrap())
-            .add_fragment(BuilderFragmentData::new(1, vec![0, 1, 2, 3, 4]).unwrap())
-            .add_fragment(BuilderFragmentData::new(2, vec![0, 1, 2, 3, 4, 5, 6, 7]).unwrap())
-            .add_fragment(BuilderFragmentData::new(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8]).unwrap())
-            .add_fragment(
-                BuilderFragmentData::new(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap(),
-            )
+            .add_fragment(0, vec![0, 1, 2, 3])
+            .add_fragment(1, vec![0, 1, 2, 3, 4])
+            .add_fragment(2, vec![0, 1, 2, 3, 4, 5, 6, 7])
+            .add_fragment(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
+            .add_fragment(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
             .build()
     }
 
@@ -467,6 +187,8 @@ mod tests {
     #[test]
     fn test_mfp_builder_fragments() {
         let mfp = demo_multi_fragment_packet_data();
+
+        dbg!(&mfp.fragment(1));
 
         let expected_fragments = vec![
             Fragment {

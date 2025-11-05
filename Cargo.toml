@@ -5,6 +5,7 @@ members = ["crates/*"]
 [workspace.dependencies]
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive"] }
+typed-builder = "0.23"
 
 [package]
 name = "pcie40-rs"

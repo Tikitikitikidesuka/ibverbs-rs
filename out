@@ -1,0 +1,1188 @@
+#![feature(prelude_import)]
+#[macro_use]
+extern crate std;
+#[prelude_import]
+use std::prelude::rust_2024::*;
+pub mod builder {
+    use typed_builder::TypedBuilder;
+    use crate::{
+        EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef,
+    };
+    #[builder(
+        build_method(into = crate::MultiFragmentPacket),
+        builder_type(name = MultiFragmentPacketBuilder, vis = "pub"),
+        mutators(
+            pub
+            fn
+            add_fragment(
+                &mut
+                self,
+                fragment_type:u8,
+                data:impl
+                Into<Vec<u8>>
+            ){self.fragments.push(BuildFragmentData{fragment_type, data:data.into()});}
+        )
+    )]
+    struct MultiFragmentPacketBuilderInternal {
+        #[builder(
+            default = MultiFragmentPacketRef::VALID_MAGIC,
+            setter(prefix = "with_")
+        )]
+        magic: u16,
+        #[builder(setter(prefix = "with_"))]
+        event_id: EventId,
+        #[builder(setter(prefix = "with_"))]
+        source_id: u16,
+        #[builder(setter(prefix = "with_"))]
+        align: u8,
+        #[builder(setter(prefix = "with_"))]
+        fragment_version: u8,
+        #[builder(default, via_mutators)]
+        fragments: Vec<BuildFragmentData>,
+    }
+    #[automatically_derived]
+    impl MultiFragmentPacketBuilderInternal {
+        /**
+                Create a builder for building `MultiFragmentPacketBuilderInternal`.
+                On the builder, call `.magic(...)`(optional), `.event_id(...)`, `.source_id(...)`, `.align(...)`, `.fragment_version(...)` to set the values of the fields.
+                Finally, call `.build()` to create the instance of `MultiFragmentPacketBuilderInternal`.
+                */
+        #[allow(dead_code, clippy::default_trait_access)]
+        pub fn builder() -> MultiFragmentPacketBuilder<
+            ((), (), (), (), (), (Vec<BuildFragmentData>,)),
+        > {
+            MultiFragmentPacketBuilder {
+                fields: ((), (), (), (), (), (::core::default::Default::default(),)),
+                phantom: ::core::default::Default::default(),
+            }
+        }
+    }
+    #[must_use]
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    pub struct MultiFragmentPacketBuilder<
+        TypedBuilderFields = ((), (), (), (), (), (Vec<BuildFragmentData>,)),
+    > {
+        fields: TypedBuilderFields,
+        phantom: ::core::marker::PhantomData<()>,
+    }
+    #[automatically_derived]
+    impl<TypedBuilderFields> Clone for MultiFragmentPacketBuilder<TypedBuilderFields>
+    where
+        TypedBuilderFields: Clone,
+    {
+        #[allow(clippy::default_trait_access)]
+        fn clone(&self) -> Self {
+            Self {
+                fields: self.fields.clone(),
+                phantom: ::core::default::Default::default(),
+            }
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __event_id,
+        __source_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        ((), __event_id, __source_id, __align, __fragment_version, __fragments),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn with_magic(
+            self,
+            magic: u16,
+        ) -> MultiFragmentPacketBuilder<
+            ((u16,), __event_id, __source_id, __align, __fragment_version, __fragments),
+        > {
+            let magic = (magic,);
+            let ((), event_id, source_id, align, fragment_version, fragments) = self
+                .fields;
+            MultiFragmentPacketBuilder {
+                fields: (magic, event_id, source_id, align, fragment_version, fragments),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Repeated_field_magic {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __event_id,
+        __source_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        ((u16,), __event_id, __source_id, __align, __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Repeated field magic")]
+        pub fn with_magic(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Repeated_field_magic,
+        ) -> MultiFragmentPacketBuilder<
+            ((u16,), __event_id, __source_id, __align, __fragment_version, __fragments),
+        > {
+            self
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __source_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (), __source_id, __align, __fragment_version, __fragments),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn with_event_id(
+            self,
+            event_id: EventId,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, (EventId,), __source_id, __align, __fragment_version, __fragments),
+        > {
+            let event_id = (event_id,);
+            let (magic, (), source_id, align, fragment_version, fragments) = self.fields;
+            MultiFragmentPacketBuilder {
+                fields: (magic, event_id, source_id, align, fragment_version, fragments),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Repeated_field_event_id {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __source_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (EventId,), __source_id, __align, __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Repeated field event_id")]
+        pub fn with_event_id(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Repeated_field_event_id,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, (EventId,), __source_id, __align, __fragment_version, __fragments),
+        > {
+            self
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, (), __align, __fragment_version, __fragments),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn with_source_id(
+            self,
+            source_id: u16,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, (u16,), __align, __fragment_version, __fragments),
+        > {
+            let source_id = (source_id,);
+            let (magic, event_id, (), align, fragment_version, fragments) = self.fields;
+            MultiFragmentPacketBuilder {
+                fields: (magic, event_id, source_id, align, fragment_version, fragments),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Repeated_field_source_id {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, (u16,), __align, __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Repeated field source_id")]
+        pub fn with_source_id(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Repeated_field_source_id,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, (u16,), __align, __fragment_version, __fragments),
+        > {
+            self
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __source_id,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, __source_id, (), __fragment_version, __fragments),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn with_align(
+            self,
+            align: u8,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, __source_id, (u8,), __fragment_version, __fragments),
+        > {
+            let align = (align,);
+            let (magic, event_id, source_id, (), fragment_version, fragments) = self
+                .fields;
+            MultiFragmentPacketBuilder {
+                fields: (magic, event_id, source_id, align, fragment_version, fragments),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Repeated_field_align {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __source_id,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, __source_id, (u8,), __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Repeated field align")]
+        pub fn with_align(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Repeated_field_align,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, __source_id, (u8,), __fragment_version, __fragments),
+        > {
+            self
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __source_id,
+        __align,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, __source_id, __align, (), __fragments),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn with_fragment_version(
+            self,
+            fragment_version: u8,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, __source_id, __align, (u8,), __fragments),
+        > {
+            let fragment_version = (fragment_version,);
+            let (magic, event_id, source_id, align, (), fragments) = self.fields;
+            MultiFragmentPacketBuilder {
+                fields: (magic, event_id, source_id, align, fragment_version, fragments),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Repeated_field_fragment_version {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __source_id,
+        __align,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, __event_id, __source_id, __align, (u8,), __fragments),
+    > {
+        #[deprecated(note = "Repeated field fragment_version")]
+        pub fn with_fragment_version(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Repeated_field_fragment_version,
+        ) -> MultiFragmentPacketBuilder<
+            (__magic, __event_id, __source_id, __align, (u8,), __fragments),
+        > {
+            self
+        }
+    }
+    #[automatically_derived]
+    impl ::typed_builder::NextFieldDefault<((u16,),)>
+    for MultiFragmentPacketBuilderInternal {
+        type Output = u16;
+        fn resolve((.., (input,)): ((u16,),)) -> Self::Output {
+            input
+        }
+    }
+    #[automatically_derived]
+    impl ::typed_builder::NextFieldDefault<((),)>
+    for MultiFragmentPacketBuilderInternal {
+        type Output = u16;
+        fn resolve(((),): ((),)) -> Self::Output {
+            MultiFragmentPacketRef::VALID_MAGIC
+        }
+    }
+    #[automatically_derived]
+    impl ::typed_builder::NextFieldDefault<
+        (&u16, &EventId, &u16, &u8, &u8, (Vec<BuildFragmentData>,)),
+    > for MultiFragmentPacketBuilderInternal {
+        type Output = Vec<BuildFragmentData>;
+        fn resolve(
+            (.., (input,)): (&u16, &EventId, &u16, &u8, &u8, (Vec<BuildFragmentData>,)),
+        ) -> Self::Output {
+            input
+        }
+    }
+    #[automatically_derived]
+    impl ::typed_builder::NextFieldDefault<(&u16, &EventId, &u16, &u8, &u8, ())>
+    for MultiFragmentPacketBuilderInternal {
+        type Output = Vec<BuildFragmentData>;
+        fn resolve(
+            (
+                magic,
+                event_id,
+                source_id,
+                align,
+                fragment_version,
+                (),
+            ): (&u16, &EventId, &u16, &u8, &u8, ()),
+        ) -> Self::Output {
+            ::core::default::Default::default()
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Missing_required_field_event_id {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs, clippy::panic)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __source_id,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (), __source_id, __align, __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Missing required field event_id")]
+        pub fn build(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Missing_required_field_event_id,
+        ) -> ! {
+            {
+                #[cold]
+                #[track_caller]
+                #[inline(never)]
+                const fn panic_cold_explicit() -> ! {
+                    ::core::panicking::panic_explicit()
+                }
+                panic_cold_explicit();
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Missing_required_field_source_id {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs, clippy::panic)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __align,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (EventId,), (), __align, __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Missing required field source_id")]
+        pub fn build(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Missing_required_field_source_id,
+        ) -> ! {
+            {
+                #[cold]
+                #[track_caller]
+                #[inline(never)]
+                const fn panic_cold_explicit() -> ! {
+                    ::core::panicking::panic_explicit()
+                }
+                panic_cold_explicit();
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Missing_required_field_align {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs, clippy::panic)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __fragment_version,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (EventId,), (u16,), (), __fragment_version, __fragments),
+    > {
+        #[deprecated(note = "Missing required field align")]
+        pub fn build(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Missing_required_field_align,
+        ) -> ! {
+            {
+                #[cold]
+                #[track_caller]
+                #[inline(never)]
+                const fn panic_cold_explicit() -> ! {
+                    ::core::panicking::panic_explicit()
+                }
+                panic_cold_explicit();
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, non_snake_case)]
+    #[allow(clippy::exhaustive_enums)]
+    pub enum MultiFragmentPacketBuilder_Error_Missing_required_field_fragment_version {}
+    #[doc(hidden)]
+    #[allow(dead_code, non_camel_case_types, missing_docs, clippy::panic)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __fragments,
+    > MultiFragmentPacketBuilder<(__magic, (EventId,), (u16,), (u8,), (), __fragments)> {
+        #[deprecated(note = "Missing required field fragment_version")]
+        pub fn build(
+            self,
+            _: MultiFragmentPacketBuilder_Error_Missing_required_field_fragment_version,
+        ) -> ! {
+            {
+                #[cold]
+                #[track_caller]
+                #[inline(never)]
+                const fn panic_cold_explicit() -> ! {
+                    ::core::panicking::panic_explicit()
+                }
+                panic_cold_explicit();
+            }
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __event_id,
+        __source_id,
+        __align,
+        __fragment_version,
+    > MultiFragmentPacketBuilder<
+        (
+            __magic,
+            __event_id,
+            __source_id,
+            __align,
+            __fragment_version,
+            (Vec<BuildFragmentData>,),
+        ),
+    > {
+        #[allow(clippy::used_underscore_binding, clippy::no_effect_underscore_binding)]
+        pub fn add_fragment(
+            self,
+            fragment_type: u8,
+            data: impl Into<Vec<u8>>,
+        ) -> MultiFragmentPacketBuilder<
+            (
+                __magic,
+                __event_id,
+                __source_id,
+                __align,
+                __fragment_version,
+                (Vec<BuildFragmentData>,),
+            ),
+        > {
+            struct TypedBuilderFieldMutator {
+                __phantom: ::core::marker::PhantomData<()>,
+                fragments: Vec<BuildFragmentData>,
+            }
+            impl TypedBuilderFieldMutator {
+                pub fn add_fragment(
+                    &mut self,
+                    fragment_type: u8,
+                    data: impl Into<Vec<u8>>,
+                ) {
+                    self.fragments
+                        .push(BuildFragmentData {
+                            fragment_type,
+                            data: data.into(),
+                        });
+                }
+            }
+            let __args = (fragment_type, data);
+            let (magic, event_id, source_id, align, fragment_version, (fragments,)) = self
+                .fields;
+            let mut __mutator: TypedBuilderFieldMutator = TypedBuilderFieldMutator {
+                __phantom: ::core::default::Default::default(),
+                fragments,
+            };
+            {
+                let (fragment_type, data) = __args;
+                __mutator.add_fragment(fragment_type, data);
+            }
+            let TypedBuilderFieldMutator { __phantom, fragments } = __mutator;
+            MultiFragmentPacketBuilder {
+                fields: (
+                    magic,
+                    event_id,
+                    source_id,
+                    align,
+                    fragment_version,
+                    (fragments,),
+                ),
+                phantom: self.phantom,
+            }
+        }
+    }
+    #[allow(dead_code, non_camel_case_types, missing_docs)]
+    #[automatically_derived]
+    impl<
+        __magic,
+        __fragments,
+    > MultiFragmentPacketBuilder<
+        (__magic, (EventId,), (u16,), (u8,), (u8,), __fragments),
+    >
+    where
+        MultiFragmentPacketBuilderInternal: for<'__typed_builder_lifetime_for_default> ::typed_builder::NextFieldDefault<
+            (__magic,),
+            Output = u16,
+        >,
+        MultiFragmentPacketBuilderInternal: for<'__typed_builder_lifetime_for_default> ::typed_builder::NextFieldDefault<
+            (
+                &'__typed_builder_lifetime_for_default u16,
+                &'__typed_builder_lifetime_for_default EventId,
+                &'__typed_builder_lifetime_for_default u16,
+                &'__typed_builder_lifetime_for_default u8,
+                &'__typed_builder_lifetime_for_default u8,
+                __fragments,
+            ),
+            Output = Vec<BuildFragmentData>,
+        >,
+    {
+        #[allow(
+            clippy::default_trait_access,
+            clippy::used_underscore_binding,
+            clippy::no_effect_underscore_binding
+        )]
+        pub fn build(self) -> crate::MultiFragmentPacket {
+            let (magic, event_id, source_id, align, fragment_version, fragments) = self
+                .fields;
+            let magic = <MultiFragmentPacketBuilderInternal as ::typed_builder::NextFieldDefault<
+                (__magic,),
+            >>::resolve((magic,));
+            let event_id = event_id.0;
+            let source_id = source_id.0;
+            let align = align.0;
+            let fragment_version = fragment_version.0;
+            let fragments = <MultiFragmentPacketBuilderInternal as ::typed_builder::NextFieldDefault<
+                (&u16, &EventId, &u16, &u8, &u8, __fragments),
+            >>::resolve((
+                &magic,
+                &event_id,
+                &source_id,
+                &align,
+                &fragment_version,
+                fragments,
+            ));
+            #[allow(deprecated)]
+            MultiFragmentPacketBuilderInternal {
+                magic,
+                event_id,
+                source_id,
+                align,
+                fragment_version,
+                fragments,
+            }
+                .into()
+        }
+    }
+    pub(crate) struct BuildFragmentData {
+        fragment_type: u8,
+        data: Vec<u8>,
+    }
+    impl MultiFragmentPacketBuilder {
+        pub fn new() -> Self {
+            MultiFragmentPacketBuilderInternal::builder()
+        }
+    }
+    impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
+        fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
+            let header_size = size_of::<MultiFragmentPacketHeader>();
+            let fragment_count = other.fragments.len();
+            let fragment_types_size = alignment_utils::align_up_pow2(
+                fragment_count * size_of::<u8>(),
+                2,
+            );
+            let fragment_sizes_size = alignment_utils::align_up_pow2(
+                fragment_count * size_of::<u16>(),
+                2,
+            );
+            let fragments_size = other
+                .fragments
+                .iter()
+                .fold(
+                    0,
+                    |acc, fragment| {
+                        acc
+                            + alignment_utils::align_up_pow2(
+                                fragment.data.len() as usize,
+                                other.align,
+                            )
+                    },
+                );
+            let packet_size = header_size + fragment_types_size + fragment_sizes_size
+                + fragments_size;
+            let mut data = ::alloc::vec::from_elem(0u8, packet_size);
+            let mut cursor = 0;
+            let write_bytes = |buffer: &mut [u8], offset: &mut usize, bytes: &[u8]| {
+                let end = *offset + bytes.len();
+                buffer[*offset..end].copy_from_slice(bytes);
+                *offset = end;
+            };
+            write_bytes(&mut data, &mut cursor, &other.magic.to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &(fragment_count as u16).to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &(packet_size as u32).to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &other.event_id.to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &other.source_id.to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &other.align.to_le_bytes());
+            write_bytes(&mut data, &mut cursor, &other.fragment_version.to_le_bytes());
+            other
+                .fragments
+                .iter()
+                .for_each(|fragment| {
+                    write_bytes(
+                        &mut data,
+                        &mut cursor,
+                        &fragment.fragment_type.to_le_bytes(),
+                    );
+                });
+            cursor = header_size + fragment_types_size;
+            other
+                .fragments
+                .iter()
+                .for_each(|fragment| {
+                    write_bytes(
+                        &mut data,
+                        &mut cursor,
+                        &fragment.data.len().to_le_bytes(),
+                    );
+                });
+            cursor = header_size + fragment_types_size + fragment_sizes_size;
+            other
+                .fragments
+                .iter()
+                .for_each(|fragment| {
+                    let fragment_data = &fragment.data;
+                    write_bytes(&mut data, &mut cursor, fragment_data);
+                    let aligned_size = alignment_utils::align_up_pow2(
+                        fragment.data.len() as usize,
+                        other.align,
+                    );
+                    cursor = cursor - fragment_data.len() + aligned_size;
+                });
+            MultiFragmentPacket { data }
+        }
+    }
+}
+pub use builder::MultiFragmentPacketBuilder;
+use std::borrow::Borrow;
+use std::fmt::{Debug, Display};
+use std::mem::offset_of;
+use std::ops::Deref;
+use std::slice;
+use thiserror::Error;
+impl MultiFragmentPacketRef {
+    pub const VALID_MAGIC: u16 = 0x40CE;
+    pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+}
+/// Type of a source id.
+pub type SourceId = u16;
+pub type EventId = u64;
+#[repr(C, packed)]
+pub struct MultiFragmentPacketHeader {
+    magic: u16,
+    fragment_count: u16,
+    packet_size: u32,
+    event_id: EventId,
+    source_id: SourceId,
+    align: u8,
+    fragment_version: u8,
+}
+#[automatically_derived]
+impl ::core::marker::Copy for MultiFragmentPacketHeader {}
+#[automatically_derived]
+impl ::core::clone::Clone for MultiFragmentPacketHeader {
+    #[inline]
+    fn clone(&self) -> MultiFragmentPacketHeader {
+        let _: ::core::clone::AssertParamIsClone<u16>;
+        let _: ::core::clone::AssertParamIsClone<u32>;
+        let _: ::core::clone::AssertParamIsClone<EventId>;
+        let _: ::core::clone::AssertParamIsClone<SourceId>;
+        let _: ::core::clone::AssertParamIsClone<u8>;
+        *self
+    }
+}
+pub struct MultiFragmentPacket {
+    data: Vec<u8>,
+}
+impl MultiFragmentPacket {
+    /// # Safety
+    /// Vec needs to contain a valid [`MultiFragmentPacket`].
+    pub unsafe fn from_data(data: Vec<u8>) -> Self {
+        Self { data }
+    }
+}
+#[repr(C, packed)]
+pub struct MultiFragmentPacketRef {
+    header: MultiFragmentPacketHeader,
+}
+impl AsRef<MultiFragmentPacketRef> for MultiFragmentPacket {
+    fn as_ref(&self) -> &MultiFragmentPacketRef {
+        unsafe {
+            MultiFragmentPacketRef::unchecked_ref_from_raw_bytes(self.data.as_slice())
+        }
+    }
+}
+impl Deref for MultiFragmentPacket {
+    type Target = MultiFragmentPacketRef;
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+impl ToOwned for MultiFragmentPacketRef {
+    type Owned = MultiFragmentPacket;
+    fn to_owned(&self) -> Self::Owned {
+        Self::Owned {
+            data: self.raw_packet_data().to_vec(),
+        }
+    }
+}
+impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
+    fn borrow(&self) -> &MultiFragmentPacketRef {
+        self
+    }
+}
+pub struct Fragment<'a> {
+    fragment_type: u8,
+    version: u8,
+    event_id: EventId,
+    source_id: SourceId,
+    data: &'a [u8],
+}
+#[automatically_derived]
+impl<'a> ::core::marker::StructuralPartialEq for Fragment<'a> {}
+#[automatically_derived]
+impl<'a> ::core::cmp::PartialEq for Fragment<'a> {
+    #[inline]
+    fn eq(&self, other: &Fragment<'a>) -> bool {
+        self.fragment_type == other.fragment_type && self.version == other.version
+            && self.event_id == other.event_id && self.source_id == other.source_id
+            && self.data == other.data
+    }
+}
+#[automatically_derived]
+impl<'a> ::core::cmp::Eq for Fragment<'a> {
+    #[inline]
+    #[doc(hidden)]
+    #[coverage(off)]
+    fn assert_receiver_is_total_eq(&self) -> () {
+        let _: ::core::cmp::AssertParamIsEq<u8>;
+        let _: ::core::cmp::AssertParamIsEq<EventId>;
+        let _: ::core::cmp::AssertParamIsEq<SourceId>;
+        let _: ::core::cmp::AssertParamIsEq<&'a [u8]>;
+    }
+}
+#[automatically_derived]
+impl<'a> ::core::marker::Copy for Fragment<'a> {}
+#[automatically_derived]
+impl<'a> ::core::clone::Clone for Fragment<'a> {
+    #[inline]
+    fn clone(&self) -> Fragment<'a> {
+        let _: ::core::clone::AssertParamIsClone<u8>;
+        let _: ::core::clone::AssertParamIsClone<EventId>;
+        let _: ::core::clone::AssertParamIsClone<SourceId>;
+        let _: ::core::clone::AssertParamIsClone<&'a [u8]>;
+        *self
+    }
+}
+impl Fragment<'_> {
+    pub fn fragment_type(&self) -> u8 {
+        self.fragment_type
+    }
+    /// in bytes, excluding the header
+    pub fn fragment_size(&self) -> u16 {
+        self.data.len() as _
+    }
+    pub fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+    pub fn event_id(&self) -> EventId {
+        self.event_id
+    }
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+}
+pub enum MultiFragmentPacketFromRawBytesError {
+    #[error(
+        "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
+    )]
+    NotEnoughDataAvailable { available_data: usize, required_data: usize },
+    #[error(
+        "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
+    )]
+    CorruptedMagic { read_magic: u16, expected_magic: u16 },
+}
+#[automatically_derived]
+impl ::core::fmt::Debug for MultiFragmentPacketFromRawBytesError {
+    #[inline]
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        match self {
+            MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
+                available_data: __self_0,
+                required_data: __self_1,
+            } => {
+                ::core::fmt::Formatter::debug_struct_field2_finish(
+                    f,
+                    "NotEnoughDataAvailable",
+                    "available_data",
+                    __self_0,
+                    "required_data",
+                    &__self_1,
+                )
+            }
+            MultiFragmentPacketFromRawBytesError::CorruptedMagic {
+                read_magic: __self_0,
+                expected_magic: __self_1,
+            } => {
+                ::core::fmt::Formatter::debug_struct_field2_finish(
+                    f,
+                    "CorruptedMagic",
+                    "read_magic",
+                    __self_0,
+                    "expected_magic",
+                    &__self_1,
+                )
+            }
+        }
+    }
+}
+#[allow(unused_qualifications)]
+#[automatically_derived]
+impl ::thiserror::__private17::Error for MultiFragmentPacketFromRawBytesError {}
+#[allow(unused_qualifications)]
+#[automatically_derived]
+impl ::core::fmt::Display for MultiFragmentPacketFromRawBytesError {
+    fn fmt(&self, __formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        use ::thiserror::__private17::AsDisplay as _;
+        #[allow(unused_variables, deprecated, clippy::used_underscore_binding)]
+        match self {
+            MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
+                available_data,
+                required_data,
+            } => {
+                match (required_data.as_display(), available_data.as_display()) {
+                    (__display_required_data, __display_available_data) => {
+                        __formatter
+                            .write_fmt(
+                                format_args!(
+                                    "Not enough data available: Required {0} bytes. Only {1} bytes are available in the buffer",
+                                    __display_required_data,
+                                    __display_available_data,
+                                ),
+                            )
+                    }
+                }
+            }
+            MultiFragmentPacketFromRawBytesError::CorruptedMagic {
+                read_magic,
+                expected_magic,
+            } => {
+                match (expected_magic, read_magic) {
+                    (__field_expected_magic, __field_read_magic) => {
+                        __formatter
+                            .write_fmt(
+                                format_args!(
+                                    "Magic bytes on the header are corrupted: Expected {0:x?}, found {1:x?}",
+                                    __field_expected_magic,
+                                    __field_read_magic,
+                                ),
+                            )
+                    }
+                }
+            }
+        }
+    }
+}
+impl MultiFragmentPacketRef {
+    pub fn ref_from_raw_bytes(
+        data: &[u8],
+    ) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
+        if data.len() < Self::HEADER_SIZE {
+            Err(MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
+                required_data: Self::HEADER_SIZE,
+                available_data: data.len(),
+            })?;
+        }
+        let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
+        if mfp.magic() != Self::VALID_MAGIC {
+            Err(MultiFragmentPacketFromRawBytesError::CorruptedMagic {
+                read_magic: mfp.magic(),
+                expected_magic: Self::VALID_MAGIC,
+            })?
+        }
+        Ok(mfp)
+    }
+    pub fn magic_field_offset() -> usize {
+        { builtin # offset_of(MultiFragmentPacketHeader, magic) }
+    }
+    pub fn magic_field_size() -> usize {
+        size_of::<u16>()
+    }
+    pub fn magic(&self) -> u16 {
+        unsafe { self.header().magic }
+    }
+    pub fn fragment_count(&self) -> u16 {
+        unsafe { self.header().fragment_count }
+    }
+    /// Packet size **in byets** including header.
+    pub fn packet_size(&self) -> u32 {
+        unsafe { self.header().packet_size }
+    }
+    pub fn event_id(&self) -> EventId {
+        unsafe { self.header().event_id }
+    }
+    pub fn source_id(&self) -> SourceId {
+        unsafe { self.header().source_id }
+    }
+    pub fn align(&self) -> u8 {
+        unsafe { self.header().align }
+    }
+    pub fn fragment_version(&self) -> u8 {
+        unsafe { self.header().fragment_version }
+    }
+    pub fn fragment_type(&self, index: usize) -> Option<u8> {
+        if index < self.fragment_count() as usize {
+            let fragment_type_ptr = unsafe { self.fragment_type_ptr().add(index) };
+            let fragment_type = unsafe { *fragment_type_ptr };
+            Some(fragment_type)
+        } else {
+            None
+        }
+    }
+    /// in bytes, excluding the header (only data)
+    pub fn fragment_size(&self, index: usize) -> Option<u16> {
+        if index < self.fragment_count() as usize {
+            let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
+            let fragment_size = unsafe { *fragment_size_ptr };
+            Some(fragment_size)
+        } else {
+            None
+        }
+    }
+    /// No random access, O(n)
+    pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
+        Some(self.iter().nth(index)?.data)
+    }
+    /// No random access, O(n)
+    pub fn fragment(&self, index: usize) -> Option<Fragment<'_>> {
+        self.iter().nth(index)
+    }
+    pub fn iter(&self) -> MultiFragmentPacketIter<'_> {
+        MultiFragmentPacketIter {
+            packet: self,
+            offset: 0,
+            index: 0,
+        }
+    }
+    pub fn raw_packet_data(&self) -> &[u8] {
+        unsafe {
+            slice::from_raw_parts(
+                (self as *const Self) as *const u8,
+                self.header().packet_size as usize,
+            )
+        }
+    }
+    unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
+        unsafe { &*(data.as_ptr() as *const MultiFragmentPacketRef) }
+    }
+    unsafe fn header(&self) -> &MultiFragmentPacketHeader {
+        unsafe { &*(self as *const Self as *const MultiFragmentPacketHeader) }
+    }
+    unsafe fn fragment_type_ptr(&self) -> *const u8 {
+        unsafe { ((self as *const Self) as *const u8).add(Self::HEADER_SIZE) }
+    }
+    unsafe fn fragment_size_ptr(&self) -> *const u16 {
+        let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
+        let aligned_fragment_types_size = alignment_utils::align_up_pow2(
+            fragment_types_size,
+            2,
+        );
+        unsafe {
+            self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16
+        }
+    }
+    unsafe fn fragment_data_ptr(&self) -> *const u8 {
+        let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
+        let aligned_fragment_sizes_size = alignment_utils::align_up_pow2(
+            fragment_sizes_size,
+            2,
+        );
+        unsafe {
+            (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size)
+        }
+    }
+}
+pub struct MultiFragmentPacketIter<'a> {
+    packet: &'a MultiFragmentPacketRef,
+    offset: usize,
+    index: usize,
+}
+impl<'a> Iterator for MultiFragmentPacketIter<'a> {
+    type Item = Fragment<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let fragment_type = self.packet.fragment_type(self.index)?;
+        let fragment_size = self.packet.fragment_size(self.index)?;
+        let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
+        let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
+        let event_id = self.packet.event_id() + self.index as EventId;
+        self.offset
+            += alignment_utils::align_up_pow2(
+                fragment_size as usize,
+                self.packet.align(),
+            );
+        self.index += 1;
+        Some(Fragment {
+            event_id,
+            source_id: self.packet.source_id(),
+            version: self.packet.fragment_version(),
+            fragment_type,
+            data,
+        })
+    }
+}
+impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
+    fn len(&self) -> usize {
+        self.packet.fragment_count() as usize
+    }
+}
+impl Debug for MultiFragmentPacketRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MultiFragmentPacketRef")
+            .field(
+                "magic",
+                &::alloc::__export::must_use({
+                    ::alloc::fmt::format(format_args!("{0:#04X}", self.magic()))
+                }),
+            )
+            .field("fragment_count", &self.fragment_count())
+            .field("packet_size", &self.packet_size())
+            .field("event_id", &self.event_id())
+            .field("source_id", &self.source_id())
+            .field("align", &self.align())
+            .field("fragment_version", &self.fragment_version())
+            .finish()
+    }
+}
+impl Display for MultiFragmentPacketRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(
+            format_args!(
+                "MFP[magic=0x{0:04X}, fragments={1}, packet_size={2}, event_id={3}, source_id={4}, fragment_version={5}]",
+                self.magic(),
+                self.fragment_count(),
+                self.packet_size(),
+                self.event_id(),
+                self.source_id(),
+                self.fragment_version(),
+            ),
+        )
+    }
+}
+impl Debug for Fragment<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let data_preview = if self.data.len() > 16 {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(
+                    format_args!(
+                        "{0:02X?}... ({1} bytes)",
+                        &self.data[0..16],
+                        self.data.len(),
+                    ),
+                )
+            })
+        } else {
+            ::alloc::__export::must_use({
+                ::alloc::fmt::format(format_args!("{0:02X?}", self.data))
+            })
+        };
+        f.debug_struct("Fragment")
+            .field("type", &self.fragment_type)
+            .field("size", &self.fragment_size())
+            .field("data", &data_preview)
+            .field("version", &self.version)
+            .field("event_id", &self.event_id)
+            .field("source_id", &self.source_id)
+            .finish()
+    }
+}
+impl Display for Fragment<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(
+            format_args!(
+                "Fragment[type={0}, size={1}]",
+                self.fragment_type,
+                self.fragment_size(),
+            ),
+        )
+    }
+}

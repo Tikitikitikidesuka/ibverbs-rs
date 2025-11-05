@@ -196,9 +196,7 @@ impl Fragment {
 
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{
-        MultiFragmentPacketBuilder, MultiFragmentPacketRef, builder::BuilderFragmentData,
-    };
+    use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
 
     use crate::{MultiEventPacket, MultiEventPacketRef};
 
@@ -210,17 +208,11 @@ mod test {
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(55555)
-            .lock_header()
             .add_fragment(
-                BuilderFragmentData::new(
-                    11,
-                    b"Hello, I am some data. I am trapped here, please free me!",
-                )
-                .unwrap(),
+                11,
+                b"Hello, I am some data. I am trapped here, please free me!",
             )
-            .add_fragment(
-                BuilderFragmentData::new(22, b"I do not exist, here is nothing to see!!!").unwrap(),
-            )
+            .add_fragment(22, b"I do not exist, here is nothing to see!!!")
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
@@ -228,11 +220,7 @@ mod test {
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(21)
-            .lock_header()
-            .add_fragment(
-                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
-                    .unwrap(),
-            )
+            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
             .build();
         let mfp3 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
@@ -240,15 +228,8 @@ mod test {
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(21)
-            .lock_header()
-            .add_fragment(
-                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
-                    .unwrap(),
-            )
-            .add_fragment(
-                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
-                    .unwrap(),
-            )
+            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
             .build();
 
         let mut mep = MultiEventPacket::builder();

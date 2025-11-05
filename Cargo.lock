@@ -226,6 +226,7 @@ dependencies = [
  "pcie40",
  "shared-memory-buffer",
  "thiserror",
+ "typed-builder",
 ]
 
 [[package]]
