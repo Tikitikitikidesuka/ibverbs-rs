@@ -5,7 +5,7 @@ use std::{
     slice,
 };
 
-use multi_fragment_packet::{MultiFragmentPacketRef, SourceId};
+use multi_fragment_packet::{EventId, MultiFragmentPacketRef, SourceId};
 
 use crate::builder::MultiEventPacketBuilder;
 
@@ -134,6 +134,16 @@ impl MultiEventPacketRef {
         self.mfp_offset_bytes(idx).map(|off| unsafe {
             &*(self as *const Self as *const MultiFragmentPacketRef).byte_add(off)
         })
+    }
+
+    pub fn event_id_range(&self) -> Range<EventId> {
+        let first = self.mfp_iter().next().expect("non empty mep");
+        let start = first.event_id();
+
+        Range {
+            start,
+            end: start + first.fragment_count() as EventId,
+        }
     }
 
     pub fn header_size(&self) -> usize {

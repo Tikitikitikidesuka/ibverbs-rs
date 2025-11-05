@@ -52,6 +52,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = other.fragments.len();
+        let fragment_count_u16 = u16::try_from(fragment_count).expect("fragment not too large");
         let fragment_types_size =
             alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
         let fragment_sizes_size =
@@ -73,12 +74,14 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
         };
 
         write_bytes(&mut data, &mut cursor, &other.magic.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &fragment_count_u16.to_le_bytes());
         write_bytes(
             &mut data,
             &mut cursor,
-            &(fragment_count as u16).to_le_bytes(),
+            &u32::try_from(packet_size)
+                .expect("packet size fits u32")
+                .to_le_bytes(),
         );
-        write_bytes(&mut data, &mut cursor, &(packet_size as u32).to_le_bytes());
         write_bytes(&mut data, &mut cursor, &other.event_id.to_le_bytes());
         write_bytes(&mut data, &mut cursor, &other.source_id.to_le_bytes());
         write_bytes(&mut data, &mut cursor, &other.align.to_le_bytes());
@@ -105,7 +108,9 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
             write_bytes(
                 &mut data,
                 &mut cursor,
-                &(fragment.data.len() as u16).to_le_bytes(),
+                &u16::try_from(fragment.data.len())
+                    .expect("fragment size fits u16")
+                    .to_le_bytes(),
             );
         });
 
@@ -192,35 +197,35 @@ mod tests {
 
         let expected_fragments = vec![
             Fragment {
-                fragment_type: 0,
+                r#type: 0,
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 1,
+                r#type: 1,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 2,
+                r#type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 3,
+                r#type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 4,
+                r#type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
                 event_id: 5,

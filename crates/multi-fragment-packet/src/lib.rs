@@ -1,3 +1,4 @@
+
 pub mod builder;
 
 #[cfg(feature = "pcie40-io")]
@@ -49,6 +50,7 @@ pub struct MultiFragmentPacket {
 impl MultiFragmentPacket {
     /// # Safety
     /// Vec needs to contain a valid [`MultiFragmentPacket`].
+    #[must_use]
     pub unsafe fn from_data(data: Vec<u8>) -> Self {
         Self { data }
     }
@@ -96,7 +98,7 @@ impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
 
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct Fragment<'a> {
-    fragment_type: u8,
+    r#type: u8,
     version: u8,
     event_id: EventId,
     source_id: SourceId,
@@ -104,13 +106,15 @@ pub struct Fragment<'a> {
 }
 
 impl Fragment<'_> {
+    #[must_use]
     pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
+        self.r#type
     }
 
     /// in bytes, excluding the header
+    #[must_use]
     pub fn fragment_size(&self) -> u16 {
-        self.data.len() as _
+        self.data.len().try_into().expect("fragment size fits u16")
     }
 
     pub fn source_id(&self) -> SourceId {
@@ -310,7 +314,7 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
             event_id,
             source_id: self.packet.source_id(),
             version: self.packet.fragment_version(),
-            fragment_type,
+            r#type: fragment_type,
             data,
         })
     }
@@ -360,7 +364,7 @@ impl Debug for Fragment<'_> {
         };
 
         f.debug_struct("Fragment")
-            .field("type", &self.fragment_type)
+            .field("type", &self.r#type)
             .field("size", &self.fragment_size())
             .field("data", &data_preview)
             .field("version", &self.version)
@@ -375,7 +379,7 @@ impl Display for Fragment<'_> {
         write!(
             f,
             "Fragment[type={}, size={}]",
-            self.fragment_type,
+            self.r#type,
             self.fragment_size()
         )
     }
@@ -571,7 +575,7 @@ mod tests {
 
         // Check first fragment using direct comparison
         let expected_fragment0 = Fragment {
-            fragment_type: 0,
+            r#type: 0,
             version: 1,
             event_id: 1,
             source_id: 1,
@@ -581,7 +585,7 @@ mod tests {
 
         // Check last fragment using direct comparison
         let expected_fragment4 = Fragment {
-            fragment_type: 4,
+            r#type: 4,
             source_id: 1,
             event_id: 5,
             version: 1,
@@ -600,35 +604,35 @@ mod tests {
 
         let expected_fragments = vec![
             Fragment {
-                fragment_type: 0,
+                r#type: 0,
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 1,
+                r#type: 1,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 2,
+                r#type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 3,
+                r#type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
                 source_id: 1,
             },
             Fragment {
-                fragment_type: 4,
+                r#type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
                 event_id: 5,

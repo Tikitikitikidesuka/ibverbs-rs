@@ -3,9 +3,10 @@ use std::{mem, slice};
 use bytemuck::{NoUninit, bytes_of};
 
 use crate::{fragment::MdfFragmentRef, multi_purpose::MultiPurposeType};
-pub mod writer;
 pub mod fragment;
-// mod transpose;
+pub mod writer;
+
+pub use writer::WriteMdf;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -42,7 +43,9 @@ impl<H: SpecificHeaderType> MdfHeader<H> {
 
 impl MdfHeader<SingleEvent> {
     pub fn new_simple(payload_size: usize) -> Self {
-        let length_32 = (payload_size + size_of::<Self>()).div_ceil(size_of::<u32>()) as u32;
+        let length_32 =
+            u32::try_from((payload_size + size_of::<Self>()).div_ceil(size_of::<u32>()))
+                .expect("payload size fits in u32");
         MdfHeader {
             length_1: length_32,
             length_2: length_32,
@@ -91,15 +94,9 @@ impl SpecificHeaderType for SingleEvent {
 }
 impl SingleEvent {
     pub const HEADER_SIZE_U32: u8 = 7;
-    // pub const SINGLE_EVENT_HEADER_SIZE_BYTES: usize =
-    // Self::SINGLE_EVENT_HEADER_SIZE_U32 as usize * size_of::<u32>();
 }
 
-// pub struct Unknown<const S: u8> {}
-// impl<const S: u8> internal::Sealed for Unknown<S> {}
-// impl<const S: u8> SpecificHeaderType for Unknown<S> {
-//     const HEADER_TYPE: u8 = S;
-// }
+
 
 #[derive(Clone, Copy, NoUninit)]
 #[repr(C)]
