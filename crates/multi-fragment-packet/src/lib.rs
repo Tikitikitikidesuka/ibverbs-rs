@@ -22,6 +22,7 @@ impl MultiFragmentPacketRef {
 
 /// Type of a source id.
 pub type SourceId = u16;
+pub type EventId = u64;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -32,7 +33,7 @@ pub struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
-    event_id: u64,
+    event_id: EventId,
     source_id: SourceId,
     align: u8,
     fragment_version: u8,
@@ -126,19 +127,27 @@ impl Fragment {
         &self.data
     }
 
-    pub fn as_fragment_ref(&self) -> FragmentRef<'_> {
-        FragmentRef {
-            fragment_type: self.fragment_type,
-            fragment_size: self.fragment_size,
-            data: &self.data,
-        }
-    }
+    // todo is this necessary? what is the purpose of Fragment / Fragment ref?
+    // If a fragment contains all the data necessary to add a fragment to a MFP, it does not need source id etc, that would be redundant.
+    // Yet, for a packet ref it is useful to also have access to this data.
+    // Here, it actually comes in handy that FragmentRef is not just a pointer to a fragment (like MFPRef) but a pointer to its data.
+    // Initially that seemed odd to me.
+    //
+    // pub fn as_fragment_ref(&self) -> FragmentRef<'_> {
+    //     FragmentRef {
+    //         fragment_type: self.fragment_type,
+    //         fragment_size: self.fragment_size,
+    //         data: &self.data,
+    //     }
+    // }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Copy, Clone)]
 pub struct FragmentRef<'a> {
     fragment_type: u8,
-    fragment_size: u16,
+    version: u8,
+    event_id: EventId,
+    source_id: SourceId,
     data: &'a [u8],
 }
 
@@ -149,7 +158,19 @@ impl FragmentRef<'_> {
 
     /// in bytes, excluding the header
     pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
+        self.data.len() as _
+    }
+
+    pub fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    pub fn event_id(&self) -> EventId {
+        self.event_id
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
     }
 
     pub fn data(&self) -> &[u8] {
@@ -230,7 +251,7 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().packet_size }
     }
 
-    pub fn event_id(&self) -> u64 {
+    pub fn event_id(&self) -> EventId {
         unsafe { self.header().event_id }
     }
 
@@ -256,6 +277,7 @@ impl MultiFragmentPacketRef {
         }
     }
 
+    /// in bytes, excluding the header (only data)
     pub fn fragment_size(&self, index: usize) -> Option<u16> {
         if index < self.fragment_count() as usize {
             let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
@@ -335,12 +357,16 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
+        let event_id = self.packet.event_id() + self.index as EventId;
+
         self.offset += alignment_utils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
         Some(FragmentRef {
+            event_id,
+            source_id: self.packet.source_id(),
+            version: self.packet.fragment_version(),
             fragment_type,
-            fragment_size,
             data,
         })
     }
@@ -391,8 +417,11 @@ impl Debug for FragmentRef<'_> {
 
         f.debug_struct("Fragment")
             .field("type", &self.fragment_type)
-            .field("size", &self.fragment_size)
+            .field("size", &self.fragment_size())
             .field("data", &data_preview)
+            .field("version", &self.version)
+            .field("event_id", &self.event_id)
+            .field("source_id", &self.source_id)
             .finish()
     }
 }
@@ -402,7 +431,8 @@ impl Display for FragmentRef<'_> {
         write!(
             f,
             "Fragment[type={}, size={}]",
-            self.fragment_type, self.fragment_size
+            self.fragment_type,
+            self.fragment_size()
         )
     }
 }
@@ -454,46 +484,6 @@ mod bincode {
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
             encoder.writer().write(self.raw_packet_data())
-        }
-    }
-
-    impl bincode::Decode<()> for Fragment {
-        fn decode<D: bincode::de::Decoder<Context = ()>>(
-            decoder: &mut D,
-        ) -> Result<Self, bincode::error::DecodeError> {
-            let fragment_type = bincode::Decode::decode(decoder)?;
-            let fragment_size = bincode::Decode::decode(decoder)?;
-
-            let mut data = vec![0u8; fragment_size as _];
-            decoder.reader().read(&mut data)?;
-
-            Ok(Self {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    impl bincode::Encode for Fragment {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            encoder.writer().write(self.data())
-        }
-    }
-
-    impl<'a> bincode::Encode for FragmentRef<'a> {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            encoder.writer().write(self.data())
         }
     }
 }
@@ -638,7 +628,9 @@ mod tests {
         // Check first fragment using direct comparison
         let expected_fragment0 = FragmentRef {
             fragment_type: 0,
-            fragment_size: 4,
+            version: 1,
+            event_id: 1,
+            source_id: 1,
             data: &[0, 1, 2, 3][..],
         };
         assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
@@ -646,7 +638,9 @@ mod tests {
         // Check last fragment using direct comparison
         let expected_fragment4 = FragmentRef {
             fragment_type: 4,
-            fragment_size: 12,
+            source_id: 1,
+            event_id: 5,
+            version: 1,
             data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
         };
         assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
@@ -663,28 +657,38 @@ mod tests {
         let expected_fragments = vec![
             FragmentRef {
                 fragment_type: 0,
-                fragment_size: 4,
                 data: &[0, 1, 2, 3][..],
+                version: 1,
+                event_id: 1,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 1,
-                fragment_size: 5,
                 data: &[0, 1, 2, 3, 4][..],
+                version: 1,
+                event_id: 2,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 2,
-                fragment_size: 8,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
+                version: 1,
+                event_id: 3,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 3,
-                fragment_size: 9,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+                version: 1,
+                event_id: 4,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 4,
-                fragment_size: 12,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+                version: 1,
+                event_id: 5,
+                source_id: 1,
             },
         ];
 

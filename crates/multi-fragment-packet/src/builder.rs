@@ -1,4 +1,6 @@
-use crate::{Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
+use crate::{
+    EventId, Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef,
+};
 use std::marker::PhantomData;
 
 pub struct MagicDefault;
@@ -23,7 +25,7 @@ pub struct MultiFragmentPacketBuilder<
     HeaderLockStatus,
 > {
     magic: u16,
-    event_id: u64,
+    event_id: EventId,
     source_id: u16,
     align: u8,
     fragment_version: u8,
@@ -121,7 +123,7 @@ impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
 {
     pub fn with_event_id(
         self,
-        event_id: u64,
+        event_id: EventId,
     ) -> MultiFragmentPacketBuilder<
         MagicStatus,
         EventIdSet,
@@ -437,28 +439,38 @@ mod tests {
         let expected_fragments = vec![
             FragmentRef {
                 fragment_type: 0,
-                fragment_size: 4,
                 data: &[0, 1, 2, 3][..],
+                version: 1,
+                event_id: 1,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 1,
-                fragment_size: 5,
                 data: &[0, 1, 2, 3, 4][..],
+                version: 1,
+                event_id: 2,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 2,
-                fragment_size: 8,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
+                version: 1,
+                event_id: 3,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 3,
-                fragment_size: 9,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+                version: 1,
+                event_id: 4,
+                source_id: 1,
             },
             FragmentRef {
                 fragment_type: 4,
-                fragment_size: 12,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+                version: 1,
+                event_id: 5,
+                source_id: 1,
             },
         ];
 

@@ -6,8 +6,8 @@ use std::io::Write;
 use bytemuck::NoUninit;
 use multi_fragment_packet::{FragmentRef, SourceId};
 use std::io::Result as IoResult;
-use typed_builder::TypedBuilder;
 
+use crate::writer::WriteMdf;
 
 #[repr(C, align(4))]
 #[derive(Copy, Clone, NoUninit)]
@@ -28,25 +28,25 @@ impl MdfFragmentHeader {
     }
 }
 
-#[derive(TypedBuilder)]
-pub struct MdfFragmentWriter<'a> {
-    version: u8,
-    source_id: SourceId,
-    fragment: &'a FragmentRef<'a>,
-}
-
-impl<'a> MdfFragmentWriter<'a> {
-    pub fn write(&self, writer: &mut impl Write) -> IoResult<()> {
+impl<'a> WriteMdf for FragmentRef<'a> {
+    fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
         let header = MdfFragmentHeader {
             magic: MdfFragmentHeader::MAGIC,
-            fragment_type: self.fragment.fragment_type(),
-            source_id: self.source_id,
-            version: self.version,
+            fragment_type: self.fragment_type(),
+            source_id: self.source_id(),
+            version: self.version(),
 
-            size: size_of::<MdfFragmentHeader>() as u16 + self.fragment.fragment_size(),
+            size: size_of::<MdfFragmentHeader>() as u16 + self.fragment_size(),
         };
         writer.write_all(header.as_bytes())?;
-        writer.write_all(self.fragment.data())
+        writer.write_all(self.data())?;
+
+        // pad to u32 size
+        let leftover = self.fragment_size() as usize % size_of::<u32>();
+        let zero = 0u32.to_ne_bytes();
+        writer.write_all(&zero[leftover..])?;
+
+        Ok(())
     }
 }
 

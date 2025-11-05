@@ -3,7 +3,7 @@ use std::{mem, slice};
 use bytemuck::{NoUninit, bytes_of};
 
 use crate::{fragment::MdfFragmentRef, multi_purpose::MultiPurposeType};
-pub mod builder;
+pub mod writer;
 pub mod fragment;
 // mod transpose;
 
