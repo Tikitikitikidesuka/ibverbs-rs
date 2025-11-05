@@ -1,14 +1,11 @@
 use crate::barrier::{
-    NonMatchingMemoryRegionCount, RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
+    RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
 };
 use crate::rdma_connection::{
     RdmaConnection, RdmaMemoryRegionConnection, RdmaRemoteMemoryRegionConnection, RdmaWorkRequest,
     WorkRequestSpinPollError,
 };
-use crate::rdma_network_node::{
-    MemoryRegionPair, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnection,
-    RdmaNetworkSelfGroupConnections,
-};
+use crate::rdma_network_node::{MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnection, RdmaNetworkSelfGroupConnections};
 use crate::spin_poll::spin_poll_timeout_batched;
 use std::marker::PhantomData;
 use std::ptr::{read_volatile, write_volatile};

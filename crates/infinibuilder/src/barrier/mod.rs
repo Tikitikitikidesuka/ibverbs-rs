@@ -31,9 +31,3 @@ pub enum RdmaNetworkNodeBarrierError {
     RdmaError(String),
 }
 
-#[derive(Debug, Error)]
-#[error("Non matching memory region count, expected {expected}, got {got}")]
-pub struct NonMatchingMemoryRegionCount {
-    expected: usize,
-    got: usize,
-}

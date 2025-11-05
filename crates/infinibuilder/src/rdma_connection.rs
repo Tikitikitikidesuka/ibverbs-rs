@@ -50,35 +50,35 @@ pub trait RdmaNamedRemoteMemoryRegionConnection: RdmaRemoteMemoryRegionConnectio
 }
 
 pub trait RdmaPostSendConnection: RdmaMemoryRegionConnection {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type SendWorkRequest: RdmaWorkRequest;
+    type SendPostError: Error;
 
     fn post_send(
         &mut self,
         memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WorkRequest, Self::PostError>;
+    ) -> Result<Self::SendWorkRequest, Self::SendPostError>;
 }
 
 pub trait RdmaPostReceiveConnection:
     RdmaMemoryRegionConnection
 {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type ReceiveWorkRequest: RdmaWorkRequest;
+    type ReceivePostError: Error;
 
     fn post_receive(
         &mut self,
         memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WorkRequest, Self::PostError>;
+    ) -> Result<Self::ReceiveWorkRequest, Self::ReceivePostError>;
 }
 
 pub trait RdmaPostReadConnection:
     RdmaMemoryRegionConnection + RdmaRemoteMemoryRegionConnection
 {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type ReadWorkRequest: RdmaWorkRequest;
+    type ReadPostError: Error;
 
     fn post_read(
         &mut self,
@@ -86,14 +86,14 @@ pub trait RdmaPostReadConnection:
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::WorkRequest, Self::PostError>;
+    ) -> Result<Self::ReadWorkRequest, Self::ReadPostError>;
 }
 
 pub trait RdmaPostWriteConnection:
     RdmaMemoryRegionConnection + RdmaRemoteMemoryRegionConnection
 {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type WriteWorkRequest: RdmaWorkRequest;
+    type WritePostError: Error;
 
     fn post_write(
         &mut self,
@@ -102,24 +102,24 @@ pub trait RdmaPostWriteConnection:
         remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WorkRequest, Self::PostError>;
+    ) -> Result<Self::WriteWorkRequest, Self::WritePostError>;
 }
 
 pub trait RdmaPostSendImmediateDataConnection {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type SendImmediateDataWorkRequest: RdmaWorkRequest;
+    type SendImmediateDataPostError: Error;
 
     fn post_send_immediate_data(
         &mut self,
         immediate_data: u32,
-    ) -> Result<Self::WorkRequest, Self::PostError>;
+    ) -> Result<Self::SendImmediateDataWorkRequest, Self::SendImmediateDataPostError>;
 }
 
 pub trait RdmaPostReceiveImmediateDataConnection {
-    type WorkRequest: RdmaWorkRequest;
-    type PostError: Error;
+    type ReceiveImmediateDataWorkRequest: RdmaWorkRequest;
+    type ReceiveImmediateDataPostError: Error;
 
-    fn post_receive_immediate_data(&mut self) -> Result<Self::WorkRequest, Self::PostError>;
+    fn post_receive_immediate_data(&mut self) -> Result<Self::ReceiveImmediateDataWorkRequest, Self::ReceiveImmediateDataPostError>;
 }
 
 // No traits for QP, PD or CQ as those the user should not care about in this abstraction

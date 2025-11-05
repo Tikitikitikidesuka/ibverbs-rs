@@ -6,6 +6,7 @@ use crate::rdma_connection::{
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
+use thiserror::Error;
 
 pub trait RdmaNetworkNode:
     RdmaRankIdNetworkNode
@@ -93,7 +94,7 @@ pub trait RdmaSendTransportNetworkNode:
         &mut self,
         peer_rank_id: usize,
         memory_region: &Self::MemoryRegion,
-        memory_range: impl RangeBounds<usize>,
+        memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 }
@@ -108,7 +109,7 @@ pub trait RdmaReceiveTransportNetworkNode:
         &mut self,
         peer_rank_id: usize,
         memory_region: &Self::MemoryRegion,
-        memory_range: impl RangeBounds<usize>,
+        memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
@@ -122,9 +123,9 @@ pub trait RdmaWriteTransportNetworkNode:
         &mut self,
         peer_rank_id: usize,
         local_memory_region: &Self::MemoryRegion,
-        local_memory_range: impl RangeBounds<usize>,
+        local_memory_range: impl RangeBounds<usize> + Clone,
         remote_memory_region: &Self::RemoteMemoryRegion,
-        remote_memory_range: impl RangeBounds<usize>,
+        remote_memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 }
@@ -139,9 +140,9 @@ pub trait RdmaReadTransportNetworkNode:
         &mut self,
         peer_rank_id: usize,
         local_memory_region: &Self::MemoryRegion,
-        local_memory_range: impl RangeBounds<usize>,
+        local_memory_range: impl RangeBounds<usize> + Clone,
         remote_memory_region: &Self::RemoteMemoryRegion,
-        remote_memory_range: impl RangeBounds<usize>,
+        remote_memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
@@ -196,6 +197,13 @@ pub trait RdmaNetworkMemoryRegionComponent<MR, RMR> {
         self,
         mrs: Option<Vec<MemoryRegionPair<MR, RMR>>>,
     ) -> Result<Self::Registered, Self::RegisterError>;
+}
+
+#[derive(Debug, Error)]
+#[error("Non matching memory region count, expected {expected}, got {got}")]
+pub struct NonMatchingMemoryRegionCount {
+    pub(super) expected: usize,
+    pub(super) got: usize,
 }
 
 #[derive(Debug, Copy, Clone)]

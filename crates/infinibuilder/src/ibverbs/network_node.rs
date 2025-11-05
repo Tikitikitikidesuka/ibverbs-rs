@@ -817,20 +817,20 @@ pub enum ConnectionTransportPostError<PostError: Error> {
     #[error("Transport to self is not allowed")]
     SelfPeerRankId,
     #[error("Rdma post error: {0}")]
-    RdmaPostError(#[from] PostError),
+    RdmaPostError(PostError),
 }
 
 impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::SendTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::SendTransportPostError>;
 
     fn post_send(
         &mut self,
         peer_rank_id: usize,
         memory_region: &Self::MemoryRegion,
-        memory_range: impl RangeBounds<usize>,
+        memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError> {
         if peer_rank_id == self.all_group.self_rank_id() {
@@ -843,26 +843,30 @@ impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetwo
             ));
         }
 
-        Ok(self.transport.post_send(
-            &mut self.connections[peer_rank_id],
-            &memory_region.conn_mrs.data[peer_rank_id],
-            memory_range,
-            immediate_data,
-        )?)
+        Ok(self
+            .transport
+            .post_send(
+                peer_rank_id,
+                &mut self.connections[peer_rank_id],
+                &memory_region.conn_mrs.data[peer_rank_id],
+                memory_range,
+                immediate_data,
+            )
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 
 impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::ReceiveTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::ReceiveTransportPostError>;
 
     fn post_receive(
         &mut self,
         peer_rank_id: usize,
         memory_region: &IbvNetworkNodeMemoryRegion,
-        memory_range: impl RangeBounds<usize>,
+        memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError> {
         if peer_rank_id == self.all_group.self_rank_id() {
             return Err(ConnectionTransportPostError::SelfPeerRankId);
@@ -874,27 +878,31 @@ impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTranspor
             ));
         }
 
-        Ok(self.transport.post_receive(
-            &mut self.connections[peer_rank_id],
-            &memory_region.conn_mrs.data[peer_rank_id],
-            memory_range,
-        )?)
+        Ok(self
+            .transport
+            .post_receive(
+                peer_rank_id,
+                &mut self.connections[peer_rank_id],
+                &memory_region.conn_mrs.data[peer_rank_id],
+                memory_range,
+            )
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 
 impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::WriteTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::WriteTransportPostError>;
 
     fn post_write(
         &mut self,
         peer_rank_id: usize,
         local_memory_region: &IbvNetworkNodeMemoryRegion,
-        local_memory_range: impl RangeBounds<usize>,
+        local_memory_range: impl RangeBounds<usize> + Clone,
         remote_memory_region: &IbvNetworkNodeRemoteMemoryRegion,
-        remote_memory_range: impl RangeBounds<usize>,
+        remote_memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError> {
         if peer_rank_id == self.all_group.self_rank_id() {
@@ -907,30 +915,34 @@ impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNet
             ));
         }
 
-        Ok(self.transport.post_write(
-            &mut self.connections[peer_rank_id],
-            &local_memory_region.conn_mrs.data[peer_rank_id],
-            local_memory_range,
-            &remote_memory_region.conn_mrs.data[peer_rank_id],
-            remote_memory_range,
-            immediate_data,
-        )?)
+        Ok(self
+            .transport
+            .post_write(
+                peer_rank_id,
+                &mut self.connections[peer_rank_id],
+                &local_memory_region.conn_mrs.data[peer_rank_id],
+                local_memory_range,
+                &remote_memory_region.conn_mrs.data[peer_rank_id],
+                remote_memory_range,
+                immediate_data,
+            )
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 
 impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::ReadTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::ReadTransportPostError>;
 
     fn post_read(
         &mut self,
         peer_rank_id: usize,
         local_memory_region: &IbvNetworkNodeMemoryRegion,
-        local_memory_range: impl RangeBounds<usize>,
+        local_memory_range: impl RangeBounds<usize> + Clone,
         remote_memory_region: &IbvNetworkNodeRemoteMemoryRegion,
-        remote_memory_range: impl RangeBounds<usize>,
+        remote_memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError> {
         if peer_rank_id == self.all_group.self_rank_id() {
             return Err(ConnectionTransportPostError::SelfPeerRankId);
@@ -942,21 +954,25 @@ impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetwo
             ));
         }
 
-        Ok(self.transport.post_read(
-            &mut self.connections[peer_rank_id],
-            &local_memory_region.conn_mrs.data[peer_rank_id],
-            local_memory_range,
-            &remote_memory_region.conn_mrs.data[peer_rank_id],
-            remote_memory_range,
-        )?)
+        Ok(self
+            .transport
+            .post_read(
+                peer_rank_id,
+                &mut self.connections[peer_rank_id],
+                &local_memory_region.conn_mrs.data[peer_rank_id],
+                local_memory_range,
+                &remote_memory_region.conn_mrs.data[peer_rank_id],
+                remote_memory_range,
+            )
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 
 impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
     RdmaSendImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::SendImmediateDataTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::SendImmediateDataTransportPostError>;
 
     fn post_send_immediate_data(
         &mut self,
@@ -975,15 +991,20 @@ impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
 
         Ok(self
             .transport
-            .post_send_immediate_data(&mut self.connections[peer_rank_id], immediate_data)?)
+            .post_send_immediate_data(
+                peer_rank_id,
+                &mut self.connections[peer_rank_id],
+                immediate_data,
+            )
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 
 impl<NB, NT: RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection>>
     RdmaReceiveImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = IbvWorkRequest;
-    type PostError = ConnectionTransportPostError<std::io::Error>;
+    type WorkRequest = NT::ReceiveImmediateDataTransportWorkRequest;
+    type PostError = ConnectionTransportPostError<NT::ReceiveImmediateDataTransportPostError>;
 
     fn post_receive_immediate_data(
         &mut self,
@@ -1001,7 +1022,8 @@ impl<NB, NT: RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection>>
 
         Ok(self
             .transport
-            .post_receive_immediate_data(&mut self.connections[peer_rank_id])?)
+            .post_receive_immediate_data(peer_rank_id, &mut self.connections[peer_rank_id])
+            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
     }
 }
 

@@ -7,6 +7,7 @@ use infinibuilder::rdma_network_node::{
     RdmaNamedMemory, RdmaNamedMemoryRegionNetworkNode, RdmaNetworkNode,
 };
 use infinibuilder::transport::basic::BasicTransport;
+use infinibuilder::transport::synced::SyncedTransport;
 use std::fs;
 use std::ptr::slice_from_raw_parts;
 use std::time::{Duration, Instant};
@@ -47,7 +48,7 @@ fn main() {
             memory.len(),
         )],
         CentralizedBarrier::new(),
-        BasicTransport::new(),
+        SyncedTransport::with_post_timeout(Duration::from_millis(1000)),
     )
     .unwrap();
 
@@ -97,14 +98,17 @@ fn sender_batch<NetworkNode: RdmaNetworkNode>(
     println!("Initial rendezvous...");
     node.barrier(&node.group_all(), Duration::from_millis(10000))
         .unwrap();
+    println!("Synchronized");
 
     // Start timing
     let start = Instant::now();
 
     // Send all batches
     for i in 0..args.batch_size {
+        /*
         node.barrier(&node.group_all(), Duration::from_millis(1000))
             .unwrap();
+        */
         let mut wr = node
             .post_send(
                 1,
@@ -119,8 +123,10 @@ fn sender_batch<NetworkNode: RdmaNetworkNode>(
     }
 
     // Wait until receiver finishes
+    println!("Final rendezvous...");
     node.barrier(&node.group_all(), Duration::from_millis(1000))
         .unwrap();
+    println!("Synchronized");
 
     // Finish timing
     let elapsed = start.elapsed();
@@ -144,6 +150,7 @@ fn receiver_batch<NetworkNode: RdmaNetworkNode>(
     println!("Initial rendezvous...");
     node.barrier(&node.group_all(), Duration::from_millis(10000))
         .unwrap();
+    println!("Synchronized");
 
     // Receive all batches
     for i in 0..args.batch_size {
@@ -154,8 +161,10 @@ fn receiver_batch<NetworkNode: RdmaNetworkNode>(
                 (i * args.message_size)..((i + 1) * args.message_size),
             )
             .unwrap();
+        /*
         node.barrier(&node.group_all(), Duration::from_millis(1000))
             .unwrap();
+        */
         wr.spin_poll_batched(Duration::from_millis(5000), 1024)
             .unwrap();
     }
@@ -164,6 +173,7 @@ fn receiver_batch<NetworkNode: RdmaNetworkNode>(
     println!("Final rendezvous...");
     node.barrier(&node.group_all(), Duration::from_millis(1000))
         .unwrap();
+    println!("Synchronized");
 
     // Validate transfer
     let memory = unsafe { &*slice_from_raw_parts(mem_address, mem_length) };

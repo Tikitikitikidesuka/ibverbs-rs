@@ -3,8 +3,9 @@
 use crate::ibverbs::connection::{IbvConnection, IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
-    RdmaPostReadConnection, RdmaPostReceiveConnection, RdmaPostReceiveImmediateDataConnection,
-    RdmaPostSendConnection, RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection,
+    RdmaConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
+    RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
+    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection,
 };
 use crate::rdma_network_node::{MemoryRegionPair, RdmaNetworkMemoryRegionComponent};
 use crate::transport::{
@@ -12,20 +13,28 @@ use crate::transport::{
     RdmaNetworkNodeReceiveTransport, RdmaNetworkNodeSendImmediateDataTransport,
     RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport,
 };
+use std::marker::PhantomData;
 use std::ops::RangeBounds;
 
 #[derive(Debug)]
-pub struct BasicTransport {}
+pub struct BasicTransport<Connection> {
+    phantom: PhantomData<Connection>,
+}
 
-impl BasicTransport {
+impl<Connection> BasicTransport<Connection> {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            phantom: Default::default(),
+        }
     }
 }
 
 // Does not register any mr
-impl RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion> for BasicTransport {
-    type Registered = BasicTransport;
+impl<Connection: RdmaConnection>
+    RdmaNetworkMemoryRegionComponent<Connection::MemoryRegion, Connection::RemoteMemoryRegion>
+    for BasicTransport<Connection>
+{
+    type Registered = BasicTransport<Connection>;
     type RegisterError = std::io::Error;
 
     fn memory(&mut self, _num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
@@ -34,45 +43,65 @@ impl RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion> fo
 
     fn registered_mrs(
         self,
-        _mrs: Option<Vec<MemoryRegionPair<IbvMemoryRegion, IbvRemoteMemoryRegion>>>,
+        _mrs: Option<
+            Vec<MemoryRegionPair<Connection::MemoryRegion, Connection::RemoteMemoryRegion>>,
+        >,
     ) -> Result<Self::Registered, Self::RegisterError> {
         Ok(self)
     }
 }
 
-impl RdmaNetworkNodeSendTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostSendConnection> RdmaNetworkNodeSendTransport<Connection>
+    for BasicTransport<Connection>
+{
+    type SendTransportWorkRequest = Connection::SendWorkRequest;
+    type SendTransportPostError = Connection::SendPostError;
+
     fn post_send(
         &mut self,
-        conn: &mut IbvConnection,
-        memory_region: &IbvMemoryRegion,
+        rank_id: usize,
+        conn: &mut Connection,
+        memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<Connection::SendWorkRequest, Connection::SendPostError> {
         conn.post_send(memory_region, memory_range, immediate_data)
     }
 }
 
-impl RdmaNetworkNodeReceiveTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostReceiveConnection> RdmaNetworkNodeReceiveTransport<Connection>
+    for BasicTransport<Connection>
+{
+    type ReceiveTransportWorkRequest = Connection::ReceiveWorkRequest;
+    type ReceiveTransportPostError = Connection::ReceivePostError;
+
     fn post_receive(
         &mut self,
-        conn: &mut IbvConnection,
-        memory_region: &IbvMemoryRegion,
+        rank_id: usize,
+        conn: &mut Connection,
+        memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<Connection::ReceiveWorkRequest, Connection::ReceivePostError> {
         conn.post_receive(memory_region, memory_range)
     }
 }
 
-impl RdmaNetworkNodeWriteTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostWriteConnection> RdmaNetworkNodeWriteTransport<Connection>
+    for BasicTransport<Connection>
+{
+    type WriteTransportWorkRequest = Connection::WriteWorkRequest;
+    type WriteTransportPostError = Connection::WritePostError;
+
     fn post_write(
         &mut self,
-        conn: &mut IbvConnection,
-        local_memory_region: &IbvMemoryRegion,
+        rank_id: usize,
+        conn: &mut Connection,
+        local_memory_region: &Connection::MemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &IbvRemoteMemoryRegion,
+        remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<Connection::WriteWorkRequest, Connection::WritePostError> {
         conn.post_write(
             local_memory_region,
             local_memory_range,
@@ -83,15 +112,21 @@ impl RdmaNetworkNodeWriteTransport<IbvConnection> for BasicTransport {
     }
 }
 
-impl RdmaNetworkNodeReadTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostReadConnection> RdmaNetworkNodeReadTransport<Connection>
+    for BasicTransport<Connection>
+{
+    type ReadTransportWorkRequest = Connection::ReadWorkRequest;
+    type ReadTransportPostError = Connection::ReadPostError;
+
     fn post_read(
         &mut self,
-        conn: &mut IbvConnection,
-        local_memory_region: &IbvMemoryRegion,
+        rank_id: usize,
+        conn: &mut Connection,
+        local_memory_region: &Connection::MemoryRegion,
         local_memory_range: impl RangeBounds<usize>,
-        remote_memory_region: &IbvRemoteMemoryRegion,
+        remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<Connection::ReadWorkRequest, Connection::ReadPostError> {
         conn.post_read(
             local_memory_region,
             local_memory_range,
@@ -101,21 +136,37 @@ impl RdmaNetworkNodeReadTransport<IbvConnection> for BasicTransport {
     }
 }
 
-impl RdmaNetworkNodeSendImmediateDataTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostSendImmediateDataConnection>
+    RdmaNetworkNodeSendImmediateDataTransport<Connection> for BasicTransport<Connection>
+{
+    type SendImmediateDataTransportWorkRequest = Connection::SendImmediateDataWorkRequest;
+    type SendImmediateDataTransportPostError = Connection::SendImmediateDataPostError;
+
     fn post_send_immediate_data(
         &mut self,
-        conn: &mut IbvConnection,
+        rank_id: usize,
+        conn: &mut Connection,
         immediate_data: u32,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+    ) -> Result<Connection::SendImmediateDataWorkRequest, Connection::SendImmediateDataPostError>
+    {
         conn.post_send_immediate_data(immediate_data)
     }
 }
 
-impl RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection> for BasicTransport {
+impl<Connection: RdmaPostReceiveImmediateDataConnection>
+    RdmaNetworkNodeReceiveImmediateDataTransport<Connection> for BasicTransport<Connection>
+{
+    type ReceiveImmediateDataTransportWorkRequest = Connection::ReceiveImmediateDataWorkRequest;
+    type ReceiveImmediateDataTransportPostError = Connection::ReceiveImmediateDataPostError;
+
     fn post_receive_immediate_data(
         &mut self,
-        conn: &mut IbvConnection,
-    ) -> Result<IbvWorkRequest, std::io::Error> {
+        rank_id: usize,
+        conn: &mut Connection,
+    ) -> Result<
+        Connection::ReceiveImmediateDataWorkRequest,
+        Connection::ReceiveImmediateDataPostError,
+    > {
         conn.post_receive_immediate_data()
     }
 }

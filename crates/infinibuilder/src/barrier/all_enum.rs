@@ -2,12 +2,10 @@ use crate::barrier::binary_tree::{BinaryTreeBarrier, UnregisteredBinaryTreeBarri
 use crate::barrier::centralized::{CentralizedBarrier, UnregisteredCentralizedBarrier};
 use crate::barrier::dissemination::{DisseminationBarrier, UnregisteredDisseminationBarrier};
 use crate::barrier::{
-    NonMatchingMemoryRegionCount, RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
+    RdmaNetworkNodeBarrier, RdmaNetworkNodeBarrierError,
 };
 use crate::rdma_connection::RdmaConnection;
-use crate::rdma_network_node::{
-    MemoryRegionPair, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnections,
-};
+use crate::rdma_network_node::{MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkMemoryRegionComponent, RdmaNetworkSelfGroupConnections};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
