@@ -70,3 +70,38 @@ impl WriteMdf for MultiEventPacketRef {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use multi_event_packet::MultiEventPacket;
+    use multi_fragment_packet::MultiFragmentPacket;
+
+    use crate::WriteMdf;
+
+    fn test_writer() {
+        let mep = MultiEventPacket::builder()
+            .add_mfp(
+                MultiFragmentPacket::builder()
+                    .with_align(align_of::<u32>() as u8)
+                    .with_event_id(0)
+                    .with_fragment_version(1)
+                    .with_source_id(11)
+                    .add_fragments([(1, b"hello".as_ref()), (2, b"how are you?".as_ref())])
+                    .build(),
+            )
+            .unwrap()
+            .add_mfp(
+                MultiFragmentPacket::builder()
+                    .with_align(align_of::<u128>() as u8)
+                    .with_event_id(0)
+                    .with_fragment_version(22)
+                    .with_source_id(2)
+                    .build(),
+            )
+            .unwrap()
+            .build();
+
+        let mut mdf = Vec::new();
+        mep.write_mdf(&mut mdf).unwrap();
+    }
+}

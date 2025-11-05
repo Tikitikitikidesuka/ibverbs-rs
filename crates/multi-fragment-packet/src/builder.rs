@@ -19,12 +19,16 @@ use crate::{EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragme
 struct MultiFragmentPacketBuilderInternal {
     #[builder(default = MultiFragmentPacketRef::VALID_MAGIC, setter(prefix="with_"))]
     magic: u16,
+    /// Event ID of first fragment in this packet.
     #[builder(setter(prefix = "with_"))]
     event_id: EventId,
+    /// Source ID of the fragments in this packet.
     #[builder(setter(prefix = "with_"))]
     source_id: u16,
+    /// Fragments in this packet are padded to 2^`align` bytes.
     #[builder(setter(prefix = "with_"))]
     align: u8,
+    /// Version of the data format of the fragments.
     #[builder(setter(prefix = "with_"))]
     fragment_version: u8,
     #[builder(default, via_mutators)]

@@ -62,20 +62,21 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(())
     }
 
-    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) -> Result<()> {
+    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(mfp)?;
         self.mfps.push(Cow::Borrowed(mfp));
-        Ok(())
+        Ok(self)
     }
 
-    pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) -> Result<()> {
+    pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(&mfp)?;
         self.mfps.push(Cow::Owned(mfp));
-        Ok(())
+        Ok(self)
     }
 
-    pub fn set_mfp_align(&mut self, align: usize) {
-        self.mfp_align = Some(align)
+    pub fn set_mfp_align(&mut self, align: usize) -> &mut Self {
+        self.mfp_align = Some(align);
+        self
     }
 
     /// Resets the builder afterwards, so it can be reused without reallocating the internal buffer.
@@ -235,7 +236,7 @@ mod test {
         let mut mep = MultiEventPacket::builder();
         mep.add_mfp_ref(&mfp).unwrap();
         mep.add_mfp_ref(&mfp).unwrap();
-        mep.add_mfp_ref(&mfp2).unwrap_err(); // expect errors as wrong num fragments
+        mep.add_mfp_ref(&mfp2).err().unwrap(); // expect errors as wrong num fragments
         mep.add_mfp(mfp3).unwrap(); // expect errors as wrong num fragments
         let mep = mep.build();
 

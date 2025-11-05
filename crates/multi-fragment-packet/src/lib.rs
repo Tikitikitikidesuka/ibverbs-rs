@@ -1,4 +1,3 @@
-
 pub mod builder;
 
 #[cfg(feature = "pcie40-io")]
@@ -53,6 +52,10 @@ impl MultiFragmentPacket {
     #[must_use]
     pub unsafe fn from_data(data: Vec<u8>) -> Self {
         Self { data }
+    }
+
+    pub fn builder() -> MultiFragmentPacketBuilder {
+        MultiFragmentPacketBuilder::default()
     }
 }
 
@@ -199,18 +202,22 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().packet_size }
     }
 
+    /// Event ID of first fragment in this packet.
     pub fn event_id(&self) -> EventId {
         unsafe { self.header().event_id }
     }
 
+    /// Fragments in this packet are padded to 2^`align` bytes.
     pub fn source_id(&self) -> SourceId {
         unsafe { self.header().source_id }
     }
 
+    /// Fragments in this packet are padded to 2^`align` bytes.
     pub fn align(&self) -> u8 {
         unsafe { self.header().align }
     }
 
+    /// Version of the data format of the fragments.
     pub fn fragment_version(&self) -> u8 {
         unsafe { self.header().fragment_version }
     }
