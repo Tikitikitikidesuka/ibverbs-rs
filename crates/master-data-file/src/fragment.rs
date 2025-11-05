@@ -4,7 +4,7 @@ use core::slice;
 use std::io::Write;
 
 use bytemuck::NoUninit;
-use multi_fragment_packet::{FragmentRef, SourceId};
+use multi_fragment_packet::{Fragment, SourceId};
 use std::io::Result as IoResult;
 
 use crate::writer::WriteMdf;
@@ -28,7 +28,7 @@ impl MdfFragmentHeader {
     }
 }
 
-impl<'a> WriteMdf for FragmentRef<'a> {
+impl<'a> WriteMdf for Fragment<'a> {
     fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
         let header = MdfFragmentHeader {
             magic: MdfFragmentHeader::MAGIC,

@@ -1,6 +1,4 @@
-use crate::{
-    EventId, Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef,
-};
+use crate::{EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
 use std::marker::PhantomData;
 
 pub struct MagicDefault;
@@ -29,7 +27,7 @@ pub struct MultiFragmentPacketBuilder<
     source_id: u16,
     align: u8,
     fragment_version: u8,
-    fragments: Vec<Fragment>,
+    fragments: Vec<BuilderFragmentData>,
     _typestate_phantom: PhantomData<(
         MagicStatus,
         EventIdStatus,
@@ -285,14 +283,14 @@ impl
         HeaderLocked,
     >
 {
-    pub fn add_fragment(mut self, fragment: Fragment) -> Self {
+    pub fn add_fragment(mut self, fragment: BuilderFragmentData) -> Self {
         self.fragments.push(fragment);
         self
     }
 
     pub fn add_fragments<I>(mut self, fragments: I) -> Self
     where
-        I: IntoIterator<Item = Fragment>,
+        I: IntoIterator<Item = BuilderFragmentData>,
     {
         self.fragments.extend(fragments);
         self
@@ -374,10 +372,42 @@ impl
     }
 }
 
+pub struct BuilderFragmentData {
+    fragment_type: u8,
+    data: Vec<u8>,
+}
+
+impl BuilderFragmentData {
+    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<BuilderFragmentData> {
+        let data = data.into();
+        if data.len() > u16::MAX as usize {
+            None
+        } else {
+            Some(BuilderFragmentData {
+                fragment_type,
+                data,
+            })
+        }
+    }
+
+    pub fn fragment_type(&self) -> u8 {
+        self.fragment_type
+    }
+
+    pub fn fragment_size(&self) -> u16 {
+        self.data.len() as _
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::Fragment;
+
     use super::*;
-    use crate::FragmentRef;
 
     fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
         MultiFragmentPacketBuilder::new()
@@ -387,11 +417,13 @@ mod tests {
             .with_align(3)
             .with_fragment_version(1)
             .lock_header()
-            .add_fragment(Fragment::new(0, vec![0, 1, 2, 3]).unwrap())
-            .add_fragment(Fragment::new(1, vec![0, 1, 2, 3, 4]).unwrap())
-            .add_fragment(Fragment::new(2, vec![0, 1, 2, 3, 4, 5, 6, 7]).unwrap())
-            .add_fragment(Fragment::new(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8]).unwrap())
-            .add_fragment(Fragment::new(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap())
+            .add_fragment(BuilderFragmentData::new(0, vec![0, 1, 2, 3]).unwrap())
+            .add_fragment(BuilderFragmentData::new(1, vec![0, 1, 2, 3, 4]).unwrap())
+            .add_fragment(BuilderFragmentData::new(2, vec![0, 1, 2, 3, 4, 5, 6, 7]).unwrap())
+            .add_fragment(BuilderFragmentData::new(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8]).unwrap())
+            .add_fragment(
+                BuilderFragmentData::new(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap(),
+            )
             .build()
     }
 
@@ -437,35 +469,35 @@ mod tests {
         let mfp = demo_multi_fragment_packet_data();
 
         let expected_fragments = vec![
-            FragmentRef {
+            Fragment {
                 fragment_type: 0,
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
                 source_id: 1,
             },
-            FragmentRef {
+            Fragment {
                 fragment_type: 1,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
                 source_id: 1,
             },
-            FragmentRef {
+            Fragment {
                 fragment_type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
                 source_id: 1,
             },
-            FragmentRef {
+            Fragment {
                 fragment_type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
                 source_id: 1,
             },
-            FragmentRef {
+            Fragment {
                 fragment_type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
@@ -474,7 +506,7 @@ mod tests {
             },
         ];
 
-        let fragments: Vec<FragmentRef> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.iter().collect();
         assert_eq!(fragments, expected_fragments);
     }
 }

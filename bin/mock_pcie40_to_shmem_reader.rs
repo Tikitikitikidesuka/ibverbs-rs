@@ -1,5 +1,6 @@
 use circular_buffer::CircularBufferWritable;
-use multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder};
+use multi_fragment_packet::builder::BuilderFragmentData;
+use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
@@ -46,16 +47,17 @@ fn main() {
         // Mock read 5 MFPs
         let mut mfps = Vec::with_capacity(5);
         for _ in 0..5 {
-            let mfp = MultiFragmentPacketBuilder::new()
-                .with_fragment_version(1)
-                .with_source_id(1)
-                .with_align(6)
-                .with_event_id(event_id)
-                .lock_header()
-                .add_fragments(
-                    (0..1000).map(|_| Fragment::new(1, (0..255).collect::<Vec<_>>()).unwrap()),
-                )
-                .build();
+            let mfp =
+                MultiFragmentPacketBuilder::new()
+                    .with_fragment_version(1)
+                    .with_source_id(1)
+                    .with_align(6)
+                    .with_event_id(event_id)
+                    .lock_header()
+                    .add_fragments((0..1000).map(|_| {
+                        BuilderFragmentData::new(1, (0..255).collect::<Vec<_>>()).unwrap()
+                    }))
+                    .build();
             mfps.push(mfp);
             event_id += 1000;
         }

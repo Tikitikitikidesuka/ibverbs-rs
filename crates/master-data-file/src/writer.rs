@@ -1,7 +1,7 @@
 use std::io::{Result as IoResult, Write};
 
 use multi_event_packet::MultiEventPacketRef;
-use multi_fragment_packet::FragmentRef;
+use multi_fragment_packet::Fragment;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
@@ -11,7 +11,7 @@ pub trait WriteMdf {
 
 #[derive(Debug)]
 pub struct MdfRecordWriter<'a> {
-    fragments: Vec<FragmentRef<'a>>,
+    fragments: Vec<Fragment<'a>>,
 }
 
 impl<'a> MdfRecordWriter<'a> {
@@ -21,7 +21,7 @@ impl<'a> MdfRecordWriter<'a> {
         }
     }
 
-    pub fn add_fragment(&mut self, frag: FragmentRef<'a>) {
+    pub fn add_fragment(&mut self, frag: Fragment<'a>) {
         self.fragments.push(frag);
     }
 

@@ -160,9 +160,45 @@ impl<'a> MultiEventPacketBuilder<'a> {
     }
 }
 
+pub struct Fragment {
+    fragment_type: u8,
+    fragment_size: u16,
+    data: Vec<u8>,
+}
+
+impl Fragment {
+    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<Fragment> {
+        let data = data.into();
+        if data.len() > u16::MAX as usize {
+            None
+        } else {
+            let fragment_size = data.len() as u16;
+            Some(Fragment {
+                fragment_type,
+                fragment_size,
+                data,
+            })
+        }
+    }
+
+    pub fn fragment_type(&self) -> u8 {
+        self.fragment_type
+    }
+
+    pub fn fragment_size(&self) -> u16 {
+        self.fragment_size
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+    use multi_fragment_packet::{
+        MultiFragmentPacketBuilder, MultiFragmentPacketRef, builder::BuilderFragmentData,
+    };
 
     use crate::{MultiEventPacket, MultiEventPacketRef};
 
@@ -176,13 +212,15 @@ mod test {
             .with_source_id(55555)
             .lock_header()
             .add_fragment(
-                Fragment::new(
+                BuilderFragmentData::new(
                     11,
                     b"Hello, I am some data. I am trapped here, please free me!",
                 )
                 .unwrap(),
             )
-            .add_fragment(Fragment::new(22, b"I do not exist, here is nothing to see!!!").unwrap())
+            .add_fragment(
+                BuilderFragmentData::new(22, b"I do not exist, here is nothing to see!!!").unwrap(),
+            )
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
@@ -192,7 +230,8 @@ mod test {
             .with_source_id(21)
             .lock_header()
             .add_fragment(
-                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+                    .unwrap(),
             )
             .build();
         let mfp3 = MultiFragmentPacketBuilder::new()
@@ -203,10 +242,12 @@ mod test {
             .with_source_id(21)
             .lock_header()
             .add_fragment(
-                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+                    .unwrap(),
             )
             .add_fragment(
-                Fragment::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein").unwrap(),
+                BuilderFragmentData::new(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+                    .unwrap(),
             )
             .build();
 
