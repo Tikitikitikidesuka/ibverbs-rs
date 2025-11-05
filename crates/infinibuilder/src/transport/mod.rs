@@ -33,8 +33,8 @@ impl<Connection: RdmaConnection, Transport> RdmaNetworkNodeTransport<Connection>
 }
 
 pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection> {
-    type SendTransportWorkRequest: RdmaWorkRequest;
-    type SendTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_send(
         &mut self,
@@ -43,12 +43,12 @@ pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection> {
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
-    ) -> Result<Self::SendTransportWorkRequest, Self::SendTransportPostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection> {
-    type ReceiveTransportWorkRequest: RdmaWorkRequest;
-    type ReceiveTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_receive(
         &mut self,
@@ -56,12 +56,12 @@ pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection>
         conn: &mut Connection,
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize> + Clone,
-    ) -> Result<Self::ReceiveTransportWorkRequest, Self::ReceiveTransportPostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
-    type WriteTransportWorkRequest: RdmaWorkRequest;
-    type WriteTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_write(
         &mut self,
@@ -72,12 +72,12 @@ pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
-    ) -> Result<Self::WriteTransportWorkRequest, Self::WriteTransportPostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection> {
-    type ReadTransportWorkRequest: RdmaWorkRequest;
-    type ReadTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_read(
         &mut self,
@@ -87,13 +87,13 @@ pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection> {
         local_memory_range: impl RangeBounds<usize> + Clone,
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize> + Clone,
-    ) -> Result<Self::ReadTransportWorkRequest, Self::ReadTransportPostError>;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 pub trait RdmaNetworkNodeSendImmediateDataTransport<Connection: RdmaPostSendImmediateDataConnection>
 {
-    type SendImmediateDataTransportWorkRequest: RdmaWorkRequest;
-    type SendImmediateDataTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_send_immediate_data(
         &mut self,
@@ -101,8 +101,8 @@ pub trait RdmaNetworkNodeSendImmediateDataTransport<Connection: RdmaPostSendImme
         conn: &mut Connection,
         immediate_data: u32,
     ) -> Result<
-        Self::SendImmediateDataTransportWorkRequest,
-        Self::SendImmediateDataTransportPostError,
+        Self::WorkRequest,
+        Self::PostError,
     >;
 }
 
@@ -110,15 +110,15 @@ pub trait RdmaNetworkNodeReceiveImmediateDataTransport<
     Connection: RdmaPostReceiveImmediateDataConnection,
 >
 {
-    type ReceiveImmediateDataTransportWorkRequest: RdmaWorkRequest;
-    type ReceiveImmediateDataTransportPostError: Error;
+    type WorkRequest: RdmaWorkRequest;
+    type PostError: Error;
 
     fn post_receive_immediate_data(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
     ) -> Result<
-        Self::ReceiveImmediateDataTransportWorkRequest,
-        Self::ReceiveImmediateDataTransportPostError,
+        Self::WorkRequest,
+        Self::PostError,
     >;
 }

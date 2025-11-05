@@ -1,7 +1,5 @@
 // Tries to send and if no received was issued, fails
 
-use crate::ibverbs::connection::{IbvConnection, IbvMemoryRegion, IbvRemoteMemoryRegion};
-use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
     RdmaConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
     RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
@@ -54,8 +52,8 @@ impl<Connection: RdmaConnection>
 impl<Connection: RdmaPostSendConnection> RdmaNetworkNodeSendTransport<Connection>
     for BasicTransport<Connection>
 {
-    type SendTransportWorkRequest = Connection::SendWorkRequest;
-    type SendTransportPostError = Connection::SendPostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_send(
         &mut self,
@@ -64,7 +62,7 @@ impl<Connection: RdmaPostSendConnection> RdmaNetworkNodeSendTransport<Connection
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Connection::SendWorkRequest, Connection::SendPostError> {
+    ) -> Result<Connection::WorkRequest, Connection::PostError> {
         conn.post_send(memory_region, memory_range, immediate_data)
     }
 }
@@ -72,8 +70,8 @@ impl<Connection: RdmaPostSendConnection> RdmaNetworkNodeSendTransport<Connection
 impl<Connection: RdmaPostReceiveConnection> RdmaNetworkNodeReceiveTransport<Connection>
     for BasicTransport<Connection>
 {
-    type ReceiveTransportWorkRequest = Connection::ReceiveWorkRequest;
-    type ReceiveTransportPostError = Connection::ReceivePostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_receive(
         &mut self,
@@ -81,7 +79,7 @@ impl<Connection: RdmaPostReceiveConnection> RdmaNetworkNodeReceiveTransport<Conn
         conn: &mut Connection,
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Connection::ReceiveWorkRequest, Connection::ReceivePostError> {
+    ) -> Result<Connection::WorkRequest, Connection::PostError> {
         conn.post_receive(memory_region, memory_range)
     }
 }
@@ -89,8 +87,8 @@ impl<Connection: RdmaPostReceiveConnection> RdmaNetworkNodeReceiveTransport<Conn
 impl<Connection: RdmaPostWriteConnection> RdmaNetworkNodeWriteTransport<Connection>
     for BasicTransport<Connection>
 {
-    type WriteTransportWorkRequest = Connection::WriteWorkRequest;
-    type WriteTransportPostError = Connection::WritePostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_write(
         &mut self,
@@ -101,7 +99,7 @@ impl<Connection: RdmaPostWriteConnection> RdmaNetworkNodeWriteTransport<Connecti
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Connection::WriteWorkRequest, Connection::WritePostError> {
+    ) -> Result<Connection::WorkRequest, Connection::PostError> {
         conn.post_write(
             local_memory_region,
             local_memory_range,
@@ -115,8 +113,8 @@ impl<Connection: RdmaPostWriteConnection> RdmaNetworkNodeWriteTransport<Connecti
 impl<Connection: RdmaPostReadConnection> RdmaNetworkNodeReadTransport<Connection>
     for BasicTransport<Connection>
 {
-    type ReadTransportWorkRequest = Connection::ReadWorkRequest;
-    type ReadTransportPostError = Connection::ReadPostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_read(
         &mut self,
@@ -126,7 +124,7 @@ impl<Connection: RdmaPostReadConnection> RdmaNetworkNodeReadTransport<Connection
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Connection::ReadWorkRequest, Connection::ReadPostError> {
+    ) -> Result<Connection::WorkRequest, Connection::PostError> {
         conn.post_read(
             local_memory_region,
             local_memory_range,
@@ -139,15 +137,15 @@ impl<Connection: RdmaPostReadConnection> RdmaNetworkNodeReadTransport<Connection
 impl<Connection: RdmaPostSendImmediateDataConnection>
     RdmaNetworkNodeSendImmediateDataTransport<Connection> for BasicTransport<Connection>
 {
-    type SendImmediateDataTransportWorkRequest = Connection::SendImmediateDataWorkRequest;
-    type SendImmediateDataTransportPostError = Connection::SendImmediateDataPostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_send_immediate_data(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         immediate_data: u32,
-    ) -> Result<Connection::SendImmediateDataWorkRequest, Connection::SendImmediateDataPostError>
+    ) -> Result<Connection::WorkRequest, Connection::PostError>
     {
         conn.post_send_immediate_data(immediate_data)
     }
@@ -156,16 +154,16 @@ impl<Connection: RdmaPostSendImmediateDataConnection>
 impl<Connection: RdmaPostReceiveImmediateDataConnection>
     RdmaNetworkNodeReceiveImmediateDataTransport<Connection> for BasicTransport<Connection>
 {
-    type ReceiveImmediateDataTransportWorkRequest = Connection::ReceiveImmediateDataWorkRequest;
-    type ReceiveImmediateDataTransportPostError = Connection::ReceiveImmediateDataPostError;
+    type WorkRequest = Connection::WorkRequest;
+    type PostError = Connection::PostError;
 
     fn post_receive_immediate_data(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
     ) -> Result<
-        Connection::ReceiveImmediateDataWorkRequest,
-        Connection::ReceiveImmediateDataPostError,
+        Connection::WorkRequest,
+        Connection::PostError,
     > {
         conn.post_receive_immediate_data()
     }

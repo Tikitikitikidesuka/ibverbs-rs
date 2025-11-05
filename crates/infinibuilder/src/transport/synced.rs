@@ -1,8 +1,10 @@
 // Communicates when a receive has been issued and waits for its signal
 
 use crate::rdma_connection::{
-    RdmaConnection, RdmaMemoryRegionConnection, RdmaPostReceiveConnection, RdmaPostSendConnection,
-    RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection, RdmaWorkRequest,
+    RdmaConnection, RdmaMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
+    RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
+    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection,
+    RdmaWorkRequest,
 };
 use crate::rdma_network_node::{
     MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkMemoryRegionComponent,
@@ -13,7 +15,6 @@ use crate::transport::{
     RdmaNetworkNodeReceiveTransport, RdmaNetworkNodeSendImmediateDataTransport,
     RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport,
 };
-use bon::builder;
 use derivative::Derivative;
 use std::error::Error;
 use std::marker::PhantomData;
@@ -190,8 +191,8 @@ pub enum SyncedTransportError<E: Error> {
 impl<Connection: RdmaConnection> RdmaNetworkNodeSendTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type SendTransportWorkRequest = Connection::SendWorkRequest;
-    type SendTransportPostError = SyncedTransportError<Connection::SendPostError>;
+    type WorkRequest = <Connection as RdmaPostSendConnection>::WorkRequest;
+    type PostError = SyncedTransportError<<Connection as RdmaPostSendConnection>::PostError>;
 
     fn post_send(
         &mut self,
@@ -200,7 +201,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeSendTransport<Connection>
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
-    ) -> Result<Self::SendTransportWorkRequest, Self::SendTransportPostError> {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         let local_issued_sends = self.read_local_issued_sends(rank_id);
         let timeout = self.post_timeout;
 
@@ -233,8 +234,8 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeSendTransport<Connection>
 impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type ReceiveTransportWorkRequest = Connection::ReceiveWorkRequest;
-    type ReceiveTransportPostError = SyncedTransportError<Connection::ReceivePostError>;
+    type WorkRequest = <Connection as RdmaPostReceiveConnection>::WorkRequest;
+    type PostError = SyncedTransportError<<Connection as RdmaPostReceiveConnection>::PostError>;
 
     fn post_receive(
         &mut self,
@@ -242,7 +243,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
         conn: &mut Connection,
         memory_region: &Connection::MemoryRegion,
         memory_range: impl RangeBounds<usize>,
-    ) -> Result<Self::ReceiveTransportWorkRequest, Self::ReceiveTransportPostError> {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         // First issue the receive
         let wr = conn
             .post_receive(memory_region, memory_range)
@@ -278,8 +279,8 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
 impl<Connection: RdmaConnection> RdmaNetworkNodeWriteTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type WriteTransportWorkRequest = Connection::WriteWorkRequest;
-    type WriteTransportPostError = Connection::WritePostError;
+    type WorkRequest = <Connection as RdmaPostWriteConnection>::WorkRequest;
+    type PostError = <Connection as RdmaPostWriteConnection>::PostError;
 
     fn post_write(
         &mut self,
@@ -290,7 +291,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeWriteTransport<Connection>
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
         immediate_data: Option<u32>,
-    ) -> Result<Connection::WriteWorkRequest, Connection::WritePostError> {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         conn.post_write(
             local_memory_region,
             local_memory_range,
@@ -304,8 +305,8 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeWriteTransport<Connection>
 impl<Connection: RdmaConnection> RdmaNetworkNodeReadTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type ReadTransportWorkRequest = Connection::ReadWorkRequest;
-    type ReadTransportPostError = Connection::ReadPostError;
+    type WorkRequest = <Connection as RdmaPostReadConnection>::WorkRequest;
+    type PostError = <Connection as RdmaPostReadConnection>::PostError;
 
     fn post_read(
         &mut self,
@@ -315,7 +316,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReadTransport<Connection>
         local_memory_range: impl RangeBounds<usize>,
         remote_memory_region: &Connection::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize>,
-    ) -> Result<Connection::ReadWorkRequest, Connection::ReadPostError> {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         conn.post_read(
             local_memory_region,
             local_memory_range,
@@ -328,19 +329,16 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReadTransport<Connection>
 impl<Connection: RdmaConnection> RdmaNetworkNodeSendImmediateDataTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type SendImmediateDataTransportWorkRequest = Connection::SendImmediateDataWorkRequest;
-    type SendImmediateDataTransportPostError =
-        SyncedTransportError<Connection::SendImmediateDataPostError>;
+    type WorkRequest = <Connection as RdmaPostSendImmediateDataConnection>::WorkRequest;
+    type PostError =
+        SyncedTransportError<<Connection as RdmaPostSendImmediateDataConnection>::PostError>;
 
     fn post_send_immediate_data(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         immediate_data: u32,
-    ) -> Result<
-        Self::SendImmediateDataTransportWorkRequest,
-        Self::SendImmediateDataTransportPostError,
-    > {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         let local_issued_sends = self.read_local_issued_sends(rank_id);
         let timeout = self.post_timeout;
 
@@ -368,18 +366,15 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeSendImmediateDataTransport<Conne
 impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveImmediateDataTransport<Connection>
     for SyncedTransport<Connection>
 {
-    type ReceiveImmediateDataTransportWorkRequest = Connection::ReceiveImmediateDataWorkRequest;
-    type ReceiveImmediateDataTransportPostError =
-        SyncedTransportError<Connection::ReceiveImmediateDataPostError>;
+    type WorkRequest = <Connection as RdmaPostReceiveImmediateDataConnection>::WorkRequest;
+    type PostError =
+        SyncedTransportError<<Connection as RdmaPostReceiveImmediateDataConnection>::PostError>;
 
     fn post_receive_immediate_data(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
-    ) -> Result<
-        Self::ReceiveImmediateDataTransportWorkRequest,
-        Self::ReceiveImmediateDataTransportPostError,
-    > {
+    ) -> Result<Self::WorkRequest, Self::PostError> {
         // First issue the receive
         let wr = conn
             .post_receive_immediate_data()

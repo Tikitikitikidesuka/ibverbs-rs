@@ -823,8 +823,8 @@ pub enum ConnectionTransportPostError<PostError: Error> {
 impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::SendTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::SendTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_send(
         &mut self,
@@ -859,8 +859,8 @@ impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetwo
 impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::ReceiveTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::ReceiveTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_receive(
         &mut self,
@@ -893,8 +893,8 @@ impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTranspor
 impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::WriteTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::WriteTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_write(
         &mut self,
@@ -933,8 +933,8 @@ impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNet
 impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetworkNode
     for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::ReadTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::ReadTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_read(
         &mut self,
@@ -971,8 +971,8 @@ impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetwo
 impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
     RdmaSendImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::SendImmediateDataTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::SendImmediateDataTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_send_immediate_data(
         &mut self,
@@ -1003,8 +1003,8 @@ impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
 impl<NB, NT: RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection>>
     RdmaReceiveImmediateDataTransportNetworkNode for IbvNetworkNode<NB, NT>
 {
-    type WorkRequest = NT::ReceiveImmediateDataTransportWorkRequest;
-    type PostError = ConnectionTransportPostError<NT::ReceiveImmediateDataTransportPostError>;
+    type WorkRequest = NT::WorkRequest;
+    type PostError = ConnectionTransportPostError<NT::PostError>;
 
     fn post_receive_immediate_data(
         &mut self,

@@ -432,8 +432,8 @@ pub enum IbvPostError {
 }
 
 impl RdmaPostSendConnection for IbvConnection {
-    type SendWorkRequest = IbvWorkRequest;
-    type SendPostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_send(
         &mut self,
@@ -454,8 +454,8 @@ impl RdmaPostSendConnection for IbvConnection {
 }
 
 impl RdmaPostReceiveConnection for IbvConnection {
-    type ReceiveWorkRequest = IbvWorkRequest;
-    type ReceivePostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_receive(
         &mut self,
@@ -472,8 +472,8 @@ impl RdmaPostReceiveConnection for IbvConnection {
 }
 
 impl RdmaPostWriteConnection for IbvConnection {
-    type WriteWorkRequest = IbvWorkRequest;
-    type WritePostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_write(
         &mut self,
@@ -494,8 +494,8 @@ impl RdmaPostWriteConnection for IbvConnection {
 }
 
 impl RdmaPostReadConnection for IbvConnection {
-    type ReadWorkRequest = IbvWorkRequest;
-    type ReadPostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_read(
         &mut self,
@@ -515,8 +515,8 @@ impl RdmaPostReadConnection for IbvConnection {
 }
 
 impl RdmaPostSendImmediateDataConnection for IbvConnection {
-    type SendImmediateDataWorkRequest = IbvWorkRequest;
-    type SendImmediateDataPostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_send_immediate_data(
         &mut self,
@@ -529,8 +529,8 @@ impl RdmaPostSendImmediateDataConnection for IbvConnection {
 }
 
 impl RdmaPostReceiveImmediateDataConnection for IbvConnection {
-    type ReceiveImmediateDataWorkRequest = IbvWorkRequest;
-    type ReceiveImmediateDataPostError = std::io::Error;
+    type WorkRequest = IbvWorkRequest;
+    type PostError = std::io::Error;
 
     fn post_receive_immediate_data(&mut self) -> Result<IbvWorkRequest, std::io::Error> {
         let wr_id = self.next_wr_id();
