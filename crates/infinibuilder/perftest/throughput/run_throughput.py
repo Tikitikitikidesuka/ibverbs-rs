@@ -14,17 +14,18 @@ def parse_output_line(line):
     return None
 
 
-def run_benchmark(binary_path, config_file, role, message_size, batch_size, iters):
+def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, iters):
     """Run the benchmark and collect pps/gbps samples"""
     cmd = [
         str(binary_path),
         '--config-file', config_file,
-        '--role', role,
+        '--rank-id', str(rank_id),
         '--num-nodes', '2',
         '--message-size', str(message_size),
         '--batch-size', str(batch_size),
         '--iters', str(iters)
     ]
+    print(cmd)
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -106,7 +107,7 @@ def run_receiver_mode(args):
 
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
-        run_benchmark(args.binary, args.config_file, "receiver", msg_size, args.batch_size, args.max_samples)
+        run_benchmark(args.binary, args.config_file, 1, msg_size, args.batch_size, args.max_samples)
 
 
 def run_sender_mode(args):
@@ -120,7 +121,7 @@ def run_sender_mode(args):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
 
         pps_samples, gbps_samples = collect_samples(
-            args.binary, args.config_file, "sender", msg_size,
+            args.binary, args.config_file, 0, msg_size,
             args.batch_size, args.max_samples, args.mean_window_size, args.std_threshold
         )
 
