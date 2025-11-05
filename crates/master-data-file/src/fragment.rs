@@ -1,17 +1,53 @@
 //! Bank (aka fragment) of an MDF record.
 
 use core::slice;
+use std::io::Write;
 
-use multi_fragment_packet::SourceId;
+use bytemuck::NoUninit;
+use multi_fragment_packet::{FragmentRef, SourceId};
+use std::io::Result as IoResult;
+use typed_builder::TypedBuilder;
+
 
 #[repr(C, align(4))]
+#[derive(Copy, Clone, NoUninit)]
 pub struct MdfFragmentHeader {
     magic: u16,
     /// size in bytes including header without padding
     size: u16,
-    bank_type: u8,
+    fragment_type: u8,
     version: u8,
     source_id: SourceId,
+}
+
+impl MdfFragmentHeader {
+    pub const MAGIC: u16 = 0xCBCB;
+
+    pub fn as_bytes(&self) -> &[u8] {
+        bytemuck::bytes_of(self)
+    }
+}
+
+#[derive(TypedBuilder)]
+pub struct MdfFragmentWriter<'a> {
+    version: u8,
+    source_id: SourceId,
+    fragment: &'a FragmentRef<'a>,
+}
+
+impl<'a> MdfFragmentWriter<'a> {
+    pub fn write(&self, writer: &mut impl Write) -> IoResult<()> {
+        let header = MdfFragmentHeader {
+            magic: MdfFragmentHeader::MAGIC,
+            fragment_type: self.fragment.fragment_type(),
+            source_id: self.source_id,
+            version: self.version,
+
+            size: size_of::<MdfFragmentHeader>() as u16 + self.fragment.fragment_size(),
+        };
+        writer.write_all(header.as_bytes())?;
+        writer.write_all(self.fragment.data())
+    }
 }
 
 #[repr(align(4))]
@@ -20,8 +56,6 @@ pub struct MdfFragmentRef {
 }
 
 impl MdfFragmentRef {
-    pub const MAGIC: u16 = 0xCBCB;
-
     /// ## Safety
     /// `slice` needs to contain at least one full correct MDF.
     /// `slice` may be larger towards the end.
@@ -31,7 +65,7 @@ impl MdfFragmentRef {
     }
 
     pub fn bank_type(&self) -> u8 {
-        self.header.bank_type
+        self.header.fragment_type
     }
 
     pub fn version(&self) -> u8 {

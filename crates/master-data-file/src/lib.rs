@@ -41,7 +41,7 @@ impl<H: SpecificHeaderType> MdfHeader<H> {
 }
 
 impl MdfHeader<SingleEvent> {
-    pub fn new(payload_size: usize) -> Self {
+    pub fn new_simple(payload_size: usize) -> Self {
         let length_32 = (payload_size + size_of::<Self>()).div_ceil(size_of::<u32>()) as u32;
         MdfHeader {
             length_1: length_32,

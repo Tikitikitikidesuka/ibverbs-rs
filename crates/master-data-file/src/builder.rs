@@ -1,10 +1,11 @@
 use std::io::{Result as IoResult, Write};
 
-use multi_event_packet::MultiEventPacket;
-use multi_fragment_packet::FragmentRef;
+use multi_fragment_packet::{FragmentRef, SourceId};
 
-use crate::{MdfHeader, SingleEvent, SpecificHeaderType, fragment::MdfFragmentHeader};
-use std::io::Seek;
+use crate::{
+    MdfHeader, SingleEvent, SpecificHeaderType,
+    fragment::{MdfFragmentHeader, MdfFragmentWriter},
+};
 
 // pub trait MdfWriter {
 //     fn write_mdf_to(&self, writer: &mut (impl Write + Seek)) -> IoResult<()>;
@@ -24,14 +25,19 @@ use std::io::Seek;
 //     }
 // }
 
-pub struct MdfBuilder<'a> {
+#[derive(Debug)]
+pub struct MdfRecordWriter<'a> {
+    event_id: u64,
+    source_id: SourceId,
+    fragment_version: u8,
     fragments: Vec<&'a FragmentRef<'a>>,
 }
 
-impl<'a> MdfBuilder<'a> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        MdfBuilder {
+impl<'a> MdfRecordWriter<'a> {
+    pub fn with_settings_from_mep(capacity: usize) -> Self {
+        MdfRecordWriter {
             fragments: Vec::with_capacity(capacity),
+            ..todo!()
         }
     }
 
@@ -49,10 +55,17 @@ impl<'a> MdfBuilder<'a> {
             .iter()
             .map(|f| f.fragment_size() as usize + size_of::<MdfFragmentHeader>())
             .sum();
-        let header = MdfHeader::new(data_size);
+        let header = MdfHeader::new_simple(data_size);
         writer.write_all(header.as_byets())?;
 
-        for fragment in &self.fragments {}
+        for fragment in &self.fragments {
+            MdfFragmentWriter::builder()
+                .fragment(fragment)
+                .version(self.fragment_version)
+                .source_id(self.source_id)
+                .build()
+                .write(writer)?;
+        }
 
         self.clear();
         Ok(())
