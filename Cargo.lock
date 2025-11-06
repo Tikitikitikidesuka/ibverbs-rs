@@ -173,6 +173,7 @@ dependencies = [
  "bytemuck",
  "multi-event-packet",
  "multi-fragment-packet",
+ "thiserror",
  "typed-builder",
 ]
 

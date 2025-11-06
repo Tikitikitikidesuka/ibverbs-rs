@@ -42,9 +42,9 @@ impl<'a> WriteMdf for Fragment<'a> {
         writer.write_all(self.data())?;
 
         // pad to u32 size
-        let leftover = self.fragment_size() as usize % size_of::<u32>();
-        let zero = 0u32.to_ne_bytes();
-        writer.write_all(&zero[leftover..])?;
+        let frag_size = self.fragment_size() as usize;
+        let padding = frag_size.next_multiple_of(align_of::<u32>()) - frag_size;
+        writer.write_all(&0u32.to_ne_bytes()[..padding])?;
 
         Ok(())
     }
@@ -64,7 +64,7 @@ impl MdfFragmentRef {
         unsafe { &*slice.as_ptr().cast() }
     }
 
-    pub fn bank_type(&self) -> u8 {
+    pub fn fragment_type(&self) -> u8 {
         self.header.fragment_type
     }
 

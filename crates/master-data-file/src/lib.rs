@@ -1,6 +1,7 @@
 use std::{mem, slice};
 
-use bytemuck::{NoUninit, bytes_of, cast_slice_mut};
+use bytemuck::cast_slice_mut;
+use thiserror::Error;
 
 use crate::{
     fragment::MdfFragmentRef,
@@ -25,8 +26,16 @@ pub struct MdfRecordRef<H: SpecificHeaderType> {
 impl<H: SpecificHeaderType> MdfRecordRef<H> {
     /// Returns the entire record length in units of `u32`.
     pub fn size_u32(&self) -> u32 {
-        assert_eq!(self.generic_header.length_1, self.generic_header.length_2);
-        assert_eq!(self.generic_header.length_2, self.generic_header.length_3);
+        assert_eq!(
+            self.generic_header.length_1, self.generic_header.length_2,
+            "{:?}",
+            self.generic_header
+        );
+        assert_eq!(
+            self.generic_header.length_2, self.generic_header.length_3,
+            "{:?}",
+            self.generic_header
+        );
         self.generic_header.length_1
     }
 
@@ -37,12 +46,12 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
 
     pub fn specific_header_type(&self) -> u8 {
         // todo is this the right way around?
-        self.generic_header.header_type >> 4
+        self.generic_header.header_type_and_size.header_type()
     }
 
     pub fn specific_header_size_bytes(&self) -> usize {
         // todo is this the right way around?
-        (self.generic_header.header_type & 0xF) as usize * size_of::<u32>()
+        self.generic_header.header_type_and_size.size_bytes()
     }
 
     pub fn specific_header(&self) -> H {
@@ -63,7 +72,8 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
     }
 
     pub fn body_u32(&self) -> &[u32] {
-        let offset = size_of_val(&self.generic_header) + self.specific_header_size_bytes();
+        // unknown has zero size specific header, account for separately
+        let offset = size_of::<MdfHeader<Unknown>>() + self.specific_header_size_bytes();
         assert!(offset.is_multiple_of(size_of::<u32>()));
         let offset32 = offset / size_of::<u32>();
 
@@ -72,6 +82,42 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
                 (self as *const Self as *const u32).add(offset32),
                 self.size_u32() as usize - offset32,
             )
+        }
+    }
+}
+
+impl MdfRecordRef<Unknown> {
+    pub fn try_into_single_event(&self) -> Result<&MdfRecordRef<SingleEvent>, HeaderParseError> {
+        self.try_into()
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum HeaderParseError {
+    #[error("Invalid header type: expected {expected} but got {got}")]
+    InvalidHeaderType { expected: u8, got: u8 },
+    #[error("Invalid header size: expected {expected} but got {got}")]
+    InvalidHeaderSize { expected: usize, got: usize },
+}
+
+impl<'a> TryFrom<&'a MdfRecordRef<Unknown>> for &'a MdfRecordRef<SingleEvent> {
+    type Error = HeaderParseError;
+
+    fn try_from(
+        other: &'a MdfRecordRef<Unknown>,
+    ) -> Result<&'a MdfRecordRef<SingleEvent>, Self::Error> {
+        if other.specific_header_type() != SingleEvent::HEADER_TYPE {
+            Err(HeaderParseError::InvalidHeaderType {
+                expected: SingleEvent::HEADER_TYPE,
+                got: other.specific_header_type(),
+            })
+        } else if other.specific_header_size_bytes() != size_of::<SingleEvent>() {
+            Err(HeaderParseError::InvalidHeaderSize {
+                expected: size_of::<SingleEvent>(),
+                got: other.specific_header_size_bytes(),
+            })
+        } else {
+            Ok(unsafe { &*(other as *const MdfRecordRef<_> as *const MdfRecordRef<SingleEvent>) })
         }
     }
 }
@@ -130,12 +176,12 @@ impl MdfRecords {
     /// Data must contain valid mdf records
     pub unsafe fn from_data(data: &[u8]) -> Self {
         let mut boxed = vec![0u32; data.len().div_ceil(size_of::<u32>())].into_boxed_slice();
-        cast_slice_mut(&mut boxed)[0..data.len()].copy_from_slice(data);
+        cast_slice_mut(&mut boxed)[..data.len()].copy_from_slice(data);
         Self { data: boxed }
     }
 
     pub fn mdf_record_iter(&self) -> MdfRecordIterator<'_> {
-        todo!()
+        MdfRecordIterator { data: &self.data }
     }
 }
 
@@ -151,7 +197,7 @@ impl<'a> Iterator for MdfRecordIterator<'a> {
             return None;
         }
 
-        let record: Self::Item = unsafe { &*self.data.as_ptr().cast() };
+        let record: Self::Item = unsafe { &*self.data.as_ptr().cast::<MdfRecordRef<Unknown>>() };
         self.data = &self.data[record.size_u32() as _..];
         Some(record)
     }
