@@ -1,5 +1,4 @@
 pub mod basic;
-//pub mod retry;
 pub mod synced;
 
 use crate::rdma_connection::{
@@ -100,10 +99,7 @@ pub trait RdmaNetworkNodeSendImmediateDataTransport<Connection: RdmaPostSendImme
         rank_id: usize,
         conn: &mut Connection,
         immediate_data: u32,
-    ) -> Result<
-        Self::WorkRequest,
-        Self::PostError,
-    >;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }
 
 pub trait RdmaNetworkNodeReceiveImmediateDataTransport<
@@ -117,8 +113,5 @@ pub trait RdmaNetworkNodeReceiveImmediateDataTransport<
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
-    ) -> Result<
-        Self::WorkRequest,
-        Self::PostError,
-    >;
+    ) -> Result<Self::WorkRequest, Self::PostError>;
 }

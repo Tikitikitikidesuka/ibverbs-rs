@@ -5,7 +5,7 @@ use crate::rdma_connection::{
     RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
     RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection,
 };
-use crate::rdma_network_node::{MemoryRegionPair, RdmaNetworkMemoryRegionComponent};
+use crate::rdma_network_node::{MemoryRegionPair, NonMatchingMemoryRegionCount, RdmaNetworkMemoryRegionComponent};
 use crate::transport::{
     RdmaNetworkNodeReadTransport, RdmaNetworkNodeReceiveImmediateDataTransport,
     RdmaNetworkNodeReceiveTransport, RdmaNetworkNodeSendImmediateDataTransport,
@@ -33,7 +33,7 @@ impl<Connection: RdmaConnection>
     for BasicTransport<Connection>
 {
     type Registered = BasicTransport<Connection>;
-    type RegisterError = std::io::Error;
+    type RegisterError = NonMatchingMemoryRegionCount;
 
     fn memory(&mut self, _num_connections: usize) -> Option<Vec<(*mut u8, usize)>> {
         None
