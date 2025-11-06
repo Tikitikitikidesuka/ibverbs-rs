@@ -1,4 +1,4 @@
-pub mod all_enum;
+pub mod any;
 pub mod binary_tree;
 pub mod centralized;
 pub mod dissemination;
@@ -30,4 +30,3 @@ pub enum RdmaNetworkNodeBarrierError {
     #[error("Centralized barrier RDMA error: {0}")]
     RdmaError(String),
 }
-

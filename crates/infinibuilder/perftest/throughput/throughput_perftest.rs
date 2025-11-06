@@ -6,7 +6,6 @@ use infinibuilder::rdma_connection::RdmaWorkRequest;
 use infinibuilder::rdma_network_node::{
     RdmaNamedMemory, RdmaNamedMemoryRegionNetworkNode, RdmaNetworkNode,
 };
-use infinibuilder::transport::basic::BasicTransport;
 use infinibuilder::transport::synced::SyncedTransport;
 use std::fs;
 use std::ptr::slice_from_raw_parts;

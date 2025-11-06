@@ -1,0 +1,55 @@
+{
+  "uaeb": [
+    "uaeb01", "uaeb02", "uaeb03", "uaeb04", "uaeb05", "uaeb06", "uaeb07", "uaeb08",
+    "uaeb09", "uaeb10", "uaeb11", "uaeb12", "uaeb13", "uaeb14", "uaeb15", "uaeb16",
+    "uaeb17", "uaeb18"
+  ],
+  "uceb": [
+    "uceb01", "uceb02", "uceb03", "uceb04", "uceb05", "uceb06", "uceb07", "uceb08",
+    "uceb09", "uceb10", "uceb11", "uceb12", "uceb13", "uceb14", "uceb15", "uceb16",
+    "uceb17", "uceb18"
+  ],
+  "sceb": [
+    "sceb01", "sceb02", "sceb03", "sceb04", "sceb05", "sceb06", "sceb07", "sceb08",
+    "sceb09", "sceb10", "sceb11", "sceb12", "sceb13", "sceb14", "sceb15", "sceb16",
+    "sceb17", "sceb18", "sceb19", "sceb20", "sceb21", "sceb22", "sceb23", "sceb24"
+  ],
+  "eceb": [
+    "eceb01", "eceb02", "eceb03", "eceb04", "eceb05", "eceb06", "eceb07", "eceb08",
+    "eceb09", "eceb10", "eceb11", "eceb12"
+  ],
+  "r1eb": [
+    "r1eb01", "r1eb02", "r1eb03", "r1eb04", "r1eb05", "r1eb06", "r1eb07", "r1eb08",
+    "r1eb09", "r1eb10", "r1eb11", "r1eb12", "r1eb13", "r1eb14", "r1eb15", "r1eb16",
+    "r1eb17", "r1eb18", "r1eb19", "r1eb20", "r1eb21", "r1eb22"
+  ],
+  "r2eb": [
+    "r2eb01", "r2eb02", "r2eb03", "r2eb04", "r2eb05", "r2eb06", "r2eb07", "r2eb08",
+    "r2eb09", "r2eb10", "r2eb11", "r2eb12"
+  ],
+  "saeb": [
+    "saeb01", "saeb02", "saeb03", "saeb04", "saeb05", "saeb06", "saeb07", "saeb08",
+    "saeb09", "saeb10", "saeb11", "saeb12", "saeb13", "saeb14", "saeb15", "saeb16",
+    "saeb17", "saeb18", "saeb19", "saeb20", "saeb21", "saeb22", "saeb23", "saeb24"
+  ],
+  "vaeb": [
+    "vaeb01", "vaeb02", "vaeb03", "vaeb04", "vaeb05", "vaeb06", "vaeb07", "vaeb08",
+    "vaeb09", "vaeb10"
+  ],
+  "vceb": [
+    "vceb01", "vceb02", "vceb03", "vceb04", "vceb05", "vceb06", "vceb07", "vceb08",
+    "vceb09", "vceb10"
+  ],
+  "hceb": [
+    "hceb01", "hceb02", "hceb03", "hceb04"
+  ],
+  "maeb": [
+    "maeb01", "maeb02", "maeb03", "maeb04"
+  ],
+  "mceb": [
+    "mceb01", "mceb02", "mceb03", "mceb04"
+  ],
+  "pleb": [
+    "pleb01"
+  ]
+}

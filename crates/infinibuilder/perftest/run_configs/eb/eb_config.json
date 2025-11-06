@@ -1,0 +1,1145 @@
+{
+  "hosts": [
+    {
+      "hostname": "uaeb13",
+      "ibdev": "mlx5_0",
+      "rankid": 0,
+      "port": 8989,
+      "utgid": "uaeb13"
+    },
+    {
+      "hostname": "uceb11",
+      "ibdev": "mlx5_0",
+      "rankid": 1,
+      "port": 8989,
+      "utgid": "uceb11"
+    },
+    {
+      "hostname": "sceb18",
+      "ibdev": "mlx5_0",
+      "rankid": 2,
+      "port": 8989,
+      "utgid": "sceb18"
+    },
+    {
+      "hostname": "eceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 3,
+      "port": 8989,
+      "utgid": "eceb02"
+    },
+    {
+      "hostname": "r1eb10",
+      "ibdev": "mlx5_0",
+      "rankid": 4,
+      "port": 8989,
+      "utgid": "r1eb10"
+    },
+    {
+      "hostname": "vceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 5,
+      "port": 8989,
+      "utgid": "vceb01"
+    },
+    {
+      "hostname": "uaeb10",
+      "ibdev": "mlx5_0",
+      "rankid": 6,
+      "port": 8989,
+      "utgid": "uaeb10"
+    },
+    {
+      "hostname": "maeb03",
+      "ibdev": "mlx5_0",
+      "rankid": 7,
+      "port": 8989,
+      "utgid": "maeb03"
+    },
+    {
+      "hostname": "eceb10",
+      "ibdev": "mlx5_0",
+      "rankid": 8,
+      "port": 8989,
+      "utgid": "eceb10"
+    },
+    {
+      "hostname": "saeb03",
+      "ibdev": "mlx5_0",
+      "rankid": 9,
+      "port": 8989,
+      "utgid": "saeb03"
+    },
+    {
+      "hostname": "r1eb18",
+      "ibdev": "mlx5_0",
+      "rankid": 10,
+      "port": 8989,
+      "utgid": "r1eb18"
+    },
+    {
+      "hostname": "vceb05",
+      "ibdev": "mlx5_0",
+      "rankid": 11,
+      "port": 8989,
+      "utgid": "vceb05"
+    },
+    {
+      "hostname": "r1eb06",
+      "ibdev": "mlx5_0",
+      "rankid": 12,
+      "port": 8989,
+      "utgid": "r1eb06"
+    },
+    {
+      "hostname": "saeb22",
+      "ibdev": "mlx5_0",
+      "rankid": 13,
+      "port": 8989,
+      "utgid": "saeb22"
+    },
+    {
+      "hostname": "hceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 14,
+      "port": 8989,
+      "utgid": "hceb04"
+    },
+    {
+      "hostname": "hceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 15,
+      "port": 8989,
+      "utgid": "hceb02"
+    },
+    {
+      "hostname": "sceb06",
+      "ibdev": "mlx5_0",
+      "rankid": 16,
+      "port": 8989,
+      "utgid": "sceb06"
+    },
+    {
+      "hostname": "uceb16",
+      "ibdev": "mlx5_0",
+      "rankid": 17,
+      "port": 8989,
+      "utgid": "uceb16"
+    },
+    {
+      "hostname": "saeb16",
+      "ibdev": "mlx5_0",
+      "rankid": 18,
+      "port": 8989,
+      "utgid": "saeb16"
+    },
+    {
+      "hostname": "uceb07",
+      "ibdev": "mlx5_0",
+      "rankid": 19,
+      "port": 8989,
+      "utgid": "uceb07"
+    },
+    {
+      "hostname": "saeb15",
+      "ibdev": "mlx5_0",
+      "rankid": 20,
+      "port": 8989,
+      "utgid": "saeb15"
+    },
+    {
+      "hostname": "saeb07",
+      "ibdev": "mlx5_0",
+      "rankid": 21,
+      "port": 8989,
+      "utgid": "saeb07"
+    },
+    {
+      "hostname": "r1eb04",
+      "ibdev": "mlx5_0",
+      "rankid": 22,
+      "port": 8989,
+      "utgid": "r1eb04"
+    },
+    {
+      "hostname": "sceb16",
+      "ibdev": "mlx5_0",
+      "rankid": 23,
+      "port": 8989,
+      "utgid": "sceb16"
+    },
+    {
+      "hostname": "uceb10",
+      "ibdev": "mlx5_0",
+      "rankid": 24,
+      "port": 8989,
+      "utgid": "uceb10"
+    },
+    {
+      "hostname": "uceb05",
+      "ibdev": "mlx5_0",
+      "rankid": 25,
+      "port": 8989,
+      "utgid": "uceb05"
+    },
+    {
+      "hostname": "r2eb07",
+      "ibdev": "mlx5_0",
+      "rankid": 26,
+      "port": 8989,
+      "utgid": "r2eb07"
+    },
+    {
+      "hostname": "saeb24",
+      "ibdev": "mlx5_0",
+      "rankid": 27,
+      "port": 8989,
+      "utgid": "saeb24"
+    },
+    {
+      "hostname": "uceb15",
+      "ibdev": "mlx5_0",
+      "rankid": 28,
+      "port": 8989,
+      "utgid": "uceb15"
+    },
+    {
+      "hostname": "saeb01",
+      "ibdev": "mlx5_0",
+      "rankid": 29,
+      "port": 8989,
+      "utgid": "saeb01"
+    },
+    {
+      "hostname": "saeb17",
+      "ibdev": "mlx5_0",
+      "rankid": 30,
+      "port": 8989,
+      "utgid": "saeb17"
+    },
+    {
+      "hostname": "saeb18",
+      "ibdev": "mlx5_0",
+      "rankid": 31,
+      "port": 8989,
+      "utgid": "saeb18"
+    },
+    {
+      "hostname": "r1eb03",
+      "ibdev": "mlx5_0",
+      "rankid": 32,
+      "port": 8989,
+      "utgid": "r1eb03"
+    },
+    {
+      "hostname": "sceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 33,
+      "port": 8989,
+      "utgid": "sceb03"
+    },
+    {
+      "hostname": "vaeb07",
+      "ibdev": "mlx5_0",
+      "rankid": 34,
+      "port": 8989,
+      "utgid": "vaeb07"
+    },
+    {
+      "hostname": "uaeb04",
+      "ibdev": "mlx5_0",
+      "rankid": 35,
+      "port": 8989,
+      "utgid": "uaeb04"
+    },
+    {
+      "hostname": "uceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 36,
+      "port": 8989,
+      "utgid": "uceb01"
+    },
+    {
+      "hostname": "hceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 37,
+      "port": 8989,
+      "utgid": "hceb03"
+    },
+    {
+      "hostname": "uaeb05",
+      "ibdev": "mlx5_0",
+      "rankid": 38,
+      "port": 8989,
+      "utgid": "uaeb05"
+    },
+    {
+      "hostname": "saeb14",
+      "ibdev": "mlx5_0",
+      "rankid": 39,
+      "port": 8989,
+      "utgid": "saeb14"
+    },
+    {
+      "hostname": "r2eb11",
+      "ibdev": "mlx5_0",
+      "rankid": 40,
+      "port": 8989,
+      "utgid": "r2eb11"
+    },
+    {
+      "hostname": "eceb07",
+      "ibdev": "mlx5_0",
+      "rankid": 41,
+      "port": 8989,
+      "utgid": "eceb07"
+    },
+    {
+      "hostname": "vceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 42,
+      "port": 8989,
+      "utgid": "vceb03"
+    },
+    {
+      "hostname": "pleb01",
+      "ibdev": "mlx5_0",
+      "rankid": 43,
+      "port": 8989,
+      "utgid": "pleb01"
+    },
+    {
+      "hostname": "sceb17",
+      "ibdev": "mlx5_0",
+      "rankid": 44,
+      "port": 8989,
+      "utgid": "sceb17"
+    },
+    {
+      "hostname": "r1eb07",
+      "ibdev": "mlx5_0",
+      "rankid": 45,
+      "port": 8989,
+      "utgid": "r1eb07"
+    },
+    {
+      "hostname": "uaeb11",
+      "ibdev": "mlx5_0",
+      "rankid": 46,
+      "port": 8989,
+      "utgid": "uaeb11"
+    },
+    {
+      "hostname": "vaeb09",
+      "ibdev": "mlx5_0",
+      "rankid": 47,
+      "port": 8989,
+      "utgid": "vaeb09"
+    },
+    {
+      "hostname": "r2eb01",
+      "ibdev": "mlx5_0",
+      "rankid": 48,
+      "port": 8989,
+      "utgid": "r2eb01"
+    },
+    {
+      "hostname": "eceb06",
+      "ibdev": "mlx5_0",
+      "rankid": 49,
+      "port": 8989,
+      "utgid": "eceb06"
+    },
+    {
+      "hostname": "hceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 50,
+      "port": 8989,
+      "utgid": "hceb01"
+    },
+    {
+      "hostname": "sceb05",
+      "ibdev": "mlx5_0",
+      "rankid": 51,
+      "port": 8989,
+      "utgid": "sceb05"
+    },
+    {
+      "hostname": "saeb12",
+      "ibdev": "mlx5_0",
+      "rankid": 52,
+      "port": 8989,
+      "utgid": "saeb12"
+    },
+    {
+      "hostname": "saeb06",
+      "ibdev": "mlx5_0",
+      "rankid": 53,
+      "port": 8989,
+      "utgid": "saeb06"
+    },
+    {
+      "hostname": "r1eb22",
+      "ibdev": "mlx5_0",
+      "rankid": 54,
+      "port": 8989,
+      "utgid": "r1eb22"
+    },
+    {
+      "hostname": "saeb10",
+      "ibdev": "mlx5_0",
+      "rankid": 55,
+      "port": 8989,
+      "utgid": "saeb10"
+    },
+    {
+      "hostname": "r1eb19",
+      "ibdev": "mlx5_0",
+      "rankid": 56,
+      "port": 8989,
+      "utgid": "r1eb19"
+    },
+    {
+      "hostname": "r2eb05",
+      "ibdev": "mlx5_0",
+      "rankid": 57,
+      "port": 8989,
+      "utgid": "r2eb05"
+    },
+    {
+      "hostname": "uaeb09",
+      "ibdev": "mlx5_0",
+      "rankid": 58,
+      "port": 8989,
+      "utgid": "uaeb09"
+    },
+    {
+      "hostname": "uceb14",
+      "ibdev": "mlx5_0",
+      "rankid": 59,
+      "port": 8989,
+      "utgid": "uceb14"
+    },
+    {
+      "hostname": "saeb21",
+      "ibdev": "mlx5_0",
+      "rankid": 60,
+      "port": 8989,
+      "utgid": "saeb21"
+    },
+    {
+      "hostname": "uceb09",
+      "ibdev": "mlx5_0",
+      "rankid": 61,
+      "port": 8989,
+      "utgid": "uceb09"
+    },
+    {
+      "hostname": "uaeb18",
+      "ibdev": "mlx5_0",
+      "rankid": 62,
+      "port": 8989,
+      "utgid": "uaeb18"
+    },
+    {
+      "hostname": "r2eb10",
+      "ibdev": "mlx5_0",
+      "rankid": 63,
+      "port": 8989,
+      "utgid": "r2eb10"
+    },
+    {
+      "hostname": "uceb18",
+      "ibdev": "mlx5_0",
+      "rankid": 64,
+      "port": 8989,
+      "utgid": "uceb18"
+    },
+    {
+      "hostname": "saeb02",
+      "ibdev": "mlx5_0",
+      "rankid": 65,
+      "port": 8989,
+      "utgid": "saeb02"
+    },
+    {
+      "hostname": "eceb09",
+      "ibdev": "mlx5_0",
+      "rankid": 66,
+      "port": 8989,
+      "utgid": "eceb09"
+    },
+    {
+      "hostname": "r2eb06",
+      "ibdev": "mlx5_0",
+      "rankid": 67,
+      "port": 8989,
+      "utgid": "r2eb06"
+    },
+    {
+      "hostname": "sceb15",
+      "ibdev": "mlx5_0",
+      "rankid": 68,
+      "port": 8989,
+      "utgid": "sceb15"
+    },
+    {
+      "hostname": "uaeb03",
+      "ibdev": "mlx5_0",
+      "rankid": 69,
+      "port": 8989,
+      "utgid": "uaeb03"
+    },
+    {
+      "hostname": "saeb19",
+      "ibdev": "mlx5_0",
+      "rankid": 70,
+      "port": 8989,
+      "utgid": "saeb19"
+    },
+    {
+      "hostname": "vceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 71,
+      "port": 8989,
+      "utgid": "vceb04"
+    },
+    {
+      "hostname": "r2eb04",
+      "ibdev": "mlx5_0",
+      "rankid": 72,
+      "port": 8989,
+      "utgid": "r2eb04"
+    },
+    {
+      "hostname": "saeb09",
+      "ibdev": "mlx5_0",
+      "rankid": 73,
+      "port": 8989,
+      "utgid": "saeb09"
+    },
+    {
+      "hostname": "eceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 74,
+      "port": 8989,
+      "utgid": "eceb01"
+    },
+    {
+      "hostname": "vaeb05",
+      "ibdev": "mlx5_0",
+      "rankid": 75,
+      "port": 8989,
+      "utgid": "vaeb05"
+    },
+    {
+      "hostname": "vaeb04",
+      "ibdev": "mlx5_0",
+      "rankid": 76,
+      "port": 8989,
+      "utgid": "vaeb04"
+    },
+    {
+      "hostname": "sceb10",
+      "ibdev": "mlx5_0",
+      "rankid": 77,
+      "port": 8989,
+      "utgid": "sceb10"
+    },
+    {
+      "hostname": "mceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 78,
+      "port": 8989,
+      "utgid": "mceb04"
+    },
+    {
+      "hostname": "vceb09",
+      "ibdev": "mlx5_0",
+      "rankid": 79,
+      "port": 8989,
+      "utgid": "vceb09"
+    },
+    {
+      "hostname": "r1eb02",
+      "ibdev": "mlx5_0",
+      "rankid": 80,
+      "port": 8989,
+      "utgid": "r1eb02"
+    },
+    {
+      "hostname": "r2eb12",
+      "ibdev": "mlx5_0",
+      "rankid": 81,
+      "port": 8989,
+      "utgid": "r2eb12"
+    },
+    {
+      "hostname": "r2eb09",
+      "ibdev": "mlx5_0",
+      "rankid": 82,
+      "port": 8989,
+      "utgid": "r2eb09"
+    },
+    {
+      "hostname": "uceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 83,
+      "port": 8989,
+      "utgid": "uceb03"
+    },
+    {
+      "hostname": "saeb23",
+      "ibdev": "mlx5_0",
+      "rankid": 84,
+      "port": 8989,
+      "utgid": "saeb23"
+    },
+    {
+      "hostname": "sceb20",
+      "ibdev": "mlx5_0",
+      "rankid": 85,
+      "port": 8989,
+      "utgid": "sceb20"
+    },
+    {
+      "hostname": "sceb07",
+      "ibdev": "mlx5_0",
+      "rankid": 86,
+      "port": 8989,
+      "utgid": "sceb07"
+    },
+    {
+      "hostname": "r1eb13",
+      "ibdev": "mlx5_0",
+      "rankid": 87,
+      "port": 8989,
+      "utgid": "r1eb13"
+    },
+    {
+      "hostname": "vceb08",
+      "ibdev": "mlx5_0",
+      "rankid": 88,
+      "port": 8989,
+      "utgid": "vceb08"
+    },
+    {
+      "hostname": "sceb08",
+      "ibdev": "mlx5_0",
+      "rankid": 89,
+      "port": 8989,
+      "utgid": "sceb08"
+    },
+    {
+      "hostname": "vceb06",
+      "ibdev": "mlx5_0",
+      "rankid": 90,
+      "port": 8989,
+      "utgid": "vceb06"
+    },
+    {
+      "hostname": "vaeb08",
+      "ibdev": "mlx5_0",
+      "rankid": 91,
+      "port": 8989,
+      "utgid": "vaeb08"
+    },
+    {
+      "hostname": "sceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 92,
+      "port": 8989,
+      "utgid": "sceb01"
+    },
+    {
+      "hostname": "sceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 93,
+      "port": 8989,
+      "utgid": "sceb04"
+    },
+    {
+      "hostname": "uaeb07",
+      "ibdev": "mlx5_0",
+      "rankid": 94,
+      "port": 8989,
+      "utgid": "uaeb07"
+    },
+    {
+      "hostname": "uaeb08",
+      "ibdev": "mlx5_0",
+      "rankid": 95,
+      "port": 8989,
+      "utgid": "uaeb08"
+    },
+    {
+      "hostname": "uceb08",
+      "ibdev": "mlx5_0",
+      "rankid": 96,
+      "port": 8989,
+      "utgid": "uceb08"
+    },
+    {
+      "hostname": "uceb17",
+      "ibdev": "mlx5_0",
+      "rankid": 97,
+      "port": 8989,
+      "utgid": "uceb17"
+    },
+    {
+      "hostname": "maeb04",
+      "ibdev": "mlx5_0",
+      "rankid": 98,
+      "port": 8989,
+      "utgid": "maeb04"
+    },
+    {
+      "hostname": "r1eb08",
+      "ibdev": "mlx5_0",
+      "rankid": 99,
+      "port": 8989,
+      "utgid": "r1eb08"
+    },
+    {
+      "hostname": "r1eb14",
+      "ibdev": "mlx5_0",
+      "rankid": 100,
+      "port": 8989,
+      "utgid": "r1eb14"
+    },
+    {
+      "hostname": "r1eb15",
+      "ibdev": "mlx5_0",
+      "rankid": 101,
+      "port": 8989,
+      "utgid": "r1eb15"
+    },
+    {
+      "hostname": "saeb05",
+      "ibdev": "mlx5_0",
+      "rankid": 102,
+      "port": 8989,
+      "utgid": "saeb05"
+    },
+    {
+      "hostname": "uaeb12",
+      "ibdev": "mlx5_0",
+      "rankid": 103,
+      "port": 8989,
+      "utgid": "uaeb12"
+    },
+    {
+      "hostname": "uaeb02",
+      "ibdev": "mlx5_0",
+      "rankid": 104,
+      "port": 8989,
+      "utgid": "uaeb02"
+    },
+    {
+      "hostname": "r1eb09",
+      "ibdev": "mlx5_0",
+      "rankid": 105,
+      "port": 8989,
+      "utgid": "r1eb09"
+    },
+    {
+      "hostname": "uaeb16",
+      "ibdev": "mlx5_0",
+      "rankid": 106,
+      "port": 8989,
+      "utgid": "uaeb16"
+    },
+    {
+      "hostname": "vaeb10",
+      "ibdev": "mlx5_0",
+      "rankid": 107,
+      "port": 8989,
+      "utgid": "vaeb10"
+    },
+    {
+      "hostname": "vaeb06",
+      "ibdev": "mlx5_0",
+      "rankid": 108,
+      "port": 8989,
+      "utgid": "vaeb06"
+    },
+    {
+      "hostname": "saeb13",
+      "ibdev": "mlx5_0",
+      "rankid": 109,
+      "port": 8989,
+      "utgid": "saeb13"
+    },
+    {
+      "hostname": "sceb12",
+      "ibdev": "mlx5_0",
+      "rankid": 110,
+      "port": 8989,
+      "utgid": "sceb12"
+    },
+    {
+      "hostname": "vaeb01",
+      "ibdev": "mlx5_0",
+      "rankid": 111,
+      "port": 8989,
+      "utgid": "vaeb01"
+    },
+    {
+      "hostname": "mceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 112,
+      "port": 8989,
+      "utgid": "mceb02"
+    },
+    {
+      "hostname": "r1eb05",
+      "ibdev": "mlx5_0",
+      "rankid": 113,
+      "port": 8989,
+      "utgid": "r1eb05"
+    },
+    {
+      "hostname": "vaeb02",
+      "ibdev": "mlx5_0",
+      "rankid": 114,
+      "port": 8989,
+      "utgid": "vaeb02"
+    },
+    {
+      "hostname": "eceb12",
+      "ibdev": "mlx5_0",
+      "rankid": 115,
+      "port": 8989,
+      "utgid": "eceb12"
+    },
+    {
+      "hostname": "saeb20",
+      "ibdev": "mlx5_0",
+      "rankid": 116,
+      "port": 8989,
+      "utgid": "saeb20"
+    },
+    {
+      "hostname": "uaeb06",
+      "ibdev": "mlx5_0",
+      "rankid": 117,
+      "port": 8989,
+      "utgid": "uaeb06"
+    },
+    {
+      "hostname": "maeb01",
+      "ibdev": "mlx5_0",
+      "rankid": 118,
+      "port": 8989,
+      "utgid": "maeb01"
+    },
+    {
+      "hostname": "maeb02",
+      "ibdev": "mlx5_0",
+      "rankid": 119,
+      "port": 8989,
+      "utgid": "maeb02"
+    },
+    {
+      "hostname": "eceb05",
+      "ibdev": "mlx5_0",
+      "rankid": 120,
+      "port": 8989,
+      "utgid": "eceb05"
+    },
+    {
+      "hostname": "uceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 121,
+      "port": 8989,
+      "utgid": "uceb02"
+    },
+    {
+      "hostname": "sceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 122,
+      "port": 8989,
+      "utgid": "sceb02"
+    },
+    {
+      "hostname": "sceb19",
+      "ibdev": "mlx5_0",
+      "rankid": 123,
+      "port": 8989,
+      "utgid": "sceb19"
+    },
+    {
+      "hostname": "mceb01",
+      "ibdev": "mlx5_0",
+      "rankid": 124,
+      "port": 8989,
+      "utgid": "mceb01"
+    },
+    {
+      "hostname": "r1eb01",
+      "ibdev": "mlx5_0",
+      "rankid": 125,
+      "port": 8989,
+      "utgid": "r1eb01"
+    },
+    {
+      "hostname": "uceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 126,
+      "port": 8989,
+      "utgid": "uceb04"
+    },
+    {
+      "hostname": "sceb21",
+      "ibdev": "mlx5_0",
+      "rankid": 127,
+      "port": 8989,
+      "utgid": "sceb21"
+    },
+    {
+      "hostname": "r1eb20",
+      "ibdev": "mlx5_0",
+      "rankid": 128,
+      "port": 8989,
+      "utgid": "r1eb20"
+    },
+    {
+      "hostname": "r2eb08",
+      "ibdev": "mlx5_0",
+      "rankid": 129,
+      "port": 8989,
+      "utgid": "r2eb08"
+    },
+    {
+      "hostname": "uceb13",
+      "ibdev": "mlx5_0",
+      "rankid": 130,
+      "port": 8989,
+      "utgid": "uceb13"
+    },
+    {
+      "hostname": "saeb11",
+      "ibdev": "mlx5_0",
+      "rankid": 131,
+      "port": 8989,
+      "utgid": "saeb11"
+    },
+    {
+      "hostname": "uaeb17",
+      "ibdev": "mlx5_0",
+      "rankid": 132,
+      "port": 8989,
+      "utgid": "uaeb17"
+    },
+    {
+      "hostname": "vceb02",
+      "ibdev": "mlx5_0",
+      "rankid": 133,
+      "port": 8989,
+      "utgid": "vceb02"
+    },
+    {
+      "hostname": "eceb08",
+      "ibdev": "mlx5_0",
+      "rankid": 134,
+      "port": 8989,
+      "utgid": "eceb08"
+    },
+    {
+      "hostname": "eceb04",
+      "ibdev": "mlx5_0",
+      "rankid": 135,
+      "port": 8989,
+      "utgid": "eceb04"
+    },
+    {
+      "hostname": "uaeb15",
+      "ibdev": "mlx5_0",
+      "rankid": 136,
+      "port": 8989,
+      "utgid": "uaeb15"
+    },
+    {
+      "hostname": "uceb12",
+      "ibdev": "mlx5_0",
+      "rankid": 137,
+      "port": 8989,
+      "utgid": "uceb12"
+    },
+    {
+      "hostname": "vceb10",
+      "ibdev": "mlx5_0",
+      "rankid": 138,
+      "port": 8989,
+      "utgid": "vceb10"
+    },
+    {
+      "hostname": "sceb13",
+      "ibdev": "mlx5_0",
+      "rankid": 139,
+      "port": 8989,
+      "utgid": "sceb13"
+    },
+    {
+      "hostname": "sceb23",
+      "ibdev": "mlx5_0",
+      "rankid": 140,
+      "port": 8989,
+      "utgid": "sceb23"
+    },
+    {
+      "hostname": "saeb08",
+      "ibdev": "mlx5_0",
+      "rankid": 141,
+      "port": 8989,
+      "utgid": "saeb08"
+    },
+    {
+      "hostname": "uaeb14",
+      "ibdev": "mlx5_0",
+      "rankid": 142,
+      "port": 8989,
+      "utgid": "uaeb14"
+    },
+    {
+      "hostname": "r1eb16",
+      "ibdev": "mlx5_0",
+      "rankid": 143,
+      "port": 8989,
+      "utgid": "r1eb16"
+    },
+    {
+      "hostname": "eceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 144,
+      "port": 8989,
+      "utgid": "eceb03"
+    },
+    {
+      "hostname": "sceb11",
+      "ibdev": "mlx5_0",
+      "rankid": 145,
+      "port": 8989,
+      "utgid": "sceb11"
+    },
+    {
+      "hostname": "saeb04",
+      "ibdev": "mlx5_0",
+      "rankid": 146,
+      "port": 8989,
+      "utgid": "saeb04"
+    },
+    {
+      "hostname": "sceb09",
+      "ibdev": "mlx5_0",
+      "rankid": 147,
+      "port": 8989,
+      "utgid": "sceb09"
+    },
+    {
+      "hostname": "uaeb01",
+      "ibdev": "mlx5_0",
+      "rankid": 148,
+      "port": 8989,
+      "utgid": "uaeb01"
+    },
+    {
+      "hostname": "sceb24",
+      "ibdev": "mlx5_0",
+      "rankid": 149,
+      "port": 8989,
+      "utgid": "sceb24"
+    },
+    {
+      "hostname": "vaeb03",
+      "ibdev": "mlx5_0",
+      "rankid": 150,
+      "port": 8989,
+      "utgid": "vaeb03"
+    },
+    {
+      "hostname": "r1eb12",
+      "ibdev": "mlx5_0",
+      "rankid": 151,
+      "port": 8989,
+      "utgid": "r1eb12"
+    },
+    {
+      "hostname": "eceb11",
+      "ibdev": "mlx5_0",
+      "rankid": 152,
+      "port": 8989,
+      "utgid": "eceb11"
+    },
+    {
+      "hostname": "sceb14",
+      "ibdev": "mlx5_0",
+      "rankid": 153,
+      "port": 8989,
+      "utgid": "sceb14"
+    },
+    {
+      "hostname": "r1eb17",
+      "ibdev": "mlx5_0",
+      "rankid": 154,
+      "port": 8989,
+      "utgid": "r1eb17"
+    },
+    {
+      "hostname": "mceb03",
+      "ibdev": "mlx5_0",
+      "rankid": 155,
+      "port": 8989,
+      "utgid": "mceb03"
+    },
+    {
+      "hostname": "r2eb02",
+      "ibdev": "mlx5_0",
+      "rankid": 156,
+      "port": 8989,
+      "utgid": "r2eb02"
+    },
+    {
+      "hostname": "r2eb03",
+      "ibdev": "mlx5_0",
+      "rankid": 157,
+      "port": 8989,
+      "utgid": "r2eb03"
+    },
+    {
+      "hostname": "r1eb11",
+      "ibdev": "mlx5_0",
+      "rankid": 158,
+      "port": 8989,
+      "utgid": "r1eb11"
+    },
+    {
+      "hostname": "sceb22",
+      "ibdev": "mlx5_0",
+      "rankid": 159,
+      "port": 8989,
+      "utgid": "sceb22"
+    },
+    {
+      "hostname": "vceb07",
+      "ibdev": "mlx5_0",
+      "rankid": 160,
+      "port": 8989,
+      "utgid": "vceb07"
+    },
+    {
+      "hostname": "uceb06",
+      "ibdev": "mlx5_0",
+      "rankid": 161,
+      "port": 8989,
+      "utgid": "uceb06"
+    },
+    {
+      "hostname": "r1eb21",
+      "ibdev": "mlx5_0",
+      "rankid": 162,
+      "port": 8989,
+      "utgid": "r1eb21"
+    }
+  ]
+}

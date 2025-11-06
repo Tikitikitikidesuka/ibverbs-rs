@@ -1,6 +1,6 @@
 use BarrierAlgorithm::*;
 use clap::Parser;
-use infinibuilder::barrier::all_enum::{AnyBarrier, AnyBarrierType};
+use infinibuilder::barrier::any::{AnyBarrier, AnyBarrierType};
 use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::rdma_network_node::RdmaNetworkNode;

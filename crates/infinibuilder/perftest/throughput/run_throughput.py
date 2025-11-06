@@ -3,7 +3,46 @@ import subprocess
 import re
 import argparse
 import csv
+import json
+import tempfile
+import os
 import numpy as np
+
+
+def load_devices(devices_file):
+    """Load devices configuration from JSON file"""
+    with open(devices_file, 'r') as f:
+        return json.load(f)
+
+
+def generate_network_config(devices_data, sender_hostname, receiver_hostname, port=10000):
+    """Generate network config with sender (rank 0) and receiver (rank 1)"""
+    sender_host = next((h for h in devices_data['hosts'] if h['hostname'] == sender_hostname), None)
+    receiver_host = next((h for h in devices_data['hosts'] if h['hostname'] == receiver_hostname), None)
+
+    if not sender_host:
+        raise ValueError(f"Sender hostname '{sender_hostname}' not found in devices file")
+    if not receiver_host:
+        raise ValueError(f"Receiver hostname '{receiver_hostname}' not found in devices file")
+
+    network_config = {
+        "hosts": [
+            {
+                "hostname": sender_host['hostname'],
+                "port": port,
+                "ibdev": sender_host['ibdev'],
+                "rankid": 0
+            },
+            {
+                "hostname": receiver_host['hostname'],
+                "port": port,
+                "ibdev": receiver_host['ibdev'],
+                "rankid": 1
+            }
+        ]
+    }
+
+    return network_config
 
 
 def parse_output_line(line):
@@ -25,7 +64,7 @@ def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, i
         '--batch-size', str(batch_size),
         '--iters', str(iters)
     ]
-    print(cmd)
+    print(f"Running: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -57,7 +96,7 @@ def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, i
 
 
 def collect_samples(binary_path, config_file, rank_id, message_size, batch_size,
-                   max_samples, mean_window_size, std_threshold=0.05):
+                    max_samples, mean_window_size, std_threshold=0.05):
     """Collect samples and check for convergence using a sliding window"""
     pps_samples, gbps_samples = run_benchmark(
         binary_path, config_file, rank_id, message_size, batch_size, max_samples
@@ -99,29 +138,33 @@ def generate_message_sizes(min_size, max_size, num_samples):
     return [int(2 ** log2_size) for log2_size in log2_sizes]
 
 
-def run_receiver_mode(args):
-    """Run as slave (rank 1)"""
+def run_receiver_mode(args, config_file):
+    """Run as receiver (rank 1)"""
     message_sizes = generate_message_sizes(args.min_msg_size, args.max_msg_size, args.num_samples)
 
-    print(f"Running as RECEIVER (rank 1) - {len(message_sizes)} message sizes\n")
+    print(f"Running as RECEIVER (rank 1) on {args.receiver_hostname}")
+    print(f"Using network config: {config_file}")
+    print(f"Testing {len(message_sizes)} message sizes\n")
 
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
-        run_benchmark(args.binary, args.config_file, 1, msg_size, args.batch_size, args.max_samples)
+        run_benchmark(args.binary, config_file, 1, msg_size, args.batch_size, args.max_samples)
 
 
-def run_sender_mode(args):
-    """Run as master (rank 0) and collect results"""
+def run_sender_mode(args, config_file):
+    """Run as sender (rank 0) and collect results"""
     message_sizes = generate_message_sizes(args.min_msg_size, args.max_msg_size, args.num_samples)
 
-    print(f"Running as SENDER (rank 0) - {len(message_sizes)} message sizes\n")
+    print(f"Running as SENDER (rank 0) on {args.sender_hostname}")
+    print(f"Using network config: {config_file}")
+    print(f"Testing {len(message_sizes)} message sizes\n")
 
     results = []
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
 
         pps_samples, gbps_samples = collect_samples(
-            args.binary, args.config_file, 0, msg_size,
+            args.binary, config_file, 0, msg_size,
             args.batch_size, args.max_samples, args.mean_window_size, args.std_threshold
         )
 
@@ -163,9 +206,12 @@ def run_sender_mode(args):
 def main():
     parser = argparse.ArgumentParser(description='Run RDMA benchmark with varying message sizes')
     parser.add_argument('--binary', type=str, required=True, help='Path to the benchmark binary')
-    parser.add_argument('--config-file', type=str, required=True, help='Path to config.json')
-    parser.add_argument('--mode', type=str, required=True, choices=['master', 'slave'],
-                        help='Run as master (rank 0) or slave (rank 1)')
+    parser.add_argument('--devices-file', type=str, required=True, help='Path to devices.json')
+    parser.add_argument('--sender-hostname', type=str, required=True, help='Sender machine hostname')
+    parser.add_argument('--receiver-hostname', type=str, required=True, help='Receiver machine hostname')
+    parser.add_argument('--mode', type=str, required=True, choices=['sender', 'receiver'],
+                        help='Run as sender (rank 0) or receiver (rank 1)')
+    parser.add_argument('--port', type=int, default=10000, help='Port number (default: 10000)')
     parser.add_argument('--batch-size', type=int, default=512, help='Batch size for benchmark')
     parser.add_argument('--min-msg-size', type=int, required=True, help='Minimum message size')
     parser.add_argument('--max-msg-size', type=int, required=True, help='Maximum message size')
@@ -177,13 +223,43 @@ def main():
     parser.add_argument('--std-threshold', type=float, default=0.02,
                         help='Relative std threshold for convergence (default: 0.02 = 2%%)')
     parser.add_argument('--output', type=str, default='benchmark_results.csv', help='Output CSV file')
+    parser.add_argument('--network-config', type=str, default=None,
+                        help='Path to save generated network config (optional, uses temp file if not specified)')
 
     args = parser.parse_args()
 
-    if args.mode == 'slave':
-        run_receiver_mode(args)
+    # Load devices and generate network config
+    devices_data = load_devices(args.devices_file)
+
+    network_config = generate_network_config(
+        devices_data,
+        args.sender_hostname,
+        args.receiver_hostname,
+        args.port
+    )
+
+    # Write network config to file
+    if args.network_config:
+        config_file = args.network_config
+        with open(config_file, 'w') as f:
+            json.dump(network_config, f, indent=2)
+        print(f"Generated network config: {config_file}\n")
     else:
-        run_sender_mode(args)
+        # Use temporary file
+        temp_fd, config_file = tempfile.mkstemp(suffix='.json', prefix='network_config_')
+        with os.fdopen(temp_fd, 'w') as f:
+            json.dump(network_config, f, indent=2)
+        print(f"Generated temporary network config: {config_file}\n")
+
+    try:
+        if args.mode == 'receiver':
+            run_receiver_mode(args, config_file)
+        else:
+            run_sender_mode(args, config_file)
+    finally:
+        # Clean up temp file if used
+        if not args.network_config and os.path.exists(config_file):
+            os.unlink(config_file)
 
 
 if __name__ == '__main__':
