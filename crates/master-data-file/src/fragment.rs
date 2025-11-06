@@ -1,7 +1,7 @@
 //! Bank (aka fragment) of an MDF record.
 
 use core::slice;
-use std::io::Write;
+use std::{fmt::Debug, io::Write};
 
 use bytemuck::NoUninit;
 use multi_fragment_packet::{Fragment, SourceId};
@@ -10,7 +10,7 @@ use std::io::Result as IoResult;
 use crate::writer::WriteMdf;
 
 #[repr(C, align(4))]
-#[derive(Copy, Clone, NoUninit)]
+#[derive(Copy, Clone, NoUninit, Debug)]
 pub struct MdfFragmentHeader {
     magic: u16,
     /// size in bytes including header without padding
@@ -53,6 +53,15 @@ impl<'a> WriteMdf for Fragment<'a> {
 #[repr(align(4))]
 pub struct MdfFragmentRef {
     header: MdfFragmentHeader,
+}
+
+impl Debug for MdfFragmentRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MdfFragmentRef")
+            .field("header", &self.header)
+            .field("data", &self.data())
+            .finish()
+    }
 }
 
 impl MdfFragmentRef {

@@ -135,6 +135,7 @@ mod test {
 
         let records = unsafe { MdfRecords::from_data(&mdf) };
         println!("in record {:08X?}", records.data);
+        println!("Records {records:#?}");
         let record = unsafe {
             &*(records
                 .data

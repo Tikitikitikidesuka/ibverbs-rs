@@ -1,4 +1,5 @@
-use std::{mem, slice};
+use core::fmt;
+use std::{fmt::Debug, mem, slice};
 
 use bytemuck::cast_slice_mut;
 use thiserror::Error;
@@ -92,6 +93,27 @@ impl MdfRecordRef<Unknown> {
     }
 }
 
+impl fmt::Debug for MdfRecordRef<Unknown> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MdfRecordRef")
+            .field("generic_header", &self.generic_header)
+            .field("body", &self.body_u32())
+            .finish()
+    }
+}
+
+impl fmt::Debug for MdfRecordRef<SingleEvent> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MdfRecordRef")
+            .field("generic_header", &self.generic_header)
+            .field(
+                "fragments",
+                &self.fragments().collect::<Vec<_>>().as_slice(),
+            )
+            .finish()
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum HeaderParseError {
     #[error("Invalid header type: expected {expected} but got {got}")]
@@ -169,6 +191,12 @@ impl MdfRecordRef<MultiPurpose> {
 
 pub struct MdfRecords {
     data: Box<[u32]>,
+}
+
+impl Debug for MdfRecords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.mdf_record_iter()).finish()
+    }
 }
 
 impl MdfRecords {
