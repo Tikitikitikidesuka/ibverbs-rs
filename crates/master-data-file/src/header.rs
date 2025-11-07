@@ -1,9 +1,9 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, mem::offset_of};
 
 use bytemuck::{NoUninit, bytes_of};
 
 #[repr(C, packed(4))]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct MdfHeader<H: SpecificHeaderType> {
     /// in units of u32
     pub(crate) length_1: u32,
@@ -15,6 +15,41 @@ pub struct MdfHeader<H: SpecificHeaderType> {
     pub(crate) data_type: u8,
     pub(crate) _spare: u8,
     pub(crate) specific_header: H,
+}
+
+impl<H: SpecificHeaderType> Debug for MdfHeader<H> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("MdfHeader");
+        let debug = debug
+            .field("length_1", &self.length_1)
+            .field("length_2", &self.length_2)
+            .field("length_3", &self.length_3)
+            .field("checksum", &self.checksum)
+            .field("compression", &self.compression)
+            .field("header_type_and_size", &self.header_type_and_size)
+            .field("data_type", &self.data_type)
+            .field("_spare", &self._spare);
+        let specific_start = unsafe {
+            (&self as *const _ as *const u32).byte_add(offset_of!(Self, specific_header))
+        };
+        let debug = match self.header_type_and_size.header_type() {
+            SingleEvent::HEADER_TYPE => {
+                let specific = unsafe { &*(specific_start as *const SingleEvent) };
+
+                debug.field("specific_header", specific)
+            }
+            MultiPurpose::HEADER_TYPE => {
+                let multi = unsafe { &*(specific_start as *const MultiPurpose) };
+                debug.field("specific_header", multi)
+            }
+            _ => {
+                let specific = self.specific_header;
+                debug.field("specific_header", &specific)
+            }
+        };
+
+        debug.finish()
+    }
 }
 
 #[repr(transparent)]

@@ -97,7 +97,7 @@ impl fmt::Debug for MdfRecordRef<Unknown> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MdfRecordRef")
             .field("generic_header", &self.generic_header)
-            .field("body", &self.body_u32())
+            .field("body", &truncate_data(self.body_u32()))
             .finish()
     }
 }
@@ -195,7 +195,15 @@ pub struct MdfRecords {
 
 impl Debug for MdfRecords {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list().entries(self.mdf_record_iter()).finish()
+        f.debug_list()
+            .entries(
+                self.mdf_record_iter(), /*.map(|r| {
+                                            r.try_into_single_event()
+                                                .map(|r| r as &dyn Debug)
+                                                .unwrap_or(r)
+                                        })*/
+            )
+            .finish()
     }
 }
 
@@ -228,5 +236,77 @@ impl<'a> Iterator for MdfRecordIterator<'a> {
         let record: Self::Item = unsafe { &*self.data.as_ptr().cast::<MdfRecordRef<Unknown>>() };
         self.data = &self.data[record.size_u32() as _..];
         Some(record)
+    }
+}
+
+fn truncate_data<'a>(data: &'a [impl Debug]) -> Box<dyn Debug + 'a> {
+    if data.len() < 100 {
+        Box::new(data)
+    } else {
+        let mut output = String::new();
+        output.push_str("[ ");
+        for d in &data[0..10] {
+            output.push_str(&format!("{d:?}"));
+            output.push_str(", ");
+        }
+        output.push_str("...");
+        output.push_str(" ]");
+
+        Box::new(output)
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::MdfRecords;
+
+    #[test]
+    fn test_file() {
+        let file = include_bytes!("../../../Run_0000328614_20250828-135252-159_TDEB03_0017.mdf");
+        // let file = include_bytes!("../../../truc.mdf");
+        let records = unsafe { MdfRecords::from_data(file) };
+        println!("{records:#?}");
+    }
+    #[test]
+    fn bin_read_test() {
+        let file = include_bytes!("../../../Run_0000328614_20250828-135252-159_TDEB03_0017.mdf");
+        let mut cursor = &file[..];
+        // let mut chunks = Vec::new();
+        while !cursor.is_empty() {
+            let size = u32::from_le_bytes(cursor[..4].try_into().unwrap());
+            let size2 = u32::from_le_bytes(cursor[4..8].try_into().unwrap());
+
+            println!("{size}");
+            if size != 800 {
+                println!("not 800! {size} {size2}");
+                // println!(
+                //     "{:#?} -- {:?}",
+                //     chunks
+                //         .iter()
+                //         .rev()
+                //         .take(3)
+                //         .copied()
+                //         .map(to_u32)
+                //         .collect::<Vec<_>>(),
+                //     cursor
+                //         .chunks(4)
+                //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+                //         .take(50)
+                //         .collect::<Vec<_>>()
+                // );
+                panic!();
+            }
+            // let previous = &cursor[..u32 as usize * size_of::<u32>()];
+            // chunks.push(previous);
+            cursor = &cursor[size as usize * size_of::<u32>()..];
+        }
+    }
+
+    fn to_u32(slice: &[u8]) -> Vec<u32> {
+        slice
+            .chunks(4)
+            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            .collect()
     }
 }
