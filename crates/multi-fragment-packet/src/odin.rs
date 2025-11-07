@@ -1,5 +1,3 @@
-use core::error;
-
 use bytemuck::{Pod, Zeroable, bytes_of};
 use thiserror::Error;
 

@@ -1,29 +1,59 @@
 use std::{fmt::Debug, mem::offset_of};
 
-use bytemuck::{NoUninit, bytes_of};
+use bytemuck::{Pod, Zeroable, bytes_of};
 
 #[repr(C, packed(4))]
-#[derive(Copy, Clone)]
-pub struct MdfHeader<H: SpecificHeaderType> {
-    /// in units of u32
-    pub(crate) length_1: u32,
-    pub(crate) length_2: u32,
-    pub(crate) length_3: u32,
+#[derive(Copy, Clone, Zeroable)]
+pub struct MdfHeader<H = Unknown>
+where
+    H: SpecificHeaderType,
+{
+    /// in units of ~~u32~~ bytes!!! contrary to the specification
+    pub(crate) lengths: [u32; 3],
     pub(crate) checksum: u32,
     pub(crate) compression: u8,
-    pub(crate) header_type_and_size: HeaderTypeAndSize,
+    pub(crate) header_type_and_size: SpecificHeaderTypeAndSize,
     pub(crate) data_type: u8,
     pub(crate) _spare: u8,
     pub(crate) specific_header: H,
 }
 
+impl<H: SpecificHeaderType> MdfHeader<H> {
+    pub const HEADER_SIZE_MIN_U32: usize = size_of::<MdfHeader<Unknown>>() / size_of::<u32>();
+    pub fn as_bytes(&self) -> &[u8] {
+        bytes_of(self)
+    }
+
+    /// Checks the length fields in the header and returns Some if valid.
+    ///
+    /// For now, this checks equality of all of them and does not take a majority decision yet.
+    pub fn length_bytes(self) -> Option<u32> {
+        let mut lengths_rot = self.lengths;
+        lengths_rot.rotate_left(1);
+        (lengths_rot == self.lengths).then_some(self.lengths[0])
+    }
+
+    pub fn length_u32(self) -> Option<usize> {
+        self.length_bytes().map(|l| l as usize / size_of::<u32>())
+    }
+
+    /// Just returns the first length field, without checking for equality.
+    /// Be careful when using this method, the other two lengths could be the correct ones.
+    pub fn length_unchecked(self) -> u32 {
+        self.lengths[0]
+    }
+}
+
+/// ## Safety
+/// Specific header has size multiple of 4.
+/// All other requirements are satisfied and checkable by the derive(Pod) Macro
+unsafe impl<H: SpecificHeaderType> Pod for MdfHeader<H> {}
+
 impl<H: SpecificHeaderType> Debug for MdfHeader<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut debug = f.debug_struct("MdfHeader");
         let debug = debug
-            .field("length_1", &self.length_1)
-            .field("length_2", &self.length_2)
-            .field("length_3", &self.length_3)
+            .field("lengths", &self.lengths)
             .field("checksum", &self.checksum)
             .field("compression", &self.compression)
             .field("header_type_and_size", &self.header_type_and_size)
@@ -53,9 +83,9 @@ impl<H: SpecificHeaderType> Debug for MdfHeader<H> {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct HeaderTypeAndSize(u8);
-impl HeaderTypeAndSize {
+#[derive(Clone, Copy, Zeroable, Pod)]
+pub struct SpecificHeaderTypeAndSize(u8);
+impl SpecificHeaderTypeAndSize {
     pub fn from_type_and_size(header_type: u8, header_size_u32: u8) -> Self {
         assert!(header_size_u32 < 0xF);
         assert!(header_type < 0xF);
@@ -73,7 +103,7 @@ impl HeaderTypeAndSize {
         self.size_u32() as usize * size_of::<u32>()
     }
 }
-impl Debug for HeaderTypeAndSize {
+impl Debug for SpecificHeaderTypeAndSize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HeaderTypeAndSize")
             .field("type", &self.header_type())
@@ -82,24 +112,13 @@ impl Debug for HeaderTypeAndSize {
     }
 }
 
-/// SAFETY: no padding, also not for generic field `H`.
-unsafe impl<H: SpecificHeaderType> NoUninit for MdfHeader<H> {}
-
-impl<H: SpecificHeaderType> MdfHeader<H> {
-    pub fn as_bytes(&self) -> &[u8] {
-        bytes_of(self)
-    }
-}
-
 impl MdfHeader<SingleEvent> {
     pub fn new_simple(payload_size: usize) -> Self {
         let length_32 =
-            u32::try_from((payload_size + size_of::<Self>()).div_ceil(size_of::<u32>()))
-                .expect("payload size fits in u32");
+            u32::try_from(payload_size + size_of::<Self>()).expect("payload size fits in u32");
+
         MdfHeader {
-            length_1: length_32,
-            length_2: length_32,
-            length_3: length_32,
+            lengths: [length_32; 3],
             checksum: 0,
             compression: 0,
             header_type_and_size: SingleEvent::header_type_and_size(),
@@ -121,13 +140,15 @@ mod internal {
 }
 
 #[allow(private_bounds)]
-pub trait SpecificHeaderType: internal::Sealed + Copy + NoUninit + Debug {
+/// ## Safety
+/// Size of type needs to be multiple of 4.
+pub unsafe trait SpecificHeaderType: internal::Sealed + Copy + Pod + Debug {
     const HEADER_TYPE: u8;
-    fn header_type_and_size() -> HeaderTypeAndSize;
+    fn header_type_and_size() -> SpecificHeaderTypeAndSize;
 }
 
 #[repr(C, packed(4))]
-#[derive(Clone, Copy, NoUninit, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 pub struct SingleEvent {
     pub event_mask: u128,
     pub run_number: u32,
@@ -135,31 +156,37 @@ pub struct SingleEvent {
     pub bunch_identifier: u32,
 }
 impl internal::Sealed for SingleEvent {}
-impl SpecificHeaderType for SingleEvent {
+/// ## Safety
+/// Size is 28, multiple of 4.
+unsafe impl SpecificHeaderType for SingleEvent {
     const HEADER_TYPE: u8 = 3;
 
-    fn header_type_and_size() -> HeaderTypeAndSize {
-        HeaderTypeAndSize::from_type_and_size(Self::HEADER_TYPE, Self::HEADER_SIZE_U32)
+    fn header_type_and_size() -> SpecificHeaderTypeAndSize {
+        SpecificHeaderTypeAndSize::from_type_and_size(Self::HEADER_TYPE, Self::HEADER_SIZE_U32)
     }
 }
 impl SingleEvent {
     pub const HEADER_SIZE_U32: u8 = 7;
 }
 
-#[derive(Clone, Copy, NoUninit, Debug)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 #[repr(C, align(4))]
 pub struct MultiPurpose {}
 impl internal::Sealed for MultiPurpose {}
-impl SpecificHeaderType for MultiPurpose {
+/// ## Safety
+/// Size is 0, multiple of 4.
+unsafe impl SpecificHeaderType for MultiPurpose {
     const HEADER_TYPE: u8 = 4;
-    fn header_type_and_size() -> HeaderTypeAndSize {
-        HeaderTypeAndSize::from_type_and_size(Self::HEADER_TYPE, 0)
+    fn header_type_and_size() -> SpecificHeaderTypeAndSize {
+        SpecificHeaderTypeAndSize::from_type_and_size(Self::HEADER_TYPE, 0)
     }
 }
 
 pub mod multi_purpose {
+    use strum::FromRepr;
+
     #[repr(u8)]
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, FromRepr)]
     pub enum MultiPurposeType {
         /// Sequences of banks produced by TELL1 boards as described in [^1].
         /// [^1]: O.Callot et al., Raw Data Format. EDMS note 565851.
@@ -177,15 +204,16 @@ pub mod multi_purpose {
     }
 }
 
-#[derive(Clone, Copy, NoUninit)]
+#[derive(Clone, Copy, Zeroable, Pod)]
 #[repr(C)]
 pub struct Unknown;
 impl internal::Sealed for Unknown {}
-
-impl SpecificHeaderType for Unknown {
+/// ## Safety
+/// Size is 0, multiple of 4.
+unsafe impl SpecificHeaderType for Unknown {
     const HEADER_TYPE: u8 = 0;
 
-    fn header_type_and_size() -> HeaderTypeAndSize {
+    fn header_type_and_size() -> SpecificHeaderTypeAndSize {
         unimplemented!()
     }
 }

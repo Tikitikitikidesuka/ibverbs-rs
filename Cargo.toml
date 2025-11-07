@@ -6,6 +6,7 @@ members = ["crates/*"]
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive"] }
 typed-builder = "0.23"
+strum = { version = "0.27", features = ["derive"] }
 
 [workspace.lints.clippy]
 cast_possible_truncation = "deny"

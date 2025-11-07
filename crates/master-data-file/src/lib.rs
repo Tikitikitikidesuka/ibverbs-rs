@@ -1,7 +1,7 @@
 use core::fmt;
-use std::{fmt::Debug, mem, slice};
+use std::{fmt::Debug, slice};
 
-use bytemuck::cast_slice_mut;
+use bytemuck::{cast_ref, cast_slice_mut};
 use thiserror::Error;
 
 use crate::{
@@ -20,38 +20,27 @@ pub use writer::WriteMdf;
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
-pub struct MdfRecordRef<H: SpecificHeaderType> {
+#[repr(C, align(4))]
+pub struct MdfRecordRef<H: SpecificHeaderType = Unknown> {
+    /// Invariant: sizes are valid (i.e. at least two equal).
     generic_header: MdfHeader<H>,
 }
 
 impl<H: SpecificHeaderType> MdfRecordRef<H> {
     /// Returns the entire record length in units of `u32`.
-    pub fn size_u32(&self) -> u32 {
-        assert_eq!(
-            self.generic_header.length_1, self.generic_header.length_2,
-            "{:?}",
-            self.generic_header
-        );
-        assert_eq!(
-            self.generic_header.length_2, self.generic_header.length_3,
-            "{:?}",
-            self.generic_header
-        );
-        self.generic_header.length_1
+    pub fn size_bytes(&self) -> usize {
+        self.generic_header.length_bytes().expect("valid") as _
     }
 
-    /// Returns the entire record length in bytes.
-    pub fn size_bytes(&self) -> usize {
-        self.size_u32() as usize * size_of::<u32>()
+    pub fn size_u32(&self) -> usize {
+        self.size_bytes() / size_of::<u32>()
     }
 
     pub fn specific_header_type(&self) -> u8 {
-        // todo is this the right way around?
         self.generic_header.header_type_and_size.header_type()
     }
 
     pub fn specific_header_size_bytes(&self) -> usize {
-        // todo is this the right way around?
         self.generic_header.header_type_and_size.size_bytes()
     }
 
@@ -81,16 +70,67 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
         unsafe {
             slice::from_raw_parts(
                 (self as *const Self as *const u32).add(offset32),
-                self.size_u32() as usize - offset32,
+                self.size_u32() - offset32,
             )
         }
     }
 }
 
-impl MdfRecordRef<Unknown> {
-    pub fn try_into_single_event(&self) -> Result<&MdfRecordRef<SingleEvent>, HeaderParseError> {
-        self.try_into()
+impl MdfRecordRef {
+    /// Tries to extract an MDF record from the start of the slice, returning the unused rest.
+    /// Fails if the slice is too small or contains invalid MDF length information.
+    pub fn from_data(data: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {
+        let header_data: &[u32; MdfHeader::<Unknown>::HEADER_SIZE_MIN_U32] = &data
+            .split_at_checked(MdfHeader::<Unknown>::HEADER_SIZE_MIN_U32)
+            .ok_or(MdfFromDataError::TooSmallForHeader(data.len()))?
+            .0
+            .try_into()
+            .expect("size matches");
+        let header: &MdfHeader<Unknown> = cast_ref(header_data);
+
+        let Some(length_32) = header.length_u32() else {
+            return Err(MdfFromDataError::HeaderLengthMismatch(header.lengths))?;
+        };
+
+        if data.len() < length_32 {
+            return Err(MdfFromDataError::TotalLengthMismatch {
+                expected: length_32 as _,
+                got: data.len(),
+            });
+        }
+
+        let record = unsafe { &*data.as_ptr().cast() };
+
+        Ok((record, &data[length_32..]))
     }
+
+    pub fn try_into_single_event(&self) -> Result<&MdfRecordRef<SingleEvent>, HeaderParseError> {
+        if self.specific_header_type() != SingleEvent::HEADER_TYPE {
+            Err(HeaderParseError::InvalidHeaderType {
+                expected: SingleEvent::HEADER_TYPE,
+                got: self.specific_header_type(),
+            })
+        } else if self.specific_header_size_bytes() != size_of::<SingleEvent>() {
+            Err(HeaderParseError::InvalidHeaderSize {
+                expected: size_of::<SingleEvent>(),
+                got: self.specific_header_size_bytes(),
+            })
+        } else {
+            Ok(unsafe { &*(self as *const MdfRecordRef<_> as *const MdfRecordRef<SingleEvent>) })
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum MdfFromDataError {
+    #[error("Slice is to small to even read the header: is {0}, but header is at least {hdr} u32 words", hdr = MdfHeader::<Unknown>::HEADER_SIZE_MIN_U32)]
+    TooSmallForHeader(usize),
+    #[error("Header length do not match: {0:?}")]
+    HeaderLengthMismatch([u32; 3]),
+    #[error(
+        "Header says record has length {expected}, but the slice you provided only has length {got}."
+    )]
+    TotalLengthMismatch { expected: usize, got: usize },
 }
 
 impl fmt::Debug for MdfRecordRef<Unknown> {
@@ -128,19 +168,7 @@ impl<'a> TryFrom<&'a MdfRecordRef<Unknown>> for &'a MdfRecordRef<SingleEvent> {
     fn try_from(
         other: &'a MdfRecordRef<Unknown>,
     ) -> Result<&'a MdfRecordRef<SingleEvent>, Self::Error> {
-        if other.specific_header_type() != SingleEvent::HEADER_TYPE {
-            Err(HeaderParseError::InvalidHeaderType {
-                expected: SingleEvent::HEADER_TYPE,
-                got: other.specific_header_type(),
-            })
-        } else if other.specific_header_size_bytes() != size_of::<SingleEvent>() {
-            Err(HeaderParseError::InvalidHeaderSize {
-                expected: size_of::<SingleEvent>(),
-                got: other.specific_header_size_bytes(),
-            })
-        } else {
-            Ok(unsafe { &*(other as *const MdfRecordRef<_> as *const MdfRecordRef<SingleEvent>) })
-        }
+        other.try_into_single_event()
     }
 }
 
@@ -164,52 +192,27 @@ impl<'a> Iterator for MdfFragmentIterator<'a> {
             return None;
         }
 
-        let ret = unsafe { MdfFragmentRef::from_raw(self.remaining_data) };
+        let (frag, rest) = MdfFragmentRef::from_data(self.remaining_data).expect("valid");
 
-        let frag_size_32 = ret.size_bytes().div_ceil(size_of::<u32>());
+        self.remaining_data = rest;
 
-        self.remaining_data = &self.remaining_data[frag_size_32..];
-
-        Some(ret)
+        Some(frag)
     }
 }
 
 impl MdfRecordRef<MultiPurpose> {
-    pub fn get_multi_purpose_type(&self) -> MultiPurposeType {
-        // todo move assert to constructor
-        assert!(
-            [
-                MultiPurposeType::BodyTypeBanks.value(),
-                MultiPurposeType::BodyTypeMEP.value()
-            ]
-            .contains(&self.generic_header.data_type),
-        );
-
-        unsafe { mem::transmute(self.generic_header.data_type) }
+    pub fn get_multi_purpose_type(&self) -> Option<MultiPurposeType> {
+        MultiPurposeType::from_repr(self.generic_header.data_type)
     }
 }
 
 pub struct MdfRecords {
     data: Box<[u32]>,
 }
-
-impl Debug for MdfRecords {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_list()
-            .entries(
-                self.mdf_record_iter(), /*.map(|r| {
-                                            r.try_into_single_event()
-                                                .map(|r| r as &dyn Debug)
-                                                .unwrap_or(r)
-                                        })*/
-            )
-            .finish()
-    }
-}
-
 impl MdfRecords {
     /// # Safety
-    /// Data must contain valid mdf records
+    /// Data must contain valid mdf records.
+    /// Data will be copied to ensure alignment.
     pub unsafe fn from_data(data: &[u8]) -> Self {
         let mut boxed = vec![0u32; data.len().div_ceil(size_of::<u32>())].into_boxed_slice();
         cast_slice_mut(&mut boxed)[..data.len()].copy_from_slice(data);
@@ -232,9 +235,17 @@ impl<'a> Iterator for MdfRecordIterator<'a> {
         if self.data.is_empty() {
             return None;
         }
+        println!("remaining length {}", self.data.len());
 
-        let record: Self::Item = unsafe { &*self.data.as_ptr().cast::<MdfRecordRef<Unknown>>() };
-        self.data = &self.data[record.size_u32() as _..];
+        let (record, rest) = MdfRecordRef::from_data(self.data).expect("valid mdf data");
+        self.data = rest;
+
+        // println!(
+        //     "data around start {:?} (record size {})",
+        //     &self.data[(record.size_u32() as usize).saturating_sub(64)
+        //         ..(record.size_u32() as usize) + 64],
+        //     record.size_u32()
+        // );
         Some(record)
     }
 }
@@ -256,6 +267,20 @@ fn truncate_data<'a>(data: &'a [impl Debug]) -> Box<dyn Debug + 'a> {
     }
 }
 
+impl Debug for MdfRecords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(
+                self.mdf_record_iter(), /*.map(|r| {
+                                            r.try_into_single_event()
+                                                .map(|r| r as &dyn Debug)
+                                                .unwrap_or(r)
+                                        })*/
+            )
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -268,45 +293,52 @@ mod test {
         let records = unsafe { MdfRecords::from_data(file) };
         println!("{records:#?}");
     }
+
     #[test]
     fn bin_read_test() {
         let file = include_bytes!("../../../Run_0000328614_20250828-135252-159_TDEB03_0017.mdf");
-        let mut cursor = &file[..];
-        // let mut chunks = Vec::new();
-        while !cursor.is_empty() {
-            let size = u32::from_le_bytes(cursor[..4].try_into().unwrap());
-            let size2 = u32::from_le_bytes(cursor[4..8].try_into().unwrap());
+        // let mut cursor = &file[..];
 
-            println!("{size}");
-            if size != 800 {
-                println!("not 800! {size} {size2}");
-                // println!(
-                //     "{:#?} -- {:?}",
-                //     chunks
-                //         .iter()
-                //         .rev()
-                //         .take(3)
-                //         .copied()
-                //         .map(to_u32)
-                //         .collect::<Vec<_>>(),
-                //     cursor
-                //         .chunks(4)
-                //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-                //         .take(50)
-                //         .collect::<Vec<_>>()
-                // );
-                panic!();
-            }
+        let mut start = 0;
+
+        // let mut chunks = Vec::new();
+        while file.get(start).is_some() {
+            let size = u32::from_le_bytes(file[start..start + 4].try_into().unwrap());
+            let size2 = u32::from_le_bytes(file[start + 4..start + 8].try_into().unwrap());
+            let size3 = u32::from_le_bytes(file[start + 8..start + 12].try_into().unwrap());
+
+            println!("{size}, {size2}, {size3}");
+            // if size != 800 && false {
+            //     println!("not 800!");
+            //     dbg!(&file[size as usize - 100..size as usize + 100]);
+            //     // println!(
+            //     //     "{:#?} -- {:?}",
+            //     //     chunks
+            //     //         .iter()
+            //     //         .rev()
+            //     //         .take(3)
+            //     //         .copied()
+            //     //         .map(to_u32)
+            //     //         .collect::<Vec<_>>(),
+            //     //     cursor
+            //     //         .chunks(4)
+            //     //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+            //     //         .take(50)
+            //     //         .collect::<Vec<_>>()
+            //     // );
+            //     panic!();
+            // }
             // let previous = &cursor[..u32 as usize * size_of::<u32>()];
             // chunks.push(previous);
-            cursor = &cursor[size as usize * size_of::<u32>()..];
+            start += size as usize;
+            // cursor = &cursor[size as usize * size_of::<u32>()..];
         }
     }
 
-    fn to_u32(slice: &[u8]) -> Vec<u32> {
-        slice
-            .chunks(4)
-            .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-            .collect()
-    }
+    // fn to_u32(slice: &[u8]) -> Vec<u32> {
+    //     slice
+    //         .chunks(4)
+    //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
+    //         .collect()
+    // }
 }

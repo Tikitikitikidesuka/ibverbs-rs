@@ -1,8 +1,10 @@
 use std::fmt::{Debug, Display};
 
+use strum::FromRepr;
+
 /// As in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, FromRepr)]
 pub enum FragmentType {
     L0Calo = 0,        //  0
     L0DU,              //  1

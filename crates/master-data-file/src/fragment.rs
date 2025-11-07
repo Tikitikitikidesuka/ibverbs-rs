@@ -3,14 +3,14 @@
 use core::slice;
 use std::{fmt::Debug, io::Write};
 
-use bytemuck::NoUninit;
+use bytemuck::{Pod, Zeroable, cast_ref};
 use multi_fragment_packet::{Fragment, SourceId};
 use std::io::Result as IoResult;
 
-use crate::{truncate_data, writer::WriteMdf};
+use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
 
 #[repr(C, align(4))]
-#[derive(Copy, Clone, NoUninit, Debug)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub struct MdfFragmentHeader {
     magic: u16,
     /// size in bytes including header without padding
@@ -71,9 +71,27 @@ impl MdfFragmentRef {
     /// ## Safety
     /// `slice` needs to contain at least one full correct MDF.
     /// `slice` may be larger towards the end.
-    pub unsafe fn from_raw(slice: &[u32]) -> &Self {
-        assert!(!slice.is_empty());
-        unsafe { &*slice.as_ptr().cast() }
+    pub fn from_data(slice: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {
+        const HEADER_SIZE_U32: usize = size_of::<MdfFragmentHeader>() / size_of::<u32>();
+        let header_data: &[u32; HEADER_SIZE_U32] = slice
+            .split_at_checked(HEADER_SIZE_U32)
+            .ok_or(MdfFromDataError::TooSmallForHeader(slice.len()))?
+            .0
+            .try_into()
+            .expect("size matches"); // todo different error
+        let header: &MdfFragmentHeader = cast_ref(header_data);
+
+        let length_u32 = (header.size as usize).div_ceil(size_of::<u32>());
+        if slice.len() < length_u32 {
+            return Err(MdfFromDataError::TotalLengthMismatch {
+                expected: length_u32,
+                got: slice.len(),
+            });
+        }
+
+        let fragment = unsafe { &*slice.as_ptr().cast() };
+
+        Ok((fragment, &slice[length_u32..]))
     }
 
     pub fn fragment_type(&self) -> u8 {
