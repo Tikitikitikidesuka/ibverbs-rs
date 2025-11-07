@@ -49,7 +49,7 @@ fn main() {
             let mfp = MultiFragmentPacketBuilder::new()
                 .with_fragment_version(1)
                 .with_source_id(1)
-                .with_align(6)
+                .with_align_log(6)
                 .with_event_id(event_id)
                 .add_fragments((0..1000).map(|_| (1, (0..255).collect::<Vec<_>>())))
                 .build();

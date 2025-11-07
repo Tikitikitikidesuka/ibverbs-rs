@@ -18,6 +18,9 @@ pcie40-io = ["dep:pcie40"]
 shmem-io = ["dep:shared-memory-buffer"]
 bincode = ["dep:bincode"]
 
+[lints]
+workspace = true
+
 [[example]]
 name = "mfp_shared_memory_example"
 path = "examples/mfp_shared_memory_example.rs"

@@ -20,7 +20,7 @@ fn main() {
     // [0, , , ]
     println!("Writing MFP 0 to shmem...");
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(0)
         .with_source_id(1)
         .with_fragment_version(1)
@@ -46,7 +46,7 @@ fn main() {
     // [0,1,2, ]
     println!("Writing MFP 2 to shmem...");
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(2)
         .with_source_id(1)
         .with_fragment_version(1)
@@ -75,7 +75,7 @@ fn main() {
     // [3,3,2,W]
     println!("Writing MFP 3 to shmem (this one sholuld trigger wrap behaviour)...");
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(3)
         .with_source_id(1)
         .with_fragment_version(1)

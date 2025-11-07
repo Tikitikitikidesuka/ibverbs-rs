@@ -26,7 +26,7 @@ struct MultiFragmentPacketBuilderInternal {
     #[builder(setter(prefix = "with_"))]
     source_id: u16,
     /// Fragments in this packet are padded to 2^`align` bytes.
-    #[builder(setter(prefix = "with_"))]
+    #[builder(setter(prefix = "with_", suffix = "_log"))]
     align: u8,
     /// Version of the data format of the fragments.
     #[builder(setter(prefix = "with_"))]
@@ -146,7 +146,7 @@ mod tests {
             .with_magic(0x40CE)
             .with_event_id(1)
             .with_source_id(1)
-            .with_align(3)
+            .with_align_log(3)
             .with_fragment_version(1)
             .add_fragment(0, vec![0, 1, 2, 3])
             .add_fragment(1, vec![0, 1, 2, 3, 4])

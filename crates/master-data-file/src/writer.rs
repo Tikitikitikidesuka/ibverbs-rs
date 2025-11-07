@@ -102,10 +102,12 @@ mod test {
             }
         }
 
+        let u32_align = align_of::<u32>().ilog2().try_into().unwrap();
+
         let mep = MultiEventPacket::builder()
             .add_mfp(
                 MultiFragmentPacket::builder()
-                    .with_align(align_of::<u32>() as u8)
+                    .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(1)
                     .with_source_id(11)
@@ -115,7 +117,7 @@ mod test {
             .unwrap()
             .add_mfp(
                 MultiFragmentPacket::builder()
-                    .with_align(align_of::<u128>() as u8)
+                    .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(22)
                     .with_source_id(2)

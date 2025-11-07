@@ -11,3 +11,6 @@ tracing = "0.1.41"
 
 [features]
 bincode = ["dep:bincode"]
+
+[lints]
+workspace = true

@@ -9,3 +9,6 @@ multi-event-packet = { path = "../multi-event-packet" }
 multi-fragment-packet = { path = "../multi-fragment-packet" }
 typed-builder.workspace = true
 thiserror.workspace = true
+
+[lints]
+workspace = true

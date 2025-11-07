@@ -30,13 +30,16 @@ impl MdfFragmentHeader {
 
 impl<'a> WriteMdf for Fragment<'a> {
     fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
+        let header_size: u16 = size_of::<MdfFragmentHeader>()
+            .try_into()
+            .expect("header size fits u16");
         let header = MdfFragmentHeader {
             magic: MdfFragmentHeader::MAGIC,
             fragment_type: self.fragment_type(),
             source_id: self.source_id(),
             version: self.version(),
 
-            size: size_of::<MdfFragmentHeader>() as u16 + self.fragment_size(),
+            size: header_size + self.fragment_size(),
         };
         writer.write_all(header.as_bytes())?;
         writer.write_all(self.data())?;

@@ -84,6 +84,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     pub fn build(&mut self) -> MultiEventPacket {
         self.mfps.sort_by_key(|m| m.source_id());
         let num_mfps = self.mfps.len();
+        let num_mfps = u16::try_from(num_mfps).expect("number of mfps does fit into u16");
 
         // alloc data
         let mut total_size = 0;
@@ -94,8 +95,10 @@ impl<'a> MultiEventPacketBuilder<'a> {
         {
             let header = unsafe { &mut *(data.as_mut_ptr() as *mut MultiEventPacketConstHeader) };
             header.magic = MultiEventPacketRef::MAGIC;
-            header.num_mfps = num_mfps as _;
-            header.packet_size = (total_size / size_of::<u32>()) as _;
+            header.num_mfps = num_mfps;
+            header.packet_size = (total_size / size_of::<u32>())
+                .try_into()
+                .expect("packet size fits into u32");
         }
 
         // set src ids
@@ -105,7 +108,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
                     .byte_add(size_of::<MultiEventPacketConstHeader>())
                     as *mut SourceId
             };
-            let src_ids = unsafe { slice::from_raw_parts_mut(src_ids, num_mfps) };
+            let src_ids = unsafe { slice::from_raw_parts_mut(src_ids, num_mfps as _) };
             for (src_id, mfp) in src_ids.iter_mut().zip(self.mfps.iter()) {
                 *src_id = mfp.source_id();
             }
@@ -116,13 +119,15 @@ impl<'a> MultiEventPacketBuilder<'a> {
             let offset_slots = unsafe {
                 data.as_mut_ptr()
                     .byte_add(size_of::<MultiEventPacketConstHeader>())
-                    .byte_add(src_ids_size(num_mfps)) as *mut Offset
+                    .byte_add(src_ids_size(num_mfps as _)) as *mut Offset
             };
-            let offset_slots = unsafe { slice::from_raw_parts_mut(offset_slots, num_mfps) };
+            let offset_slots = unsafe { slice::from_raw_parts_mut(offset_slots, num_mfps as _) };
             for (offset_slot, offset_value) in
                 offset_slots.iter_mut().zip(self.offsets_iter(&mut 0))
             {
-                *offset_slot = (offset_value / size_of::<u32>()) as _;
+                *offset_slot = (offset_value / size_of::<u32>())
+                    .try_into()
+                    .expect("offsets fit into u32");
             }
         }
 
@@ -161,40 +166,6 @@ impl<'a> MultiEventPacketBuilder<'a> {
     }
 }
 
-pub struct Fragment {
-    fragment_type: u8,
-    fragment_size: u16,
-    data: Vec<u8>,
-}
-
-impl Fragment {
-    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<Fragment> {
-        let data = data.into();
-        if data.len() > u16::MAX as usize {
-            None
-        } else {
-            let fragment_size = data.len() as u16;
-            Some(Fragment {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
-    }
-
-    pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-}
-
 #[cfg(test)]
 mod test {
     use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
@@ -203,9 +174,10 @@ mod test {
 
     #[test]
     fn test_build_mep() {
+        let u64_align = align_of::<u64>().ilog2().try_into().unwrap();
         let mfp = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
-            .with_align(align_of::<u64>().ilog2() as _)
+            .with_align_log(u64_align)
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(55555)
@@ -217,7 +189,7 @@ mod test {
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
-            .with_align(align_of::<u64>().ilog2() as _)
+            .with_align_log(u64_align)
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(21)
@@ -225,7 +197,7 @@ mod test {
             .build();
         let mfp3 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
-            .with_align(align_of::<u64>().ilog2() as _)
+            .with_align_log(u64_align)
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
             .with_source_id(21)
