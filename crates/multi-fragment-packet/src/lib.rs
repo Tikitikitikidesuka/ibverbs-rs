@@ -7,6 +7,8 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
+pub mod odin;
+pub mod fragment_type;
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
