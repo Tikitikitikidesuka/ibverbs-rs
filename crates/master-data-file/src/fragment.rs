@@ -42,7 +42,7 @@ impl<'a> WriteMdf for Fragment<'a> {
             size: header_size + self.fragment_size(),
         };
         writer.write_all(header.as_bytes())?;
-        writer.write_all(self.data())?;
+        writer.write_all(self.payload())?;
 
         // pad to u32 size
         let frag_size = self.fragment_size() as usize;

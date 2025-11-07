@@ -12,6 +12,7 @@ circular-buffer = { path = "../circular-buffer" }
 shared-memory-buffer = { path = "../shared-memory-buffer", optional = true }
 bincode = { version = "2.0", optional = true }
 typed-builder.workspace = true
+bytemuck.workspace = true
 
 [features]
 pcie40-io = ["dep:pcie40"]

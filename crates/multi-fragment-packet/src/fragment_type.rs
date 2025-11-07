@@ -1,5 +1,8 @@
+use std::fmt::{Debug, Display};
+
 /// As in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>
 #[repr(u8)]
+#[derive(Copy, Clone, Debug)]
 pub enum FragmentType {
     L0Calo = 0,        //  0
     L0DU,              //  1
@@ -98,4 +101,10 @@ pub enum FragmentType {
     DaqErrorFragmentMissing = 253,
     DaqErrorFragmentTruncated = 254,
     DaqErrorInvalid = 255,
+}
+
+impl Display for FragmentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}({})", *self as u8)
+    }
 }

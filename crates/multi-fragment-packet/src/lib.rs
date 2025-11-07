@@ -7,8 +7,8 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
-pub mod odin;
 pub mod fragment_type;
+pub mod odin;
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
@@ -102,24 +102,17 @@ impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
 }
 
 #[derive(PartialEq, Eq, Copy, Clone)]
-pub struct Fragment<'a> {
+pub struct Fragment<'a, Data: ?Sized = [u8]> {
     r#type: u8,
     version: u8,
     event_id: EventId,
     source_id: SourceId,
-    data: &'a [u8],
+    data: &'a Data,
 }
 
-impl Fragment<'_> {
-    #[must_use]
+impl<'a, T: ?Sized> Fragment<'a, T> {
     pub fn fragment_type(&self) -> u8 {
         self.r#type
-    }
-
-    /// in bytes, excluding the header
-    #[must_use]
-    pub fn fragment_size(&self) -> u16 {
-        self.data.len().try_into().expect("fragment size fits u16")
     }
 
     pub fn source_id(&self) -> SourceId {
@@ -134,8 +127,16 @@ impl Fragment<'_> {
         self.version
     }
 
-    pub fn data(&self) -> &[u8] {
+    pub fn payload(&self) -> &T {
         self.data
+    }
+
+    /// in bytes, excluding the header
+    #[must_use]
+    pub fn fragment_size(&self) -> u16 {
+        size_of_val(self.data)
+            .try_into()
+            .expect("fragment size fits u16")
     }
 }
 

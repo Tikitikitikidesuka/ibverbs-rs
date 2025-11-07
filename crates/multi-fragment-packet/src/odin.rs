@@ -1,6 +1,13 @@
+use core::error;
+
+use bytemuck::{Pod, Zeroable, bytes_of};
+use thiserror::Error;
+
+use crate::{Fragment, fragment_type::FragmentType};
+
 /// See <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct OdinFragment {
     run_number: u32,
     event_type: u16,
@@ -116,5 +123,66 @@ impl OdinFragment {
     /// The calib type indicates what calibration command was sent at the same time as a calibration trigger (4 bits).
     pub fn calib_type(self) -> u8 {
         (self.misc >> 28 & 0xF) as u8
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum FragmentCastError {
+    #[error("Wrong fragment type: expected {expected} but got {got}")]
+    WrongFragmentType { expected: FragmentType, got: u8 },
+    #[error("Wrong fragment size: expected {expected} but got {got}")]
+    WrongFragmentSize { expected: usize, got: usize },
+}
+
+impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinFragment> {
+    type Error = FragmentCastError;
+
+    fn try_from(value: Fragment<'a>) -> Result<Self, Self::Error> {
+        value.try_into_odin()
+    }
+}
+
+impl<'a> From<Fragment<'a, OdinFragment>> for Fragment<'a> {
+    fn from(value: Fragment<'a, OdinFragment>) -> Self {
+        value.into_generic()
+    }
+}
+
+impl<'a> Fragment<'a> {
+    pub fn try_into_odin(self) -> Result<Fragment<'a, OdinFragment>, FragmentCastError> {
+        if self.r#type != FragmentType::ODIN as u8 {
+            return Err(FragmentCastError::WrongFragmentType {
+                expected: FragmentType::ODIN,
+                got: self.r#type,
+            });
+        }
+
+        let odin = bytemuck::try_from_bytes(self.data).map_err(|e| match e {
+            bytemuck::PodCastError::SizeMismatch => FragmentCastError::WrongFragmentSize {
+                expected: size_of::<OdinFragment>(),
+                got: self.data.len(),
+            },
+            e => panic!("{e:?}"),
+        })?;
+
+        Ok(Fragment {
+            r#type: self.r#type,
+            version: self.version,
+            event_id: self.event_id,
+            source_id: self.source_id,
+            data: odin,
+        })
+    }
+}
+
+impl<'a> Fragment<'a, OdinFragment> {
+    pub fn into_generic(self) -> Fragment<'a> {
+        Fragment {
+            r#type: self.r#type,
+            version: self.version,
+            event_id: self.event_id,
+            source_id: self.source_id,
+            data: bytes_of(self.data),
+        }
     }
 }
