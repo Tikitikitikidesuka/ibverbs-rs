@@ -14,6 +14,7 @@ MEAN_WINDOW_SIZE=10
 MAX_SAMPLES=20
 STD_THRESHOLD=0.02
 OUTPUT_FILE="benchmark_results.csv"
+PIPELINE_SIZE=1
 PORT=10000
 
 # Function to show usage
@@ -38,6 +39,7 @@ usage() {
     echo "  --max-samples <N>        Max samples per message size (default: 20)"
     echo "  --std-threshold <float>  Std convergence threshold (default: 0.02)"
     echo "  --output <file>          Output CSV file (default: benchmark_results.csv)"
+    echo "  --pipeline-size <N>      Batch size for transport pipelined operations (default: 1)"
     echo "  --port <N>               Port number (default: 10000)"
     echo ""
     exit 1
@@ -110,6 +112,10 @@ while [[ $# -gt 0 ]]; do
             PORT="$2"
             shift 2
             ;;
+        --pipeline-size)
+            PIPELINE_SIZE="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             ;;
@@ -142,6 +148,6 @@ EOF
 echo "Running RDMA benchmark with MPI"
 
 # Run with MPI - rank 0 is sender, rank 1 is receiver
-mpirun -n 2 -bind-to core --hostfile "$HOSTFILE" --rankfile "$RANKFILE" bash -c "if [ \$OMPI_COMM_WORLD_RANK -eq 0 ]; then MODE=sender; else MODE=receiver; fi; python3 $PYTHON_SCRIPT --binary $BINARY --devices-file $DEVICES_FILE --sender-hostname $SENDER_HOSTNAME --receiver-hostname $RECEIVER_HOSTNAME --mode \$MODE --port $PORT --batch-size $BATCH_SIZE --min-msg-size $MIN_MSG_SIZE --max-msg-size $MAX_MSG_SIZE --num-samples $NUM_SAMPLES --mean-window-size $MEAN_WINDOW_SIZE --max-samples $MAX_SAMPLES --std-threshold $STD_THRESHOLD --output $OUTPUT_FILE"
+mpirun -n 2 -bind-to core --hostfile "$HOSTFILE" --rankfile "$RANKFILE" bash -c "if [ \$OMPI_COMM_WORLD_RANK -eq 0 ]; then MODE=sender; else MODE=receiver; fi; python3 $PYTHON_SCRIPT --binary $BINARY --devices-file $DEVICES_FILE --sender-hostname $SENDER_HOSTNAME --receiver-hostname $RECEIVER_HOSTNAME --mode \$MODE --port $PORT --batch-size $BATCH_SIZE --pipeline-size $PIPELINE_SIZE --min-msg-size $MIN_MSG_SIZE --max-msg-size $MAX_MSG_SIZE --num-samples $NUM_SAMPLES --mean-window-size $MEAN_WINDOW_SIZE --max-samples $MAX_SAMPLES --std-threshold $STD_THRESHOLD --output $OUTPUT_FILE"
 
 echo "Test completed. Output saved to $OUTPUT_FILE"

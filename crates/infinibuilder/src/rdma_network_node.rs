@@ -1,8 +1,5 @@
-use crate::barrier::RdmaNetworkNodeBarrier;
-use crate::rdma_connection::{
-    RdmaConnection, RdmaPostReceiveImmediateDataConnection, RdmaPostSendImmediateDataConnection,
-    RdmaWorkRequest,
-};
+use crate::rdma_connection::{RdmaConnection, RdmaWorkRequest};
+use std::borrow::Borrow;
 use std::error::Error;
 use std::ops::RangeBounds;
 use std::time::Duration;
@@ -84,9 +81,13 @@ pub trait RdmaNamedRemoteMemoryRegionNetworkNode: RdmaRemoteMemoryRegionNetworkN
     fn remote_mr(&self, id: impl AsRef<str>) -> Option<Self::RemoteMemoryRegion>;
 }
 
-pub trait RdmaSendTransportNetworkNode:
-    RdmaMemoryRegionNetworkNode
-{
+pub struct RdmaSendParams<MemoryRegion, Range> {
+    pub memory_region: MemoryRegion,
+    pub memory_range: Range,
+    pub immediate_data: Option<u32>,
+}
+
+pub trait RdmaSendTransportNetworkNode: RdmaMemoryRegionNetworkNode {
     type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
@@ -97,11 +98,34 @@ pub trait RdmaSendTransportNetworkNode:
         memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_send_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        peer_rank_id: usize,
+        send_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaSendParams<Self::MemoryRegion, Range>>,
+        >,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        send_params_iter
+            .into_iter()
+            .map(|send_params| {
+                self.post_send(
+                    peer_rank_id,
+                    &send_params.borrow().memory_region,
+                    send_params.borrow().memory_range.clone(),
+                    send_params.borrow().immediate_data.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
-pub trait RdmaReceiveTransportNetworkNode:
-    RdmaMemoryRegionNetworkNode
-{
+pub struct RdmaReceiveParams<MemoryRegion, Range> {
+    pub memory_region: MemoryRegion,
+    pub memory_range: Range,
+}
+
+pub trait RdmaReceiveTransportNetworkNode: RdmaMemoryRegionNetworkNode {
     type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
 
@@ -111,6 +135,33 @@ pub trait RdmaReceiveTransportNetworkNode:
         memory_region: &Self::MemoryRegion,
         memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_receive_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        peer_rank_id: usize,
+        receive_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaReceiveParams<Self::MemoryRegion, Range>>,
+        >,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        receive_params_iter
+            .into_iter()
+            .map(|receive_params| {
+                self.post_receive(
+                    peer_rank_id,
+                    &receive_params.borrow().memory_region,
+                    receive_params.borrow().memory_range.clone(),
+                )
+            })
+            .collect()
+    }
+}
+
+pub struct RdmaWriteParams<MemoryRegion, RemoteMemoryRegion, Range> {
+    pub local_memory_region: MemoryRegion,
+    pub local_memory_range: Range,
+    pub remote_memory_region: RemoteMemoryRegion,
+    pub remote_memory_range: Range,
+    pub immediate_data: Option<u32>,
 }
 
 pub trait RdmaWriteTransportNetworkNode:
@@ -128,6 +179,35 @@ pub trait RdmaWriteTransportNetworkNode:
         remote_memory_range: impl RangeBounds<usize> + Clone,
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_write_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        peer_rank_id: usize,
+        write_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaWriteParams<Self::MemoryRegion, Self::RemoteMemoryRegion, Range>>,
+        >,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        write_params_iter
+            .into_iter()
+            .map(|write_params| {
+                self.post_write(
+                    peer_rank_id,
+                    &write_params.borrow().local_memory_region,
+                    write_params.borrow().local_memory_range.clone(),
+                    &write_params.borrow().remote_memory_region,
+                    write_params.borrow().remote_memory_range.clone(),
+                    write_params.borrow().immediate_data.clone(),
+                )
+            })
+            .collect()
+    }
+}
+
+pub struct RdmaReadParams<MemoryRegion, RemoteMemoryRegion, Range> {
+    pub local_memory_region: MemoryRegion,
+    pub local_memory_range: Range,
+    pub remote_memory_region: RemoteMemoryRegion,
+    pub remote_memory_range: Range,
 }
 
 pub trait RdmaReadTransportNetworkNode:
@@ -144,6 +224,27 @@ pub trait RdmaReadTransportNetworkNode:
         remote_memory_region: &Self::RemoteMemoryRegion,
         remote_memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_read_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        peer_rank_id: usize,
+        read_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaReadParams<Self::MemoryRegion, Self::RemoteMemoryRegion, Range>>,
+        >,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        read_params_iter
+            .into_iter()
+            .map(|read_params| {
+                self.post_read(
+                    peer_rank_id,
+                    &read_params.borrow().local_memory_region,
+                    read_params.borrow().local_memory_range.clone(),
+                    &read_params.borrow().remote_memory_region,
+                    read_params.borrow().remote_memory_range.clone(),
+                )
+            })
+            .collect()
+    }
 }
 
 pub trait RdmaSendImmediateDataTransportNetworkNode {
@@ -155,6 +256,17 @@ pub trait RdmaSendImmediateDataTransportNetworkNode {
         peer_rank_id: usize,
         immediate_data: u32,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_send_immediate_data_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        peer_rank_id: usize,
+        send_immediate_data_params_iter: impl IntoIterator<Item = u32>,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        send_immediate_data_params_iter
+            .into_iter()
+            .map(|imm_data| self.post_send_immediate_data(peer_rank_id, imm_data))
+            .collect()
+    }
 }
 
 pub trait RdmaReceiveImmediateDataTransportNetworkNode {
@@ -165,6 +277,17 @@ pub trait RdmaReceiveImmediateDataTransportNetworkNode {
         &mut self,
         peer_rank_id: usize,
     ) -> Result<Self::WorkRequest, Self::PostError>;
+
+    fn post_receive_immediate_data_batch(
+        &mut self,
+        peer_rank_id: usize,
+        num_receives: usize,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        (0..num_receives)
+            .into_iter()
+            .map(|_| self.post_receive_immediate_data(peer_rank_id))
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -243,7 +366,10 @@ pub trait RdmaNetworkGroupConnections<'network>: RdmaNetworkGroup {
 pub trait RdmaNetworkSelfGroupConnections<'network>: RdmaNetworkSelfGroup {
     type Connection: RdmaConnection;
 
-    fn connection_mut(&mut self, idx: usize) -> Option<RdmaNetworkSelfGroupConnection<Self::Connection>>;
+    fn connection_mut(
+        &mut self,
+        idx: usize,
+    ) -> Option<RdmaNetworkSelfGroupConnection<Self::Connection>>;
 }
 
 pub enum RdmaNetworkSelfGroupConnection<'network, Conn> {

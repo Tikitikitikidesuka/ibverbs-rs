@@ -53,7 +53,7 @@ def parse_output_line(line):
     return None
 
 
-def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, iters):
+def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, iters, pipeline_size):
     """Run the benchmark and collect pps/gbps samples"""
     cmd = [
         str(binary_path),
@@ -62,12 +62,15 @@ def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, i
         '--num-nodes', '2',
         '--message-size', str(message_size),
         '--batch-size', str(batch_size),
+        '--pipeline-size', str(pipeline_size),
         '--iters', str(iters)
     ]
-    print(f"Running: {' '.join(cmd)}")
+    #print(f"Running: {' '.join(cmd)}")
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        #print(result)
 
         pps_samples = []
         gbps_samples = []
@@ -96,10 +99,10 @@ def run_benchmark(binary_path, config_file, rank_id, message_size, batch_size, i
 
 
 def collect_samples(binary_path, config_file, rank_id, message_size, batch_size,
-                    max_samples, mean_window_size, std_threshold=0.05):
+                    max_samples, mean_window_size, pipeline_size, std_threshold=0.05):
     """Collect samples and check for convergence using a sliding window"""
     pps_samples, gbps_samples = run_benchmark(
-        binary_path, config_file, rank_id, message_size, batch_size, max_samples
+        binary_path, config_file, rank_id, message_size, batch_size, max_samples, pipeline_size
     )
 
     if not pps_samples or len(pps_samples) < mean_window_size:
@@ -119,7 +122,7 @@ def collect_samples(binary_path, config_file, rank_id, message_size, batch_size,
         gbps_rel_std = gbps_std / gbps_mean if gbps_mean > 0 else float('inf')
 
         if pps_rel_std <= std_threshold and gbps_rel_std <= std_threshold:
-            print(f"  Converged with window at samples {start_idx+1}-{start_idx+mean_window_size}")
+            print(f"  Converged with window at samples {start_idx + 1}-{start_idx + mean_window_size}")
             return pps_window, gbps_window
 
     # If no window converged, return the last mean_window_size samples
@@ -148,7 +151,7 @@ def run_receiver_mode(args, config_file):
 
     for i, msg_size in enumerate(message_sizes, 1):
         print(f"[{i}/{len(message_sizes)}] Message size: {msg_size}")
-        run_benchmark(args.binary, config_file, 1, msg_size, args.batch_size, args.max_samples)
+        run_benchmark(args.binary, config_file, 1, msg_size, args.batch_size, args.max_samples, args.pipeline_size)
 
 
 def run_sender_mode(args, config_file):
@@ -165,7 +168,8 @@ def run_sender_mode(args, config_file):
 
         pps_samples, gbps_samples = collect_samples(
             args.binary, config_file, 0, msg_size,
-            args.batch_size, args.max_samples, args.mean_window_size, args.std_threshold
+            args.batch_size, args.max_samples, args.mean_window_size, args.pipeline_size,
+            std_threshold=args.std_threshold
         )
 
         if not pps_samples:
@@ -213,6 +217,8 @@ def main():
                         help='Run as sender (rank 0) or receiver (rank 1)')
     parser.add_argument('--port', type=int, default=10000, help='Port number (default: 10000)')
     parser.add_argument('--batch-size', type=int, default=512, help='Batch size for benchmark')
+    parser.add_argument('--pipeline-size', type=int, default=1,
+                        help='Pipeline size for transport operations (default: 1)')
     parser.add_argument('--min-msg-size', type=int, required=True, help='Minimum message size')
     parser.add_argument('--max-msg-size', type=int, required=True, help='Maximum message size')
     parser.add_argument('--num-samples', type=int, required=True, help='Number of message size samples')

@@ -13,9 +13,10 @@ use crate::spin_poll::spin_poll_timeout_batched;
 use crate::transport::{
     RdmaNetworkNodeReadTransport, RdmaNetworkNodeReceiveImmediateDataTransport,
     RdmaNetworkNodeReceiveTransport, RdmaNetworkNodeSendImmediateDataTransport,
-    RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport,
+    RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport, RdmaReceiveParams, RdmaSendParams,
 };
 use derivative::Derivative;
+use std::borrow::Borrow;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
@@ -101,12 +102,12 @@ impl<Connection: RdmaConnection> SyncedTransport<Connection> {
         unsafe { read(self.local_issued_receives_ptr(rank_id)) }
     }
 
-    fn increase_local_issued_receives(&mut self, rank_id: usize) {
+    fn increase_local_issued_receives(&mut self, rank_id: usize, num: u64) {
         // Volatile write since it will be sent through RDMA write
         unsafe {
             write_volatile(
                 self.local_issued_receives_ptr(rank_id),
-                self.read_local_issued_receives(rank_id) + 1,
+                self.read_local_issued_receives(rank_id) + num,
             )
         };
     }
@@ -251,7 +252,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
         //println!("Issued receive");
 
         // Then notify the peer of it
-        self.increase_local_issued_receives(rank_id);
+        self.increase_local_issued_receives(rank_id, 1);
         //println!("Local issued receives: {}", self.read_local_issued_receives(rank_id));
         conn.post_write(
             &self.mrs[rank_id].local_mr,
@@ -260,12 +261,12 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
             self.remote_issued_receives_mr_range(),
             None,
         )
-        .map_err(|e| {
-            SyncedTransportError::SyncError(
-                "Error writing local issued receives counter to remote peer. Could not post write operation.".to_string(),
-            )
-        })?
-        .spin_poll_batched(self.post_timeout, 1024).map_err(|e| {
+            .map_err(|e| {
+                SyncedTransportError::SyncError(
+                    "Error writing local issued receives counter to remote peer. Could not post write operation.".to_string(),
+                )
+            })?
+            .spin_poll_batched(self.post_timeout, 1024).map_err(|e| {
             SyncedTransportError::SyncError(
                 format!("Error writing local issued receives counter to remote peer. Write operation failed: {e}")
             )
@@ -273,6 +274,53 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
         //println!("Notified the peer of receive");
 
         Ok(wr)
+    }
+
+    fn post_receive_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        rank_id: usize,
+        conn: &mut Connection,
+        receive_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaReceiveParams<Connection::MemoryRegion, Range>>,
+        >,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        // First issue the receives
+        let wrs = receive_params_iter
+            .into_iter()
+            .map(|receive_params| {
+                conn.post_receive(
+                    &receive_params.borrow().memory_region,
+                    receive_params.borrow().memory_range.clone(),
+                )
+                .map_err(SyncedTransportError::OperationError)
+            })
+            .collect::<Vec<_>>();
+        let successful_post_count = wrs.iter().filter(|wr| wr.is_ok()).count();
+
+        // Then notify the peer of it
+        self.increase_local_issued_receives(rank_id, successful_post_count as u64);
+        match conn.post_write(
+            &self.mrs[rank_id].local_mr,
+            self.local_issued_receives_mr_range(),
+            &self.mrs[rank_id].remote_mr,
+            self.remote_issued_receives_mr_range(),
+            None,
+        ) {
+            Err(error) => {
+                return vec![Err(SyncedTransportError::SyncError(format!(
+                    "Error writing local issued receives counter to remote peer. Could not post write operation: {error}"
+                )))];
+            }
+            Ok(mut write_wr) => {
+                if let Err(error) = write_wr.spin_poll_batched(self.post_timeout, 1024) {
+                    return vec![Err(SyncedTransportError::SyncError(format!(
+                        "Error writing local issued receives counter to remote peer. Write operation failed: {error}"
+                    )))];
+                }
+            }
+        }
+
+        wrs
     }
 }
 
@@ -381,7 +429,7 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveImmediateDataTransport<Co
             .map_err(SyncedTransportError::OperationError)?;
 
         // Then notify the peer of it
-        self.increase_local_issued_receives(rank_id);
+        self.increase_local_issued_receives(rank_id, 1);
         conn.post_write(
             &self.mrs[rank_id].local_mr,
             self.local_issued_receives_mr_range(),
@@ -401,5 +449,47 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveImmediateDataTransport<Co
         })?;
 
         Ok(wr)
+    }
+
+    fn post_receive_immediate_data_batch<Range: RangeBounds<usize> + Clone>(
+        &mut self,
+        rank_id: usize,
+        conn: &mut Connection,
+        num_receives: usize,
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+        // First issue the receives
+        let wrs = (0..num_receives)
+            .into_iter()
+            .map(|receive_params| {
+                conn.post_receive_immediate_data()
+                    .map_err(SyncedTransportError::OperationError)
+            })
+            .collect::<Vec<_>>();
+        let successful_post_count = wrs.iter().filter(|wr| wr.is_ok()).count();
+
+        // Then notify the peer of it
+        self.increase_local_issued_receives(rank_id, successful_post_count as u64);
+        match conn.post_write(
+            &self.mrs[rank_id].local_mr,
+            self.local_issued_receives_mr_range(),
+            &self.mrs[rank_id].remote_mr,
+            self.remote_issued_receives_mr_range(),
+            None,
+        ) {
+            Err(error) => {
+                return vec![Err(SyncedTransportError::SyncError(format!(
+                    "Error writing local issued receives counter to remote peer. Could not post write operation: {error}"
+                )))];
+            }
+            Ok(mut write_wr) => {
+                if let Err(error) = write_wr.spin_poll_batched(self.post_timeout, 1024) {
+                    return vec![Err(SyncedTransportError::SyncError(format!(
+                        "Error writing local issued receives counter to remote peer. Write operation failed: {error}"
+                    )))];
+                }
+            }
+        }
+
+        wrs
     }
 }

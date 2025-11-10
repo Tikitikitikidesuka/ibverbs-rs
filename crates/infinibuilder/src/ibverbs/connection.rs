@@ -245,6 +245,8 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                     | ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
                     | ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
             )
+            .set_max_recv_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
+            .set_max_send_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
             .build()
             .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))
     }
@@ -328,9 +330,6 @@ impl IbvPreparedConnection {
             .into_iter()
             .map(|(id, rmr)| (id.clone(), IbvRemoteMemoryRegion::new(id, rmr)))
             .collect();
-
-        println!("Local mrs: {local_mrs:?}\n\n");
-        println!("Remote mrs: {remote_mrs:?}\n\n");
 
         Ok(IbvConnection {
             local_qp_endpoint: self.local_qp_endpoint,

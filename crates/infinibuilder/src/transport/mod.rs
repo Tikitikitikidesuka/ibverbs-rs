@@ -11,6 +11,7 @@ use crate::rdma_connection::{
 use std::borrow::Borrow;
 use std::error::Error;
 use std::ops::RangeBounds;
+use crate::rdma_network_node::{RdmaReadParams, RdmaReceiveParams, RdmaSendParams, RdmaWriteParams};
 
 pub trait RdmaNetworkNodeTransport<Connection: RdmaConnection>:
     RdmaNetworkNodeSendTransport<Connection>
@@ -31,12 +32,6 @@ impl<Connection: RdmaConnection, Transport> RdmaNetworkNodeTransport<Connection>
         + RdmaNetworkNodeSendImmediateDataTransport<Connection>
         + RdmaNetworkNodeReceiveImmediateDataTransport<Connection>
 {
-}
-
-pub struct RdmaSendParams<MemoryRegion, Range> {
-    memory_region: MemoryRegion,
-    memory_range: Range,
-    immediate_data: Option<u32>,
 }
 
 pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection> {
@@ -75,11 +70,6 @@ pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection> {
     }
 }
 
-pub struct RdmaReceiveParams<MemoryRegion, Range> {
-    memory_region: MemoryRegion,
-    memory_range: Range,
-}
-
 pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection> {
     type WorkRequest: RdmaWorkRequest;
     type PostError: Error;
@@ -112,14 +102,6 @@ pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection>
             })
             .collect()
     }
-}
-
-pub struct RdmaWriteParams<MemoryRegion, RemoteMemoryRegion, Range> {
-    local_memory_region: MemoryRegion,
-    local_memory_range: Range,
-    remote_memory_region: RemoteMemoryRegion,
-    remote_memory_range: Range,
-    immediate_data: Option<u32>,
 }
 
 pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
@@ -164,12 +146,6 @@ pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
     }
 }
 
-pub struct RdmaReadParams<MemoryRegion, RemoteMemoryRegion, Range> {
-    local_memory_region: MemoryRegion,
-    local_memory_range: Range,
-    remote_memory_region: RemoteMemoryRegion,
-    remote_memory_range: Range,
-}
 
 pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection> {
     type WorkRequest: RdmaWorkRequest;

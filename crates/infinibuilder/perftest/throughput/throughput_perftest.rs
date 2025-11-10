@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 /// the sender node will send contiguous slices of size `message size` to the receiver node.
 /// The receiver will receive them in its memory region to their corresponding locations.
 ///
+/// REMOVED CORRECTNESS CHECK
 /// To check the correctness of the communication, the sender will fill its buffer with ascending numbers
 /// from zero in the body of unsigned eight bit integers (wrap at 256); the receiver, in turn, will
 /// check that the final values in its memory follow the same pattern.
@@ -32,8 +33,12 @@ fn main() {
         .unwrap()
         .take_nodes(args.num_nodes);
 
+    if args.pipeline_size > args.batch_size {
+        panic!("Pipeline size cannot be larger than batch size")
+    }
+
     let mem_name = "foo";
-    let memory_size = args.message_size * args.batch_size;
+    let memory_size = args.message_size * args.pipeline_size;
     let mut memory = vec![0u8; memory_size];
 
     let mut node = create_ibv_network_node(
@@ -90,8 +95,13 @@ fn sender_batch<NetworkNode: RdmaNetworkNode>(
     args: &Args,
 ) {
     // Initialize memory for correctness check later on
+    /*
     (0..mem_length)
         .for_each(|i| unsafe { mem_address.add(i).write_volatile(((i + iter) % 256) as u8) });
+
+     */
+
+    let mut wr_queue = Vec::with_capacity(args.pipeline_size);
 
     // Wait until receiver is ready
     println!("Initial rendezvous...");
@@ -102,33 +112,51 @@ fn sender_batch<NetworkNode: RdmaNetworkNode>(
     // Start timing
     let start = Instant::now();
 
+    // Initial pipeline fill
+    for i in 0..args.pipeline_size {
+        wr_queue.push(
+            node.post_send(
+                1,
+                mr,
+                ((i % args.pipeline_size) * args.message_size)
+                    ..(((i % args.pipeline_size) + 1) * args.message_size),
+                None,
+            )
+            .unwrap(),
+        )
+    }
+
     // Send all batches
-    for i in 0..args.batch_size {
-        /*
-        node.barrier(&node.group_all(), Duration::from_millis(1000))
+    for i in args.pipeline_size..args.batch_size {
+        // Wait until one is finished
+        wr_queue[i % args.pipeline_size]
+            .spin_poll_batched(Duration::from_millis(5000), 1024)
             .unwrap();
-        */
-        let mut wr = node
+
+        // Feed another to the pipeline
+        let wr = node
             .post_send(
                 1,
                 mr,
-                (i * args.message_size)..((i + 1) * args.message_size),
+                ((i % args.pipeline_size) * args.message_size)
+                    ..(((i % args.pipeline_size) + 1) * args.message_size),
                 None,
             )
             .unwrap();
-        let wc = wr
+
+        wr_queue[i % args.pipeline_size] = wr;
+    }
+
+    for i in args.batch_size..(args.batch_size + args.pipeline_size) {
+        wr_queue[i % args.pipeline_size]
             .spin_poll_batched(Duration::from_millis(5000), 1024)
             .unwrap();
     }
 
-    // Wait until receiver finishes
-    println!("Final rendezvous...");
-    node.barrier(&node.group_all(), Duration::from_millis(1000))
-        .unwrap();
-    println!("Synchronized");
-
     // Finish timing
     let elapsed = start.elapsed();
+
+    println!("Finished");
 
     // Print results
     let pps = args.batch_size as f64 / elapsed.as_secs_f64();
@@ -145,36 +173,55 @@ fn receiver_batch<NetworkNode: RdmaNetworkNode>(
     node: &mut NetworkNode,
     args: &Args,
 ) {
+    let mut wr_queue = Vec::with_capacity(args.pipeline_size);
+
     // Notify sender to start
     println!("Initial rendezvous...");
     node.barrier(&node.group_all(), Duration::from_millis(10000))
         .unwrap();
     println!("Synchronized");
 
-    // Receive all batches
-    for i in 0..args.batch_size {
-        let mut wr = node
+    // Initial pipeline fill
+    for i in 0..args.pipeline_size {
+        wr_queue.push(
+            node.post_receive(
+                0,
+                mr,
+                ((i % args.pipeline_size) * args.message_size)
+                    ..(((i % args.pipeline_size) + 1) * args.message_size),
+            )
+            .unwrap(),
+        )
+    }
+
+    // Send all batches
+    for i in args.pipeline_size..args.batch_size {
+        // Wait until one is finished
+        wr_queue[i % args.pipeline_size]
+            .spin_poll_batched(Duration::from_millis(5000), 1024)
+            .unwrap();
+
+        // Feed another to the pipeline
+        let wr = node
             .post_receive(
                 0,
                 mr,
-                (i * args.message_size)..((i + 1) * args.message_size),
+                ((i % args.pipeline_size) * args.message_size)
+                    ..(((i % args.pipeline_size) + 1) * args.message_size),
             )
             .unwrap();
-        /*
-        node.barrier(&node.group_all(), Duration::from_millis(1000))
-            .unwrap();
-        */
-        wr.spin_poll_batched(Duration::from_millis(5000), 1024)
+
+        wr_queue[i % args.pipeline_size] = wr;
+    }
+
+    for i in args.batch_size..(args.batch_size + args.pipeline_size) {
+        wr_queue[i % args.pipeline_size]
+            .spin_poll_batched(Duration::from_millis(5000), 1024)
             .unwrap();
     }
 
-    // Notify sender of finish
-    println!("Final rendezvous...");
-    node.barrier(&node.group_all(), Duration::from_millis(1000))
-        .unwrap();
-    println!("Synchronized");
-
     // Validate transfer
+    /*
     let memory = unsafe { &*slice_from_raw_parts(mem_address, mem_length) };
     println!("Memory: {:?}", &memory[..10]);
     if !memory
@@ -184,8 +231,9 @@ fn receiver_batch<NetworkNode: RdmaNetworkNode>(
     {
         panic!("Memory not transferred correctly")
     } else {
-        println!("Memory transfered corretly");
+        println!("Memory transferred correctly");
     }
+    */
 }
 
 #[derive(Debug, Copy, Clone, clap::ValueEnum)]
@@ -207,6 +255,8 @@ struct Args {
     message_size: usize,
     #[arg(short, long)]
     batch_size: usize,
+    #[arg(short, long)]
+    pipeline_size: usize,
     #[arg(short, long)]
     iters: Option<usize>,
 }

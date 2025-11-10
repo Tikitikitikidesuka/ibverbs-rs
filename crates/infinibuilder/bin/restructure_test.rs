@@ -1,7 +1,8 @@
 use infinibuilder::ibverbs::connection::IbvConnectionBuilder;
-use infinibuilder::rdma_connection::{RdmaConnection, RdmaWorkCompletion, RdmaWorkRequestStatus};
+use infinibuilder::rdma_connection::{RdmaConnection, RdmaNamedRemoteMemoryRegionConnection, RdmaPostReceiveImmediateDataConnection, RdmaPostSendImmediateDataConnection, RdmaWorkCompletion, RdmaWorkRequest, RdmaWorkRequestStatus};
 use infinibuilder::spin_poll::spin_poll_timeout_batched;
 use std::time::Duration;
+use infinibuilder::rdma_network_node::RdmaNamedMemory;
 
 fn main() {
     let id: u32 = std::env::args()
@@ -16,7 +17,8 @@ fn main() {
     let mut conn_prep = IbvConnectionBuilder::new()
         .ibv_device("mlx5_0")
         .cq_params(32, 512)
-        .register_mr(mem_id, mem.as_mut_ptr(), mem.len())
+        .lock_clone()
+        .register_mr(RdmaNamedMemory::new(mem_id, mem.as_mut_ptr(), mem.len()))
         .build()
         .unwrap();
 
@@ -33,73 +35,20 @@ fn main() {
 
     let mut conn = conn_prep.connect(remote_endpoint).unwrap();
 
-    println!("Mem: {mem:?}");
     println!("Comms...");
-
-    // Post/Receive
-    /*
-    let mut wr = if id == 0 {
-        conn.post_send(mr, 0..4, Some(33)).unwrap()
-    } else {
-        conn.post_receive(mr, 4..8).unwrap()
-    };
-
-    let wc_result = spin_poll_batched(
-        || match wr.poll().unwrap() {
-            RdmaWorkRequestStatus::Pending => None,
-            RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
-            RdmaWorkRequestStatus::Error(error) => Some(Err(error)),
-        },
-        Duration::from_millis(5000),
-        1024,
-    )
-        .unwrap();
-
-    match wc_result {
-        Ok(wc) => println!("Success: {wc}"),
-        Err(error) => println!("Error: {error:?}"),
-    };
-    */
 
     // Write
     if id == 0 {
-        let rmr = conn.remote_mr(mem_id).unwrap();
-        let mut wr = conn.post_send_immediate_data(42).unwrap();
+        let mut wr0 = conn.post_send_immediate_data(42).unwrap();
+        let mut wr1 = conn.post_send_immediate_data(42).unwrap();
 
-        let wc_result = spin_poll_timeout_batched(
-            || match wr.poll().unwrap() {
-                RdmaWorkRequestStatus::Pending => None,
-                RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
-                RdmaWorkRequestStatus::Error(error) => Some(Err(error)),
-            },
-            Duration::from_millis(5000),
-            1024,
-        )
-        .unwrap();
-
-        match wc_result {
-            Ok(wc) => println!("Success: {wc}"),
-            Err(error) => println!("Error: {error:?}"),
-        };
+        wr0.spin_poll_batched(Duration::from_millis(5000), 1024).unwrap();
+        wr1.spin_poll_batched(Duration::from_millis(5000), 1024).unwrap();
     } else {
-        let mut wr = conn.post_receive_immediate_data().unwrap();
+        let mut wr0 = conn.post_receive_immediate_data().unwrap();
+        let mut wr1 = conn.post_receive_immediate_data().unwrap();
 
-        let wc_result = spin_poll_timeout_batched(
-            || match wr.poll().unwrap() {
-                RdmaWorkRequestStatus::Pending => None,
-                RdmaWorkRequestStatus::Success(wc) => Some(Ok(wc)),
-                RdmaWorkRequestStatus::Error(error) => Some(Err(error)),
-            },
-            Duration::from_millis(5000),
-            1024,
-        )
-        .unwrap();
-
-        match wc_result {
-            Ok(wc) => println!("Success: {wc}"),
-            Err(error) => println!("Error: {error:?}"),
-        };
+        wr0.spin_poll_batched(Duration::from_millis(5000), 1024).unwrap();
+        wr1.spin_poll_batched(Duration::from_millis(5000), 1024).unwrap();
     }
-
-    println!("Mem: {mem:?}");
 }
