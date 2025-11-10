@@ -22,7 +22,7 @@ pub enum FragmentType {
     Muon,              // 13
     L0PU,              // 14
     DAQ,               // 15
-    ODIN,              // 16
+    Odin,              // 16
     HltDecReports,     // 17
     VeloFull,          // 18
     TTFull,            // 19

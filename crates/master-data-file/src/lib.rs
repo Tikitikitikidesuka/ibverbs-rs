@@ -9,6 +9,7 @@ use std::{
 };
 
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
+use multi_fragment_packet::{EventId, Fragment};
 use std::io::Result as IoResult;
 use thiserror::Error;
 
@@ -19,7 +20,7 @@ use crate::{
         multi_purpose::MultiPurposeType,
     },
 };
-pub mod fragment;
+mod fragment;
 pub mod header;
 pub mod writer;
 
@@ -181,19 +182,34 @@ impl<'a> TryFrom<&'a MdfRecordRef<Unknown>> for &'a MdfRecordRef<SingleEvent> {
 }
 
 impl MdfRecordRef<SingleEvent> {
-    pub fn fragments(&self) -> impl Iterator<Item = &MdfFragmentRef> {
+    pub fn fragments(&self) -> impl Iterator<Item = Fragment<'_>> {
+        let mut iter = MdfFragmentIterator {
+            remaining_data: self.body_u32(),
+            event_id: EventId::MAX,
+        };
+
+        let event_id = if let Some(first) = iter.next()
+            && let Ok(odin) = first.try_into_odin()
+        {
+            odin.payload().event_id()
+        } else {
+            EventId::MAX // unknown value...
+        };
+
         MdfFragmentIterator {
             remaining_data: self.body_u32(),
+            event_id,
         }
     }
 }
 
 pub struct MdfFragmentIterator<'a> {
+    event_id: EventId,
     remaining_data: &'a [u32],
 }
 
 impl<'a> Iterator for MdfFragmentIterator<'a> {
-    type Item = &'a MdfFragmentRef;
+    type Item = Fragment<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining_data.is_empty() {
@@ -204,7 +220,7 @@ impl<'a> Iterator for MdfFragmentIterator<'a> {
 
         self.remaining_data = rest;
 
-        Some(frag)
+        Some(frag.as_fragment(self.event_id))
     }
 }
 

@@ -36,16 +36,18 @@ pub fn main() -> anyhow::Result<()> {
             for frag in rec.fragments() {
                 let name = frag
                     .fragment_type_parsed()
-                    .map(|ty| format!("{:?}({})", ty, frag.fragment_type_raw()))
-                    .unwrap_or_else(|| format!("UNKNOWN({:?})", frag.fragment_type_raw()));
+                    .map(|ty| format!("{:?}", ty))
+                    .unwrap_or_else(|| "Unknown".into());
                 writeln!(
                     output,
-                    "  Fragment {name} version {}: source {}, size {} bytes",
+                    "  Fragment {name} ({:#X}) version {}: source {}, size {} bytes",
+                    frag.fragment_type_raw(),
                     frag.version(),
                     frag.source_id(),
-                    frag.size_bytes(),
+                    frag.fragment_size(),
                 )?;
-                if let Ok(odin) = frag.as_fragment().try_into_odin() {
+
+                if let Ok(odin) = frag.try_into_odin() {
                     let odin = odin.payload();
                     let time =
                         UtcDateTime::from_unix_timestamp_nanos(i128::from(odin.gps_time()) * 1_000)

@@ -148,9 +148,9 @@ impl<'a> From<Fragment<'a, OdinFragment>> for Fragment<'a> {
 
 impl<'a> Fragment<'a> {
     pub fn try_into_odin(self) -> Result<Fragment<'a, OdinFragment>, FragmentCastError> {
-        if self.r#type != FragmentType::ODIN as u8 {
+        if self.r#type != FragmentType::Odin as u8 {
             return Err(FragmentCastError::WrongFragmentType {
-                expected: FragmentType::ODIN,
+                expected: FragmentType::Odin,
                 got: self.r#type,
             });
         }

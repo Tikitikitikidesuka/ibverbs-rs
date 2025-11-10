@@ -4,7 +4,7 @@ use core::slice;
 use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use multi_fragment_packet::{Fragment, SourceId, fragment_type::FragmentType};
+use multi_fragment_packet::{EventId, Fragment, SourceId};
 use std::io::Result as IoResult;
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
@@ -55,7 +55,7 @@ impl<'a> WriteMdf for Fragment<'a> {
 
 #[repr(align(4))]
 /// Aka bank.
-pub struct MdfFragmentRef {
+pub(crate) struct MdfFragmentRef {
     header: MdfFragmentHeader,
 }
 
@@ -95,47 +95,22 @@ impl MdfFragmentRef {
         Ok((fragment, &slice[length_u32..]))
     }
 
-    pub fn fragment_type_raw(&self) -> u8 {
-        self.header.fragment_type
-    }
-
-    pub fn fragment_type_parsed(&self) -> Option<FragmentType> {
-        FragmentType::from_repr(self.header.fragment_type)
-    }
-
-    pub fn version(&self) -> u8 {
-        self.header.version
-    }
-
-    pub fn source_id(&self) -> SourceId {
-        self.header.source_id
-    }
-
-    // Size in bytes including the header, without padding to u32 size.
-    pub fn size_bytes(&self) -> usize {
-        self.header.size as _
-    }
-
-    pub fn size_bytes_padded(&self) -> usize {
-        self.size_bytes().next_multiple_of(align_of::<u32>())
-    }
-
     pub fn data(&self) -> &[u8] {
         let offset = size_of_val(&self.header);
         unsafe {
             slice::from_raw_parts(
                 (self as *const Self as *const u8).byte_add(offset),
-                self.size_bytes() - offset,
+                self.header.size as usize - offset,
             )
         }
     }
 
-    pub fn as_fragment(&self) -> Fragment<'_> {
+    pub fn as_fragment(&self, event_id: EventId) -> Fragment<'_> {
         Fragment::new(
-            self.fragment_type_raw(),
-            self.version(),
-            0, // todo?
-            self.source_id(),
+            self.header.fragment_type,
+            self.header.version,
+            event_id,
+            self.header.source_id,
             self.data(),
         )
     }
