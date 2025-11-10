@@ -15,7 +15,6 @@ edition = "2024"
 alignment-utils.path = "crates/alignment-utils"
 circular-buffer.path = "crates/circular-buffer"
 master-data-file.path = "crates/master-data-file"
-mock-buffers.path = "crates/mock-buffers"
 multi-event-packet.path = "crates/multi-event-packet"
 multi-fragment-packet.path = "crates/multi-fragment-packet"
 pcie40.path = "crates/pcie40"
@@ -65,3 +64,10 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 opt-level = 3
 lto = "fat"
 codegen-units = 1
+
+[dependencies]
+clap = { version = "4.5.51", features = ["derive"] }
+master-data-file = { workspace = true, features = ["mmap"] }
+anyhow = "1.0"
+multi-fragment-packet.workspace = true
+time = { version = "0.3.44", features = ["formatting"] }

@@ -1,10 +1,10 @@
 //! Bank (aka fragment) of an MDF record.
 
 use core::slice;
-use std::{fmt::Debug, io::Write};
+use std::{fmt::Debug, io::Write, ops::Deref};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use multi_fragment_packet::{Fragment, SourceId};
+use multi_fragment_packet::{Fragment, SourceId, fragment_type::FragmentType};
 use std::io::Result as IoResult;
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
@@ -35,7 +35,7 @@ impl<'a> WriteMdf for Fragment<'a> {
             .expect("header size fits u16");
         let header = MdfFragmentHeader {
             magic: MdfFragmentHeader::MAGIC,
-            fragment_type: self.fragment_type(),
+            fragment_type: self.fragment_type_raw(),
             source_id: self.source_id(),
             version: self.version(),
 
@@ -95,8 +95,12 @@ impl MdfFragmentRef {
         Ok((fragment, &slice[length_u32..]))
     }
 
-    pub fn fragment_type(&self) -> u8 {
+    pub fn fragment_type_raw(&self) -> u8 {
         self.header.fragment_type
+    }
+
+    pub fn fragment_type_parsed(&self) -> Option<FragmentType> {
+        FragmentType::from_repr(self.header.fragment_type)
     }
 
     pub fn version(&self) -> u8 {
@@ -124,5 +128,15 @@ impl MdfFragmentRef {
                 self.size_bytes() - offset,
             )
         }
+    }
+
+    pub fn as_fragment(&self) -> Fragment<'_> {
+        Fragment::new(
+            self.fragment_type_raw(),
+            self.version(),
+            0, // todo?
+            self.source_id(),
+            self.data(),
+        )
     }
 }

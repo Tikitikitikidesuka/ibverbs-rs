@@ -9,6 +9,7 @@ pub mod shared_memory_element;
 pub use builder::MultiFragmentPacketBuilder;
 pub mod fragment_type;
 pub mod odin;
+pub mod sub_detector;
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
@@ -16,6 +17,8 @@ use std::mem::offset_of;
 use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
+
+use crate::fragment_type::FragmentType;
 
 impl MultiFragmentPacketRef {
     pub const VALID_MAGIC: u16 = 0x40CE;
@@ -111,8 +114,28 @@ pub struct Fragment<'a, Data: ?Sized = [u8]> {
 }
 
 impl<'a, T: ?Sized> Fragment<'a, T> {
-    pub fn fragment_type(&self) -> u8 {
+    pub fn new(
+        r#type: u8,
+        version: u8,
+        event_id: EventId,
+        source_id: SourceId,
+        data: &'a T,
+    ) -> Self {
+        Fragment {
+            r#type,
+            version,
+            event_id,
+            source_id,
+            data,
+        }
+    }
+
+    pub fn fragment_type_raw(&self) -> u8 {
         self.r#type
+    }
+
+    pub fn fragment_type_parsed(&self) -> Option<FragmentType> {
+        FragmentType::from_repr(self.fragment_type_raw())
     }
 
     pub fn source_id(&self) -> SourceId {

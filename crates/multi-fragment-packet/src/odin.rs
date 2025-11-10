@@ -45,7 +45,7 @@ impl OdinFragment {
     }
 
     /// This is the Trigger Configuration Key as set by the central ECS system.
-    pub fn trigger_config_key(self) -> u32 {
+    pub fn tck(self) -> u32 {
         self.tck
     }
 

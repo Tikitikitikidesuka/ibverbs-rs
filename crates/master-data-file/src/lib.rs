@@ -234,6 +234,16 @@ impl<Store: AsRef<[u32]>> MdfRecords<Store> {
     }
 }
 
+impl<'a, Store: AsRef<[u32]>> IntoIterator for &'a MdfRecords<Store> {
+    type Item = &'a MdfRecordRef;
+
+    type IntoIter = MdfRecordIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.mdf_record_iter()
+    }
+}
+
 impl MdfRecords<Box<[u32]>> {
     /// Data must contain valid mdf records.
     /// Data will be copied to ensure alignment.
