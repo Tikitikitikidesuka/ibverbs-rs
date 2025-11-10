@@ -156,11 +156,11 @@ mod test {
         // sorted by source id...
         assert_eq!(fragments[0].data(), b"bye");
         assert_eq!(fragments[0].fragment_type_raw(), 3);
-        assert_eq!(fragments[0].source_id(), 2);
+        assert_eq!(fragments[0].source_id().0, 2);
 
         let fragments = records[1].fragments().collect::<Vec<_>>();
         assert_eq!(fragments[1].data(), b"how are you?");
         assert_eq!(fragments[1].fragment_type_raw(), 2);
-        assert_eq!(fragments[1].source_id(), 11);
+        assert_eq!(fragments[1].source_id().0, 11);
     }
 }

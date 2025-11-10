@@ -9,7 +9,7 @@ pub mod shared_memory_element;
 pub use builder::MultiFragmentPacketBuilder;
 pub mod fragment_type;
 pub mod odin;
-pub mod sub_detector;
+pub mod source_id;
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
@@ -19,6 +19,7 @@ use std::slice;
 use thiserror::Error;
 
 use crate::fragment_type::FragmentType;
+pub use crate::source_id::SourceId;
 
 impl MultiFragmentPacketRef {
     pub const VALID_MAGIC: u16 = 0x40CE;
@@ -26,7 +27,6 @@ impl MultiFragmentPacketRef {
 }
 
 /// Type of a source id.
-pub type SourceId = u16;
 pub type EventId = u64;
 
 #[cfg(not(target_endian = "little"))]
@@ -533,7 +533,7 @@ mod tests {
     fn test_mfp_source_id_getter() {
         let data = demo_multi_fragment_packet_data();
         let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-        assert_eq!(mfp.source_id(), 1);
+        assert_eq!(mfp.source_id().0, 1);
     }
 
     #[test]
@@ -611,7 +611,7 @@ mod tests {
             r#type: 0,
             version: 1,
             event_id: 1,
-            source_id: 1,
+            source_id: SourceId(1),
             data: &[0, 1, 2, 3][..],
         };
         assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
@@ -619,7 +619,7 @@ mod tests {
         // Check last fragment using direct comparison
         let expected_fragment4 = Fragment {
             r#type: 4,
-            source_id: 1,
+            source_id: SourceId(1),
             event_id: 5,
             version: 1,
             data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
@@ -641,35 +641,35 @@ mod tests {
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 1,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
                 event_id: 5,
-                source_id: 1,
+                source_id: SourceId(1),
             },
         ];
 

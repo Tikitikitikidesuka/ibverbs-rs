@@ -168,7 +168,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+    use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId};
 
     use crate::{MultiEventPacket, MultiEventPacketRef};
 
@@ -215,16 +215,30 @@ mod test {
         assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
         assert_eq!(mep.packet_size_u32(), 111);
-        assert_eq!(mep.mfp_source_ids(), &[21, 55555, 55555]);
+        assert_eq!(
+            mep.mfp_source_ids(),
+            &[SourceId(21), SourceId(55555), SourceId(55555)]
+        );
         assert_eq!(mep.mfp_offsets_u32(), &[7, 39, 75]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
 
         assert_eq!(3, mep.mfp_iter().len());
-        assert_eq!(0, mep.mfp_iter_srcid_range(0..10).len());
-        assert_eq!(0, mep.mfp_iter_srcid_range(55555..55555).len());
-        assert_eq!(2, mep.mfp_iter_srcid_range(55555..55556).len());
-        assert_eq!(3, mep.mfp_iter_srcid_range(0..55556).len());
+        assert_eq!(0, mep.mfp_iter_srcid_range(SourceId(0)..SourceId(10)).len());
+        assert_eq!(
+            0,
+            mep.mfp_iter_srcid_range(SourceId(55555)..SourceId(55555))
+                .len()
+        );
+        assert_eq!(
+            2,
+            mep.mfp_iter_srcid_range(SourceId(55555)..SourceId(55556))
+                .len()
+        );
+        assert_eq!(
+            3,
+            mep.mfp_iter_srcid_range(SourceId(0)..SourceId(55556)).len()
+        );
         for fp in mep.mfp_iter() {
             println!("{fp:?}");
             assert_eq!(fp.magic(), MultiFragmentPacketRef::VALID_MAGIC);

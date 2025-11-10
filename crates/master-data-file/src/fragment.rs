@@ -1,7 +1,7 @@
 //! Bank (aka fragment) of an MDF record.
 
 use core::slice;
-use std::{fmt::Debug, io::Write, ops::Deref};
+use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
 use multi_fragment_packet::{Fragment, SourceId, fragment_type::FragmentType};

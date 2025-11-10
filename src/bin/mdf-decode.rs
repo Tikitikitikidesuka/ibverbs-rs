@@ -6,9 +6,9 @@ use std::{
 use anyhow::Context;
 use clap::Parser;
 use master_data_file::MdfRecords;
-use multi_fragment_packet::sub_detector::SubDetectors;
+use multi_fragment_packet::source_id::SubDetector;
 use std::io::Write;
-use time::{Time, UtcDateTime};
+use time::UtcDateTime;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -21,7 +21,7 @@ pub fn main() -> anyhow::Result<()> {
 
     let x = MdfRecords::mmap_file(&args.file)?;
 
-    let mut output = stdout();
+    let mut output = BufWriter::new(stdout());
 
     for rec in &x {
         write!(output, "MDF Record:")?;
@@ -43,7 +43,7 @@ pub fn main() -> anyhow::Result<()> {
                     output,
                     "  Fragment {name} version {}: source {} {:#04X}, size {}",
                     frag.version(),
-                    SubDetectors::from_source_id(frag.source_id())
+                    SubDetector::from_source_id(frag.source_id())
                         .map(Into::into)
                         .unwrap_or(""),
                     frag.source_id(),

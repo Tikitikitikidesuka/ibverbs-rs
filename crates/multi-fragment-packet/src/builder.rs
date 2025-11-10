@@ -137,7 +137,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
 
 #[cfg(test)]
 mod tests {
-    use crate::Fragment;
+    use crate::{Fragment, SourceId};
 
     use super::*;
 
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn test_mfp_builder_source_id() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.source_id(), 1);
+        assert_eq!(mfp.source_id().0, 1);
     }
 
     #[test]
@@ -205,35 +205,35 @@ mod tests {
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 1,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
-                source_id: 1,
+                source_id: SourceId(1),
             },
             Fragment {
                 r#type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
                 event_id: 5,
-                source_id: 1,
+                source_id: SourceId(1),
             },
         ];
 
