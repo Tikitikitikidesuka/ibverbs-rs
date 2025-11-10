@@ -1,7 +1,7 @@
 use nix::errno::Errno;
 use nix::fcntl::{Flock, FlockArg};
 use std::fs::{File, OpenOptions};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 

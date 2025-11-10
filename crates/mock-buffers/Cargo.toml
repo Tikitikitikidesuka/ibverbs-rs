@@ -7,9 +7,10 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
+alignment-utils.workspace = true
+circular-buffer.workspace = true
+
 thiserror.workspace = true
-alignment-utils = { path = "../alignment-utils" }
-circular-buffer = { path = "../circular-buffer" }
 
 [[example]]
 name = "mock_aliased_example"

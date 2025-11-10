@@ -390,6 +390,7 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "mmap")]
     fn test_mmap() {
         let records = MdfRecords::mmap_file("test.mdf").unwrap();
         println!("{}", records.mdf_record_iter().count());

@@ -12,10 +12,22 @@ edition = "2024"
 
 
 [workspace.dependencies]
+alignment-utils.path = "crates/alignment-utils"
+circular-buffer.path = "crates/circular-buffer"
+master-data-file.path = "crates/master-data-file"
+mock-buffers.path = "crates/mock-buffers"
+multi-event-packet.path = "crates/multi-event-packet"
+multi-fragment-packet.path = "crates/multi-fragment-packet"
+pcie40.path = "crates/pcie40"
+shared-memory-buffer.path = "crates/shared-memory-buffer"
+
+
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive"] }
+bincode = "2.0"
 typed-builder = "0.23"
 strum = { version = "0.27", features = ["derive"] }
+tracing = "0.1.41"
 
 [workspace.lints.clippy]
 cast_possible_truncation = "deny"
