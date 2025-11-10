@@ -2,6 +2,15 @@
 resolver = "3"
 members = ["crates/*"]
 
+
+[workspace.package]
+version = "0.2.0"
+authors = ["Miguel Hermoso Mantecon", "Jonatan Ziegler"]
+description = "A collection of crates for an LHCb event builder at CERN."
+repository = "https://gitlab.cern.ch/lhcb-online/rusteb"
+edition = "2024"
+
+
 [workspace.dependencies]
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive"] }
@@ -13,13 +22,19 @@ cast_possible_truncation = "deny"
 cast_possible_wrap = "deny"
 cast_sign_loss = "deny"
 
-[package]
-name = "pcie40-rs"
-version = "0.1.0"
-edition = "2024"
-description = "Rust bindings for the PCIe40 drivers"
 
-[dependencies]
+# ========== Package ===========
+
+
+[package]
+name = "rusteb"
+description = "Crate containing examples and tools utilizing the other rusteb crates."
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dev-dependencies]
 thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
 alignment-utils = { path = "crates/alignment-utils" }
@@ -38,15 +53,3 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-
-[[bin]]
-name = "pcie40_to_shmem_reader"
-path = "bin/pcie40_to_shmem_reader.rs"
-
-[[bin]]
-name = "pcie40_to_shmem_receiver"
-path = "bin/pcie40_to_shmem_receiver.rs"
-
-[[bin]]
-name = "mock_pcie40_to_shmem_reader"
-path = "bin/mock_pcie40_to_shmem_reader.rs"

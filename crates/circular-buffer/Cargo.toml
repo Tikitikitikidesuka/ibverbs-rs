@@ -1,5 +1,7 @@
 [package]
 name = "circular-buffer"
-version = "0.1.0"
-edition = "2024"
 description = "Single writer, single reader circular buffer interface for the buffers of the LHCb Event Builder"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true

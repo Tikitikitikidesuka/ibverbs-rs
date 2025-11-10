@@ -1,7 +1,10 @@
 [package]
 name = "master-data-file"
-version = "0.1.0"
-edition = "2024"
+description = "Crate for reading and writing MDF files."
+authors = ["Jonatan Ziegler"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 bytemuck.workspace = true

@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "alignment-utils"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "bincode"
@@ -104,7 +104,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "circular-buffer"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "clang-sys"
@@ -180,7 +180,7 @@ checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 
 [[package]]
 name = "master-data-file"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "include_bytes_aligned",
@@ -224,7 +224,7 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "mock-buffers"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alignment-utils",
  "circular-buffer",
@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "multi-event-packet"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "bincode",
  "multi-fragment-packet",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "multi-fragment-packet"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alignment-utils",
  "bincode",
@@ -295,27 +295,13 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "pcie40"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alignment-utils",
  "bindgen",
  "circular-buffer",
  "thiserror",
  "tracing",
-]
-
-[[package]]
-name = "pcie40-rs"
-version = "0.1.0"
-dependencies = [
- "alignment-utils",
- "circular-buffer",
- "multi-fragment-packet",
- "pcie40",
- "shared-memory-buffer",
- "thiserror",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -388,6 +374,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
+name = "rusteb"
+version = "0.2.0"
+dependencies = [
+ "alignment-utils",
+ "circular-buffer",
+ "multi-fragment-packet",
+ "pcie40",
+ "shared-memory-buffer",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "shared-memory-buffer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "alignment-utils",
  "circular-buffer",

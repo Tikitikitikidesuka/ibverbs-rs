@@ -1,7 +1,10 @@
 [package]
 name = "multi-event-packet"
-version = "0.1.1"
-edition = "2024"
+description = "Crate for building and reading MEPs."
+authors = ["Jonatan Ziegler"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 multi-fragment-packet = { path = "../multi-fragment-packet" }

@@ -1,8 +1,10 @@
 [package]
 name = "pcie40"
-version = "0.1.0"
-edition = "2024"
 description = "Safe Rust PCIe40 bindings wrapper for the LHCb Event Builder"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 thiserror.workspace = true
