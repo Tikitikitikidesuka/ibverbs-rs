@@ -10,6 +10,13 @@ multi-fragment-packet = { path = "../multi-fragment-packet" }
 typed-builder.workspace = true
 thiserror.workspace = true
 strum.workspace = true
+memmap2 = { version = "0.9.9", optional = true }
 
 [lints]
 workspace = true
+
+[features]
+mmap = ["dep:memmap2"]
+
+[dev-dependencies]
+include_bytes_aligned = "0.1.4"

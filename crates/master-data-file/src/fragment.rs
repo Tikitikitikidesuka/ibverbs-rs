@@ -54,6 +54,7 @@ impl<'a> WriteMdf for Fragment<'a> {
 }
 
 #[repr(align(4))]
+/// Aka bank.
 pub struct MdfFragmentRef {
     header: MdfFragmentHeader,
 }

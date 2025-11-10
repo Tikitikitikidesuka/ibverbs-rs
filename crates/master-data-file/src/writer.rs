@@ -135,7 +135,7 @@ mod test {
         let record = unsafe { &*(mdf.as_ref() as *const [u8] as *const MdfRecordRef<SingleEvent>) };
         println!("{:?}", record.generic_header);
 
-        let records = unsafe { MdfRecords::from_data(&mdf) };
+        let records = MdfRecords::from_data(&mdf);
         println!("in record {:08X?}", records.data);
         println!("Records {records:#?}");
         let record = unsafe {

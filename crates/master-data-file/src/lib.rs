@@ -1,7 +1,15 @@
 use core::fmt;
-use std::{fmt::Debug, slice};
+use std::{
+    fmt::Debug,
+    fs::File,
+    io::{self, Read},
+    os::unix::fs::MetadataExt,
+    path::Path,
+    slice,
+};
 
-use bytemuck::{cast_ref, cast_slice_mut};
+use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
+use std::io::Result as IoResult;
 use thiserror::Error;
 
 use crate::{
@@ -206,21 +214,75 @@ impl MdfRecordRef<MultiPurpose> {
     }
 }
 
-pub struct MdfRecords {
-    data: Box<[u32]>,
+pub struct MdfRecords<Store: AsRef<[u32]> = Box<[u32]>> {
+    data: Store,
 }
-impl MdfRecords {
-    /// # Safety
+
+impl<Store: AsRef<[u32]>> MdfRecords<Store> {
+    pub fn mdf_record_iter(&self) -> MdfRecordIterator<'_> {
+        MdfRecordIterator {
+            data: self.data.as_ref(),
+        }
+    }
+
+    pub fn data(&self) -> &[u32] {
+        self.data.as_ref()
+    }
+
+    pub fn into_inner(self) -> Store {
+        self.data
+    }
+}
+
+impl MdfRecords<Box<[u32]>> {
     /// Data must contain valid mdf records.
     /// Data will be copied to ensure alignment.
-    pub unsafe fn from_data(data: &[u8]) -> Self {
+    pub fn from_data(data: &[u8]) -> Self {
         let mut boxed = vec![0u32; data.len().div_ceil(size_of::<u32>())].into_boxed_slice();
         cast_slice_mut(&mut boxed)[..data.len()].copy_from_slice(data);
         Self { data: boxed }
     }
 
-    pub fn mdf_record_iter(&self) -> MdfRecordIterator<'_> {
-        MdfRecordIterator { data: &self.data }
+    /// Reads an MDF file into memory (completely).
+    pub fn read_file(file: impl AsRef<Path>) -> IoResult<Self> {
+        let mut file: File = File::open(file)?;
+        let size = file.metadata()?.size();
+        let size = usize::try_from(size).map_err(io::Error::other)?;
+        let mut data = vec![0u32; size / size_of::<u32>()].into_boxed_slice();
+        file.read_exact(&mut cast_slice_mut(&mut data)[..size])?;
+        Ok(Self { data })
+    }
+}
+
+impl<'a> MdfRecords<&'a [u32]> {
+    /// Return `None` if the slice is not 32 bit aligned or has size not multiple of 32 bit.
+    pub fn from_aligned_slice(data: &'a [u8]) -> Option<Self> {
+        try_cast_slice(data).map(|data| Self { data }).ok()
+    }
+}
+
+#[cfg(feature = "mmap")]
+pub mod mmap {
+    use super::*;
+
+    use memmap2::Mmap;
+
+    use crate::MdfRecords;
+
+    pub struct MemMap(Mmap);
+
+    impl AsRef<[u32]> for MemMap {
+        fn as_ref(&self) -> &[u32] {
+            bytemuck::try_cast_slice(self.0.as_ref()).expect("alignment matches, length compatible")
+        }
+    }
+
+    impl MdfRecords<MemMap> {
+        pub fn mmap_file(file: impl AsRef<Path>) -> IoResult<Self> {
+            let file = File::open(file)?;
+            let map = unsafe { Mmap::map(&file) }?;
+            Ok(MdfRecords { data: MemMap(map) })
+        }
     }
 }
 
@@ -235,23 +297,16 @@ impl<'a> Iterator for MdfRecordIterator<'a> {
         if self.data.is_empty() {
             return None;
         }
-        println!("remaining length {}", self.data.len());
 
         let (record, rest) = MdfRecordRef::from_data(self.data).expect("valid mdf data");
         self.data = rest;
 
-        // println!(
-        //     "data around start {:?} (record size {})",
-        //     &self.data[(record.size_u32() as usize).saturating_sub(64)
-        //         ..(record.size_u32() as usize) + 64],
-        //     record.size_u32()
-        // );
         Some(record)
     }
 }
 
 fn truncate_data<'a>(data: &'a [impl Debug]) -> Box<dyn Debug + 'a> {
-    if data.len() < 100 {
+    if data.len() < 20 {
         Box::new(data)
     } else {
         let mut output = String::new();
@@ -267,16 +322,14 @@ fn truncate_data<'a>(data: &'a [impl Debug]) -> Box<dyn Debug + 'a> {
     }
 }
 
-impl Debug for MdfRecords {
+impl<D: AsRef<[u32]>> Debug for MdfRecords<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list()
-            .entries(
-                self.mdf_record_iter(), /*.map(|r| {
-                                            r.try_into_single_event()
-                                                .map(|r| r as &dyn Debug)
-                                                .unwrap_or(r)
-                                        })*/
-            )
+            .entries(self.mdf_record_iter().map(|r| {
+                r.try_into_single_event()
+                    .map(|r| r as &dyn Debug)
+                    .unwrap_or(r)
+            }))
             .finish()
     }
 }
@@ -284,61 +337,61 @@ impl Debug for MdfRecords {
 #[cfg(test)]
 mod test {
 
+    use include_bytes_aligned::include_bytes_aligned;
+
     use crate::MdfRecords;
 
     #[test]
-    fn test_file() {
-        let file = include_bytes!("../../../Run_0000328614_20250828-135252-159_TDEB03_0017.mdf");
+    #[ignore]
+    fn print_data() {
+        let file = include_bytes!("../test.mdf");
         // let file = include_bytes!("../../../truc.mdf");
-        let records = unsafe { MdfRecords::from_data(file) };
-        println!("{records:#?}");
+        let records = MdfRecords::from_data(file);
+        println!("{:#?}", records);
     }
 
     #[test]
     fn bin_read_test() {
-        let file = include_bytes!("../../../Run_0000328614_20250828-135252-159_TDEB03_0017.mdf");
-        // let mut cursor = &file[..];
+        let file = include_bytes!("../test.mdf");
+        let mut cursor = &file[..];
 
-        let mut start = 0;
-
-        // let mut chunks = Vec::new();
-        while file.get(start).is_some() {
-            let size = u32::from_le_bytes(file[start..start + 4].try_into().unwrap());
-            let size2 = u32::from_le_bytes(file[start + 4..start + 8].try_into().unwrap());
-            let size3 = u32::from_le_bytes(file[start + 8..start + 12].try_into().unwrap());
+        while !cursor.is_empty() {
+            let size = u32::from_le_bytes(cursor[0..4].try_into().unwrap());
+            let size2 = u32::from_le_bytes(cursor[4..8].try_into().unwrap());
+            let size3 = u32::from_le_bytes(cursor[8..12].try_into().unwrap());
 
             println!("{size}, {size2}, {size3}");
-            // if size != 800 && false {
-            //     println!("not 800!");
-            //     dbg!(&file[size as usize - 100..size as usize + 100]);
-            //     // println!(
-            //     //     "{:#?} -- {:?}",
-            //     //     chunks
-            //     //         .iter()
-            //     //         .rev()
-            //     //         .take(3)
-            //     //         .copied()
-            //     //         .map(to_u32)
-            //     //         .collect::<Vec<_>>(),
-            //     //     cursor
-            //     //         .chunks(4)
-            //     //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-            //     //         .take(50)
-            //     //         .collect::<Vec<_>>()
-            //     // );
-            //     panic!();
-            // }
-            // let previous = &cursor[..u32 as usize * size_of::<u32>()];
-            // chunks.push(previous);
-            start += size as usize;
-            // cursor = &cursor[size as usize * size_of::<u32>()..];
+
+            assert_eq!(size, size2);
+            assert_eq!(size2, size3);
+
+            cursor = &cursor[size as usize..];
         }
     }
 
-    // fn to_u32(slice: &[u8]) -> Vec<u32> {
-    //     slice
-    //         .chunks(4)
-    //         .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
-    //         .collect()
-    // }
+    #[test]
+    #[ignore]
+    fn some_size() {
+        let data = include_bytes_aligned!(4, "../test.mdf");
+        let mdfs = MdfRecords::from_aligned_slice(data).expect("aligned");
+        let size: usize = mdfs
+            .mdf_record_iter()
+            .skip(213)
+            .take(2)
+            .map(|x| x.size_bytes())
+            .sum();
+        println!("{size}");
+    }
+
+    #[test]
+    fn test_file() {
+        let records = MdfRecords::read_file("test.mdf").unwrap();
+        println!("{}", records.mdf_record_iter().count());
+    }
+
+    #[test]
+    fn test_mmap() {
+        let records = MdfRecords::mmap_file("test.mdf").unwrap();
+        println!("{}", records.mdf_record_iter().count());
+    }
 }
