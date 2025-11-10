@@ -11,8 +11,8 @@ pub struct SourceId(pub u16);
 impl Display for SourceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.sub_detector() {
-            Ok(sub) => write!(f, "{sub:?}({})-{:#05X}", sub as u8, self.sub_part()),
-            Err(id) => write!(f, "Unknown({:#X})-{:#05X}", id, self.sub_part()),
+            Ok(sub) => write!(f, "{sub:?}-{:#06X} ({:#X})", self.sub_part(), self.0),
+            Err(_id) => write!(f, "Unknown-{:#06X} ({:#X})", self.sub_part(), self.0),
         }
     }
 }

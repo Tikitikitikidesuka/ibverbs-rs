@@ -6,7 +6,6 @@ use std::{
 use anyhow::Context;
 use clap::Parser;
 use master_data_file::MdfRecords;
-use multi_fragment_packet::source_id::SubDetector;
 use std::io::Write;
 use time::UtcDateTime;
 
@@ -41,11 +40,8 @@ pub fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|| format!("UNKNOWN({:?})", frag.fragment_type_raw()));
                 writeln!(
                     output,
-                    "  Fragment {name} version {}: source {} {:#04X}, size {}",
+                    "  Fragment {name} version {}: source {}, size {} bytes",
                     frag.version(),
-                    SubDetector::from_source_id(frag.source_id())
-                        .map(Into::into)
-                        .unwrap_or(""),
                     frag.source_id(),
                     frag.size_bytes(),
                 )?;
@@ -56,13 +52,12 @@ pub fn main() -> anyhow::Result<()> {
                             .context("Convert Gps Time")?;
                     // writeln!(output, "    Time {:?}", odin.gps_time());
                     writeln!(output, "    Event Id {} ({0:#X})", odin.event_id())?;
-                    writeln!(output, "    Event Type {:?}", odin.event_type())?;
-                    writeln!(output, "    Time {:?}", time)?;
+                    writeln!(output, "    Event Type {:}", odin.event_type())?;
+                    writeln!(output, "    Time {:}", time)?;
                     writeln!(output, "    Partition {:#08X}", odin.partition_id())?;
-                    writeln!(output, "    EventType {:?}", odin.event_type())?;
-                    writeln!(output, "    Step enabled? {:?}", odin.step_run_enable())?;
+                    writeln!(output, "    Step enabled? {:}", odin.step_run_enable())?;
                     if odin.step_run_enable() {
-                        writeln!(output, "    StepNumber {:?}", odin.step_number())?;
+                        writeln!(output, "    StepNumber {} ({0:#X})", odin.step_number())?;
                     }
                     writeln!(output, "    Orbit Id {:?} ({0:#X})", odin.orbit_id())?;
                     writeln!(output, "    Bunch Id {} ({0:#X})", odin.bunch_id())?;
