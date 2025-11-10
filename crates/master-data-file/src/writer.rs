@@ -80,7 +80,9 @@ mod test {
     use std::io::Write;
 
     use multi_event_packet::MultiEventPacket;
-    use multi_fragment_packet::MultiFragmentPacket;
+    use multi_fragment_packet::{
+        MultiFragmentPacket, SourceId, fragment_type::FragmentType, source_id::SubDetector,
+    };
 
     use crate::{
         MdfRecordRef, MdfRecords, WriteMdf,
@@ -110,8 +112,11 @@ mod test {
                     .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(1)
-                    .with_source_id(11)
-                    .add_fragments([(1, b"hello".as_ref()), (2, b"how are you?".as_ref())])
+                    .with_source_id(SourceId::new_odin(0))
+                    .add_fragments([
+                        (FragmentType::Odin, b"hello".as_ref()),
+                        (FragmentType::Odin, b"how are you?".as_ref()),
+                    ])
                     .build(),
             )
             .unwrap()
@@ -120,8 +125,11 @@ mod test {
                     .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(22)
-                    .with_source_id(2)
-                    .add_fragments([(3, b"bye".as_ref()), (4, b"good, thanks".as_ref())])
+                    .with_source_id(SourceId::new(SubDetector::VeloC, 55))
+                    .add_fragments([
+                        (FragmentType::DAQ, b"bye".as_ref()),
+                        (FragmentType::Calo, b"good, thanks".as_ref()),
+                    ])
                     .build(),
             )
             .unwrap()
@@ -151,16 +159,22 @@ mod test {
             .map(|r| r.try_into_single_event().unwrap())
             .collect::<Vec<_>>();
 
-        let fragments = records[0].fragments().collect::<Vec<_>>();
         println!("record 0: size {}", records[0].size_u32());
         // sorted by source id...
-        assert_eq!(fragments[0].payload(), b"bye");
-        assert_eq!(fragments[0].fragment_type_raw(), 3);
-        assert_eq!(fragments[0].source_id().0, 2);
+        let fragments = records[0].fragments().collect::<Vec<_>>();
+        assert_eq!(fragments[0].payload(), b"hello");
+        assert_eq!(
+            fragments[0].fragment_type_parsed(),
+            Some(FragmentType::Odin)
+        );
+        assert_eq!(fragments[0].source_id().0, 0);
 
         let fragments = records[1].fragments().collect::<Vec<_>>();
-        assert_eq!(fragments[1].payload(), b"how are you?");
-        assert_eq!(fragments[1].fragment_type_raw(), 2);
-        assert_eq!(fragments[1].source_id().0, 11);
+        assert_eq!(fragments[1].payload(), b"good, thanks");
+        assert_eq!(fragments[1].fragment_type_parsed(), Some(FragmentType::Calo));
+        assert_eq!(
+            fragments[1].source_id(),
+            SourceId::new(SubDetector::VeloC, 55)
+        );
     }
 }

@@ -1,6 +1,8 @@
 use std::{borrow::Cow, slice};
 
-use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketRef, SourceId};
+use multi_fragment_packet::{
+    MultiFragmentPacket, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
+};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -19,6 +21,8 @@ pub enum EventBuilderError {
         "Trying ot add an mfp with different number of fragments ({got}) than previously added ({expected})."
     )]
     MismatchingFragmentCount { expected: u16, got: u16 },
+    #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
+    SuperfluousOdinFragment,
 }
 
 pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
@@ -27,6 +31,7 @@ pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
 pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacketRef>>,
     mfp_align: Option<usize>,
+    odin_added: bool,
 }
 
 impl<'a> MultiEventPacketBuilder<'a> {
@@ -59,17 +64,27 @@ impl<'a> MultiEventPacketBuilder<'a> {
                 });
             }
         }
+
+        if self.odin_added && test_mfp.source_id().is_odin() {
+            return Err(EventBuilderError::SuperfluousOdinFragment);
+        }
         Ok(())
     }
 
     pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(mfp)?;
+        if mfp.source_id().is_odin() {
+            self.odin_added = true;
+        }
         self.mfps.push(Cow::Borrowed(mfp));
         Ok(self)
     }
 
     pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(&mfp)?;
+        if mfp.source_id().is_odin() {
+            self.odin_added = true;
+        }
         self.mfps.push(Cow::Owned(mfp));
         Ok(self)
     }
@@ -133,6 +148,12 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
         // set mfps
         for (offset, mfp) in self.offsets_iter(&mut 0).zip(&self.mfps) {
+            if mfp.source_id().is_odin() {
+                assert!(mfp.iter().all(|f| {
+                    f.fragment_type_parsed()
+                        .is_some_and(|t| t == FragmentType::Odin)
+                }));
+            }
             let data = slice_as_bytes_mut(data.as_mut());
             let data = &mut data[offset..];
             let data = &mut data[..mfp.packet_size() as usize];
@@ -168,7 +189,10 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId};
+    use multi_fragment_packet::{
+        MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
+        source_id::SubDetector,
+    };
 
     use crate::{MultiEventPacket, MultiEventPacketRef};
 
@@ -180,51 +204,63 @@ mod test {
             .with_align_log(u64_align)
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
-            .with_source_id(55555)
+            .with_source_id(SourceId::new(SubDetector::Odin, 0))
             .add_fragment(
-                11,
+                FragmentType::Odin,
                 b"Hello, I am some data. I am trapped here, please free me!",
             )
-            .add_fragment(22, b"I do not exist, here is nothing to see!!!")
+            .add_fragment(
+                FragmentType::Odin,
+                b"I do not exist, here is nothing to see!!!",
+            )
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
             .with_align_log(u64_align)
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
-            .with_source_id(21)
-            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+            .with_source_id(SourceId::new(SubDetector::MuonA, 21))
+            .add_fragment(
+                FragmentType::DAQ,
+                b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein",
+            )
             .build();
         let mfp3 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
             .with_align_log(u64_align)
             .with_fragment_version(25)
             .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
-            .with_source_id(21)
-            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
-            .add_fragment(11, b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein")
+            .with_source_id(SourceId::new(SubDetector::Rich1, 55))
+            .add_fragment(
+                FragmentType::DAQ,
+                b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein",
+            )
+            .add_fragment(
+                FragmentType::HcalE,
+                b"rsthoeiasrmtarinstitnarsatrnsteinarsietnaein",
+            )
             .build();
 
         let mut mep = MultiEventPacket::builder();
-        mep.add_mfp_ref(&mfp).unwrap();
-        mep.add_mfp_ref(&mfp).unwrap();
+        mep.add_mfp(mfp).unwrap();
         mep.add_mfp_ref(&mfp2).err().unwrap(); // expect errors as wrong num fragments
-        mep.add_mfp(mfp3).unwrap(); // expect errors as wrong num fragments
+        mep.add_mfp_ref(&mfp3).unwrap();
+        mep.add_mfp_ref(&mfp3).unwrap(); // expect errors as wrong num fragments
         let mep = mep.build();
 
         assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
-        assert_eq!(mep.packet_size_u32(), 111);
+        assert_eq!(mep.packet_size_u32(), 107);
         assert_eq!(
             mep.mfp_source_ids(),
-            &[SourceId(21), SourceId(55555), SourceId(55555)]
+            &[SourceId(0), SourceId(8247), SourceId(8247)]
         );
-        assert_eq!(mep.mfp_offsets_u32(), &[7, 39, 75]);
+        assert_eq!(mep.mfp_offsets_u32(), &[7, 43, 75]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
 
         assert_eq!(3, mep.mfp_iter().len());
-        assert_eq!(0, mep.mfp_iter_srcid_range(SourceId(0)..SourceId(10)).len());
+        assert_eq!(0, mep.mfp_iter_srcid_range(SourceId(1)..SourceId(10)).len());
         assert_eq!(
             0,
             mep.mfp_iter_srcid_range(SourceId(55555)..SourceId(55555))
@@ -232,7 +268,7 @@ mod test {
         );
         assert_eq!(
             2,
-            mep.mfp_iter_srcid_range(SourceId(55555)..SourceId(55556))
+            mep.mfp_iter_srcid_range(SubDetector::Rich1.source_id_range())
                 .len()
         );
         assert_eq!(

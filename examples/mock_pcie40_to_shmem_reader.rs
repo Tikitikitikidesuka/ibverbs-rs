@@ -1,5 +1,5 @@
 use circular_buffer::CircularBufferWritable;
-use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
+use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder, SourceId};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
@@ -48,7 +48,7 @@ fn main() {
         for _ in 0..5 {
             let mfp = MultiFragmentPacketBuilder::new()
                 .with_fragment_version(1)
-                .with_source_id(1)
+                .with_source_id(SourceId(1))
                 .with_align_log(6)
                 .with_event_id(event_id)
                 .add_fragments((0..1000).map(|_| (1, (0..255).collect::<Vec<_>>())))

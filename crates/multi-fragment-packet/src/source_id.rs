@@ -19,15 +19,30 @@ impl Display for SourceId {
 
 impl SourceId {
     pub const BITS: u32 = u16::BITS;
+
+    pub const fn new(detector: SubDetector, sub_id: u16) -> Self {
+        detector.to_source_id(sub_id)
+    }
+
+    pub fn new_odin(odin_number: u16) -> Self {
+        SubDetector::Odin.to_source_id(odin_number)
+    }
+
     pub fn sub_detector(self) -> Result<SubDetector, u8> {
         SubDetector::from_source_id(self)
     }
+
     pub fn sub_part(self) -> u16 {
         self.0 & (1 << ((SourceId::BITS - SubDetector::BITS) - 1))
     }
 
     pub fn is_odin(self) -> bool {
         self.sub_detector().is_ok_and(|s| s == SubDetector::Odin)
+    }
+
+    /// Returns the odin number of this source id, if it is a odin source id.
+    pub fn odin_number(self) -> Option<u16> {
+        self.is_odin().then_some(self.sub_part())
     }
 }
 
@@ -53,7 +68,7 @@ pub enum SubDetector {
 
 impl SubDetector {
     const BITS: u32 = 5;
-    pub fn to_source_id(self, sub_id: u16) -> SourceId {
+    pub const fn to_source_id(self, sub_id: u16) -> SourceId {
         assert!(sub_id < 1 << (SourceId::BITS - Self::BITS));
         SourceId((self as u8 as u16) << (SourceId::BITS - Self::BITS) | sub_id)
     }

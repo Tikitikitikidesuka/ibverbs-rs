@@ -1,19 +1,22 @@
 use typed_builder::TypedBuilder;
 
-use crate::{EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
+use crate::{
+    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef, SourceId,
+    fragment_type::FragmentType,
+};
 
 #[derive(TypedBuilder)]
 #[builder(build_method(into = crate::MultiFragmentPacket),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
-    pub fn add_fragment(&mut self, fragment_type: u8, data: impl Into<Vec<u8>>) {
+    pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>>) {
         self.fragments.push(BuildFragmentData {
-            fragment_type,
+            fragment_type: fragment_type as u8,
             data: data.into()
         });
     }
 
     /// Add fragments by iterator of `(fragment_type, data)`.
-    pub fn add_fragments(&mut self, iter: impl IntoIterator<Item=(u8, impl Into<Vec<u8>>)>) {
-        self.fragments.extend(iter.into_iter().map(|(ty, dat)| BuildFragmentData { fragment_type: ty, data: dat.into()}));
+    pub fn add_fragments(&mut self, iter: impl IntoIterator<Item=(FragmentType, impl Into<Vec<u8>>)>) {
+        self.fragments.extend(iter.into_iter().map(|(ty, dat)| BuildFragmentData { fragment_type: ty as _, data: dat.into()}));
     }
     ))]
 struct MultiFragmentPacketBuilderInternal {
@@ -24,7 +27,7 @@ struct MultiFragmentPacketBuilderInternal {
     event_id: EventId,
     /// Source ID of the fragments in this packet.
     #[builder(setter(prefix = "with_"))]
-    source_id: u16,
+    source_id: SourceId,
     /// Fragments in this packet are padded to 2^`align` bytes.
     #[builder(setter(prefix = "with_", suffix = "_log"))]
     align: u8,
@@ -87,7 +90,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
                 .to_le_bytes(),
         );
         write_bytes(&mut data, &mut cursor, &other.event_id.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &other.source_id.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.source_id.0.to_le_bytes());
         write_bytes(&mut data, &mut cursor, &other.align.to_le_bytes());
         write_bytes(
             &mut data,
@@ -145,14 +148,17 @@ mod tests {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
             .with_event_id(1)
-            .with_source_id(1)
+            .with_source_id(SourceId::new(crate::source_id::SubDetector::MuonA, 156))
             .with_align_log(3)
             .with_fragment_version(1)
-            .add_fragment(0, vec![0, 1, 2, 3])
-            .add_fragment(1, vec![0, 1, 2, 3, 4])
-            .add_fragment(2, vec![0, 1, 2, 3, 4, 5, 6, 7])
-            .add_fragment(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
-            .add_fragment(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3])
+            .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3, 4])
+            .add_fragment(FragmentType::Calo, vec![0, 1, 2, 3, 4, 5, 6, 7])
+            .add_fragment(FragmentType::GaudiHeader, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
+            .add_fragment(
+                FragmentType::HltRoutingBits,
+                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            )
             .build()
     }
 
@@ -184,7 +190,10 @@ mod tests {
     #[test]
     fn test_mfp_builder_source_id() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.source_id().0, 1);
+        assert_eq!(
+            mfp.source_id(),
+            SourceId::new(crate::source_id::SubDetector::MuonA, 156)
+        );
     }
 
     #[test]
@@ -198,42 +207,43 @@ mod tests {
         let mfp = demo_multi_fragment_packet_data();
 
         dbg!(&mfp.fragment(1));
+        let source_id = SourceId::new(crate::source_id::SubDetector::MuonA, 156);
 
         let expected_fragments = vec![
             Fragment {
-                r#type: 0,
+                r#type: FragmentType::DAQ as _,
                 data: &[0, 1, 2, 3][..],
                 version: 1,
                 event_id: 1,
-                source_id: SourceId(1),
+                source_id,
             },
             Fragment {
-                r#type: 1,
+                r#type: FragmentType::DAQ as _,
                 data: &[0, 1, 2, 3, 4][..],
                 version: 1,
                 event_id: 2,
-                source_id: SourceId(1),
+                source_id,
             },
             Fragment {
-                r#type: 2,
+                r#type: FragmentType::Calo as _,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
                 version: 1,
                 event_id: 3,
-                source_id: SourceId(1),
+                source_id,
             },
             Fragment {
-                r#type: 3,
+                r#type: FragmentType::GaudiHeader as _,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
                 version: 1,
                 event_id: 4,
-                source_id: SourceId(1),
+                source_id,
             },
             Fragment {
-                r#type: 4,
+                r#type: FragmentType::HltRoutingBits as _,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
                 version: 1,
                 event_id: 5,
-                source_id: SourceId(1),
+                source_id,
             },
         ];
 

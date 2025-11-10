@@ -110,3 +110,10 @@ impl Display for FragmentType {
         write!(f, "{self:?}({})", *self as u8)
     }
 }
+
+impl PartialEq for FragmentType {
+    fn eq(&self, other: &Self) -> bool {
+        (*self as u8) < FragmentType::DaqErrorBase as u8
+            && core::mem::discriminant(self) == core::mem::discriminant(other)
+    }
+}

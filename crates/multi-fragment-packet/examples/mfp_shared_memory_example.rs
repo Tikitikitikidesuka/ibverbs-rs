@@ -1,7 +1,9 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+use multi_fragment_packet::{
+    MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
+};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
 };
@@ -22,9 +24,9 @@ fn main() {
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(0)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .add_fragment(1, (0..190).collect::<Vec<_>>())
+        .add_fragment(FragmentType::CaloSpecial, (0..190).collect::<Vec<_>>())
         .build();
     mfp_0_256.write(&mut writer).unwrap();
     println!(
@@ -48,9 +50,9 @@ fn main() {
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(2)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .add_fragment(1, (40..255).collect::<Vec<_>>())
+        .add_fragment(FragmentType::FTNZS, (40..255).collect::<Vec<_>>())
         .build();
     mfp_2_256.write(&mut writer).unwrap();
     println!(
@@ -77,9 +79,9 @@ fn main() {
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(3)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .add_fragment(1, (0..255).collect::<Vec<_>>())
+        .add_fragment(FragmentType::DAQ, (0..255).collect::<Vec<_>>())
         .build();
     mfp_3_512.write(&mut writer).unwrap();
     println!(
