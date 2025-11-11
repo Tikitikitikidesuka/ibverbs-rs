@@ -4,41 +4,48 @@ use infinibuilder::ibverbs::init::create_ibv_network_node;
 use infinibuilder::network_config::RawNetworkConfig;
 use infinibuilder::rdma_connection::RdmaWorkRequest;
 use infinibuilder::rdma_network_node::{
-    RdmaNamedMemory, RdmaNamedMemoryRegionNetworkNode, RdmaNetworkNode,
+    RdmaBarrierNetworkNode, RdmaGroupNetworkNode, RdmaNamedMemory,
+    RdmaNamedMemoryRegionNetworkNode, RdmaNetworkNode, RdmaReceiveParams, RdmaSendParams,
 };
 use infinibuilder::transport::synced::SyncedTransport;
 use std::fs;
-use std::ptr::slice_from_raw_parts;
+use std::process::exit;
 use std::time::{Duration, Instant};
 
-/// This benchmark's objective is finding the throughput between two nodes, a sender and a receiver.
-/// A memory region with size `batch number of messages * message size`. During the execution,
-/// the sender node will send contiguous slices of size `message size` to the receiver node.
-/// The receiver will receive them in its memory region to their corresponding locations.
-///
-/// REMOVED CORRECTNESS CHECK
-/// To check the correctness of the communication, the sender will fill its buffer with ascending numbers
-/// from zero in the body of unsigned eight bit integers (wrap at 256); the receiver, in turn, will
-/// check that the final values in its memory follow the same pattern.
-///
-/// The execution of the batch of sends will be repeated `iters` times before concluding the benchmark.
-/// If `iters` is `None` then the benchmark will run until killed.
-
 fn main() {
-    simple_logger::init().unwrap();
-
     let args = Args::parse();
-    let json_network = fs::read_to_string(&args.config_file).unwrap();
+    let json_network = fs::read_to_string(&args.network_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
         .unwrap()
-        .take_nodes(args.num_nodes);
+        .take_nodes(2);
 
-    if args.pipeline_size > args.batch_size {
-        panic!("Pipeline size cannot be larger than batch size")
+    // Validate arguments
+    if args.post_batch == 0 {
+        eprintln!("Batch post count must be greater than zero");
+        exit(1);
+    }
+    if args.message_count % args.post_batch != 0 {
+        eprintln!("Message count must be a multiple of the post batch size");
+        exit(1);
+    }
+    if args.max_parallel == 0 {
+        eprintln!("Max parallel messages must be greater than zero");
+        exit(1);
+    }
+    if args.max_parallel % args.post_batch != 0 {
+        eprintln!("Max parallel messages must be a multiple of the post batch size");
+        exit(1);
+    }
+    if args.rank_id != 0 && args.rank_id != 1 {
+        eprintln!(
+            "Rank id {} is not valid\nRank id must be 0 for sender node or 1 for receiver node",
+            args.rank_id
+        );
+        exit(1);
     }
 
-    let mem_name = "foo";
-    let memory_size = args.message_size * args.pipeline_size;
+    let mem_name = "transfer";
+    let memory_size = args.max_parallel * args.message_size;
     let mut memory = vec![0u8; memory_size];
 
     let mut node = create_ibv_network_node(
@@ -54,209 +61,183 @@ fn main() {
         CentralizedBarrier::new(),
         SyncedTransport::with_post_timeout(Duration::from_millis(1000)),
     )
-    .unwrap();
+        .unwrap();
 
-    let iters = args.iters.unwrap_or(usize::MAX);
-    for iter in 0..iters {
-        match args.rank_id {
-            0 => {
-                let local_mr = node.local_mr(mem_name).unwrap();
-                sender_batch(
-                    iter,
-                    memory.as_mut_ptr(),
-                    memory.len(),
-                    &local_mr,
-                    &mut node,
-                    &args,
-                )
-            }
-            1 => {
-                let local_mr = node.local_mr(mem_name).unwrap();
-                receiver_batch(
-                    iter,
-                    memory.as_mut_ptr(),
-                    memory.len(),
-                    &local_mr,
-                    &mut node,
-                    &args,
-                )
-            }
-            id => unreachable!("This node ({id}) does not participate in the benchmark"),
+    let local_mr = node.local_mr(mem_name).unwrap();
+
+    for iter_idx in 0..args.iters {
+        // Sync all agents
+        node.barrier(&node.group_all(), Duration::from_millis(1000))
+            .unwrap();
+
+        if args.rank_id == 0 {
+            let throughput_sample = run_sender(&mut node, &local_mr, &args);
+            println!(
+                "Sender(iter={})[gbps={:.2},pps={:.2}]",
+                iter_idx, throughput_sample.gbps, throughput_sample.pps
+            );
+        } else if args.rank_id == 1 {
+            let throughput_sample = run_receiver(&mut node, &local_mr, &args);
+            println!(
+                "Receiver(iter={})[gbps={:.2},pps={:.2}]",
+                iter_idx, throughput_sample.gbps, throughput_sample.pps
+            );
         }
+
+        // Sync all agents
+        node.barrier(&node.group_all(), Duration::from_millis(1000))
+            .unwrap();
     }
 }
 
-fn sender_batch<NetworkNode: RdmaNetworkNode>(
-    iter: usize,
-    mem_address: *mut u8,
-    mem_length: usize,
-    mr: &NetworkNode::MemoryRegion,
-    node: &mut NetworkNode,
+fn run_sender<MemoryRegion, Node: RdmaNetworkNode<MemoryRegion = MemoryRegion>>(
+    node: &mut Node,
+    memory_region: &MemoryRegion,
     args: &Args,
-) {
-    // Initialize memory for correctness check later on
-    /*
-    (0..mem_length)
-        .for_each(|i| unsafe { mem_address.add(i).write_volatile(((i + iter) % 256) as u8) });
+) -> ThroughputSample {
+    let num_posts = args.message_count / args.post_batch;
+    let num_send_configs = args.max_parallel / args.post_batch;
 
-     */
+    let send_configs = (0..num_send_configs)
+        .map(|send_type_idx| {
+            (0..args.post_batch)
+                .map(|send_idx| {
+                    let start = send_type_idx * args.post_batch * args.message_size
+                        + send_idx * args.message_size;
+                    let end = start + args.message_size;
+                    RdmaSendParams {
+                        memory_region,
+                        memory_range: start..end,
+                        immediate_data: None,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-    let mut wr_queue = Vec::with_capacity(args.pipeline_size);
+    let mut batched_wrs: Vec<Vec<_>> = (0..num_send_configs).map(|_| vec![]).collect();
 
-    // Wait until receiver is ready
-    println!("Initial rendezvous...");
-    node.barrier(&node.group_all(), Duration::from_millis(10000))
-        .unwrap();
-    println!("Synchronized");
-
-    // Start timing
     let start = Instant::now();
 
-    // Initial pipeline fill
-    for i in 0..args.pipeline_size {
-        wr_queue.push(
-            node.post_send(
-                1,
-                mr,
-                ((i % args.pipeline_size) * args.message_size)
-                    ..(((i % args.pipeline_size) + 1) * args.message_size),
-                None,
-            )
-            .unwrap(),
-        )
+    let mut issued_sends = 0;
+    let mut finished_sends = 0;
+
+    while finished_sends < num_posts {
+        // If max parallel sends allows more sends, send
+        if issued_sends < num_posts && (issued_sends - finished_sends) < num_send_configs {
+            let slot_idx = issued_sends % num_send_configs;
+            // BUG WAS HERE: was using issued_sends / num_send_configs instead of %
+            let wrs = node.post_send_batch(1, send_configs[slot_idx].as_slice());
+            batched_wrs[slot_idx] = wrs;
+            issued_sends += 1;
+        } else {
+            // Otherwise, wait
+            let slot_idx = finished_sends % num_send_configs;
+            let wrs = std::mem::replace(&mut batched_wrs[slot_idx], vec![]);
+            for wr in wrs {
+                let mut wr = wr.unwrap();
+                wr.spin_poll_batched(Duration::from_millis(5000), 1024)
+                    .unwrap();
+            }
+            finished_sends += 1;
+        }
     }
 
-    // Send all batches
-    for i in args.pipeline_size..args.batch_size {
-        // Wait until one is finished
-        wr_queue[i % args.pipeline_size]
-            .spin_poll_batched(Duration::from_millis(5000), 1024)
-            .unwrap();
-
-        // Feed another to the pipeline
-        let wr = node
-            .post_send(
-                1,
-                mr,
-                ((i % args.pipeline_size) * args.message_size)
-                    ..(((i % args.pipeline_size) + 1) * args.message_size),
-                None,
-            )
-            .unwrap();
-
-        wr_queue[i % args.pipeline_size] = wr;
-    }
-
-    for i in args.batch_size..(args.batch_size + args.pipeline_size) {
-        wr_queue[i % args.pipeline_size]
-            .spin_poll_batched(Duration::from_millis(5000), 1024)
-            .unwrap();
-    }
-
-    // Finish timing
     let elapsed = start.elapsed();
+    let total_bytes = (args.message_size * args.message_count) as f64;
+    let total_seconds = elapsed.as_secs_f64();
+    let throughput_gbps = (total_bytes * 8.0) / (total_seconds * 1e9);
+    let throughput_pps = args.message_count as f64 / total_seconds;
 
-    println!("Finished");
-
-    // Print results
-    let pps = args.batch_size as f64 / elapsed.as_secs_f64();
-    let gbps =
-        (args.batch_size * args.message_size * 8) as f64 / (1000000000_f64 * elapsed.as_secs_f64());
-    println!("pps: {pps:.2}, gbps: {gbps:.2}");
+    ThroughputSample {
+        gbps: throughput_gbps,
+        pps: throughput_pps,
+    }
 }
 
-fn receiver_batch<NetworkNode: RdmaNetworkNode>(
-    iter: usize,
-    mem_address: *mut u8,
-    mem_length: usize,
-    mr: &NetworkNode::MemoryRegion,
-    node: &mut NetworkNode,
+fn run_receiver<MemoryRegion, Node: RdmaNetworkNode<MemoryRegion = MemoryRegion>>(
+    node: &mut Node,
+    memory_region: &MemoryRegion,
     args: &Args,
-) {
-    let mut wr_queue = Vec::with_capacity(args.pipeline_size);
+) -> ThroughputSample {
+    let num_posts = args.message_count / args.post_batch;
+    let num_recv_configs = args.max_parallel / args.post_batch;
 
-    // Notify sender to start
-    println!("Initial rendezvous...");
-    node.barrier(&node.group_all(), Duration::from_millis(10000))
-        .unwrap();
-    println!("Synchronized");
+    let recv_configs = (0..num_recv_configs)
+        .map(|recv_type_idx| {
+            (0..args.post_batch)
+                .map(|recv_idx| {
+                    let start = recv_type_idx * args.post_batch * args.message_size
+                        + recv_idx * args.message_size;
+                    let end = start + args.message_size;
+                    RdmaReceiveParams {
+                        memory_region,
+                        memory_range: start..end,
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-    // Initial pipeline fill
-    for i in 0..args.pipeline_size {
-        wr_queue.push(
-            node.post_receive(
-                0,
-                mr,
-                ((i % args.pipeline_size) * args.message_size)
-                    ..(((i % args.pipeline_size) + 1) * args.message_size),
-            )
-            .unwrap(),
-        )
+    let mut batched_wrs: Vec<Vec<_>> = (0..num_recv_configs).map(|_| vec![]).collect();
+
+    let start = Instant::now();
+
+    let mut issued_recvs = 0;
+    let mut finished_recvs = 0;
+
+    while finished_recvs < num_posts {
+        // Post receives if we have room in the pipeline
+        if issued_recvs < num_posts && (issued_recvs - finished_recvs) < num_recv_configs {
+            let slot_idx = issued_recvs % num_recv_configs;
+            let wrs = node.post_receive_batch(0, recv_configs[slot_idx].as_slice());
+            batched_wrs[slot_idx] = wrs;
+            issued_recvs += 1;
+        } else {
+            // Wait for completion
+            let slot_idx = finished_recvs % num_recv_configs;
+            let wrs = std::mem::replace(&mut batched_wrs[slot_idx], vec![]);
+            for wr in wrs {
+                let mut wr = wr.unwrap();
+                wr.spin_poll_batched(Duration::from_millis(5000), 1024)
+                    .unwrap();
+            }
+            finished_recvs += 1;
+        }
     }
 
-    // Send all batches
-    for i in args.pipeline_size..args.batch_size {
-        // Wait until one is finished
-        wr_queue[i % args.pipeline_size]
-            .spin_poll_batched(Duration::from_millis(5000), 1024)
-            .unwrap();
+    let elapsed = start.elapsed();
+    let total_bytes = (args.message_size * args.message_count) as f64;
+    let total_seconds = elapsed.as_secs_f64();
+    let throughput_gbps = (total_bytes * 8.0) / (total_seconds * 1e9);
+    let throughput_pps = args.message_count as f64 / total_seconds;
 
-        // Feed another to the pipeline
-        let wr = node
-            .post_receive(
-                0,
-                mr,
-                ((i % args.pipeline_size) * args.message_size)
-                    ..(((i % args.pipeline_size) + 1) * args.message_size),
-            )
-            .unwrap();
-
-        wr_queue[i % args.pipeline_size] = wr;
+    ThroughputSample {
+        gbps: throughput_gbps,
+        pps: throughput_pps,
     }
-
-    for i in args.batch_size..(args.batch_size + args.pipeline_size) {
-        wr_queue[i % args.pipeline_size]
-            .spin_poll_batched(Duration::from_millis(5000), 1024)
-            .unwrap();
-    }
-
-    // Validate transfer
-    /*
-    let memory = unsafe { &*slice_from_raw_parts(mem_address, mem_length) };
-    println!("Memory: {:?}", &memory[..10]);
-    if !memory
-        .iter()
-        .enumerate()
-        .all(|(i, v)| *v == ((i + iter) % 256) as u8)
-    {
-        panic!("Memory not transferred correctly")
-    } else {
-        println!("Memory transferred correctly");
-    }
-    */
-}
-
-#[derive(Debug, Copy, Clone, clap::ValueEnum)]
-enum Role {
-    Sender,
-    Receiver,
 }
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    config_file: String,
+    message_size: usize,
+    #[arg(short, long)]
+    message_count: usize,
+    #[arg(short, long)]
+    max_parallel: usize,
+    #[arg(short, long)]
+    post_batch: usize,
+    #[arg(short, long)]
+    iters: usize,
     #[arg(short, long)]
     rank_id: usize,
     #[arg(short, long)]
-    num_nodes: usize,
-    #[arg(short, long)]
-    message_size: usize,
-    #[arg(short, long)]
-    batch_size: usize,
-    #[arg(short, long)]
-    pipeline_size: usize,
-    #[arg(short, long)]
-    iters: Option<usize>,
+    network_file: String,
+}
+
+struct ThroughputSample {
+    gbps: f64,
+    pps: f64,
 }
