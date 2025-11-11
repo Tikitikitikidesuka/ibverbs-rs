@@ -34,10 +34,6 @@ name = "throughput_perftest"
 path = "perftest/throughput/throughput_perftest.rs"
 
 [[bin]]
-name = "rendezvous_perftest"
-path = "perftest/rendezvous_perftest.rs"
-
-[[bin]]
 name = "barrier_perftest"
 path = "perftest/barrier/barrier_perftest.rs"
 

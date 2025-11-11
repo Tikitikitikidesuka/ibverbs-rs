@@ -1,5 +1,6 @@
 // Communicates when a receive has been issued and waits for its signal
 
+use std::borrow::Borrow;
 use crate::rdma_connection::{
     RdmaConnection, RdmaMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
     RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
@@ -16,7 +17,6 @@ use crate::transport::{
     RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport, RdmaReceiveParams, RdmaSendParams,
 };
 use derivative::Derivative;
-use std::borrow::Borrow;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
@@ -276,20 +276,23 @@ impl<Connection: RdmaConnection> RdmaNetworkNodeReceiveTransport<Connection>
         Ok(wr)
     }
 
-    fn post_receive_batch<Range: RangeBounds<usize> + Clone>(
+    fn post_receive_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         receive_params_iter: impl IntoIterator<
-            Item = impl Borrow<RdmaReceiveParams<Connection::MemoryRegion, Range>>,
+            Item = impl Borrow<RdmaReceiveParams<'a, Connection::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    where
+        <Connection as RdmaMemoryRegionConnection>::MemoryRegion: 'a,
+    {
         // First issue the receives
         let wrs = receive_params_iter
             .into_iter()
             .map(|receive_params| {
                 conn.post_receive(
-                    &receive_params.borrow().memory_region,
+                    receive_params.borrow().memory_region,
                     receive_params.borrow().memory_range.clone(),
                 )
                 .map_err(SyncedTransportError::OperationError)

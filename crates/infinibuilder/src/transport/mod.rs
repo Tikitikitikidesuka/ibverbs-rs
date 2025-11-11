@@ -3,15 +3,17 @@ pub mod basic;
 pub mod synced;
 
 use crate::rdma_connection::{
-    RdmaConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
+    RdmaConnection, RdmaMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
     RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
-    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaWorkCompletion,
-    RdmaWorkRequest,
+    RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection,
+    RdmaWorkCompletion, RdmaWorkRequest,
+};
+use crate::rdma_network_node::{
+    RdmaReadParams, RdmaReceiveParams, RdmaSendParams, RdmaWriteParams,
 };
 use std::borrow::Borrow;
 use std::error::Error;
 use std::ops::RangeBounds;
-use crate::rdma_network_node::{RdmaReadParams, RdmaReceiveParams, RdmaSendParams, RdmaWriteParams};
 
 pub trait RdmaNetworkNodeTransport<Connection: RdmaConnection>:
     RdmaNetworkNodeSendTransport<Connection>
@@ -47,21 +49,24 @@ pub trait RdmaNetworkNodeSendTransport<Connection: RdmaPostSendConnection> {
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 
-    fn post_send_batch<Range: RangeBounds<usize> + Clone>(
+    fn post_send_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         send_params_iter: impl IntoIterator<
-            Item = impl Borrow<RdmaSendParams<Connection::MemoryRegion, Range>>,
+            Item = impl Borrow<RdmaSendParams<'a, Connection::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    where
+        <Connection as RdmaMemoryRegionConnection>::MemoryRegion: 'a,
+    {
         send_params_iter
             .into_iter()
             .map(|send_params| {
                 self.post_send(
                     rank_id,
                     conn,
-                    &send_params.borrow().memory_region,
+                    send_params.borrow().memory_region,
                     send_params.borrow().memory_range.clone(),
                     send_params.borrow().immediate_data.clone(),
                 )
@@ -82,21 +87,24 @@ pub trait RdmaNetworkNodeReceiveTransport<Connection: RdmaPostReceiveConnection>
         memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 
-    fn post_receive_batch<Range: RangeBounds<usize> + Clone>(
+    fn post_receive_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         receive_params_iter: impl IntoIterator<
-            Item = impl Borrow<RdmaReceiveParams<Connection::MemoryRegion, Range>>,
+            Item = impl Borrow<RdmaReceiveParams<'a, Connection::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    where
+        <Connection as RdmaMemoryRegionConnection>::MemoryRegion: 'a,
+    {
         receive_params_iter
             .into_iter()
             .map(|receive_params| {
                 self.post_receive(
                     rank_id,
                     conn,
-                    &receive_params.borrow().memory_region,
+                    receive_params.borrow().memory_region,
                     receive_params.borrow().memory_range.clone(),
                 )
             })
@@ -119,25 +127,34 @@ pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
         immediate_data: Option<u32>,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 
-    fn post_write_batch<Range: RangeBounds<usize> + Clone>(
+    fn post_write_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         write_params_iter: impl IntoIterator<
             Item = impl Borrow<
-                RdmaWriteParams<Connection::MemoryRegion, Connection::RemoteMemoryRegion, Range>,
+                RdmaWriteParams<
+                    'a,
+                    Connection::MemoryRegion,
+                    Connection::RemoteMemoryRegion,
+                    Range,
+                >,
             >,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    where
+        <Connection as RdmaMemoryRegionConnection>::MemoryRegion: 'a,
+        <Connection as RdmaRemoteMemoryRegionConnection>::RemoteMemoryRegion: 'a,
+    {
         write_params_iter
             .into_iter()
             .map(|write_params| {
                 self.post_write(
                     rank_id,
                     conn,
-                    &write_params.borrow().local_memory_region,
+                    write_params.borrow().local_memory_region,
                     write_params.borrow().local_memory_range.clone(),
-                    &write_params.borrow().remote_memory_region,
+                    write_params.borrow().remote_memory_region,
                     write_params.borrow().remote_memory_range.clone(),
                     write_params.borrow().immediate_data.clone(),
                 )
@@ -145,7 +162,6 @@ pub trait RdmaNetworkNodeWriteTransport<Connection: RdmaPostWriteConnection> {
             .collect()
     }
 }
-
 
 pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection> {
     type WorkRequest: RdmaWorkRequest;
@@ -161,25 +177,29 @@ pub trait RdmaNetworkNodeReadTransport<Connection: RdmaPostReadConnection> {
         remote_memory_range: impl RangeBounds<usize> + Clone,
     ) -> Result<Self::WorkRequest, Self::PostError>;
 
-    fn post_read_batch<Range: RangeBounds<usize> + Clone>(
+    fn post_read_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
         read_params_iter: impl IntoIterator<
             Item = impl Borrow<
-                RdmaReadParams<Connection::MemoryRegion, Connection::RemoteMemoryRegion, Range>,
+                RdmaReadParams<'a, Connection::MemoryRegion, Connection::RemoteMemoryRegion, Range>,
             >,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
+    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    where
+        <Connection as RdmaMemoryRegionConnection>::MemoryRegion: 'a,
+        <Connection as RdmaRemoteMemoryRegionConnection>::RemoteMemoryRegion: 'a,
+    {
         read_params_iter
             .into_iter()
             .map(|read_params| {
                 self.post_read(
                     rank_id,
                     conn,
-                    &read_params.borrow().local_memory_region,
+                    read_params.borrow().local_memory_region,
                     read_params.borrow().local_memory_range.clone(),
-                    &read_params.borrow().remote_memory_region,
+                    read_params.borrow().remote_memory_region,
                     read_params.borrow().remote_memory_range.clone(),
                 )
             })
@@ -203,12 +223,12 @@ pub trait RdmaNetworkNodeSendImmediateDataTransport<Connection: RdmaPostSendImme
         &mut self,
         rank_id: usize,
         conn: &mut Connection,
-        send_immediate_data_params_iter: impl IntoIterator<Item = u32>,
+        send_immediate_data_params_iter: &[u32],
     ) -> Vec<Result<Self::WorkRequest, Self::PostError>> {
         send_immediate_data_params_iter
             .into_iter()
             .map(|send_immediate_data_params| {
-                self.post_send_immediate_data(rank_id, conn, send_immediate_data_params)
+                self.post_send_immediate_data(rank_id, conn, *send_immediate_data_params)
             })
             .collect()
     }
