@@ -5,14 +5,14 @@ use std::{
     slice,
 };
 
-use multi_fragment_packet::{EventId, MultiFragmentPacketRef, SourceId};
+use multi_fragment_packet::{EventId, MultiFragmentPacket, SourceId};
 
 use crate::builder::MultiEventPacketBuilder;
 
 pub mod builder;
 
-/// Container type owning a [`MultiEventPacketRef`].
-pub struct MultiEventPacket {
+/// Container type owning a [`MultiEventPacket`].
+pub struct MultiEventPacketOwned {
     data: Box<[u32]>, // assures alignement of u32
 }
 
@@ -29,33 +29,33 @@ pub(crate) struct MultiEventPacketConstHeader {
     packet_size: u32,
 }
 
-impl MultiEventPacketRef {
+impl MultiEventPacket {
     pub const MAGIC: u16 = 0xCEFA;
 }
 
-impl Deref for MultiEventPacket {
-    type Target = MultiEventPacketRef;
+impl Deref for MultiEventPacketOwned {
+    type Target = MultiEventPacket;
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
     }
 }
 
-impl AsRef<MultiEventPacketRef> for MultiEventPacket {
-    fn as_ref(&self) -> &MultiEventPacketRef {
+impl AsRef<MultiEventPacket> for MultiEventPacketOwned {
+    fn as_ref(&self) -> &MultiEventPacket {
         // MultiEventPacket must be guaranteed to be correct already. Since it can only
         // be built by the builder, it is supposed to be guaranteed.
-        unsafe { MultiEventPacketRef::unchecked_ref_from_raw_bytes(&self.data) }
+        unsafe { MultiEventPacket::unchecked_ref_from_raw_bytes(&self.data) }
     }
 }
 
-impl Borrow<MultiEventPacketRef> for MultiEventPacket {
-    fn borrow(&self) -> &MultiEventPacketRef {
+impl Borrow<MultiEventPacket> for MultiEventPacketOwned {
+    fn borrow(&self) -> &MultiEventPacket {
         self
     }
 }
 
-impl MultiEventPacket {
+impl MultiEventPacketOwned {
     pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
         MultiEventPacketBuilder::new()
     }
@@ -71,12 +71,12 @@ impl MultiEventPacket {
 ///
 /// Its relationship to [`MultiEventPacket`] is as [`str`] to [`String`].
 #[repr(C, packed)]
-pub struct MultiEventPacketRef {
+pub struct MultiEventPacket {
     header: MultiEventPacketConstHeader,
 }
 
-impl ToOwned for MultiEventPacketRef {
-    type Owned = MultiEventPacket;
+impl ToOwned for MultiEventPacket {
+    type Owned = MultiEventPacketOwned;
 
     fn to_owned(&self) -> Self::Owned {
         Self::Owned {
@@ -85,7 +85,7 @@ impl ToOwned for MultiEventPacketRef {
     }
 }
 
-impl MultiEventPacketRef {
+impl MultiEventPacket {
     pub fn magic(&self) -> u16 {
         self.header.magic
     }
@@ -132,15 +132,15 @@ impl MultiEventPacketRef {
             .map(|v| *v as usize * size_of::<u32>())
     }
 
-    pub fn get_mfp(&self, idx: usize) -> Option<&MultiFragmentPacketRef> {
+    pub fn get_mfp(&self, idx: usize) -> Option<&MultiFragmentPacket> {
         // SAFETY: MFPs are located at the given offset (in bytes!) and expected to be valid.
         // SAFETY: Returned lifetime is same as data
         self.mfp_offset_bytes(idx).map(|off| unsafe {
-            &*(self as *const Self as *const MultiFragmentPacketRef).byte_add(off)
+            &*(self as *const Self as *const MultiFragmentPacket).byte_add(off)
         })
     }
 
-    pub fn get_odin_mfp(&self) -> &MultiFragmentPacketRef {
+    pub fn get_odin_mfp(&self) -> &MultiFragmentPacket {
         // As MFPs are sorted by source id, the odin mfp is first.
         let mfp = self.get_mfp(0).expect("odin mfp exists");
         assert!(mfp.source_id().is_odin());
@@ -203,14 +203,14 @@ impl MultiEventPacketRef {
     /// SAFETY: Assumes data contains a valid MEP, with MFPs sorted by srcid.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
-        unsafe { &*(data.as_ptr() as *const MultiEventPacketRef) }
+        unsafe { &*(data.as_ptr() as *const MultiEventPacket) }
     }
 }
 
-impl Debug for MultiEventPacketRef {
+impl Debug for MultiEventPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mfps = self.mfp_iter().collect::<Vec<_>>();
-        f.debug_struct("MultiEventPacketRef")
+        f.debug_struct("MultiEventPacket")
             .field("magic", &format!("{:#04X}", self.magic()))
             .field("nmfps", &self.num_mfps())
             .field("pwords", &self.packet_size_u32())
@@ -221,7 +221,7 @@ impl Debug for MultiEventPacketRef {
     }
 }
 
-impl Debug for MultiEventPacket {
+impl Debug for MultiEventPacketOwned {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.deref().fmt(f)
     }
@@ -244,13 +244,13 @@ pub(crate) fn header_size(num_mfps: usize) -> usize {
 }
 
 pub struct MultiEventPacketIterator<'a> {
-    mep: &'a MultiEventPacketRef,
+    mep: &'a MultiEventPacket,
     next_idx: usize,
     end: Option<usize>,
 }
 
 impl<'a> Iterator for MultiEventPacketIterator<'a> {
-    type Item = &'a MultiFragmentPacketRef;
+    type Item = &'a MultiFragmentPacket;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.end.is_none_or(|end| self.next_idx < end) {
@@ -280,11 +280,11 @@ mod bincode {
     use ::bincode;
     use bincode::{Decode, Encode, de::read::Reader, enc::write::Writer};
 
-    use crate::{MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef};
+    use crate::{MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned};
 
     use super::slice_as_bytes_mut;
 
-    impl Decode<()> for MultiEventPacket {
+    impl Decode<()> for MultiEventPacketOwned {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
@@ -295,11 +295,11 @@ mod bincode {
 
             let header = unsafe { &*(bytes.as_ptr() as *const MultiEventPacketConstHeader) };
 
-            if header.magic != MultiEventPacketRef::MAGIC {
+            if header.magic != MultiEventPacket::MAGIC {
                 return Err(bincode::error::DecodeError::OtherString(format!(
                     "Invalid magic number for `MultiEventPacket`: got {:#04X} but expected {:#04X}",
                     header.magic,
-                    MultiEventPacketRef::MAGIC
+                    MultiEventPacket::MAGIC
                 )));
             }
 
@@ -319,7 +319,7 @@ mod bincode {
         }
     }
 
-    impl Encode for MultiEventPacketRef {
+    impl Encode for MultiEventPacket {
         fn encode<E: bincode::enc::Encoder>(
             &self,
             encoder: &mut E,
@@ -328,7 +328,7 @@ mod bincode {
         }
     }
 
-    impl Encode for MultiEventPacket {
+    impl Encode for MultiEventPacketOwned {
         fn encode<E: bincode::enc::Encoder>(
             &self,
             encoder: &mut E,

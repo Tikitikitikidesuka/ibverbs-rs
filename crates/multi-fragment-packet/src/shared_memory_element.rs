@@ -1,4 +1,4 @@
-use crate::{MultiFragmentPacket, MultiFragmentPacketRef};
+use crate::{MultiFragmentPacketOwned, MultiFragmentPacket};
 use circular_buffer::CircularBufferWriter;
 use shared_memory_buffer::{
     ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError,
@@ -8,17 +8,17 @@ use shared_memory_buffer::{
 
 const WRAP_MAGIC: u16 = 0xBF31;
 
+impl_circular_buffer_writable!(MultiFragmentPacketOwned);
 impl_circular_buffer_writable!(MultiFragmentPacket);
-impl_circular_buffer_writable!(MultiFragmentPacketRef);
-impl_circular_buffer_readable!(MultiFragmentPacketRef);
+impl_circular_buffer_readable!(MultiFragmentPacket);
 
-impl SharedMemoryBufferElement for MultiFragmentPacketRef {
+impl SharedMemoryBufferElement for MultiFragmentPacket {
     fn length_in_bytes(&self) -> usize {
         self.packet_size() as usize
     }
 }
 
-impl ReadableSharedMemoryBufferElement for MultiFragmentPacketRef {
+impl ReadableSharedMemoryBufferElement for MultiFragmentPacket {
     fn cast_to_element(data: &[u8]) -> Result<&Self, SharedMemoryTypedReadError> {
         // Verify enough data for header
         if data.len() < Self::HEADER_SIZE {
@@ -50,7 +50,7 @@ impl ReadableSharedMemoryBufferElement for MultiFragmentPacketRef {
     }
 }
 
-impl WritableSharedMemoryBufferElement for MultiFragmentPacketRef {
+impl WritableSharedMemoryBufferElement for MultiFragmentPacket {
     fn write_to_buffer(&self, buffer: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError> {
         let mfp_slice = self.raw_packet_data();
 
@@ -81,13 +81,13 @@ impl WritableSharedMemoryBufferElement for MultiFragmentPacketRef {
     }
 }
 
-impl SharedMemoryBufferElement for MultiFragmentPacket {
+impl SharedMemoryBufferElement for MultiFragmentPacketOwned {
     fn length_in_bytes(&self) -> usize {
         self.packet_size() as usize
     }
 }
 
-impl WritableSharedMemoryBufferElement for MultiFragmentPacket {
+impl WritableSharedMemoryBufferElement for MultiFragmentPacketOwned {
     fn write_to_buffer(&self, buffer: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError> {
         // Write as if it were an MFPRef
         self.as_ref().write_to_buffer(buffer)
@@ -95,6 +95,6 @@ impl WritableSharedMemoryBufferElement for MultiFragmentPacket {
 
     fn set_wrap_flag(bytes: &mut [u8]) -> Result<(), SharedMemoryTypedWriteError> {
         // Same as with the MFPRef
-        MultiFragmentPacketRef::set_wrap_flag(bytes)
+        MultiFragmentPacket::set_wrap_flag(bytes)
     }
 }

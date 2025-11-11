@@ -1,6 +1,6 @@
 use alignment_utils::IsPow2Result;
 use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
-use multi_fragment_packet::MultiFragmentPacketRef;
+use multi_fragment_packet::MultiFragmentPacket;
 use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
 use pcie40::ctrl::PCIe40ControllerManager;
 use pcie40::reader::PCIe40Reader;
@@ -81,7 +81,7 @@ fn main() {
             .expect("Error reading MFPs from shared memory");
 
         // Read the MFPs
-        let mfps = MultiFragmentPacketRef::read_multiple(&mut pcie40_reader, 5)
+        let mfps = MultiFragmentPacket::read_multiple(&mut pcie40_reader, 5)
             .expect("Error reading MFPs from shared memory");
 
         println!("Read MFP[0]: {:?}", mfps[0]);
@@ -113,7 +113,7 @@ fn pcie40_wait_for_mfps(
     poll_interval: Duration,
 ) -> Result<(), ()> {
     loop {
-        match MultiFragmentPacketRef::read_multiple(reader, num) {
+        match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(_) => return Ok(()),
             Err(PCIe40TypedReadError::NotFound | PCIe40TypedReadError::NotEnoughData) => {
                 println!("No MFPs found, waiting for more data...");
@@ -128,7 +128,7 @@ fn pcie40_wait_for_mfps(
 
 fn shmem_write_mfps(
     writer: &mut SharedMemoryBufferWriter,
-    mfps: &[&MultiFragmentPacketRef],
+    mfps: &[&MultiFragmentPacket],
     poll_interval: Duration,
 ) -> Result<(), ()> {
     for mfp in mfps {

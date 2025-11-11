@@ -1,6 +1,6 @@
 use circular_buffer::CircularBufferWritable;
 use multi_fragment_packet::fragment_type::FragmentType;
-use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder, SourceId};
+use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketOwned, SourceId};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
@@ -87,7 +87,7 @@ fn main() {
 
 fn shmem_write_mfps(
     writer: &mut SharedMemoryBufferWriter,
-    mfps: &[MultiFragmentPacket],
+    mfps: &[MultiFragmentPacketOwned],
     poll_interval: Duration,
 ) -> Result<(), ()> {
     for mfp in mfps {

@@ -55,20 +55,20 @@ impl<'a> WriteMdf for Fragment<'a> {
 
 #[repr(align(4))]
 /// Aka bank.
-pub(crate) struct MdfFragmentRef {
+pub(crate) struct MdfFragment {
     header: MdfFragmentHeader,
 }
 
-impl Debug for MdfFragmentRef {
+impl Debug for MdfFragment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfFragmentRef")
+        f.debug_struct("MdfFragment")
             .field("header", &self.header)
             .field("data", &truncate_data(self.data()))
             .finish()
     }
 }
 
-impl MdfFragmentRef {
+impl MdfFragment {
     /// `slice` needs to contain at least one full correct MDF.
     /// `slice` may be larger towards the end.
     pub fn from_data(slice: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {

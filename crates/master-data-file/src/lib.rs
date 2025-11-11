@@ -14,7 +14,7 @@ use std::io::Result as IoResult;
 use thiserror::Error;
 
 use crate::{
-    fragment::MdfFragmentRef,
+    fragment::MdfFragment,
     header::{
         MdfHeader, MultiPurpose, SingleEvent, SpecificHeaderType, Unknown,
         multi_purpose::MultiPurposeType,
@@ -30,12 +30,12 @@ pub use writer::WriteMdf;
 compile_error!("Only little endian supported!");
 
 #[repr(C, align(4))]
-pub struct MdfRecordRef<H: SpecificHeaderType = Unknown> {
+pub struct MdfRecord<H: SpecificHeaderType = Unknown> {
     /// Invariant: sizes are valid (i.e. at least two equal).
     generic_header: MdfHeader<H>,
 }
 
-impl<H: SpecificHeaderType> MdfRecordRef<H> {
+impl<H: SpecificHeaderType> MdfRecord<H> {
     /// Returns the entire record length in units of `u32`.
     pub fn size_bytes(&self) -> usize {
         self.generic_header.length_bytes().expect("valid") as _
@@ -85,7 +85,7 @@ impl<H: SpecificHeaderType> MdfRecordRef<H> {
     }
 }
 
-impl MdfRecordRef {
+impl MdfRecord {
     /// Tries to extract an MDF record from the start of the slice, returning the unused rest.
     /// Fails if the slice is too small or contains invalid MDF length information.
     pub fn from_data(data: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {
@@ -113,7 +113,7 @@ impl MdfRecordRef {
         Ok((record, &data[length_32..]))
     }
 
-    pub fn try_into_single_event(&self) -> Result<&MdfRecordRef<SingleEvent>, HeaderParseError> {
+    pub fn try_into_single_event(&self) -> Result<&MdfRecord<SingleEvent>, HeaderParseError> {
         if self.specific_header_type() != SingleEvent::HEADER_TYPE {
             Err(HeaderParseError::InvalidHeaderType {
                 expected: SingleEvent::HEADER_TYPE,
@@ -125,7 +125,7 @@ impl MdfRecordRef {
                 got: self.specific_header_size_bytes(),
             })
         } else {
-            Ok(unsafe { &*(self as *const MdfRecordRef<_> as *const MdfRecordRef<SingleEvent>) })
+            Ok(unsafe { &*(self as *const MdfRecord<_> as *const MdfRecord<SingleEvent>) })
         }
     }
 }
@@ -142,18 +142,18 @@ pub enum MdfFromDataError {
     TotalLengthMismatch { expected: usize, got: usize },
 }
 
-impl fmt::Debug for MdfRecordRef<Unknown> {
+impl fmt::Debug for MdfRecord<Unknown> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfRecordRef")
+        f.debug_struct("MdfRecord")
             .field("generic_header", &self.generic_header)
             .field("body", &truncate_data(self.body_u32()))
             .finish()
     }
 }
 
-impl fmt::Debug for MdfRecordRef<SingleEvent> {
+impl fmt::Debug for MdfRecord<SingleEvent> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfRecordRef")
+        f.debug_struct("MdfRecord")
             .field("generic_header", &self.generic_header)
             .field(
                 "fragments",
@@ -171,17 +171,15 @@ pub enum HeaderParseError {
     InvalidHeaderSize { expected: usize, got: usize },
 }
 
-impl<'a> TryFrom<&'a MdfRecordRef<Unknown>> for &'a MdfRecordRef<SingleEvent> {
+impl<'a> TryFrom<&'a MdfRecord<Unknown>> for &'a MdfRecord<SingleEvent> {
     type Error = HeaderParseError;
 
-    fn try_from(
-        other: &'a MdfRecordRef<Unknown>,
-    ) -> Result<&'a MdfRecordRef<SingleEvent>, Self::Error> {
+    fn try_from(other: &'a MdfRecord<Unknown>) -> Result<&'a MdfRecord<SingleEvent>, Self::Error> {
         other.try_into_single_event()
     }
 }
 
-impl MdfRecordRef<SingleEvent> {
+impl MdfRecord<SingleEvent> {
     pub fn fragments(&self) -> impl Iterator<Item = Fragment<'_>> {
         let event_id = self.odin_fragment().event_id();
 
@@ -192,7 +190,7 @@ impl MdfRecordRef<SingleEvent> {
     }
 
     pub fn odin_fragment(&self) -> Fragment<'_, OdinFragment> {
-        let frag = MdfFragmentRef::from_data(self.body_u32())
+        let frag = MdfFragment::from_data(self.body_u32())
             .expect("contains at least one fragment")
             .0;
 
@@ -219,7 +217,7 @@ impl<'a> Iterator for MdfFragmentIterator<'a> {
             return None;
         }
 
-        let (frag, rest) = MdfFragmentRef::from_data(self.remaining_data).expect("valid");
+        let (frag, rest) = MdfFragment::from_data(self.remaining_data).expect("valid");
 
         self.remaining_data = rest;
 
@@ -227,7 +225,7 @@ impl<'a> Iterator for MdfFragmentIterator<'a> {
     }
 }
 
-impl MdfRecordRef<MultiPurpose> {
+impl MdfRecord<MultiPurpose> {
     pub fn get_multi_purpose_type(&self) -> Option<MultiPurposeType> {
         MultiPurposeType::from_repr(self.generic_header.data_type)
     }
@@ -254,7 +252,7 @@ impl<Store: AsRef<[u32]>> MdfRecords<Store> {
 }
 
 impl<'a, Store: AsRef<[u32]>> IntoIterator for &'a MdfRecords<Store> {
-    type Item = &'a MdfRecordRef;
+    type Item = &'a MdfRecord;
 
     type IntoIter = MdfRecordIterator<'a>;
 
@@ -320,14 +318,14 @@ pub struct MdfRecordIterator<'a> {
 }
 
 impl<'a> Iterator for MdfRecordIterator<'a> {
-    type Item = &'a MdfRecordRef<Unknown>;
+    type Item = &'a MdfRecord<Unknown>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.data.is_empty() {
             return None;
         }
 
-        let (record, rest) = MdfRecordRef::from_data(self.data).expect("valid mdf data");
+        let (record, rest) = MdfRecord::from_data(self.data).expect("valid mdf data");
         self.data = rest;
 
         Some(record)

@@ -1,12 +1,12 @@
 use typed_builder::TypedBuilder;
 
 use crate::{
-    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef, SourceId,
+    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketOwned, SourceId,
     fragment_type::FragmentType,
 };
 
 #[derive(TypedBuilder)]
-#[builder(build_method(into = crate::MultiFragmentPacket),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
+#[builder(build_method(into = crate::MultiFragmentPacketOwned),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
     pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>>) {
         self.fragments.push(BuildFragmentData {
             fragment_type: fragment_type as u8,
@@ -20,7 +20,7 @@ use crate::{
     }
     ))]
 struct MultiFragmentPacketBuilderInternal {
-    #[builder(default = MultiFragmentPacketRef::VALID_MAGIC, setter(prefix="with_"))]
+    #[builder(default = MultiFragmentPacket::VALID_MAGIC, setter(prefix="with_"))]
     magic: u16,
     /// Event ID of first fragment in this packet.
     #[builder(setter(prefix = "with_"))]
@@ -55,7 +55,7 @@ impl MultiFragmentPacketBuilder {
     }
 }
 
-impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
+impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwned {
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = other.fragments.len();
@@ -134,7 +134,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        MultiFragmentPacket { data }
+        MultiFragmentPacketOwned { data }
     }
 }
 
@@ -144,7 +144,7 @@ mod tests {
 
     use super::*;
 
-    fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
+    fn demo_multi_fragment_packet_data() -> MultiFragmentPacketOwned {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
             .with_event_id(1)

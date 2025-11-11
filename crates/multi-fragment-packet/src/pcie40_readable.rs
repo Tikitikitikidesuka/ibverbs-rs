@@ -1,4 +1,4 @@
-use crate::MultiFragmentPacketRef;
+use crate::MultiFragmentPacket;
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
     ReadGuard,
@@ -22,7 +22,7 @@ pub enum PCIe40TypedReadError {
     StreamError(#[from] PCIe40StreamError),
 }
 
-impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
+impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
     type ReadResult<'a>
         = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
     where
@@ -59,7 +59,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
     }
 }
 
-impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
+impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
     type MultiReadResult<'a>
         = Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
     where
