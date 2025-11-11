@@ -71,3 +71,5 @@ master-data-file = { workspace = true, features = ["mmap"] }
 anyhow = "1.0"
 multi-fragment-packet.workspace = true
 time = { version = "0.3.44", features = ["formatting"] }
+colored = "3.0.0"
+pretty-hex = "0.4.1"

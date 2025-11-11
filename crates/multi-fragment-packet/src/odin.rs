@@ -124,6 +124,12 @@ impl OdinFragment {
     }
 }
 
+impl AsRef<[u8]> for OdinFragment {
+    fn as_ref(&self) -> &[u8] {
+        bytemuck::bytes_of(self)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum FragmentCastError {
     #[error("Wrong fragment type: expected {expected} but got {got}")]
@@ -147,7 +153,7 @@ impl<'a> From<Fragment<'a, OdinFragment>> for Fragment<'a> {
 }
 
 impl<'a> Fragment<'a> {
-    pub fn try_into_odin(self) -> Result<Fragment<'a, OdinFragment>, FragmentCastError> {
+    pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinFragment>, FragmentCastError> {
         if self.r#type != FragmentType::Odin as u8 {
             return Err(FragmentCastError::WrongFragmentType {
                 expected: FragmentType::Odin,

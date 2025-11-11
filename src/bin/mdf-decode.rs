@@ -4,32 +4,47 @@ use std::{
 };
 
 use anyhow::Context;
-use clap::Parser;
+use clap::{ColorChoice, Parser};
+use colored::Colorize;
 use master_data_file::MdfRecords;
+use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
 use time::UtcDateTime;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
+    /// File to decode
     file: PathBuf,
+    #[arg(long)]
+    /// Controls whether colored output is used
+    color: ColorChoice,
 }
 
 pub fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+
+    match args.color {
+        ColorChoice::Auto => (),
+        ColorChoice::Always => colored::control::set_override(true),
+        ColorChoice::Never => colored::control::set_override(false),
+    }
 
     let x = MdfRecords::mmap_file(&args.file)?;
 
     let mut output = BufWriter::new(stdout());
 
     for rec in &x {
-        write!(output, "MDF Record:")?;
+        write!(output, "{}", "MDF Record".bold().blue())?;
         if let Ok(rec) = rec.try_into_single_event() {
             writeln!(
                 output,
-                " Run {}, Orbit {}, Bunch {}",
+                " {} {}, {} {}, {} {}",
+                "Run".black(),
                 rec.specific_header().run_number,
+                "Orbit".black(),
                 rec.specific_header().orbit_count,
+                "Bunch".black(),
                 rec.specific_header().bunch_identifier
             )?;
 
@@ -40,11 +55,17 @@ pub fn main() -> anyhow::Result<()> {
                     .unwrap_or_else(|| "Unknown".into());
                 writeln!(
                     output,
-                    "  Fragment {name} ({:#X}) version {}: source {}, size {} bytes",
+                    "  {} {} ({:#X}) {} {}{} {}{} {} {}",
+                    "Fragment".bold().black(),
+                    name.green().bold(),
                     frag.fragment_type_raw(),
+                    "Version".black(),
                     frag.version(),
+                    ", Source".black(),
                     frag.source_id(),
+                    ", Size".black(),
                     frag.fragment_size(),
+                    "bytes"
                 )?;
 
                 if let Ok(odin) = frag.try_into_odin() {
@@ -53,32 +74,116 @@ pub fn main() -> anyhow::Result<()> {
                         UtcDateTime::from_unix_timestamp_nanos(i128::from(odin.gps_time()) * 1_000)
                             .context("Convert Gps Time")?;
                     // writeln!(output, "    Time {:?}", odin.gps_time());
-                    writeln!(output, "    Event Id {} ({0:#X})", odin.event_id())?;
-                    writeln!(output, "    Event Type {:}", odin.event_type())?;
-                    writeln!(output, "    Time {:}", time)?;
-                    writeln!(output, "    Partition {:#08X}", odin.partition_id())?;
-                    writeln!(output, "    Step enabled? {:}", odin.step_run_enable())?;
-                    if odin.step_run_enable() {
-                        writeln!(output, "    StepNumber {} ({0:#X})", odin.step_number())?;
-                    }
-                    writeln!(output, "    Orbit Id {:?} ({0:#X})", odin.orbit_id())?;
-                    writeln!(output, "    Bunch Id {} ({0:#X})", odin.bunch_id())?;
-                    writeln!(output, "    BunchType {:?}", odin.bx_type())?;
-                    writeln!(output, "    TCK {}", odin.tck())?;
-                    writeln!(output, "    is nzs event? {}", odin.is_nzs_event())?;
-                    writeln!(output, "    calib type {} ({0:#X})", odin.calib_type())?;
                     writeln!(
                         output,
-                        "    trigger type {:?} ({0:#X})",
+                        "    {:<15} {1} ({1:#X})",
+                        "Event Id".black(),
+                        odin.event_id()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {:}",
+                        "Event Type".black(),
+                        odin.event_type()
+                    )?;
+                    writeln!(output, "    {:<15} {:}", "Time".black(), time)?;
+                    writeln!(
+                        output,
+                        "    {:<15} {:#08X}",
+                        "Partition".black(),
+                        odin.partition_id()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {:}",
+                        "Step enabled?".black(),
+                        odin.step_run_enable()
+                    )?;
+                    if odin.step_run_enable() {
+                        writeln!(
+                            output,
+                            "    {:<15} {} ({1:#X})",
+                            "StepNumber".black(),
+                            odin.step_number()
+                        )?;
+                    }
+                    writeln!(
+                        output,
+                        "    {:<15} {:?} ({1:#X})",
+                        "Orbit Id".black(),
+                        odin.orbit_id()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {} ({1:#X})",
+                        "Bunch Id".black(),
+                        odin.bunch_id()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {:?}",
+                        "BunchType".black(),
+                        odin.bx_type()
+                    )?;
+                    writeln!(output, "    {:<15} {}", "TCK".black(), odin.tck())?;
+                    writeln!(
+                        output,
+                        "    {:<15} {}",
+                        "Is nzs event?".black(),
+                        odin.is_nzs_event()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {} ({1:#X})",
+                        "Calib type".black(),
+                        odin.calib_type()
+                    )?;
+                    writeln!(
+                        output,
+                        "    {:<15} {:?} ({1:#X})",
+                        "Trigger type".black(),
                         odin.trigger_type()
                     )?;
                     if odin.tae_window() > 0 {
-                        writeln!(output, "    tae window {:?}", odin.tae_window())?;
-                        writeln!(output, "    tae central {:?}", odin.tae_central())?;
-                        writeln!(output, "    tae first {:?}", odin.tae_first())?;
+                        writeln!(
+                            output,
+                            "    {:<15} {:?}",
+                            "Tae window".black(),
+                            odin.tae_window()
+                        )?;
+                        writeln!(
+                            output,
+                            "    {:<15} {:?}",
+                            "Tae central".black(),
+                            odin.tae_central()
+                        )?;
+                        writeln!(
+                            output,
+                            "    {:<15} {:?}",
+                            "Tae first".black(),
+                            odin.tae_first()
+                        )?;
                     } else {
-                        writeln!(output, "    tae disabled")?;
+                        writeln!(output, "    {}", "Tae disabled".black())?;
                     }
+                } else {
+                    writeln!(
+                        output,
+                        "    {}",
+                        config_hex(
+                            &frag.payload_bytes(),
+                            HexConfig {
+                                title: false,
+                                ascii: true,
+                                width: 16,
+                                group: 0,
+                                chunk: 4,
+                                max_bytes: 256,
+                                display_offset: 0,
+                            }
+                        )
+                        .replace("\n", "\n    ")
+                    )?;
                 }
             }
         } else {

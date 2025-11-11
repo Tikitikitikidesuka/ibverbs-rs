@@ -1,4 +1,5 @@
 use circular_buffer::CircularBufferWritable;
+use multi_fragment_packet::fragment_type::FragmentType;
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder, SourceId};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
@@ -51,7 +52,7 @@ fn main() {
                 .with_source_id(SourceId(1))
                 .with_align_log(6)
                 .with_event_id(event_id)
-                .add_fragments((0..1000).map(|_| (1, (0..255).collect::<Vec<_>>())))
+                .add_fragments((0..1000).map(|_| (FragmentType::DAQ, (0..255).collect::<Vec<_>>())))
                 .build();
             mfps.push(mfp);
             event_id += 1000;

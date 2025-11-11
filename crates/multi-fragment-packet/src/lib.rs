@@ -7,6 +7,7 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
+use derive_where::derive_where;
 pub mod fragment_type;
 pub mod odin;
 pub mod source_id;
@@ -104,8 +105,9 @@ impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
     }
 }
 
-#[derive(PartialEq, Eq, Copy, Clone)]
-pub struct Fragment<'a, Data: ?Sized = [u8]> {
+#[derive(PartialEq, Eq)]
+#[derive_where(Copy, Clone)]
+pub struct Fragment<'a, Data: ?Sized + AsRef<[u8]> = [u8]> {
     r#type: u8,
     version: u8,
     event_id: EventId,
@@ -113,7 +115,7 @@ pub struct Fragment<'a, Data: ?Sized = [u8]> {
     data: &'a Data,
 }
 
-impl<'a, T: ?Sized> Fragment<'a, T> {
+impl<'a, T: ?Sized + AsRef<[u8]>> Fragment<'a, T> {
     pub fn new(
         r#type: u8,
         version: u8,
@@ -152,6 +154,10 @@ impl<'a, T: ?Sized> Fragment<'a, T> {
 
     pub fn payload(&self) -> &T {
         self.data
+    }
+
+    pub fn payload_bytes(&self) -> &[u8] {
+        self.data.as_ref()
     }
 
     /// in bytes, excluding the header
