@@ -9,7 +9,7 @@ use std::{
 };
 
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
-use multi_fragment_packet::{EventId, Fragment};
+use multi_fragment_packet::{EventId, Fragment, odin::OdinFragment};
 use std::io::Result as IoResult;
 use thiserror::Error;
 
@@ -183,23 +183,26 @@ impl<'a> TryFrom<&'a MdfRecordRef<Unknown>> for &'a MdfRecordRef<SingleEvent> {
 
 impl MdfRecordRef<SingleEvent> {
     pub fn fragments(&self) -> impl Iterator<Item = Fragment<'_>> {
-        let mut iter = MdfFragmentIterator {
-            remaining_data: self.body_u32(),
-            event_id: EventId::MAX,
-        };
-
-        let event_id = if let Some(first) = iter.next()
-            && let Ok(odin) = first.try_into_odin()
-        {
-            odin.payload().event_id()
-        } else {
-            EventId::MAX // unknown value...
-        };
+        let event_id = self.odin_fragment().event_id();
 
         MdfFragmentIterator {
             remaining_data: self.body_u32(),
             event_id,
         }
+    }
+
+    pub fn odin_fragment(&self) -> Fragment<'_, OdinFragment> {
+        let frag = MdfFragmentRef::from_data(self.body_u32())
+            .expect("contains at least one fragment")
+            .0;
+
+        let temp_odin = frag
+            .as_fragment(EventId::MAX)
+            .try_into_odin()
+            .expect("First fragment is odin fragment");
+        frag.as_fragment(temp_odin.payload().event_id())
+            .try_into_odin()
+            .expect("First fragment is odin fragment")
     }
 }
 

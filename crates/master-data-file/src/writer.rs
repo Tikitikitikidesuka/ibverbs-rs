@@ -133,7 +133,8 @@ mod test {
                     .build(),
             )
             .unwrap()
-            .build();
+            .build()
+            .unwrap();
 
         let mut mdf = Vec::new();
         mep.write_mdf(&mut TraceWriter(&mut mdf)).unwrap();
@@ -171,7 +172,10 @@ mod test {
 
         let fragments = records[1].fragments().collect::<Vec<_>>();
         assert_eq!(fragments[1].payload(), b"good, thanks");
-        assert_eq!(fragments[1].fragment_type_parsed(), Some(FragmentType::Calo));
+        assert_eq!(
+            fragments[1].fragment_type_parsed(),
+            Some(FragmentType::Calo)
+        );
         assert_eq!(
             fragments[1].source_id(),
             SourceId::new(SubDetector::VeloC, 55)

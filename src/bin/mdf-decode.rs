@@ -65,7 +65,7 @@ pub fn main() -> anyhow::Result<()> {
                     frag.source_id(),
                     ", Size".black(),
                     frag.fragment_size(),
-                    "bytes"
+                    "bytes".black()
                 )?;
 
                 if let Ok(odin) = frag.try_into_odin() {

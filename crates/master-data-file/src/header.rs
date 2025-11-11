@@ -149,6 +149,9 @@ pub unsafe trait SpecificHeaderType: internal::Sealed + Copy + Pod + Debug {
 
 #[repr(C, packed(4))]
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
+/// A type of MDF record that contains multiple fragments for a single event.
+///
+/// It must contain exactly one odin fragment.
 pub struct SingleEvent {
     pub event_mask: u128,
     pub run_number: u32,

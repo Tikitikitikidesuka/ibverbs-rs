@@ -69,7 +69,6 @@ impl Debug for MdfFragmentRef {
 }
 
 impl MdfFragmentRef {
-    /// ## Safety
     /// `slice` needs to contain at least one full correct MDF.
     /// `slice` may be larger towards the end.
     pub fn from_data(slice: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {

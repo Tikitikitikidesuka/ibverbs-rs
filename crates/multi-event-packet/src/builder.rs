@@ -23,6 +23,8 @@ pub enum EventBuilderError {
     MismatchingFragmentCount { expected: u16, got: u16 },
     #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
     SuperfluousOdinFragment,
+    #[error("No odin MFP was added. Exactly one Odin MFP is required.")]
+    NoOdinFragment,
 }
 
 pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
@@ -49,6 +51,8 @@ impl<'a> MultiEventPacketBuilder<'a> {
     }
 
     /// Checks wether the given mfp can be inserted into the same [`MultiEventPacket`]s as the previous, checking its number of fragments and event ids.
+    ///
+    /// Also checks wether a odin fragment was already added when trying to add another one.
     /// This is checked when adding an mft automatically.
     pub fn check_mfp_event_compatiblity(&self, test_mfp: &MultiFragmentPacketRef) -> Result<()> {
         if let Some(reference_mfp) = self.mfps.first() {
@@ -95,8 +99,14 @@ impl<'a> MultiEventPacketBuilder<'a> {
     }
 
     /// Resets the builder afterwards, so it can be reused without reallocating the internal buffer.
+    ///
+    /// In case of `Err`, the builder is not reset!
     #[instrument(skip(self))]
-    pub fn build(&mut self) -> MultiEventPacket {
+    pub fn build(&mut self) -> Result<MultiEventPacket> {
+        if !self.odin_added {
+            return Err(EventBuilderError::NoOdinFragment);
+        }
+
         self.mfps.sort_by_key(|m| m.source_id());
         let num_mfps = self.mfps.len();
         let num_mfps = u16::try_from(num_mfps).expect("number of mfps does fit into u16");
@@ -162,7 +172,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
         self.reset_mfps();
 
-        MultiEventPacket { data }
+        Ok(MultiEventPacket { data })
     }
 
     /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate
@@ -246,7 +256,7 @@ mod test {
         mep.add_mfp_ref(&mfp2).err().unwrap(); // expect errors as wrong num fragments
         mep.add_mfp_ref(&mfp3).unwrap();
         mep.add_mfp_ref(&mfp3).unwrap(); // expect errors as wrong num fragments
-        let mep = mep.build();
+        let mep = mep.build().unwrap();
 
         assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
@@ -279,5 +289,10 @@ mod test {
             println!("{fp:?}");
             assert_eq!(fp.magic(), MultiFragmentPacketRef::VALID_MAGIC);
         }
+    }
+
+    #[test]
+    fn test_no_odin() {
+        MultiEventPacket::builder().build().unwrap_err();
     }
 }
