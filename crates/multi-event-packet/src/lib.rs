@@ -9,7 +9,7 @@ use multi_fragment_packet::MultiFragmentPacket;
 pub mod builder;
 mod owned;
 pub use owned::MultiEventPacketOwned;
-use utils::{EventId, Uninstantiatable, source_id::SourceId};
+use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");

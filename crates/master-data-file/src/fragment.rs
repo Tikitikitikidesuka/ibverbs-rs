@@ -5,7 +5,7 @@ use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
 use std::io::Result as IoResult;
-use utils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
+use ebutils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
 

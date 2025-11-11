@@ -12,7 +12,7 @@ edition = "2024"
 
 
 [workspace.dependencies]
-utils.path = "crates/utils"
+ebutils.path = "crates/ebutils"
 circular-buffer.path = "crates/circular-buffer"
 master-data-file.path = "crates/master-data-file"
 multi-event-packet.path = "crates/multi-event-packet"
@@ -48,7 +48,7 @@ repository.workspace = true
 [dev-dependencies]
 thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
-utils = { path = "crates/utils" }
+ebutils = { path = "crates/ebutils" }
 circular-buffer = { path = "crates/circular-buffer" }
 shared-memory-buffer = { path = "crates/shared-memory-buffer" }
 multi-fragment-packet = { path = "crates/multi-fragment-packet", features = [

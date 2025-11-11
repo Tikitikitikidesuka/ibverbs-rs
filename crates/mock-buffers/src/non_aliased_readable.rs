@@ -55,7 +55,7 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
 
         // Calculate total size and validate space
         let total_length = size_of::<Self>() + diary_entry.note().len();
-        let aligned_size = utils::align_up_pow2(total_length, reader.alignment_pow2());
+        let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
 
         if readable_region.len() < aligned_size {
             return Err(ReadError::NotEnoughData);
@@ -120,7 +120,7 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
             // Calculate entry size and validate total space
             let total_length = size_of::<Self>() + diary_entry.note().len();
             let aligned_entry_size =
-                utils::align_up_pow2(total_length, reader.alignment_pow2());
+                ebutils::align_up_pow2(total_length, reader.alignment_pow2());
 
             if current_region.len() < aligned_entry_size + offset {
                 return Err(ReadError::NotEnoughData);

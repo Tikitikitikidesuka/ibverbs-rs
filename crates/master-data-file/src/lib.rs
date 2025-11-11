@@ -11,8 +11,8 @@ use std::{
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
 use std::io::Result as IoResult;
 use thiserror::Error;
-use utils::Uninstantiatable;
-use utils::{EventId, fragment::Fragment, odin::OdinPayload};
+use ebutils::Uninstantiatable;
+use ebutils::{EventId, fragment::Fragment, odin::OdinPayload};
 
 use crate::{
     fragment::MdfFragment,

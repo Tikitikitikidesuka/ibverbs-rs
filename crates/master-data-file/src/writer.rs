@@ -1,7 +1,7 @@
 use std::io::{Result as IoResult, Write};
 
 use multi_event_packet::MultiEventPacket;
-use utils::fragment::Fragment;
+use ebutils::fragment::Fragment;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
@@ -81,7 +81,7 @@ mod test {
 
     use multi_event_packet::MultiEventPacketOwned;
     use multi_fragment_packet::MultiFragmentPacketOwned;
-    use utils::{
+    use ebutils::{
         fragment_type::FragmentType,
         source_id::{SourceId, SubDetector},
     };

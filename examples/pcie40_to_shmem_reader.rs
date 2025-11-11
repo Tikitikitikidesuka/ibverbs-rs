@@ -1,4 +1,4 @@
-use utils::IsPow2Result;
+use ebutils::IsPow2Result;
 use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
 use multi_fragment_packet::MultiFragmentPacket;
 use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
@@ -33,7 +33,7 @@ fn main() {
     // -------------------------- //
 
     let controller = PCIe40ControllerManager::open_by_device_name(device_name).unwrap();
-    let meta_alignment_pow2 = match utils::is_pow2(controller.meta_alignment().unwrap()) {
+    let meta_alignment_pow2 = match ebutils::is_pow2(controller.meta_alignment().unwrap()) {
         IsPow2Result::Yes(pow2) => pow2,
         IsPow2Result::No => {
             panic!("Meta alignment is not a power of 2")

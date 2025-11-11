@@ -7,9 +7,9 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
-use utils::fragment::Fragment;
-use utils::source_id::SourceId;
-use utils::{EventId, Uninstantiatable};
+use ebutils::fragment::Fragment;
+use ebutils::source_id::SourceId;
+use ebutils::{EventId, Uninstantiatable};
 pub mod owned;
 
 pub use owned::MultiFragmentPacketOwned;
@@ -180,13 +180,13 @@ impl MultiFragmentPacket {
 
     unsafe fn fragment_size_ptr(&self) -> *const u16 {
         let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
-        let aligned_fragment_types_size = utils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = ebutils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16 }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
-        let aligned_fragment_sizes_size = utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = ebutils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
 }
@@ -228,7 +228,7 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
 
         let event_id = self.packet.event_id() + self.index as EventId;
 
-        self.offset += utils::align_up_pow2(fragment_size as usize, self.packet.align());
+        self.offset += ebutils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
         Some(Fragment::new(
@@ -328,7 +328,7 @@ mod bincode {
 
 #[cfg(test)]
 mod tests {
-    use utils::{fragment::Fragment, source_id::SourceId};
+    use ebutils::{fragment::Fragment, source_id::SourceId};
 
     use super::*;
 

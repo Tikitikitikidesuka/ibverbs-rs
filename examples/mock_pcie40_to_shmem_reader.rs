@@ -4,8 +4,8 @@ use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
-use utils::fragment_type::FragmentType;
-use utils::source_id::SourceId;
+use ebutils::fragment_type::FragmentType;
+use ebutils::source_id::SourceId;
 
 fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb

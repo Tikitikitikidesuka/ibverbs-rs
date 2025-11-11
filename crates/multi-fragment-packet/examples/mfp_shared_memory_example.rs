@@ -1,11 +1,11 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
 };
-use utils::{fragment_type::FragmentType, source_id::SourceId};
 
 fn main() {
     // Create the buffer with size 1024 bytes, alignment 8 (2^8 = 256 bytes) (max 4 elements of 256 bytes)
@@ -30,7 +30,7 @@ fn main() {
     mfp_0_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -41,7 +41,7 @@ fn main() {
     read_mfp.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1,2, ]
@@ -56,7 +56,7 @@ fn main() {
     mfp_2_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -85,7 +85,7 @@ fn main() {
     mfp_3_512.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ , , , ]

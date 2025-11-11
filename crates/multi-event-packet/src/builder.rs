@@ -3,7 +3,7 @@ use std::{borrow::Cow, slice};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketOwned};
 use thiserror::Error;
 use tracing::instrument;
-use utils::{fragment_type::FragmentType, source_id::SourceId};
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
@@ -199,7 +199,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 #[cfg(test)]
 mod test {
     use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
-    use utils::{
+    use ebutils::{
         fragment_type::FragmentType,
         source_id::{SourceId, SubDetector},
     };
