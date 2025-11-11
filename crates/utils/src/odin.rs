@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable, bytes_of};
 use thiserror::Error;
 
-use crate::{Fragment, fragment_type::FragmentType};
+use crate::{fragment::Fragment, fragment_type::FragmentType};
 
 /// See <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
 #[repr(C, packed)]

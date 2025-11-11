@@ -1,8 +1,8 @@
 use typed_builder::TypedBuilder;
+use utils::fragment_type::FragmentType;
 
 use crate::{
     EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketOwned, SourceId,
-    fragment_type::FragmentType,
 };
 
 #[derive(TypedBuilder)]
@@ -132,12 +132,14 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        MultiFragmentPacketOwned { data }
+        unsafe { MultiFragmentPacketOwned::from_data(data) }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use utils::source_id::SubDetector;
+
     use crate::{Fragment, SourceId};
 
     use super::*;
@@ -146,7 +148,7 @@ mod tests {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
             .with_event_id(1)
-            .with_source_id(SourceId::new(crate::source_id::SubDetector::MuonA, 156))
+            .with_source_id(SourceId::new(SubDetector::MuonA, 156))
             .with_align_log(3)
             .with_fragment_version(1)
             .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3])
@@ -188,10 +190,7 @@ mod tests {
     #[test]
     fn test_mfp_builder_source_id() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(
-            mfp.source_id(),
-            SourceId::new(crate::source_id::SubDetector::MuonA, 156)
-        );
+        assert_eq!(mfp.source_id(), SourceId::new(SubDetector::MuonA, 156));
     }
 
     #[test]
@@ -205,44 +204,38 @@ mod tests {
         let mfp = demo_multi_fragment_packet_data();
 
         dbg!(&mfp.fragment(1));
-        let source_id = SourceId::new(crate::source_id::SubDetector::MuonA, 156);
+        let source_id = SourceId::new(SubDetector::MuonA, 156);
 
         let expected_fragments = vec![
-            Fragment {
-                r#type: FragmentType::DAQ as _,
-                data: &[0, 1, 2, 3][..],
-                version: 1,
-                event_id: 1,
+            Fragment::new(FragmentType::DAQ as _, 1, 1, source_id, &[0, 1, 2, 3][..]),
+            Fragment::new(
+                FragmentType::DAQ as _,
+                1,
+                2,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::DAQ as _,
-                data: &[0, 1, 2, 3, 4][..],
-                version: 1,
-                event_id: 2,
+                &[0, 1, 2, 3, 4][..],
+            ),
+            Fragment::new(
+                FragmentType::Calo as _,
+                1,
+                3,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::Calo as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
-                version: 1,
-                event_id: 3,
+                &[0, 1, 2, 3, 4, 5, 6, 7][..],
+            ),
+            Fragment::new(
+                FragmentType::GaudiHeader as _,
+                1,
+                4,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::GaudiHeader as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
-                version: 1,
-                event_id: 4,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+            ),
+            Fragment::new(
+                FragmentType::HltRoutingBits as _,
+                1,
+                5,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::HltRoutingBits as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
-                version: 1,
-                event_id: 5,
-                source_id,
-            },
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            ),
         ];
 
         let fragments: Vec<Fragment> = mfp.iter().collect();

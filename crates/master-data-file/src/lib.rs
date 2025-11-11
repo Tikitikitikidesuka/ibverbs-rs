@@ -9,10 +9,10 @@ use std::{
 };
 
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
-use multi_fragment_packet::{EventId, Fragment, odin::OdinPayload};
 use std::io::Result as IoResult;
 use thiserror::Error;
 use utils::Uninstantiatable;
+use utils::{EventId, fragment::Fragment, odin::OdinPayload};
 
 use crate::{
     fragment::MdfFragment,

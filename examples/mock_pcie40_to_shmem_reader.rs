@@ -1,10 +1,11 @@
 use circular_buffer::CircularBufferWritable;
-use multi_fragment_packet::fragment_type::FragmentType;
-use multi_fragment_packet::{MultiFragmentPacketBuilder, MultiFragmentPacketOwned, SourceId};
+use multi_fragment_packet::{MultiFragmentPacketOwned, builder::MultiFragmentPacketBuilder};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
+use utils::fragment_type::FragmentType;
+use utils::source_id::SourceId;
 
 fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb

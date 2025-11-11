@@ -4,9 +4,8 @@ use core::slice;
 use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use multi_fragment_packet::{EventId, Fragment, SourceId};
 use std::io::Result as IoResult;
-use utils::Uninstantiatable;
+use utils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
 

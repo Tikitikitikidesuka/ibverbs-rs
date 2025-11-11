@@ -7,30 +7,22 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
-use utils::Uninstantiatable;
-pub mod fragment;
-pub mod fragment_type;
-pub mod odin;
-pub mod source_id;
+use utils::fragment::Fragment;
+use utils::source_id::SourceId;
+use utils::{EventId, Uninstantiatable};
+pub mod owned;
 
-pub use fragment::Fragment;
+pub use owned::MultiFragmentPacketOwned;
 
-use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
-use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
-
-pub use crate::source_id::SourceId;
 
 impl MultiFragmentPacket {
     pub const VALID_MAGIC: u16 = 0x40CE;
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
-
-/// Type of a source id.
-pub type EventId = u64;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -47,26 +39,6 @@ pub struct MultiFragmentPacketHeader {
     fragment_version: u8,
 }
 
-pub struct MultiFragmentPacketOwned {
-    data: Vec<u8>,
-    // Array of fragment types is dynamically sized [FragmentType]
-    // Array of fragment sizes is dynamically sized [FragmentSize]
-    // Array of fragments is dynamically sized [Fragment ([u8])]
-}
-
-impl MultiFragmentPacketOwned {
-    /// # Safety
-    /// Vec needs to contain a valid [`MultiFragmentPacket`].
-    #[must_use]
-    pub unsafe fn from_data(data: Vec<u8>) -> Self {
-        Self { data }
-    }
-
-    pub fn builder() -> MultiFragmentPacketBuilder {
-        MultiFragmentPacketBuilder::default()
-    }
-}
-
 /// May only ever exist as `&MultiFragmentPacket`.
 // todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
@@ -76,57 +48,6 @@ pub struct MultiFragmentPacket {
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
     _unin: Uninstantiatable,
-}
-
-impl AsRef<MultiFragmentPacket> for MultiFragmentPacketOwned {
-    fn as_ref(&self) -> &MultiFragmentPacket {
-        // MultiFragmentPacket must be guaranteed to be correct already. Since it can only
-        // be built by the builder, it is supposed to be guaranteed.
-        unsafe { MultiFragmentPacket::unchecked_ref_from_raw_bytes(self.data.as_slice()) }
-    }
-}
-
-impl Deref for MultiFragmentPacketOwned {
-    type Target = MultiFragmentPacket;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl ToOwned for MultiFragmentPacket {
-    type Owned = MultiFragmentPacketOwned;
-
-    fn to_owned(&self) -> Self::Owned {
-        Self::Owned {
-            data: self.raw_packet_data().to_vec(),
-        }
-    }
-}
-
-impl Borrow<MultiFragmentPacket> for MultiFragmentPacketOwned {
-    fn borrow(&self) -> &MultiFragmentPacket {
-        self
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum MultiFragmentPacketFromRawBytesError {
-    #[error(
-        "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
-    )]
-    NotEnoughDataAvailable {
-        available_data: usize,
-        required_data: usize,
-    },
-
-    #[error(
-        "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
-    )]
-    CorruptedMagic {
-        read_magic: u16,
-        expected_magic: u16,
-    },
 }
 
 impl MultiFragmentPacket {
@@ -219,7 +140,7 @@ impl MultiFragmentPacket {
     /// No random access, O(n)
     pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
         let frag = self.iter().nth(index)?;
-        Some(frag.data)
+        Some(frag.payload_bytes())
     }
 
     /// No random access, O(n)
@@ -268,6 +189,25 @@ impl MultiFragmentPacket {
         let aligned_fragment_sizes_size = utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum MultiFragmentPacketFromRawBytesError {
+    #[error(
+        "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
+    )]
+    NotEnoughDataAvailable {
+        available_data: usize,
+        required_data: usize,
+    },
+
+    #[error(
+        "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
+    )]
+    CorruptedMagic {
+        read_magic: u16,
+        expected_magic: u16,
+    },
 }
 
 pub struct MultiFragmentPacketIter<'a> {
@@ -363,7 +303,7 @@ mod bincode {
             data[0..HEADER_SIZE].copy_from_slice(&bytes);
             decoder.reader().read(&mut data[HEADER_SIZE..])?;
 
-            Ok(Self { data })
+            Ok(unsafe { Self::from_data(data) })
         }
     }
 
@@ -388,6 +328,8 @@ mod bincode {
 
 #[cfg(test)]
 mod tests {
+    use utils::{fragment::Fragment, source_id::SourceId};
+
     use super::*;
 
     fn demo_multi_fragment_packet_data() -> Vec<u8> {
@@ -551,5 +493,51 @@ mod tests {
         // The raw packet data should be the same as the input data up to packet_size
         assert_eq!(raw_data.len(), data.len());
         assert_eq!(raw_data, &data);
+    }
+
+    #[test]
+    fn test_mfp_fragment_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+
+        // Check first fragment using direct comparison
+        let expected_fragment0 = Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]);
+        assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
+
+        // Check last fragment using direct comparison
+        let expected_fragment4 = Fragment::new(
+            4,
+            1,
+            5,
+            SourceId(1),
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+        );
+        assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment(5), None);
+    }
+
+    #[test]
+    fn test_mfp_iter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+
+        let expected_fragments = vec![
+            Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]),
+            Fragment::new(1, 1, 2, SourceId(1), &[0, 1, 2, 3, 4][..]),
+            Fragment::new(2, 1, 3, SourceId(1), &[0, 1, 2, 3, 4, 5, 6, 7][..]),
+            Fragment::new(3, 1, 4, SourceId(1), &[0, 1, 2, 3, 4, 5, 6, 7, 8][..]),
+            Fragment::new(
+                4,
+                1,
+                5,
+                SourceId(1),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            ),
+        ];
+
+        let fragments: Vec<Fragment> = mfp.iter().collect();
+        assert_eq!(fragments, expected_fragments);
     }
 }

@@ -1,7 +1,7 @@
 use std::io::{Result as IoResult, Write};
 
 use multi_event_packet::MultiEventPacket;
-use multi_fragment_packet::Fragment;
+use utils::fragment::Fragment;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
@@ -80,8 +80,10 @@ mod test {
     use std::io::Write;
 
     use multi_event_packet::MultiEventPacketOwned;
-    use multi_fragment_packet::{
-        MultiFragmentPacketOwned, SourceId, fragment_type::FragmentType, source_id::SubDetector,
+    use multi_fragment_packet::MultiFragmentPacketOwned;
+    use utils::{
+        fragment_type::FragmentType,
+        source_id::{SourceId, SubDetector},
     };
 
     use crate::{
