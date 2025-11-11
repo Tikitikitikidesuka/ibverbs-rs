@@ -1,6 +1,7 @@
 use std::{fmt::Debug, mem::offset_of};
 
 use bytemuck::{Pod, Zeroable, bytes_of};
+use ebutils::odin::OdinPayload;
 
 #[repr(C, packed(4))]
 #[derive(Copy, Clone, Zeroable)]
@@ -113,7 +114,7 @@ impl Debug for SpecificHeaderTypeAndSize {
 }
 
 impl MdfHeader<SingleEvent> {
-    pub fn new_simple(payload_size: usize) -> Self {
+    pub fn new_simple(payload_size: usize, odin: OdinPayload) -> Self {
         let length_32 =
             u32::try_from(payload_size + size_of::<Self>()).expect("payload size fits in u32");
 
@@ -126,10 +127,9 @@ impl MdfHeader<SingleEvent> {
             _spare: 0,
             specific_header: SingleEvent {
                 event_mask: 0,
-                // todo for now zero: populate from odin fragment later
-                run_number: 0,
-                orbit_count: 0,
-                bunch_identifier: 0,
+                run_number: odin.run_number(),
+                orbit_count: odin.orbit_id(),
+                bunch_identifier: odin.bunch_id() as _,
             },
         }
     }

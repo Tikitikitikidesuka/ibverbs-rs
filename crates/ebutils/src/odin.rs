@@ -5,7 +5,7 @@ use crate::{fragment::Fragment, fragment_type::FragmentType};
 
 /// See <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
 #[repr(C, packed)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub struct OdinPayload {
     run_number: u32,
     event_type: u16,

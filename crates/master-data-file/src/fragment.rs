@@ -4,10 +4,12 @@ use core::slice;
 use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use std::io::Result as IoResult;
 use ebutils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
 
-use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
+use crate::{
+    MdfFromDataError, truncate_data,
+    writer::{MdfWriterError, WriteMdf},
+};
 
 #[repr(C, align(4))]
 #[derive(Copy, Clone, Pod, Zeroable, Debug)]
@@ -29,7 +31,7 @@ impl MdfFragmentHeader {
 }
 
 impl<'a> WriteMdf for Fragment<'a> {
-    fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
+    fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
         let header_size: u16 = size_of::<MdfFragmentHeader>()
             .try_into()
             .expect("header size fits u16");

@@ -1,58 +1,27 @@
-use std::io::{Result as IoResult, Write};
+use std::io::Write;
 
+use ebutils::{fragment::Fragment, odin::OdinPayload};
 use multi_event_packet::MultiEventPacket;
-use ebutils::fragment::Fragment;
+use thiserror::Error;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
 pub trait WriteMdf {
-    fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()>;
+    fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError>;
 }
 
-#[derive(Debug)]
-pub struct MdfRecordWriter<'a> {
-    fragments: Vec<Fragment<'a>>,
-}
-
-impl<'a> MdfRecordWriter<'a> {
-    pub fn with_capacity(capacity: usize) -> Self {
-        MdfRecordWriter {
-            fragments: Vec::with_capacity(capacity),
-        }
-    }
-
-    pub fn add_fragment(&mut self, frag: Fragment<'a>) {
-        self.fragments.push(frag);
-    }
-
-    pub fn reset(&mut self) {
-        self.fragments.clear();
-    }
-
-    pub fn write_and_reset(&mut self, writer: &mut impl Write) -> IoResult<()> {
-        let data_size: usize = self
-            .fragments
-            .iter()
-            .map(|f| {
-                size_of::<MdfFragmentHeader>()
-                    + (f.fragment_size() as usize).next_multiple_of(align_of::<u32>())
-            })
-            .sum();
-
-        let header = MdfHeader::new_simple(data_size);
-        writer.write_all(header.as_bytes())?;
-
-        for fragment in &self.fragments {
-            fragment.write_mdf(writer)?;
-        }
-
-        self.reset();
-        Ok(())
-    }
+#[derive(Debug, Error)]
+pub enum MdfWriterError {
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error("Odin fragment already added for this record")]
+    OdinAlreadyAdded,
+    #[error("No Odin fragment added for this record")]
+    NoOdinFragment,
 }
 
 impl WriteMdf for MultiEventPacket {
-    fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
+    fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
         let mut record_writer = MdfRecordWriter::with_capacity(self.num_mfps() as _);
 
         let mut mfp_iterators = self.mfp_iter().map(|mfp| mfp.iter()).collect::<Vec<_>>();
@@ -68,10 +37,64 @@ impl WriteMdf for MultiEventPacket {
                     return Ok(());
                 };
 
-                record_writer.add_fragment(frag);
+                record_writer.add_fragment(frag)?;
             }
             record_writer.write_and_reset(writer)?;
         }
+    }
+}
+
+#[derive(Debug)]
+struct MdfRecordWriter<'a> {
+    fragments: Vec<Fragment<'a>>,
+    odin: Option<OdinPayload>,
+}
+
+impl<'a> MdfRecordWriter<'a> {
+    pub fn with_capacity(capacity: usize) -> Self {
+        MdfRecordWriter {
+            fragments: Vec::with_capacity(capacity),
+            odin: None,
+        }
+    }
+
+    pub fn add_fragment(&mut self, frag: Fragment<'a>) -> Result<(), MdfWriterError> {
+        if let Ok(odin) = frag.try_into_odin() {
+            if self.odin.is_some() {
+                return Err(MdfWriterError::OdinAlreadyAdded);
+            }
+            self.odin = Some(*odin.payload());
+        }
+        self.fragments.push(frag);
+
+        Ok(())
+    }
+
+    pub fn reset(&mut self) {
+        self.fragments.clear();
+        self.odin = None;
+    }
+
+    pub fn write_and_reset(&mut self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
+        let odin = self.odin.ok_or(MdfWriterError::NoOdinFragment)?;
+        let data_size: usize = self
+            .fragments
+            .iter()
+            .map(|f| {
+                size_of::<MdfFragmentHeader>()
+                    + (f.fragment_size() as usize).next_multiple_of(align_of::<u32>())
+            })
+            .sum();
+
+        let header = MdfHeader::new_simple(data_size, odin);
+        writer.write_all(header.as_bytes())?;
+
+        for fragment in &self.fragments {
+            fragment.write_mdf(writer)?;
+        }
+
+        self.reset();
+        Ok(())
     }
 }
 
@@ -79,12 +102,12 @@ impl WriteMdf for MultiEventPacket {
 mod test {
     use std::io::Write;
 
-    use multi_event_packet::MultiEventPacketOwned;
-    use multi_fragment_packet::MultiFragmentPacketOwned;
     use ebutils::{
         fragment_type::FragmentType,
         source_id::{SourceId, SubDetector},
     };
+    use multi_event_packet::MultiEventPacketOwned;
+    use multi_fragment_packet::MultiFragmentPacketOwned;
 
     use crate::{
         MdfRecord, MdfRecords, WriteMdf,
