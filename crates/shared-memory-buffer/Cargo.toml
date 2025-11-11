@@ -7,7 +7,7 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-alignment-utils.workspace = true
+utils.workspace = true
 circular-buffer.workspace = true
 
 tracing = "0.1.41"

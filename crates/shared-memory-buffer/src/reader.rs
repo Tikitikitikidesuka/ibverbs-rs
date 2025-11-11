@@ -50,13 +50,13 @@ impl CircularBufferReader for SharedMemoryBufferReader {
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !alignment_utils::check_alignment_pow2(bytes, 1) {
+        if !utils::check_alignment_pow2(bytes, 1) {
             warn!("Aborting read pointer advance due to failed 2 byte alignment violation");
             return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
         }
 
         debug!("Checking buffer's alignment");
-        if !alignment_utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
+        if !utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
             warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(SharedMemoryBufferAdvanceError::NotAligned);
         }

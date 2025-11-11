@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 pcie40 = { workspace = true, optional = true }
-alignment-utils.workspace = true
+utils.workspace = true
 circular-buffer.workspace = true
 shared-memory-buffer = { workspace = true, optional = true }
 

@@ -6,7 +6,7 @@ use crate::{Fragment, fragment_type::FragmentType};
 /// See <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable)]
-pub struct OdinFragment {
+pub struct OdinPayload {
     run_number: u32,
     event_type: u16,
     step_number: u16,
@@ -19,7 +19,7 @@ pub struct OdinFragment {
 }
 
 #[deny(clippy::cast_sign_loss)]
-impl OdinFragment {
+impl OdinPayload {
     /// This is the Run Number as set by the central ECS at the start of a run.
     pub fn run_number(self) -> u32 {
         self.run_number
@@ -124,7 +124,7 @@ impl OdinFragment {
     }
 }
 
-impl AsRef<[u8]> for OdinFragment {
+impl AsRef<[u8]> for OdinPayload {
     fn as_ref(&self) -> &[u8] {
         bytemuck::bytes_of(self)
     }
@@ -138,7 +138,7 @@ pub enum FragmentCastError {
     WrongFragmentSize { expected: usize, got: usize },
 }
 
-impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinFragment> {
+impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinPayload> {
     type Error = FragmentCastError;
 
     fn try_from(value: Fragment<'a>) -> Result<Self, Self::Error> {
@@ -146,14 +146,14 @@ impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinFragment> {
     }
 }
 
-impl<'a> From<Fragment<'a, OdinFragment>> for Fragment<'a> {
-    fn from(value: Fragment<'a, OdinFragment>) -> Self {
+impl<'a> From<Fragment<'a, OdinPayload>> for Fragment<'a> {
+    fn from(value: Fragment<'a, OdinPayload>) -> Self {
         value.into_generic()
     }
 }
 
 impl<'a> Fragment<'a> {
-    pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinFragment>, FragmentCastError> {
+    pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinPayload>, FragmentCastError> {
         if self.r#type != FragmentType::Odin as u8 {
             return Err(FragmentCastError::WrongFragmentType {
                 expected: FragmentType::Odin,
@@ -163,7 +163,7 @@ impl<'a> Fragment<'a> {
 
         let odin = bytemuck::try_from_bytes(self.data).map_err(|e| match e {
             bytemuck::PodCastError::SizeMismatch => FragmentCastError::WrongFragmentSize {
-                expected: size_of::<OdinFragment>(),
+                expected: size_of::<OdinPayload>(),
                 got: self.data.len(),
             },
             e => panic!("{e:?}"),
@@ -179,7 +179,7 @@ impl<'a> Fragment<'a> {
     }
 }
 
-impl<'a> Fragment<'a, OdinFragment> {
+impl<'a> Fragment<'a, OdinPayload> {
     pub fn into_generic(self) -> Fragment<'a> {
         Fragment {
             r#type: self.r#type,

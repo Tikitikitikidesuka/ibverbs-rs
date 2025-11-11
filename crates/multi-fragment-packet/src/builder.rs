@@ -60,12 +60,10 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = other.fragments.len();
         let fragment_count_u16 = u16::try_from(fragment_count).expect("fragment not too large");
-        let fragment_types_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
-        let fragment_sizes_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
+        let fragment_types_size = utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
+        let fragment_sizes_size = utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
         let fragments_size = other.fragments.iter().fold(0, |acc, fragment| {
-            acc + alignment_utils::align_up_pow2(fragment.data.len(), other.align)
+            acc + utils::align_up_pow2(fragment.data.len(), other.align)
         });
         let packet_size = header_size + fragment_types_size + fragment_sizes_size + fragments_size;
 
@@ -130,7 +128,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
             write_bytes(&mut data, &mut cursor, fragment_data);
 
             // Skip padding (already zeroed)
-            let aligned_size = alignment_utils::align_up_pow2(fragment.data.len(), other.align);
+            let aligned_size = utils::align_up_pow2(fragment.data.len(), other.align);
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 

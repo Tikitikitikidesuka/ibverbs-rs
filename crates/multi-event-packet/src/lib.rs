@@ -1,5 +1,4 @@
 use std::{
-    borrow::Borrow,
     fmt::Debug,
     ops::{Deref, Range},
     slice,
@@ -7,14 +6,10 @@ use std::{
 
 use multi_fragment_packet::{EventId, MultiFragmentPacket, SourceId};
 
-use crate::builder::MultiEventPacketBuilder;
-
 pub mod builder;
-
-/// Container type owning a [`MultiEventPacket`].
-pub struct MultiEventPacketOwned {
-    data: Box<[u32]>, // assures alignement of u32
-}
+mod owned;
+pub use owned::MultiEventPacketOwned;
+use utils::Uninstantiatable;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -33,55 +28,22 @@ impl MultiEventPacket {
     pub const MAGIC: u16 = 0xCEFA;
 }
 
-impl Deref for MultiEventPacketOwned {
-    type Target = MultiEventPacket;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl AsRef<MultiEventPacket> for MultiEventPacketOwned {
-    fn as_ref(&self) -> &MultiEventPacket {
-        // MultiEventPacket must be guaranteed to be correct already. Since it can only
-        // be built by the builder, it is supposed to be guaranteed.
-        unsafe { MultiEventPacket::unchecked_ref_from_raw_bytes(&self.data) }
-    }
-}
-
-impl Borrow<MultiEventPacket> for MultiEventPacketOwned {
-    fn borrow(&self) -> &MultiEventPacket {
-        self
-    }
-}
-
-impl MultiEventPacketOwned {
-    pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
-        MultiEventPacketBuilder::new()
-    }
-
-    /// # Safety
-    /// Data needs to be a valid [`MultiEventPacket`].
-    pub unsafe fn from_data(data: Box<[u32]>) -> Self {
-        Self { data }
-    }
-}
-
 /// MultiEventPacket reference data type.
 ///
 /// Its relationship to [`MultiEventPacket`] is as [`str`] to [`String`].
+/// May only ever exist as `&MultiEventPacket`.
+// todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
 pub struct MultiEventPacket {
     header: MultiEventPacketConstHeader,
+    _unin: Uninstantiatable,
 }
 
 impl ToOwned for MultiEventPacket {
     type Owned = MultiEventPacketOwned;
 
     fn to_owned(&self) -> Self::Owned {
-        Self::Owned {
-            data: self.data_aligned().to_vec().into_boxed_slice(),
-        }
+        unsafe { MultiEventPacketOwned::from_data(self.data_aligned().to_vec().into_boxed_slice()) }
     }
 }
 
@@ -313,9 +275,7 @@ mod bincode {
                 decoder.reader().read(&mut data[HEADER_SIZE..])?;
             }
 
-            Ok(Self {
-                data: data.into_boxed_slice(),
-            })
+            Ok(unsafe { Self::from_data(data.into_boxed_slice()) })
         }
     }
 

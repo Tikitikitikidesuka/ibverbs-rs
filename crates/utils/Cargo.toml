@@ -1,5 +1,5 @@
 [package]
-name = "alignment-utils"
+name = "utils"
 description = "Helper functions for integer alignment"
 authors = ["Miguel Hermoso Mantecon"]
 version.workspace = true

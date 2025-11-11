@@ -1,6 +1,5 @@
 use crate::stream::mapped_stream::PCIe40MappedStream;
 use crate::stream::stream::PCIe40StreamError;
-use alignment_utils;
 use circular_buffer::CircularBufferReader;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
@@ -52,21 +51,21 @@ impl<'a> PCIe40Reader<'a> {
 
         debug!("Checking buffer size fits alignment");
         let buffer_size = mapped_buffer.size();
-        if !alignment_utils::check_alignment_pow2(buffer_size, alignment_pow2) {
+        if !utils::check_alignment_pow2(buffer_size, alignment_pow2) {
             warn!("Buffer size does not match alignment");
             return Err(PCIe40ReaderInstanceError::BufferSizeNotAligned {
                 buffer_size,
-                alignment: alignment_utils::pow2(alignment_pow2),
+                alignment: utils::pow2(alignment_pow2),
             });
         }
 
         debug!("Checking read offset fits alignment");
         let read_offset = mapped_buffer.get_read_offset()?;
-        if !alignment_utils::check_alignment_pow2(read_offset, alignment_pow2) {
+        if !utils::check_alignment_pow2(read_offset, alignment_pow2) {
             warn!("Read offset does not match alignment");
             return Err(PCIe40ReaderInstanceError::ReadOffsetNotAligned {
                 read_offset,
-                alignment: alignment_utils::pow2(alignment_pow2),
+                alignment: utils::pow2(alignment_pow2),
             });
         }
 
@@ -96,7 +95,7 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
         debug!("Checking buffer's alignment");
-        if !alignment_utils::check_alignment_pow2(self.read_offset + bytes, self.alignment_pow2) {
+        if !utils::check_alignment_pow2(self.read_offset + bytes, self.alignment_pow2) {
             warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(PCIe40AdvanceError::NotAligned);
         }
@@ -111,7 +110,7 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
         debug!("All necessary checks for read pointer advance passed! Updating read pointer");
         debug!("Wrapping read offset to fit the buffer boundary (size/2) if necessary");
         self.read_offset =
-            alignment_utils::wrap_around(self.read_offset + bytes, self.mapped_buffer.size() / 2);
+            utils::wrap_around(self.read_offset + bytes, self.mapped_buffer.size() / 2);
 
         debug!("Read pointer advanced successfully");
         Ok(())

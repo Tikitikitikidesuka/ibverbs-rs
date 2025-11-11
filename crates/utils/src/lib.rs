@@ -1,3 +1,7 @@
+/// Zero sized marker type that cannot be instantiated.
+/// To be replaced by an external type later on, see https://github.com/rust-lang/rust/issues/43467.
+pub struct Uninstantiatable(());
+
 pub fn align_up(n: usize, alignment: usize) -> usize {
     if n == 0 || alignment == 0 {
         return n;

@@ -24,7 +24,7 @@ macro_rules! impl_circular_buffer_writable {
 
             fn write(&self, writer: &mut $crate::SharedMemoryBufferWriter) -> Self::WriteResult {
                 let aligned_size =
-                    alignment_utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
+                    utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
                 let (primary_region, secondary_region) = writer.writable_region();
 
                 let (writable_region, advance_size) = if aligned_size <= primary_region.len() {
@@ -60,7 +60,7 @@ impl<T: WritableSharedMemoryBufferElement> CircularBufferWritable<SharedMemoryBu
         debug!("Attempting to write element to the buffer");
 
         debug!("Calculating the aligned size and getting the buffer's writable region");
-        let aligned_size = alignment_utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
+        let aligned_size = utils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
         let (primary_region, secondary_region) = writer.writable_region();
 
         debug!("Determining which region of the buffer's writable region to write to");

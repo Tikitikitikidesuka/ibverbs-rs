@@ -11,7 +11,7 @@ pub struct MockNonAliasedBuffer {
 
 impl MockNonAliasedBuffer {
     pub fn new(capacity: usize, alignment_pow2: u8) -> Result<Self, ()> {
-        if !alignment_utils::check_alignment_pow2(capacity, alignment_pow2) {
+        if !utils::check_alignment_pow2(capacity, alignment_pow2) {
             Err(())
         } else {
             Ok(Self {
@@ -69,7 +69,7 @@ impl CircularBufferReader for MockNonAliasedBufferReader {
         let buf = unsafe { &mut *self.buffer };
 
         // Check alignment
-        if !alignment_utils::check_alignment_pow2(bytes, buf.alignment_pow2) {
+        if !utils::check_alignment_pow2(bytes, buf.alignment_pow2) {
             return Err(MockNonAliasedAdvanceError::NotAligned);
         }
 
@@ -115,7 +115,7 @@ impl CircularBufferWriter for MockNonAliasedBufferWriter {
         let buf = unsafe { &mut *self.buffer };
 
         // Check alignment
-        if !alignment_utils::check_alignment_pow2(bytes, buf.alignment_pow2) {
+        if !utils::check_alignment_pow2(bytes, buf.alignment_pow2) {
             return Err(MockNonAliasedAdvanceError::NotAligned);
         }
 

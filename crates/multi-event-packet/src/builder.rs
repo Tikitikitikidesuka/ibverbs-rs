@@ -172,7 +172,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
         self.reset_mfps();
 
-        Ok(MultiEventPacketOwned { data })
+        Ok(unsafe { MultiEventPacketOwned::from_data(data) })
     }
 
     /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate

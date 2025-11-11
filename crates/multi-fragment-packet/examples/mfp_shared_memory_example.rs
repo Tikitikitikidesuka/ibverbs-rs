@@ -31,7 +31,7 @@ fn main() {
     mfp_0_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
+        utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -42,7 +42,7 @@ fn main() {
     read_mfp.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
+        utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1,2, ]
@@ -57,7 +57,7 @@ fn main() {
     mfp_2_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
+        utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -86,7 +86,7 @@ fn main() {
     mfp_3_512.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
+        utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ , , , ]

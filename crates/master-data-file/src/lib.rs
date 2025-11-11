@@ -9,9 +9,10 @@ use std::{
 };
 
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
-use multi_fragment_packet::{EventId, Fragment, odin::OdinFragment};
+use multi_fragment_packet::{EventId, Fragment, odin::OdinPayload};
 use std::io::Result as IoResult;
 use thiserror::Error;
+use utils::Uninstantiatable;
 
 use crate::{
     fragment::MdfFragment,
@@ -29,10 +30,13 @@ pub use writer::WriteMdf;
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
+/// May only ever exist as `&MdfRecord`.
+// todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, align(4))]
 pub struct MdfRecord<H: SpecificHeaderType = Unknown> {
     /// Invariant: sizes are valid (i.e. at least two equal).
     generic_header: MdfHeader<H>,
+    _unin: Uninstantiatable,
 }
 
 impl<H: SpecificHeaderType> MdfRecord<H> {
@@ -144,7 +148,7 @@ pub enum MdfFromDataError {
 
 impl fmt::Debug for MdfRecord<Unknown> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfRecord")
+        f.debug_struct("MdfRecordRef")
             .field("generic_header", &self.generic_header)
             .field("body", &truncate_data(self.body_u32()))
             .finish()
@@ -153,7 +157,7 @@ impl fmt::Debug for MdfRecord<Unknown> {
 
 impl fmt::Debug for MdfRecord<SingleEvent> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfRecord")
+        f.debug_struct("MdfRecordRef")
             .field("generic_header", &self.generic_header)
             .field(
                 "fragments",
@@ -189,7 +193,7 @@ impl MdfRecord<SingleEvent> {
         }
     }
 
-    pub fn odin_fragment(&self) -> Fragment<'_, OdinFragment> {
+    pub fn odin_fragment(&self) -> Fragment<'_, OdinPayload> {
         let frag = MdfFragment::from_data(self.body_u32())
             .expect("contains at least one fragment")
             .0;

@@ -47,7 +47,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
 
         // Verify enough data for the whole entry and alignment
         let aligned_size =
-            alignment_utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
+            utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
         if readable_region.len() < aligned_size {
             return Err(PCIe40TypedReadError::NotEnoughData);
         }
@@ -93,7 +93,7 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
             }
 
             // Verify enough data for the whole entry and alignment
-            let aligned_size = alignment_utils::align_up_pow2(
+            let aligned_size = utils::align_up_pow2(
                 mfp_mem.packet_size() as usize,
                 reader.alignment_pow2(),
             );

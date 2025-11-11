@@ -6,6 +6,7 @@ use std::{fmt::Debug, io::Write};
 use bytemuck::{Pod, Zeroable, cast_ref};
 use multi_fragment_packet::{EventId, Fragment, SourceId};
 use std::io::Result as IoResult;
+use utils::Uninstantiatable;
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
 
@@ -55,8 +56,12 @@ impl<'a> WriteMdf for Fragment<'a> {
 
 #[repr(align(4))]
 /// Aka bank.
+///
+/// May only ever exist as `&MdfFragment`.
+// todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 pub(crate) struct MdfFragment {
     header: MdfFragmentHeader,
+    _unin: Uninstantiatable,
 }
 
 impl Debug for MdfFragment {

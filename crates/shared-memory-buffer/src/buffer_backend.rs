@@ -91,7 +91,7 @@ impl SharedMemoryBuffer {
 
         debug!("Getting buffer usable start address");
         let start_address = unsafe { shared_memory.as_slice().as_ptr() };
-        let buffer_ptr = alignment_utils::align_up_pow2(
+        let buffer_ptr = utils::align_up_pow2(
             start_address as usize + size_of::<CircularBufferStatus>(),
             alignment_pow2,
         ) as *const u8;
@@ -169,7 +169,7 @@ impl SharedMemoryBuffer {
 
         debug!("Getting buffer usable start address");
         let start_address = unsafe { shared_memory.as_slice().as_ptr() };
-        let buffer_ptr = alignment_utils::align_up_pow2(
+        let buffer_ptr = utils::align_up_pow2(
             start_address as usize + size_of::<CircularBufferStatus>(),
             alignment_pow2,
         ) as *const u8;
@@ -357,7 +357,7 @@ impl SharedMemoryBuffer {
         size: usize,
     ) -> Result<(), SharedMemoryBufferNewError> {
         debug!("Initializing shared memory status structure");
-        let aligned_buffer_size = alignment_utils::align_up_pow2(size, alignment_pow2);
+        let aligned_buffer_size = utils::align_up_pow2(size, alignment_pow2);
         let initial_status = CircularBufferStatus::new(
             aligned_buffer_size,
             alignment_pow2 as usize,
@@ -417,8 +417,8 @@ impl SharedMemoryBuffer {
 
         debug!("Calculating total size with header and padding");
         let header_size = size_of::<CircularBufferStatus>();
-        let aligned_header_size = alignment_utils::align_up_pow2(header_size, alignment_pow2);
-        let aligned_buffer_size = alignment_utils::align_up_pow2(size, alignment_pow2);
+        let aligned_header_size = utils::align_up_pow2(header_size, alignment_pow2);
+        let aligned_buffer_size = utils::align_up_pow2(size, alignment_pow2);
         let total_size = aligned_header_size + aligned_buffer_size;
         debug!("Total size: {} Bytes", total_size);
 
