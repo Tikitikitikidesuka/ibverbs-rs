@@ -154,39 +154,30 @@ impl<'a> From<Fragment<'a, OdinPayload>> for Fragment<'a> {
 
 impl<'a> Fragment<'a> {
     pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinPayload>, FragmentCastError> {
-        if self.r#type != FragmentType::Odin as u8 {
+        if self
+            .fragment_type_parsed()
+            .is_some_and(|t| t == FragmentType::Odin)
+        {
             return Err(FragmentCastError::WrongFragmentType {
                 expected: FragmentType::Odin,
-                got: self.r#type,
+                got: self.fragment_type_raw(),
             });
         }
 
-        let odin = bytemuck::try_from_bytes(self.data).map_err(|e| match e {
+        let odin = bytemuck::try_from_bytes(self.payload_bytes()).map_err(|e| match e {
             bytemuck::PodCastError::SizeMismatch => FragmentCastError::WrongFragmentSize {
                 expected: size_of::<OdinPayload>(),
-                got: self.data.len(),
+                got: self.payload_bytes().len(),
             },
             e => panic!("{e:?}"),
         })?;
 
-        Ok(Fragment {
-            r#type: self.r#type,
-            version: self.version,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            data: odin,
-        })
+        Ok(self.map_payload(|_| odin))
     }
 }
 
 impl<'a> Fragment<'a, OdinPayload> {
     pub fn into_generic(self) -> Fragment<'a> {
-        Fragment {
-            r#type: self.r#type,
-            version: self.version,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            data: bytes_of(self.data),
-        }
+        self.map_payload(bytes_of)
     }
 }

@@ -7,11 +7,11 @@ use crate::{EventId, fragment_type::FragmentType, source_id::SourceId};
 #[derive(PartialEq, Eq)]
 #[derive_where(Copy, Clone)]
 pub struct Fragment<'a, Data: ?Sized + AsRef<[u8]> = [u8]> {
-    pub(crate) r#type: u8,
-    pub(crate) version: u8,
-    pub(crate) event_id: EventId,
-    pub(crate) source_id: SourceId,
-    pub(crate) data: &'a Data,
+    r#type: u8,
+    version: u8,
+    event_id: EventId,
+    source_id: SourceId,
+    data: &'a Data,
 }
 
 impl<'a, T: ?Sized + AsRef<[u8]>> Fragment<'a, T> {
@@ -65,6 +65,19 @@ impl<'a, T: ?Sized + AsRef<[u8]>> Fragment<'a, T> {
         size_of_val(self.data)
             .try_into()
             .expect("fragment size fits u16")
+    }
+
+    pub fn map_payload<U: ?Sized + AsRef<[u8]>>(
+        &self,
+        f: impl FnOnce(&'a T) -> &'a U,
+    ) -> Fragment<'a, U> {
+        Fragment {
+            r#type: self.r#type,
+            version: self.version,
+            event_id: self.event_id,
+            source_id: self.source_id,
+            data: f(self.data),
+        }
     }
 }
 
