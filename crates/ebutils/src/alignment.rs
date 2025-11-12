@@ -105,7 +105,7 @@ pub fn check_alignment(n: usize, alignment: usize) -> bool {
                 .expect("bits fit into u8"),
         )
     } else {
-        n % alignment == 0
+        n.is_multiple_of(alignment)
     }
 }
 

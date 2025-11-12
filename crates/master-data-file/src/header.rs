@@ -1,7 +1,10 @@
+use core::panic;
 use std::{fmt::Debug, mem::offset_of};
 
 use bytemuck::{Pod, Zeroable, bytes_of};
 use ebutils::odin::OdinPayload;
+
+use crate::rounting_bits::RoutingBit;
 
 #[repr(C, packed(4))]
 #[derive(Copy, Clone, Zeroable)]
@@ -133,6 +136,30 @@ impl MdfHeader<SingleEvent> {
             },
         }
     }
+
+    pub fn new_with_routing_bit(
+        payload_size: usize,
+        odin: OdinPayload,
+        routing_bit: RoutingBit,
+    ) -> Self {
+        let length_32 =
+            u32::try_from(payload_size + size_of::<Self>()).expect("payload size fits in u32");
+
+        MdfHeader {
+            lengths: [length_32; 3],
+            checksum: 0,
+            compression: 0,
+            header_type_and_size: SingleEvent::header_type_and_size(),
+            data_type: 0,
+            _spare: 0,
+            specific_header: SingleEvent {
+                event_mask: 1 << routing_bit as u128,
+                run_number: odin.run_number(),
+                orbit_count: odin.orbit_id(),
+                bunch_identifier: odin.bunch_id() as _,
+            },
+        }
+    }
 }
 
 mod internal {
@@ -158,6 +185,7 @@ pub struct SingleEvent {
     pub orbit_count: u32,
     pub bunch_identifier: u32,
 }
+
 impl internal::Sealed for SingleEvent {}
 /// ## Safety
 /// Size is 28, multiple of 4.
@@ -170,6 +198,26 @@ unsafe impl SpecificHeaderType for SingleEvent {
 }
 impl SingleEvent {
     pub const HEADER_SIZE_U32: u8 = 7;
+
+    pub fn get_routing_bit(&self) -> Option<RoutingBit> {
+        let rounting_bits = self.event_mask & RoutingBit::ROUTING_MASK;
+        if rounting_bits != 0 {
+            if !rounting_bits.is_power_of_two() {
+                panic!(
+                    "Multiple routing bits set in MDF header event mask: {:0b}",
+                    rounting_bits
+                );
+            }
+            RoutingBit::from_repr(
+                rounting_bits
+                    .ilog2()
+                    .try_into()
+                    .expect("only 128 < 255 bit positions"),
+            )
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]

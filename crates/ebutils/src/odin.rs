@@ -344,7 +344,7 @@ pub enum OdinBuilderError {
     TaeWindowTooLarge(u8),
 }
 
-#[cfg(test)]
+/// Just some dummy payload used for testing.
 pub fn dummy_odin_payload(event_id: u64) -> OdinPayload {
     OdinPayload::builder()
         .event_id(event_id)

@@ -214,7 +214,6 @@ mod tests {
     fn test_mfp_builder_fragments() {
         let mfp = demo_multi_fragment_packet_data();
 
-        dbg!(&mfp.fragment(1));
         let source_id = SourceId::new(SubDetector::MuonA, 156);
 
         let expected_fragments = vec![

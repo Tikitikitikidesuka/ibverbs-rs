@@ -9,10 +9,10 @@ use std::{
 };
 
 use bytemuck::{cast_ref, cast_slice_mut, checked::try_cast_slice};
-use std::io::Result as IoResult;
-use thiserror::Error;
 use ebutils::Uninstantiatable;
 use ebutils::{EventId, fragment::Fragment, odin::OdinPayload};
+use std::io::Result as IoResult;
+use thiserror::Error;
 
 use crate::{
     fragment::MdfFragment,
@@ -23,6 +23,7 @@ use crate::{
 };
 mod fragment;
 pub mod header;
+pub mod rounting_bits;
 pub mod writer;
 
 pub use writer::WriteMdf;
