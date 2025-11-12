@@ -1,11 +1,11 @@
 use circular_buffer::CircularBufferWritable;
+use ebutils::fragment_type::FragmentType;
+use ebutils::source_id::SourceId;
 use multi_fragment_packet::{MultiFragmentPacketOwned, builder::MultiFragmentPacketBuilder};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
-use ebutils::fragment_type::FragmentType;
-use ebutils::source_id::SourceId;
 
 fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb

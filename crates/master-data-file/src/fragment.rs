@@ -1,5 +1,4 @@
 //! Bank (aka fragment) of an MDF record.
-
 use core::slice;
 use std::{fmt::Debug, io::Write};
 

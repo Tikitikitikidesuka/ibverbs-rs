@@ -249,6 +249,13 @@ impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
 
 impl Debug for MultiFragmentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let frags = self
+            .iter()
+            .map(|f| match f.try_into_odin() {
+                Ok(odin) => Box::new(odin) as Box<dyn Debug>,
+                Err(_) => Box::new(f) as Box<dyn Debug>,
+            })
+            .collect::<Vec<_>>();
         f.debug_struct("MultiFragmentPacket")
             .field("magic", &format!("{:#04X}", self.magic()))
             .field("fragment_count", &self.fragment_count())
@@ -257,6 +264,7 @@ impl Debug for MultiFragmentPacket {
             .field("source_id", &self.source_id())
             .field("align", &self.align())
             .field("fragment_version", &self.fragment_version())
+            .field("fragments", &frags)
             .finish()
     }
 }

@@ -3,13 +3,11 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::Context;
 use clap::{ColorChoice, Parser};
 use colored::Colorize;
 use master_data_file::MdfRecords;
 use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
-use time::UtcDateTime;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -70,10 +68,7 @@ pub fn main() -> anyhow::Result<()> {
 
                 if let Ok(odin) = frag.try_into_odin() {
                     let odin = odin.payload();
-                    let time =
-                        UtcDateTime::from_unix_timestamp_nanos(i128::from(odin.gps_time()) * 1_000)
-                            .context("Convert Gps Time")?;
-                    // writeln!(output, "    Time {:?}", odin.gps_time());
+
                     writeln!(
                         output,
                         "    {:<15} {1} ({1:#X})",
@@ -86,7 +81,7 @@ pub fn main() -> anyhow::Result<()> {
                         "Event Type".black(),
                         odin.event_type()
                     )?;
-                    writeln!(output, "    {:<15} {:}", "Time".black(), time)?;
+                    writeln!(output, "    {:<15} {:}", "Time".black(), odin.gps_time())?;
                     writeln!(
                         output,
                         "    {:<15} {:#08X}",
@@ -187,7 +182,7 @@ pub fn main() -> anyhow::Result<()> {
                 }
             }
         } else {
-            println!(" Header type {}", rec.specific_header_type());
+            writeln!(output, " Header type {}", rec.specific_header_type())?;
         }
     }
 

@@ -1,9 +1,9 @@
 use std::{borrow::Cow, slice};
 
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketOwned};
 use thiserror::Error;
 use tracing::instrument;
-use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
@@ -198,11 +198,12 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
     use ebutils::{
         fragment_type::FragmentType,
+        odin::dummy_odin_payload,
         source_id::{SourceId, SubDetector},
     };
+    use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 
     use crate::{MultiEventPacket, MultiEventPacketOwned};
 
@@ -215,14 +216,8 @@ mod test {
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::Odin, 0))
-            .add_fragment(
-                FragmentType::Odin,
-                b"Hello, I am some data. I am trapped here, please free me!",
-            )
-            .add_fragment(
-                FragmentType::Odin,
-                b"I do not exist, here is nothing to see!!!",
-            )
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(123456))
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(123457))
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)
@@ -260,17 +255,18 @@ mod test {
 
         assert_eq!(mep.magic(), MultiEventPacket::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
-        assert_eq!(mep.packet_size_u32(), 107);
+        assert_eq!(mep.packet_size_u32(), 99);
         assert_eq!(
             mep.mfp_source_ids(),
             &[SourceId(0), SourceId(8247), SourceId(8247)]
         );
-        assert_eq!(mep.mfp_offsets_u32(), &[7, 43, 75]);
+        assert_eq!(mep.mfp_offsets_u32(), &[7, 35, 67]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
 
         assert_eq!(3, mep.mfp_iter().len());
         assert_eq!(0, mep.mfp_iter_srcid_range(SourceId(1)..SourceId(10)).len());
+        println!("{:?}", mep.get_mfp(0).unwrap().fragment(0));
         assert_eq!(
             0,
             mep.mfp_iter_srcid_range(SourceId(55555)..SourceId(55555))

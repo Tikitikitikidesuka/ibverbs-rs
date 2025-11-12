@@ -1,6 +1,9 @@
 use std::io::Write;
 
-use ebutils::{fragment::Fragment, odin::OdinPayload};
+use ebutils::{
+    fragment::Fragment,
+    odin::{FragmentCastError, OdinPayload},
+};
 use multi_event_packet::MultiEventPacket;
 use thiserror::Error;
 
@@ -18,6 +21,8 @@ pub enum MdfWriterError {
     OdinAlreadyAdded,
     #[error("No Odin fragment added for this record")]
     NoOdinFragment,
+    #[error("Fragment with type odin could not be cast to Odin payload: {0:?}")]
+    BadOdinFragment(FragmentCastError),
 }
 
 impl WriteMdf for MultiEventPacket {
@@ -59,11 +64,18 @@ impl<'a> MdfRecordWriter<'a> {
     }
 
     pub fn add_fragment(&mut self, frag: Fragment<'a>) -> Result<(), MdfWriterError> {
-        if let Ok(odin) = frag.try_into_odin() {
-            if self.odin.is_some() {
-                return Err(MdfWriterError::OdinAlreadyAdded);
+        match frag.try_into_odin() {
+            Ok(odin) => {
+                if self.odin.is_some() {
+                    return Err(MdfWriterError::OdinAlreadyAdded);
+                }
+                assert!(frag.fragment_size() as usize == size_of::<OdinPayload>());
+                self.odin = Some(*odin.payload());
             }
-            self.odin = Some(*odin.payload());
+            Err(e @ FragmentCastError::WrongFragmentSize { .. }) => {
+                return Err(MdfWriterError::BadOdinFragment(e));
+            }
+            Err(_) => {}
         }
         self.fragments.push(frag);
 
@@ -104,6 +116,7 @@ mod test {
 
     use ebutils::{
         fragment_type::FragmentType,
+        odin::OdinPayload,
         source_id::{SourceId, SubDetector},
     };
     use multi_event_packet::MultiEventPacketOwned;
@@ -138,10 +151,42 @@ mod test {
                     .with_event_id(0)
                     .with_fragment_version(1)
                     .with_source_id(SourceId::new_odin(0))
-                    .add_fragments([
-                        (FragmentType::Odin, b"hello".as_ref()),
-                        (FragmentType::Odin, b"how are you?".as_ref()),
-                    ])
+                    .add_fragment(
+                        FragmentType::Odin,
+                        OdinPayload::builder()
+                            .run_number(42)
+                            .event_id(0)
+                            .event_type(7)
+                            .gps_time(
+                                ebutils::odin::UtcDateTime::from_unix_timestamp(1762936178)
+                                    .unwrap(),
+                            )
+                            .tck(123456)
+                            .partition_id(0)
+                            .orbit_id(15)
+                            .bunch_id(465)
+                            .trigger_type(5)
+                            .build()
+                            .unwrap(),
+                    )
+                    .add_fragment(
+                        FragmentType::Odin,
+                        OdinPayload::builder()
+                            .event_id(1)
+                            .run_number(42)
+                            .event_type(7)
+                            .gps_time(
+                                ebutils::odin::UtcDateTime::from_unix_timestamp(1762936178)
+                                    .unwrap(),
+                            )
+                            .tck(123456)
+                            .partition_id(0)
+                            .orbit_id(15)
+                            .bunch_id(455)
+                            .trigger_type(5)
+                            .build()
+                            .unwrap(),
+                    )
                     .build(),
             )
             .unwrap()
@@ -160,6 +205,8 @@ mod test {
             .unwrap()
             .build()
             .unwrap();
+
+        println!("MEP: {:?}", mep);
 
         let mut mdf = Vec::new();
         mep.write_mdf(&mut TraceWriter(&mut mdf)).unwrap();
