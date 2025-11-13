@@ -1,5 +1,6 @@
 /*!
 # 💫🛠️ MDF decode
+[![Static Badge](https://img.shields.io/badge/docs-available-brightgreen)](https://lb-rusteb-docs.docs.cern.ch/mdf_decode)
 This binary is a simple tool to view MDF files.
 ## Example
 `mdf-decode /path/to/file.mdf`

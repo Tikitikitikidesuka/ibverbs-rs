@@ -1,4 +1,6 @@
 # 💫🛠️ Master Data File
+[![Static Badge](https://img.shields.io/badge/docs-available-brightgreen)](https://lb-rusteb-docs.docs.cern.ch/master_data_file)
+
 This crate allows reading and writing master data files (MDF).
 
 For reading, there exist the [`MdfRecord`] type for accessing a record inside an MDF file (often also just referred to as an MDF).
