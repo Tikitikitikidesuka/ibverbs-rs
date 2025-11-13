@@ -1,6 +1,6 @@
 # 💫🛠️ Rust Event Builder
 
-[![Static Badge](https://img.shields.io/badge/docs-available-brightgreen)](https://lb-rusteb-docs.docs.cern.ch)
+[![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch)
 
 
 This collection of crates contains libraries and bindings for building an event builder at [LHCb](https://home.cern/science/experiments/lhcb) at [CERN](https://home.cern).

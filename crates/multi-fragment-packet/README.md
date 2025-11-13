@@ -1,5 +1,5 @@
 # 💫🛠️ Multi Fragment Packet
-[![Static Badge](https://img.shields.io/badge/docs-available-brightgreen)](https://lb-rusteb-docs.docs.cern.ch/multi_fragment_packet)
+[![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch/multi_fragment_packet)
 
 This crate provides the [`MultiFragmentPacket`] (MFP) type used in LHCb data acquisition and event building.
 

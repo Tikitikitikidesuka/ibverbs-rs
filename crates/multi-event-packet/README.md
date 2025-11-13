@@ -1,5 +1,5 @@
 # 💫🛠️ Multi Event Packet
-[![Static Badge](https://img.shields.io/badge/docs-available-brightgreen)](https://lb-rusteb-docs.docs.cern.ch/multi_event_packet)
+[![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch/multi_event_packet)
 
 This crate provides the [`MultiEventPacket`] (MEP, pronounced /mæp/) type used in LHCb event building.
 
