@@ -44,7 +44,7 @@ macro_rules! impl_circular_buffer_single_readable {
                 let element_ptr = element as *const Self;
                 let element = unsafe { &*element_ptr };
 
-                let aligned_size = alignment_utils::align_up_pow2(
+                let aligned_size = ebutils::align_up_pow2(
                     element.length_in_bytes(),
                     reader.alignment_pow2(),
                 );
@@ -109,7 +109,7 @@ macro_rules! impl_circular_buffer_multi_readable {
                     let element_ptr = element as *const Self;
                     let element = unsafe { &*element_ptr };
 
-                    let aligned_size = alignment_utils::align_up_pow2(
+                    let aligned_size = ebutils::align_up_pow2(
                         element.length_in_bytes(),
                         reader.alignment_pow2(),
                     );
@@ -181,7 +181,7 @@ where
         let element = unsafe { &*element_ptr };
 
         debug!("Verifying there is enough data to read this element and its alignment padding");
-        let aligned_size = alignment_utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
+        let aligned_size = ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
         if readable_region.len() < aligned_size {
             warn!("There is not enough data to read this element and its alignment padding");
             return Err(SharedMemoryTypedReadError::NotEnoughData);
@@ -275,7 +275,7 @@ where
 
             debug!("Verifying there is enough data to read this element and its alignment padding");
             let aligned_size =
-                alignment_utils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
+                ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
             if current_region.len() < aligned_size + offset {
                 warn!("There is not enough data to read this element and its alignment padding");
                 return Err(SharedMemoryTypedReadError::NotEnoughData);

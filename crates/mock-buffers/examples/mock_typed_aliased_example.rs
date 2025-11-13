@@ -18,7 +18,7 @@ fn main() {
     writable_entry_0_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        alignment_utils::align_up_pow2(
+        ebutils::align_up_pow2(
             writable_entry_0_32.buffered_size(),
             writer.alignment_pow2()
         )
@@ -35,7 +35,7 @@ fn main() {
     writable_entry_2_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        alignment_utils::align_up_pow2(
+        ebutils::align_up_pow2(
             writable_entry_2_32.buffered_size(),
             writer.alignment_pow2()
         )
@@ -52,7 +52,7 @@ fn main() {
     writable_entry_3_64.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        alignment_utils::align_up_pow2(
+        ebutils::align_up_pow2(
             writable_entry_3_64.buffered_size(),
             writer.alignment_pow2()
         )

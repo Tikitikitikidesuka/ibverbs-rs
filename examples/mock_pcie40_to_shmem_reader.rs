@@ -1,9 +1,11 @@
 use circular_buffer::CircularBufferWritable;
-use multi_fragment_packet::{Fragment, MultiFragmentPacket, MultiFragmentPacketBuilder};
+use multi_fragment_packet::{MultiFragmentPacketOwned, builder::MultiFragmentPacketBuilder};
 use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
+use ebutils::fragment_type::FragmentType;
+use ebutils::source_id::SourceId;
 
 fn main() {
     const BUFFER_SIZE: usize = 1 << 32; // 4Gb
@@ -48,13 +50,10 @@ fn main() {
         for _ in 0..5 {
             let mfp = MultiFragmentPacketBuilder::new()
                 .with_fragment_version(1)
-                .with_source_id(1)
-                .with_align(6)
+                .with_source_id(SourceId(1))
+                .with_align_log(6)
                 .with_event_id(event_id)
-                .lock_header()
-                .add_fragments(
-                    (0..1000).map(|_| Fragment::new(1, (0..255).collect::<Vec<_>>()).unwrap()),
-                )
+                .add_fragments((0..1000).map(|_| (FragmentType::DAQ, (0..255).collect::<Vec<_>>())))
                 .build();
             mfps.push(mfp);
             event_id += 1000;
@@ -89,7 +88,7 @@ fn main() {
 
 fn shmem_write_mfps(
     writer: &mut SharedMemoryBufferWriter,
-    mfps: &[MultiFragmentPacket],
+    mfps: &[MultiFragmentPacketOwned],
     poll_interval: Duration,
 ) -> Result<(), ()> {
     for mfp in mfps {

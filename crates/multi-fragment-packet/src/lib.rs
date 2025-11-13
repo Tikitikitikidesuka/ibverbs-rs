@@ -1,4 +1,4 @@
-mod builder;
+pub mod builder;
 
 #[cfg(feature = "pcie40-io")]
 pub mod pcie40_readable;
@@ -7,152 +7,50 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
+use ebutils::fragment::Fragment;
+use ebutils::source_id::SourceId;
+use ebutils::{EventId, Uninstantiatable};
+pub mod owned;
 
-use alignment_utils;
+pub use owned::MultiFragmentPacketOwned;
+
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
-use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
 
-impl MultiFragmentPacketRef {
+impl MultiFragmentPacket {
     pub const VALID_MAGIC: u16 = 0x40CE;
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
 
+#[cfg(not(target_endian = "little"))]
+compile_error!("Only little endian supported!");
+
 #[repr(C, packed)]
+#[derive(Copy, Clone)]
 pub struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
-    event_id: u64,
-    source_id: u16,
+    event_id: EventId,
+    source_id: SourceId,
     align: u8,
     fragment_version: u8,
 }
 
-pub struct MultiFragmentPacket {
-    data: Vec<u8>,
-    // Array of fragment types is dynamically sized [FragmentType]
-    // Array of fragment sizes is dynamically sized [FragmentSize]
-    // Array of fragments is dynamically sized [Fragment ([u8])]
-}
-
+/// May only ever exist as `&MultiFragmentPacket`.
+// todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
-pub struct MultiFragmentPacketRef {
+pub struct MultiFragmentPacket {
     header: MultiFragmentPacketHeader,
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
+    _unin: Uninstantiatable,
 }
 
-impl AsRef<MultiFragmentPacketRef> for MultiFragmentPacket {
-    fn as_ref(&self) -> &MultiFragmentPacketRef {
-        // MultiFragmentPacket must be guaranteed to be correct already. Since it can only
-        // be built by the builder, it is supposed to be guaranteed.
-        unsafe { MultiFragmentPacketRef::unchecked_ref_from_raw_bytes(self.data.as_slice()) }
-    }
-}
-
-impl Deref for MultiFragmentPacket {
-    type Target = MultiFragmentPacketRef;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-pub struct Fragment {
-    fragment_type: u8,
-    fragment_size: u16,
-    data: Vec<u8>,
-}
-
-impl Fragment {
-    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<Fragment> {
-        let data = data.into();
-        if data.len() > u16::MAX as usize {
-            None
-        } else {
-            let fragment_size = data.len() as u16;
-            Some(Fragment {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
-    }
-
-    pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn as_fragment_ref(&self) -> FragmentRef {
-        FragmentRef {
-            fragment_type: self.fragment_type,
-            fragment_size: self.fragment_size,
-            data: &self.data,
-        }
-    }
-}
-
-#[derive(PartialEq, Eq)]
-pub struct FragmentRef<'a> {
-    fragment_type: u8,
-    fragment_size: u16,
-    data: &'a [u8],
-}
-
-impl FragmentRef<'_> {
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
-    }
-
-    pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
-    }
-
-    pub fn data(&self) -> &[u8] {
-        self.data
-    }
-
-    pub fn to_owned(&self) -> Fragment {
-        Fragment {
-            fragment_type: self.fragment_type(),
-            fragment_size: self.fragment_size(),
-            data: self.data().to_owned(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum MultiFragmentPacketFromRawBytesError {
-    #[error(
-        "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
-    )]
-    NotEnoughDataAvailable {
-        available_data: usize,
-        required_data: usize,
-    },
-
-    #[error(
-        "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
-    )]
-    CorruptedMagic {
-        read_magic: u16,
-        expected_magic: u16,
-    },
-}
-
-impl MultiFragmentPacketRef {
+impl MultiFragmentPacket {
     pub fn ref_from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
         // Check if there is enough data for the header
         if data.len() < Self::HEADER_SIZE {
@@ -193,22 +91,27 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().fragment_count }
     }
 
+    /// Packet size **in byets** including header.
     pub fn packet_size(&self) -> u32 {
         unsafe { self.header().packet_size }
     }
 
-    pub fn event_id(&self) -> u64 {
+    /// Event ID of first fragment in this packet.
+    pub fn event_id(&self) -> EventId {
         unsafe { self.header().event_id }
     }
 
-    pub fn source_id(&self) -> u16 {
+    /// Fragments in this packet are padded to 2^`align` bytes.
+    pub fn source_id(&self) -> SourceId {
         unsafe { self.header().source_id }
     }
 
+    /// Fragments in this packet are padded to 2^`align` bytes.
     pub fn align(&self) -> u8 {
         unsafe { self.header().align }
     }
 
+    /// Version of the data format of the fragments.
     pub fn fragment_version(&self) -> u8 {
         unsafe { self.header().fragment_version }
     }
@@ -223,6 +126,7 @@ impl MultiFragmentPacketRef {
         }
     }
 
+    /// in bytes, excluding the header (only data)
     pub fn fragment_size(&self, index: usize) -> Option<u16> {
         if index < self.fragment_count() as usize {
             let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
@@ -235,15 +139,16 @@ impl MultiFragmentPacketRef {
 
     /// No random access, O(n)
     pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
-        Some(self.iter().nth(index)?.data)
+        let frag = self.iter().nth(index)?;
+        Some(frag.payload_bytes())
     }
 
     /// No random access, O(n)
-    pub fn fragment(&self, index: usize) -> Option<FragmentRef> {
+    pub fn fragment(&self, index: usize) -> Option<Fragment<'_>> {
         self.iter().nth(index)
     }
 
-    pub fn iter(&self) -> MultiFragmentPacketIter {
+    pub fn iter(&self) -> MultiFragmentPacketIter<'_> {
         MultiFragmentPacketIter {
             packet: self,
             offset: 0,
@@ -261,8 +166,8 @@ impl MultiFragmentPacketRef {
     }
 
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
-        // Cast to MFPRef type to read its attributes
-        unsafe { &*(data.as_ptr() as *const MultiFragmentPacketRef) }
+        // Cast to MFP type to read its attributes
+        unsafe { &*(data.as_ptr() as *const MultiFragmentPacket) }
     }
 
     unsafe fn header(&self) -> &MultiFragmentPacketHeader {
@@ -275,25 +180,44 @@ impl MultiFragmentPacketRef {
 
     unsafe fn fragment_size_ptr(&self) -> *const u16 {
         let fragment_types_size = self.fragment_count() as usize * size_of::<u8>();
-        let aligned_fragment_types_size = alignment_utils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_types_size = ebutils::align_up_pow2(fragment_types_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { self.fragment_type_ptr().add(aligned_fragment_types_size) as *const u16 }
     }
 
     unsafe fn fragment_data_ptr(&self) -> *const u8 {
         let fragment_sizes_size = self.fragment_count() as usize * size_of::<u16>();
-        let aligned_fragment_sizes_size = alignment_utils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
+        let aligned_fragment_sizes_size = ebutils::align_up_pow2(fragment_sizes_size, 2); // 32 bit alignment -> 4 bytes -> 2^2
         unsafe { (self.fragment_size_ptr() as *const u8).add(aligned_fragment_sizes_size) }
     }
 }
 
+#[derive(Debug, Error)]
+pub enum MultiFragmentPacketFromRawBytesError {
+    #[error(
+        "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
+    )]
+    NotEnoughDataAvailable {
+        available_data: usize,
+        required_data: usize,
+    },
+
+    #[error(
+        "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
+    )]
+    CorruptedMagic {
+        read_magic: u16,
+        expected_magic: u16,
+    },
+}
+
 pub struct MultiFragmentPacketIter<'a> {
-    packet: &'a MultiFragmentPacketRef,
+    packet: &'a MultiFragmentPacket,
     offset: usize,
     index: usize,
 }
 
 impl<'a> Iterator for MultiFragmentPacketIter<'a> {
-    type Item = FragmentRef<'a>;
+    type Item = Fragment<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let fragment_type = self.packet.fragment_type(self.index)?;
@@ -302,14 +226,18 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
-        self.offset += alignment_utils::align_up_pow2(fragment_size as usize, self.packet.align());
+        let event_id = self.packet.event_id() + self.index as EventId;
+
+        self.offset += ebutils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
-        Some(FragmentRef {
+        Some(Fragment::new(
             fragment_type,
-            fragment_size,
+            self.packet.fragment_version(),
+            event_id,
+            self.packet.source_id(),
             data,
-        })
+        ))
     }
 }
 
@@ -319,10 +247,10 @@ impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
     }
 }
 
-impl Debug for MultiFragmentPacketRef {
+impl Debug for MultiFragmentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MultiFragmentPacketRef")
-            .field("magic", &format!("0x{:04X}", self.magic()))
+        f.debug_struct("MultiFragmentPacket")
+            .field("magic", &format!("{:#04X}", self.magic()))
             .field("fragment_count", &self.fragment_count())
             .field("packet_size", &self.packet_size())
             .field("event_id", &self.event_id())
@@ -333,7 +261,7 @@ impl Debug for MultiFragmentPacketRef {
     }
 }
 
-impl Display for MultiFragmentPacketRef {
+impl Display for MultiFragmentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -347,43 +275,44 @@ impl Display for MultiFragmentPacketRef {
         )
     }
 }
-
-impl Debug for FragmentRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let data_preview = if self.data.len() > 16 {
-            format!("{:02X?}... ({} bytes)", &self.data[0..16], self.data.len())
-        } else {
-            format!("{:02X?}", self.data)
-        };
-
-        f.debug_struct("Fragment")
-            .field("type", &self.fragment_type)
-            .field("size", &self.fragment_size)
-            .field("data", &data_preview)
-            .finish()
-    }
-}
-
-impl Display for FragmentRef<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Fragment[type={}, size={}]",
-            self.fragment_type, self.fragment_size
-        )
-    }
-}
-
 #[cfg(feature = "bincode")]
 mod bincode {
     use super::*;
     use ::bincode;
-    impl bincode::Decode<()> for MultiFragmentPacket {
+    use bincode::{de::read::Reader, enc::write::Writer};
+    impl bincode::Decode<()> for MultiFragmentPacketOwned {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
             decoder: &mut D,
         ) -> Result<Self, bincode::error::DecodeError> {
-            let vec = Vec::from(Box::<[u8]>::decode(decoder)?);
-            Ok(Self { data: vec })
+            const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+
+            let mut bytes: [u8; HEADER_SIZE] = Default::default();
+            decoder.reader().read(&mut bytes)?;
+
+            let header = unsafe { &*(bytes.as_ptr() as *const MultiFragmentPacketHeader) };
+
+            if header.magic != MultiFragmentPacket::VALID_MAGIC {
+                let magic = header.magic;
+                return Err(bincode::error::DecodeError::OtherString(format!(
+                    "Invalid magic number for `MultiEventPacket`: got {magic:#04X} but expected {:#04X}",
+                    MultiFragmentPacket::VALID_MAGIC
+                )));
+            }
+
+            let mut data = vec![0u8; header.packet_size as usize];
+            data[0..HEADER_SIZE].copy_from_slice(&bytes);
+            decoder.reader().read(&mut data[HEADER_SIZE..])?;
+
+            Ok(unsafe { Self::from_data(data) })
+        }
+    }
+
+    impl bincode::Encode for MultiFragmentPacketOwned {
+        fn encode<E: bincode::enc::Encoder>(
+            &self,
+            encoder: &mut E,
+        ) -> Result<(), bincode::error::EncodeError> {
+            self.as_ref().encode(encoder)
         }
     }
 
@@ -392,59 +321,15 @@ mod bincode {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            self.data.as_slice().encode(encoder)
-        }
-    }
-
-    impl bincode::Encode for MultiFragmentPacketRef {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.raw_packet_data().encode(encoder)
-        }
-    }
-
-    impl bincode::Decode<()> for Fragment {
-        fn decode<D: bincode::de::Decoder<Context = ()>>(
-            decoder: &mut D,
-        ) -> Result<Self, bincode::error::DecodeError> {
-            let fragment_type = bincode::Decode::decode(decoder)?;
-            let fragment_size = bincode::Decode::decode(decoder)?;
-            let data = Vec::from(Box::<[u8]>::decode(decoder)?);
-            Ok(Self {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    impl bincode::Encode for Fragment {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            self.data().encode(encoder)
-        }
-    }
-
-    impl<'a> bincode::Encode for FragmentRef<'a> {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            self.data.encode(encoder)
+            encoder.writer().write(self.raw_packet_data())
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use ebutils::{fragment::Fragment, source_id::SourceId};
+
     use super::*;
 
     fn demo_multi_fragment_packet_data() -> Vec<u8> {
@@ -477,21 +362,21 @@ mod tests {
     #[test]
     fn test_mfp_magic_packet_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.magic(), 0x40CE);
     }
 
     #[test]
     fn test_mfp_fragment_count_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.fragment_count(), 5);
     }
 
     #[test]
     fn test_mfp_packet_size_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.raw_packet_data().len(), mfp.packet_size() as usize);
         assert_eq!(mfp.packet_size(), 96);
     }
@@ -499,35 +384,35 @@ mod tests {
     #[test]
     fn test_mfp_event_id_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.event_id(), 1);
     }
 
     #[test]
     fn test_mfp_source_id_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-        assert_eq!(mfp.source_id(), 1);
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.source_id().0, 1);
     }
 
     #[test]
     fn test_mfp_align_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.align(), 3);
     }
 
     #[test]
     fn test_mfp_fragment_version_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.fragment_version(), 1);
     }
 
     #[test]
     fn test_mfp_fragment_type_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
 
         // Check all fragment types
         assert_eq!(mfp.fragment_type(0), Some(0));
@@ -543,7 +428,7 @@ mod tests {
     #[test]
     fn test_mfp_fragment_size_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
 
         // Check all fragment sizes
         assert_eq!(mfp.fragment_size(0), Some(4));
@@ -559,7 +444,7 @@ mod tests {
     #[test]
     fn test_mfp_fragment_data_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
 
         // Check all fragment data
         assert_eq!(mfp.fragment_data(0), Some(&[0, 1, 2, 3][..]));
@@ -576,71 +461,9 @@ mod tests {
     }
 
     #[test]
-    fn test_mfp_fragment_getter() {
-        let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-
-        // Check first fragment using direct comparison
-        let expected_fragment0 = FragmentRef {
-            fragment_type: 0,
-            fragment_size: 4,
-            data: &[0, 1, 2, 3][..],
-        };
-        assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
-
-        // Check last fragment using direct comparison
-        let expected_fragment4 = FragmentRef {
-            fragment_type: 4,
-            fragment_size: 12,
-            data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
-        };
-        assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
-
-        // Check out of bounds
-        assert_eq!(mfp.fragment(5), None);
-    }
-
-    #[test]
-    fn test_mfp_iter() {
-        let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-
-        let expected_fragments = vec![
-            FragmentRef {
-                fragment_type: 0,
-                fragment_size: 4,
-                data: &[0, 1, 2, 3][..],
-            },
-            FragmentRef {
-                fragment_type: 1,
-                fragment_size: 5,
-                data: &[0, 1, 2, 3, 4][..],
-            },
-            FragmentRef {
-                fragment_type: 2,
-                fragment_size: 8,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
-            },
-            FragmentRef {
-                fragment_type: 3,
-                fragment_size: 9,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
-            },
-            FragmentRef {
-                fragment_type: 4,
-                fragment_size: 12,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
-            },
-        ];
-
-        let fragments: Vec<FragmentRef> = mfp.iter().collect();
-        assert_eq!(fragments, expected_fragments);
-    }
-
-    #[test]
     fn test_exact_size_iterator() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
 
         let iter = mfp.iter();
         assert_eq!(iter.len(), 5);
@@ -663,12 +486,58 @@ mod tests {
     #[test]
     fn test_mfp_raw_packet_data() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
 
         let raw_data = mfp.raw_packet_data();
 
         // The raw packet data should be the same as the input data up to packet_size
         assert_eq!(raw_data.len(), data.len());
         assert_eq!(raw_data, &data);
+    }
+
+    #[test]
+    fn test_mfp_fragment_getter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+
+        // Check first fragment using direct comparison
+        let expected_fragment0 = Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]);
+        assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
+
+        // Check last fragment using direct comparison
+        let expected_fragment4 = Fragment::new(
+            4,
+            1,
+            5,
+            SourceId(1),
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+        );
+        assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
+
+        // Check out of bounds
+        assert_eq!(mfp.fragment(5), None);
+    }
+
+    #[test]
+    fn test_mfp_iter() {
+        let data = demo_multi_fragment_packet_data();
+        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+
+        let expected_fragments = vec![
+            Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]),
+            Fragment::new(1, 1, 2, SourceId(1), &[0, 1, 2, 3, 4][..]),
+            Fragment::new(2, 1, 3, SourceId(1), &[0, 1, 2, 3, 4, 5, 6, 7][..]),
+            Fragment::new(3, 1, 4, SourceId(1), &[0, 1, 2, 3, 4, 5, 6, 7, 8][..]),
+            Fragment::new(
+                4,
+                1,
+                5,
+                SourceId(1),
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            ),
+        ];
+
+        let fragments: Vec<Fragment> = mfp.iter().collect();
+        assert_eq!(fragments, expected_fragments);
     }
 }
