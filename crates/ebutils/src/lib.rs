@@ -12,7 +12,7 @@ pub use alignment::*;
 /// To be replaced by an external type later on, see <https://github.com/rust-lang/rust/issues/43467>.
 pub struct Uninstantiatable(());
 
-/// Type of a source id.
+/// An identifier uniquely identifying an "event" within a run.
 pub type EventId = u64;
 
 pub use fragment::Fragment;

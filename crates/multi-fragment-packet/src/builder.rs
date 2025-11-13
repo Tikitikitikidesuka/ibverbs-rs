@@ -1,3 +1,4 @@
+#![doc(hidden)]
 use std::fmt::Debug;
 
 use ebutils::{fragment_type::FragmentType, odin::OdinPayload};
@@ -144,7 +145,8 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        unsafe { MultiFragmentPacketOwned::from_data(data) }
+        // SAFETY: is a valid MFP in terms of the function because magic and size match by construction.
+        unsafe { MultiFragmentPacketOwned::from_data_unchecked(data) }
     }
 }
 

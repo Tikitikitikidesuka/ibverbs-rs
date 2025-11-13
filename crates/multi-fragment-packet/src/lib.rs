@@ -17,6 +17,7 @@ pub use owned::MultiFragmentPacketOwned;
 
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
+use std::ops::Range;
 use std::slice;
 use thiserror::Error;
 
@@ -25,7 +26,7 @@ compile_error!("Only little endian supported!");
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
-pub struct MultiFragmentPacketHeader {
+struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
@@ -36,10 +37,14 @@ pub struct MultiFragmentPacketHeader {
 }
 
 /// This struct represents a multi-fragment packet in memory.
-/// It can be thought of as similar to [`str`] in a way that it only ever exist behind references `&MultiFragmentPacket`, never owned.
 ///
+/// It can be thought of as similar to [`str`] in a way that it only ever exist behind references `&MultiFragmentPacket`, never owned.
 /// If you want an owned version, use [`MultiFragmentPacketOwned`].
 /// There also exists a builder for that using [`MultiFragmentPacketOwned::builder`].
+/// Its relationship to [`MultiFragmentPacketOwned`] is as [`str`] to [`String`].
+///
+/// See the [module level documentation](crate#what-is-an-mfp) for more details on what an MFP actually represents.
+/// The MFP format is defined here <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.3>.
 // todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
 pub struct MultiFragmentPacket {
@@ -171,7 +176,7 @@ impl MultiFragmentPacket {
     ///
     /// For more convenient access, consider using [`Self::fragment`] instead.
     ///
-    /// No random access, O(n). Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
+    /// No random access, `O(n)`. Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
     pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
         let frag = self.fragment_iter().nth(index)?;
         Some(frag.payload_bytes())
@@ -179,7 +184,7 @@ impl MultiFragmentPacket {
 
     /// Returns a reference to the fragment at the given index.
     ///
-    /// No random access, O(n). Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
+    /// No random access, `O(n)`. Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
     pub fn fragment(&self, index: usize) -> Option<Fragment<'_>> {
         self.fragment_iter().nth(index)
     }
@@ -202,6 +207,16 @@ impl MultiFragmentPacket {
                 (self as *const Self) as *const u8,
                 self.header().packet_size as usize,
             )
+        }
+    }
+
+    /// Returns a range over the event ids this MFP contains.
+    pub fn event_id_range(&self) -> Range<EventId> {
+        let start = self.event_id();
+
+        Range {
+            start,
+            end: start + self.fragment_count() as EventId,
         }
     }
 
@@ -238,6 +253,7 @@ impl MultiFragmentPacket {
 /// Errors that can be encountered when trying to construct a MultiFragmentPacket from raw bytes.
 #[derive(Debug, Error)]
 pub enum MultiFragmentPacketFromRawBytesError {
+    /// Not enough bytes presented to decode MFP.
     #[error(
         "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
     )]
@@ -246,6 +262,7 @@ pub enum MultiFragmentPacketFromRawBytesError {
         required_data: usize,
     },
 
+    /// Invalid magic for an MFP.
     #[error(
         "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
     )]
@@ -360,7 +377,8 @@ mod bincode {
             data[0..HEADER_SIZE].copy_from_slice(&bytes);
             decoder.reader().read(&mut data[HEADER_SIZE..])?;
 
-            Ok(unsafe { Self::from_data(data) })
+            // SAFETY: is a valid MFP in terms of the function because magic and size match.
+            Ok(unsafe { Self::from_data_unchecked(data) })
         }
     }
 

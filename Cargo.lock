@@ -414,6 +414,7 @@ name = "multi-event-packet"
 version = "0.2.0"
 dependencies = [
  "bincode",
+ "bytemuck",
  "ebutils",
  "multi-fragment-packet",
  "thiserror",

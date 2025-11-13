@@ -415,6 +415,7 @@ pub enum OdinBuilderError {
 }
 
 /// Just some dummy payload used for testing.
+#[doc(hidden)]
 pub fn dummy_odin_payload(event_id: u64) -> OdinPayload {
     OdinPayload::builder()
         .event_id(event_id)

@@ -1,5 +1,6 @@
 use std::{borrow::Cow, slice};
 
+use bytemuck::cast_slice_mut;
 use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketOwned};
 use thiserror::Error;
@@ -7,27 +8,28 @@ use tracing::instrument;
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
-    slice_as_bytes_mut, src_ids_size,
+    src_ids_size,
 };
 
-#[derive(Debug, Error)]
-pub enum EventBuilderError {
-    #[error(
-        "Trying to add a mfp with different event ID ({got}) than previously added ({expected})."
-    )]
-    MismatchingEventId { expected: u64, got: u64 },
-    #[error(
-        "Trying ot add an mfp with different number of fragments ({got}) than previously added ({expected})."
-    )]
-    MismatchingFragmentCount { expected: u16, got: u16 },
-    #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
-    SuperfluousOdinFragment,
-    #[error("No odin MFP was added. Exactly one Odin MFP is required.")]
-    NoOdinFragment,
-}
-
-pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
-
+/// This is a builder struct for constructing an MEP out of MFPs for the same events and different source ids.
+///
+/// At least one MFP from an ODIN source is required ([`SourceId::is_odin`] and Containing [`ebutils::OdinPayload`] fragments).
+///
+/// # Example
+/// ```
+/// # use multi_event_packet::MultiEventPacketBuilder;
+/// # use ebutils::{odin::dummy_odin_payload, FragmentType, SourceId};
+/// # use multi_fragment_packet::MultiFragmentPacketOwned;
+/// # let mfp1 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(0)).with_align_log(2).with_fragment_version(0)
+/// # .add_fragment(FragmentType::Odin, dummy_odin_payload(0)).build();
+/// # let mfp2 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(12213)).with_align_log(2).with_fragment_version(0)
+/// # .add_fragment(FragmentType::DAQ, b"Hello").build();
+/// // getting mfp1 and mfp2 from somewhere
+/// let mep = MultiEventPacketBuilder::with_capacity(2)
+///     .add_mfp(mfp1).unwrap()
+///     .add_mfp(mfp2).unwrap()
+///     .build().unwrap();
+/// ```
 #[derive(Default)]
 pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
@@ -38,10 +40,12 @@ pub struct MultiEventPacketBuilder<'a> {
 impl<'a> MultiEventPacketBuilder<'a> {
     pub const DEFAULT_MFP_ALIGN: usize = align_of::<u64>();
 
+    /// Creates a new builder.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates a new builder with a preallocated capacity for `capacity` MFP references.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             mfps: Vec::with_capacity(capacity),
@@ -53,7 +57,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     ///
     /// Also checks wether a odin fragment was already added when trying to add another one.
     /// This is checked when adding an mft automatically.
-    pub fn check_mfp_event_compatiblity(&self, test_mfp: &MultiFragmentPacket) -> Result<()> {
+    pub fn check_mfp_compatibility(&self, test_mfp: &MultiFragmentPacket) -> Result<()> {
         if let Some(reference_mfp) = self.mfps.first() {
             if test_mfp.event_id() != reference_mfp.event_id() {
                 return Err(EventBuilderError::MismatchingEventId {
@@ -74,8 +78,12 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(())
     }
 
+    /// Adds an MFP to this builder, only requiring a reference to it.
+    ///
+    /// The MFP needs to cover the same events as previously added MFPs.
+    /// For more details on the requirements, see [`Self::check_mfp_compatibility`].
     pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacket) -> Result<&mut Self> {
-        self.check_mfp_event_compatiblity(mfp)?;
+        self.check_mfp_compatibility(mfp)?;
         if mfp.source_id().is_odin() {
             self.odin_added = true;
         }
@@ -83,8 +91,14 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(self)
     }
 
+    /// Adds an owned MFP to this builder.
+    ///
+    /// This is useful if you don't want or can keep around all the MFPs while building.
+    ///
+    /// The MFP needs to cover the same events as previously added MFPs.
+    /// For more details on the requirements, see [`Self::check_mfp_compatibility`].
     pub fn add_mfp(&mut self, mfp: MultiFragmentPacketOwned) -> Result<&mut Self> {
-        self.check_mfp_event_compatiblity(&mfp)?;
+        self.check_mfp_compatibility(&mfp)?;
         if mfp.source_id().is_odin() {
             self.odin_added = true;
         }
@@ -92,12 +106,20 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(self)
     }
 
+    /// Sets the alignment the MFPs in the MEP should have.
+    ///
+    /// This can be set at any time before build.
+    /// The default value is [`Self::DEFAULT_MFP_ALIGN`].
     pub fn set_mfp_align(&mut self, align: usize) -> &mut Self {
         self.mfp_align = Some(align);
         self
     }
 
+    /// Builds an MEP from the provided MFPs.
+    ///
     /// Resets the builder afterwards, so it can be reused without reallocating the internal buffer.
+    /// # Errors
+    /// If no ODIN MFP has been added.
     ///
     /// In case of `Err`, the builder is not reset!
     #[instrument(skip(self))]
@@ -163,7 +185,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
                         .is_some_and(|t| t == FragmentType::Odin)
                 }));
             }
-            let data = slice_as_bytes_mut(data.as_mut());
+            let data = cast_slice_mut(data.as_mut());
             let data = &mut data[offset..];
             let data = &mut data[..mfp.packet_size() as usize];
             data.copy_from_slice(mfp.raw_packet_data());
@@ -174,13 +196,16 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(unsafe { MultiEventPacketOwned::from_data(data) })
     }
 
-    /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate
+    /// Resets the builder for reuse.
+    ///
+    /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate.
+    /// This is useful if you want to avoid any allocations while building MEPs.
     pub fn reset_mfps(&mut self) {
         self.mfps.clear();
     }
 
     /// Generates the MFP offsets in bytes from the start of the header.
-    /// Also stores the total size in the out parateter.
+    /// Also stores the total size in the out parameter.
     fn offsets_iter(&self, total_size: &mut usize) -> impl Iterator<Item = usize> {
         let align = self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN);
         *total_size = header_size(self.mfps.len());
@@ -195,6 +220,30 @@ impl<'a> MultiEventPacketBuilder<'a> {
             })
     }
 }
+
+/// Errors that can occur when building MEPs.
+#[derive(Debug, Error)]
+pub enum EventBuilderError {
+    /// You tried to build an MEP with different event ids.
+    #[error(
+        "Trying to add a mfp with different event ID ({got}) than previously added ({expected})."
+    )]
+    MismatchingEventId { expected: u64, got: u64 },
+    /// You tried to build an MEP with differently sized MFPs.
+    #[error(
+        "Trying ot add an mfp with different number of fragments ({got}) than previously added ({expected})."
+    )]
+    MismatchingFragmentCount { expected: u16, got: u16 },
+    /// You tried to add more than one ODIN MFP.
+    #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
+    SuperfluousOdinFragment,
+    /// You tried to build an MFP without an odin fragment.
+    #[error("No odin MFP was added. Exactly one Odin MFP is required.")]
+    NoOdinFragment,
+}
+
+/// A convenience type definition for a [`Result`] with its error defaulting to [`EventBuilderError`].
+pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
 
 #[cfg(test)]
 mod test {

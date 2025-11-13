@@ -7,17 +7,22 @@ use pcie40::reader::PCIe40Reader;
 use pcie40::stream::stream::PCIe40StreamError;
 use thiserror::Error;
 
+/// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
 pub enum PCIe40TypedReadError {
+    /// No data is yet present in the buffer.
     #[error("Type not found on buffer")]
     NotFound,
 
+    /// Not enough data is yet present it the buffer to satisfy the request.
     #[error("Not enough data for requested type")]
     NotEnoughData,
 
+    /// Corrupted data was returned, i.e. detected by an invalid magic number.
     #[error("Data is corrupt for requested type")]
     CorruptData,
 
+    /// Error when communicating with the PICe40 stream.
     #[error("Unable to communicate with the stream: {0:?}")]
     StreamError(#[from] PCIe40StreamError),
 }
