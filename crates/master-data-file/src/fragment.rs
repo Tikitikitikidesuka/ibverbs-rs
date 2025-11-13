@@ -1,13 +1,11 @@
 //! Bank (aka fragment) of an MDF record.
-
 use core::slice;
-use std::{fmt::Debug, io::Write};
+use std::fmt::Debug;
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use std::io::Result as IoResult;
 use ebutils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
 
-use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
+use crate::{MdfFromDataError, truncate_data};
 
 #[repr(C, align(4))]
 #[derive(Copy, Clone, Pod, Zeroable, Debug)]
@@ -25,31 +23,6 @@ impl MdfFragmentHeader {
 
     pub fn as_bytes(&self) -> &[u8] {
         bytemuck::bytes_of(self)
-    }
-}
-
-impl<'a> WriteMdf for Fragment<'a> {
-    fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
-        let header_size: u16 = size_of::<MdfFragmentHeader>()
-            .try_into()
-            .expect("header size fits u16");
-        let header = MdfFragmentHeader {
-            magic: MdfFragmentHeader::MAGIC,
-            fragment_type: self.fragment_type_raw(),
-            source_id: self.source_id(),
-            version: self.version(),
-
-            size: header_size + self.fragment_size(),
-        };
-        writer.write_all(header.as_bytes())?;
-        writer.write_all(self.payload())?;
-
-        // pad to u32 size
-        let frag_size = self.fragment_size() as usize;
-        let padding = frag_size.next_multiple_of(align_of::<u32>()) - frag_size;
-        writer.write_all(&0u32.to_ne_bytes()[..padding])?;
-
-        Ok(())
     }
 }
 
@@ -116,5 +89,36 @@ impl MdfFragment {
             self.header.source_id,
             self.data(),
         )
+    }
+}
+
+#[cfg(feature = "mep")]
+#[doc(hidden)]
+impl<'a> crate::writer::WriteMdf for Fragment<'a> {
+    /// This is for internal use. You probably want to use `write_mdf` on an [`MultiEventPacket`](multi-event-packet:MultiEventPacket).
+    fn write_mdf(
+        &self,
+        writer: &mut impl std::io::Write,
+    ) -> Result<(), crate::writer::MdfWriterError> {
+        let header_size: u16 = size_of::<MdfFragmentHeader>()
+            .try_into()
+            .expect("header size fits u16");
+        let header = MdfFragmentHeader {
+            magic: MdfFragmentHeader::MAGIC,
+            fragment_type: self.fragment_type_raw(),
+            source_id: self.source_id(),
+            version: self.version(),
+
+            size: header_size + self.fragment_size(),
+        };
+        writer.write_all(header.as_bytes())?;
+        writer.write_all(self.payload())?;
+
+        // pad to u32 size
+        let frag_size = self.fragment_size() as usize;
+        let padding = frag_size.next_multiple_of(align_of::<u32>()) - frag_size;
+        writer.write_all(&0u32.to_ne_bytes()[..padding])?;
+
+        Ok(())
     }
 }

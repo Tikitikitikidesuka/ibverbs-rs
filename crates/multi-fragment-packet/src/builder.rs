@@ -1,4 +1,7 @@
-use ebutils::fragment_type::FragmentType;
+#![doc(hidden)]
+use std::fmt::Debug;
+
+use ebutils::{fragment_type::FragmentType, odin::OdinPayload};
 use typed_builder::TypedBuilder;
 
 use crate::{
@@ -7,10 +10,10 @@ use crate::{
 
 #[derive(TypedBuilder)]
 #[builder(build_method(into = crate::MultiFragmentPacketOwned),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
-    pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>>) {
+    pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>> + Debug) {
         self.fragments.push(BuildFragmentData {
             fragment_type: fragment_type as u8,
-            data: data.into()
+            data: data.into(),
         });
     }
 
@@ -38,6 +41,7 @@ struct MultiFragmentPacketBuilderInternal {
     fragments: Vec<BuildFragmentData>,
 }
 
+#[doc(hidden)]
 pub struct BuildFragmentData {
     fragment_type: u8,
     data: Vec<u8>,
@@ -57,6 +61,15 @@ impl MultiFragmentPacketBuilder {
 
 impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwned {
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
+        if other.source_id.is_odin()
+            && !other.fragments.iter().all(|f| {
+                f.fragment_type == FragmentType::Odin as u8
+                    && f.data.len() == size_of::<OdinPayload>()
+            })
+        {
+            panic!("Source ID indicates Odin fragments, but not all fragments are of Odin type");
+        }
+
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = other.fragments.len();
         let fragment_count_u16 = u16::try_from(fragment_count).expect("fragment not too large");
@@ -132,13 +145,14 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        unsafe { MultiFragmentPacketOwned::from_data(data) }
+        // SAFETY: is a valid MFP in terms of the function because magic and size match by construction.
+        unsafe { MultiFragmentPacketOwned::from_data_unchecked(data) }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ebutils::source_id::SubDetector;
+    use ebutils::{odin::dummy_odin_payload, source_id::SubDetector};
 
     use crate::{Fragment, SourceId};
 
@@ -196,14 +210,13 @@ mod tests {
     #[test]
     fn test_mfp_builder_align() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.align(), 3);
+        assert_eq!(mfp.align_log(), 3);
     }
 
     #[test]
     fn test_mfp_builder_fragments() {
         let mfp = demo_multi_fragment_packet_data();
 
-        dbg!(&mfp.fragment(1));
         let source_id = SourceId::new(SubDetector::MuonA, 156);
 
         let expected_fragments = vec![
@@ -238,7 +251,28 @@ mod tests {
             ),
         ];
 
-        let fragments: Vec<Fragment> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.fragment_iter().collect();
         assert_eq!(fragments, expected_fragments);
+    }
+
+    #[test]
+    fn test_odin_mfp() {
+        let mfp = MultiFragmentPacketBuilder::new()
+            .with_magic(0x40CE)
+            .with_event_id(42)
+            .with_source_id(SourceId::new_odin(1))
+            .with_align_log(3)
+            .with_fragment_version(1)
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(42))
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(43))
+            .build();
+
+        let fragment = mfp.fragment(0).unwrap();
+        assert_eq!(fragment.fragment_type_parsed(), Some(FragmentType::Odin));
+        let odin_payload = fragment
+            .try_into_odin()
+            .expect("valid Odin fragment")
+            .payload();
+        assert_eq!(odin_payload.event_id(), 42);
     }
 }

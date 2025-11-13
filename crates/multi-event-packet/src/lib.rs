@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use std::{
     fmt::Debug,
     ops::{Deref, Range},
@@ -7,9 +9,10 @@ use std::{
 use multi_fragment_packet::MultiFragmentPacket;
 
 pub mod builder;
-mod owned;
-pub use owned::MultiEventPacketOwned;
+pub mod owned;
+pub use builder::MultiEventPacketBuilder;
 use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
+pub use owned::MultiEventPacketOwned;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -23,15 +26,16 @@ pub(crate) struct MultiEventPacketConstHeader {
     /// Packet size in 32 bit words
     packet_size: u32,
 }
-
-impl MultiEventPacket {
-    pub const MAGIC: u16 = 0xCEFA;
-}
-
-/// MultiEventPacket reference data type.
+/// This struct represents a multi event packet in memory.
 ///
-/// Its relationship to [`MultiEventPacket`] is as [`str`] to [`String`].
-/// May only ever exist as `&MultiEventPacket`.
+/// It can be thought of similar to [`str`] in a way that it only ever exists behind references `&MultiEventPacket`, never owned.
+/// If you want an owned version, use [`MultiEventPacketOwned`].
+/// There also exists a builder for that: [`MultiEventPacketBuilder`].
+///
+/// Its relationship to [`MultiEventPacketOwned`] is as [`str`] to [`String`].
+///
+/// See the [module level documentation](crate#what-is-an-mep) for more information what an MEP actually represents.
+/// The MEP format is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.4).
 // todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
 pub struct MultiEventPacket {
@@ -39,32 +43,36 @@ pub struct MultiEventPacket {
     _unin: Uninstantiatable,
 }
 
-impl ToOwned for MultiEventPacket {
-    type Owned = MultiEventPacketOwned;
-
-    fn to_owned(&self) -> Self::Owned {
-        unsafe { MultiEventPacketOwned::from_data(self.data_aligned().to_vec().into_boxed_slice()) }
-    }
-}
-
 impl MultiEventPacket {
+    /// The valid magic number stored in an MEP header.
+    pub const MAGIC: u16 = 0xCEFA;
+
+    /// The magic number stored in this MEPs header. Is always [`Self::MAGIC`]
     pub fn magic(&self) -> u16 {
         self.header.magic
     }
 
+    /// Returns the number of MFPs contained in this MEP.
     pub fn num_mfps(&self) -> u16 {
         self.header.num_mfps
     }
 
-    // Size of packet **in 32 bit words!** (as stored in the header).
+    /// Returns the total size of this MEP packet in units of `u32`, as it is stored in the header.
     pub fn packet_size_u32(&self) -> u32 {
         self.header.packet_size
     }
 
+    /// Returns the total size of this MEP packet in units of byets.
+    ///
+    /// This is just a `self.packet_size_u32() * size_of::<u32>()`.
     pub fn packet_size_byets(&self) -> usize {
         self.packet_size_u32() as usize * size_of::<u32>()
     }
 
+    /// Returns a slice of the source ids of the contained MEPs.
+    ///
+    /// The length of the slice equals the number of MFPs in this MEP.
+    /// This may be useful when searching for a specific MFP as they can be randomly accessed in `O(1)`.
     pub fn mfp_source_ids(&self) -> &[SourceId] {
         // SAFETY: Source ids start ofter constant sized header part.
         let src_ids = unsafe {
@@ -75,7 +83,10 @@ impl MultiEventPacket {
         unsafe { slice::from_raw_parts(src_ids, self.num_mfps() as _) }
     }
 
-    /// Offset of the mfps from the start of the header, **in 32 bit words!** (as stored in the header).
+    /// Returns a slice to the offsets of the mfps from the start of the packet/header, **in 32 bit words!** (as stored in the header).
+    ///
+    /// You probably never need to use this method on your own.
+    /// To access a specific MFP inside, use [`Self::get_mfp`].
     pub fn mfp_offsets_u32(&self) -> &[Offset] {
         // SAFETY: Offsets are located after the constant header part and source ids, padded to an even number (32 bit).
         let offsets = unsafe {
@@ -88,12 +99,16 @@ impl MultiEventPacket {
         unsafe { slice::from_raw_parts(offsets, self.num_mfps() as _) }
     }
 
-    pub fn mfp_offset_bytes(&self, idx: usize) -> Option<usize> {
+    fn mfp_offset_bytes(&self, idx: usize) -> Option<usize> {
         self.mfp_offsets_u32()
             .get(idx)
             .map(|v| *v as usize * size_of::<u32>())
     }
 
+    /// Returns a reference to the `idx`th MFP inside this MEP.
+    ///
+    /// Returns `None` when `idx` is out of bounds.
+    /// MEPs have `O(1)` random access.
     pub fn get_mfp(&self, idx: usize) -> Option<&MultiFragmentPacket> {
         // SAFETY: MFPs are located at the given offset (in bytes!) and expected to be valid.
         // SAFETY: Returned lifetime is same as data
@@ -102,6 +117,9 @@ impl MultiEventPacket {
         })
     }
 
+    /// Returns a reference to the MFP containing the ODIN fragments.
+    ///
+    /// This is just a convenience method to access the first MFP.
     pub fn get_odin_mfp(&self) -> &MultiFragmentPacket {
         // As MFPs are sorted by source id, the odin mfp is first.
         let mfp = self.get_mfp(0).expect("odin mfp exists");
@@ -109,25 +127,20 @@ impl MultiEventPacket {
         mfp
     }
 
+    /// Returns a range over the event ids each of this MEP's MFPs contain.
     pub fn event_id_range(&self) -> Range<EventId> {
         let first = self.mfp_iter().next().expect("non empty mep");
-        let start = first.event_id();
-
-        Range {
-            start,
-            end: start + first.fragment_count() as EventId,
-        }
-    }
-
-    pub fn header_size(&self) -> usize {
-        header_size(self.num_mfps() as _)
+        first.event_id_range()
     }
 
     fn src_ids_size(&self) -> usize {
         src_ids_size(self.num_mfps() as _)
     }
 
+    /// Returns an iterator over all the MFPs in this MEP.
     pub fn mfp_iter(&self) -> MultiEventPacketIterator<'_> {
+        // todo use pre-made iterator like range with map and capture self
+        // to get more performant auxiliary methods (like custom count, nth, ...)
         MultiEventPacketIterator {
             mep: self,
             next_idx: 0,
@@ -135,6 +148,10 @@ impl MultiEventPacket {
         }
     }
 
+    /// Returns an iterator over the MFPs in a sub-range of source ids.
+    ///
+    /// Getting this iterator takes `O(log n)` where `n` is the number of MFPs.
+    /// This is caused by the binary search performed on the source ids.
     pub fn mfp_iter_srcid_range(&self, range: Range<SourceId>) -> MultiEventPacketIterator<'_> {
         let start_idx = self.mfp_source_ids().partition_point(|v| *v < range.start);
         let end_idx = self.mfp_source_ids().partition_point(|v| *v < range.end);
@@ -146,11 +163,15 @@ impl MultiEventPacket {
         }
     }
 
+    /// Returns this packet as raw byte slice.
     pub fn data(&self) -> &[u8] {
         // SAFETY: Data of length packet_size (in bytes!) belongs to this MEP. Returned lifetime is same as of self.
         unsafe { slice::from_raw_parts(self as *const Self as *const u8, self.packet_size_byets()) }
     }
 
+    /// Returns this packet as [`u32`] slice.
+    ///
+    /// This is possible as MEPs are always `u32` aligned.
     pub fn data_aligned(&self) -> &[u32] {
         // SAFETY: Data of length packet_size (in u32!) belongs to this MEP. Returned lifetime is same as of self.
         // SAFETY: Alignment is guaranteed to be of of u32.
@@ -162,10 +183,19 @@ impl MultiEventPacket {
         }
     }
 
-    /// SAFETY: Assumes data contains a valid MEP, with MFPs sorted by srcid.
+    /// # Safety
+    /// Assumes data contains a valid MEP, with MFPs sorted by srcid.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
         unsafe { &*(data.as_ptr() as *const MultiEventPacket) }
+    }
+}
+
+impl ToOwned for MultiEventPacket {
+    type Owned = MultiEventPacketOwned;
+
+    fn to_owned(&self) -> Self::Owned {
+        unsafe { MultiEventPacketOwned::from_data(self.data_aligned().to_vec().into_boxed_slice()) }
     }
 }
 
@@ -205,6 +235,7 @@ pub(crate) fn header_size(num_mfps: usize) -> usize {
     size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
 }
 
+/// An iterator over (some of) the MFPs inside an MEP.
 pub struct MultiEventPacketIterator<'a> {
     mep: &'a MultiEventPacket,
     next_idx: usize,
@@ -232,19 +263,12 @@ impl<'a> Iterator for MultiEventPacketIterator<'a> {
 
 impl<'a> ExactSizeIterator for MultiEventPacketIterator<'a> {}
 
-pub(crate) fn slice_as_bytes_mut(data: &mut [u32]) -> &mut [u8] {
-    // SAFETY: slice is contigous without padding of correct length. Lifetime matches.
-    unsafe { slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, std::mem::size_of_val(data)) }
-}
-
 #[cfg(feature = "bincode")]
 mod bincode {
     use ::bincode;
     use bincode::{Decode, Encode, de::read::Reader, enc::write::Writer};
 
     use crate::{MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned};
-
-    use super::slice_as_bytes_mut;
 
     impl Decode<()> for MultiEventPacketOwned {
         fn decode<D: bincode::de::Decoder<Context = ()>>(
@@ -269,7 +293,7 @@ mod bincode {
 
             // copy in data
             {
-                let data = slice_as_bytes_mut(data.as_mut_slice());
+                let data = bytemuck::cast_slice_mut(data.as_mut_slice());
 
                 data[0..HEADER_SIZE].copy_from_slice(&bytes);
                 decoder.reader().read(&mut data[HEADER_SIZE..])?;
