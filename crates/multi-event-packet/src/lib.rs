@@ -35,7 +35,7 @@ pub(crate) struct MultiEventPacketConstHeader {
 /// Its relationship to [`MultiEventPacketOwned`] is as [`str`] to [`String`].
 ///
 /// See the [module level documentation](crate#what-is-an-mep) for more information what an MEP actually represents.
-/// The MEP format is defined here <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.4>.
+/// The MEP format is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.4).
 // todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
 pub struct MultiEventPacket {

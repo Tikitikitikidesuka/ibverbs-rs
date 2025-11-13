@@ -9,10 +9,26 @@ use thiserror::Error;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
+/// This is an extension trait to write [`MultiEventPacket`]s as multiple [`MdfRecord`](crate::MdfRecord)s to file.
+///
+/// # Example
+/// ```no_run
+/// # use multi_event_packet::MultiEventPacketOwned;
+/// use master_data_file::WriteMdf;
+///
+/// let mdf: MultiEventPacketOwned = todo!();
+/// let file = std::fs::File::open("/tmp/test.mdf").unwrap();
+/// let buf = std::io::BufWriter::new(file);
+/// mdf.write_mdf(&mut buf).unwrap();
+/// ```
 pub trait WriteMdf {
+    /// Writes self in the MDF format using `writer`.
+    ///
+    /// If using with a [`File`](std::fs::File), consider using a [`std::io::BufWriter`] for better performance.
     fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError>;
 }
 
+/// Errors that can occur during writing MDF files.
 #[derive(Debug, Error)]
 pub enum MdfWriterError {
     #[error(transparent)]
@@ -25,11 +41,15 @@ pub enum MdfWriterError {
     BadOdinFragment(FragmentCastError),
 }
 
+/// Writes each of this MEP's events to `writer`.
 impl WriteMdf for MultiEventPacket {
     fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
         let mut record_writer = MdfRecordWriter::with_capacity(self.num_mfps() as _);
 
-        let mut mfp_iterators = self.mfp_iter().map(|mfp| mfp.fragment_iter()).collect::<Vec<_>>();
+        let mut mfp_iterators = self
+            .mfp_iter()
+            .map(|mfp| mfp.fragment_iter())
+            .collect::<Vec<_>>();
 
         loop {
             for (idx, iter) in mfp_iterators.iter_mut().enumerate() {
@@ -56,14 +76,14 @@ struct MdfRecordWriter<'a> {
 }
 
 impl<'a> MdfRecordWriter<'a> {
-    pub fn with_capacity(capacity: usize) -> Self {
+    fn with_capacity(capacity: usize) -> Self {
         MdfRecordWriter {
             fragments: Vec::with_capacity(capacity),
             odin: None,
         }
     }
 
-    pub fn add_fragment(&mut self, frag: Fragment<'a>) -> Result<(), MdfWriterError> {
+    fn add_fragment(&mut self, frag: Fragment<'a>) -> Result<(), MdfWriterError> {
         match frag.try_into_odin() {
             Ok(odin) => {
                 if self.odin.is_some() {
@@ -82,12 +102,12 @@ impl<'a> MdfRecordWriter<'a> {
         Ok(())
     }
 
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.fragments.clear();
         self.odin = None;
     }
 
-    pub fn write_and_reset(&mut self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
+    fn write_and_reset(&mut self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
         let odin = self.odin.ok_or(MdfWriterError::NoOdinFragment)?;
         let data_size: usize = self
             .fragments
@@ -123,7 +143,8 @@ mod test {
     use multi_fragment_packet::MultiFragmentPacketOwned;
 
     use crate::{
-        MdfRecord, MdfRecords, WriteMdf,
+        MdfRecord, WriteMdf,
+        file::MdfFile,
         header::{SingleEvent, Unknown},
     };
 
@@ -143,6 +164,18 @@ mod test {
         }
 
         let u32_align = align_of::<u32>().ilog2().try_into().unwrap();
+        let odin1 = OdinPayload::builder()
+            .run_number(42)
+            .event_id(0)
+            .event_type(7)
+            .gps_time(ebutils::odin::UtcDateTime::from_unix_timestamp(1762936178).unwrap())
+            .tck(123456)
+            .partition_id(0)
+            .orbit_id(15)
+            .bunch_id(465)
+            .trigger_type(5)
+            .build()
+            .unwrap();
 
         let mep = MultiEventPacketOwned::builder()
             .add_mfp(
@@ -151,24 +184,7 @@ mod test {
                     .with_event_id(0)
                     .with_fragment_version(1)
                     .with_source_id(SourceId::new_odin(0))
-                    .add_fragment(
-                        FragmentType::Odin,
-                        OdinPayload::builder()
-                            .run_number(42)
-                            .event_id(0)
-                            .event_type(7)
-                            .gps_time(
-                                ebutils::odin::UtcDateTime::from_unix_timestamp(1762936178)
-                                    .unwrap(),
-                            )
-                            .tck(123456)
-                            .partition_id(0)
-                            .orbit_id(15)
-                            .bunch_id(465)
-                            .trigger_type(5)
-                            .build()
-                            .unwrap(),
-                    )
+                    .add_fragment(FragmentType::Odin, odin1)
                     .add_fragment(
                         FragmentType::Odin,
                         OdinPayload::builder()
@@ -216,10 +232,16 @@ mod test {
         let record = unsafe { &*(mdf.as_ref() as *const [u8] as *const MdfRecord<SingleEvent>) };
         println!("{:?}", record.generic_header);
 
-        let records = MdfRecords::from_data(&mdf);
-        println!("in record {:08X?}", records.data);
+        let records = MdfFile::from_data(&mdf);
+        println!("in record {:08X?}", records.data());
         println!("Records {records:#?}");
-        let record = unsafe { &*(records.data.as_ref().as_ptr().cast::<MdfRecord<Unknown>>()) };
+        let record = unsafe {
+            &*(records
+                .data()
+                .as_ref()
+                .as_ptr()
+                .cast::<MdfRecord<Unknown>>())
+        };
         println!("3: {:?}", record.generic_header);
         let records = records
             .mdf_record_iter()
@@ -229,7 +251,7 @@ mod test {
         println!("record 0: size {}", records[0].size_u32());
         // sorted by source id...
         let fragments = records[0].fragments().collect::<Vec<_>>();
-        assert_eq!(fragments[0].payload(), b"hello");
+        assert_eq!(fragments[0].payload(), odin1.as_ref());
         assert_eq!(
             fragments[0].fragment_type_parsed(),
             Some(FragmentType::Odin)

@@ -12,7 +12,7 @@ pub use time::UtcDateTime;
 /// You can easily construct an odin payload using the [`OdinPayload::builder()`] method.
 /// This is usually only necessary for testing purposes though.
 ///
-/// It is defined in <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
+/// It is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12).
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub struct OdinPayload {

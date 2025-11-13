@@ -1,6 +1,6 @@
 use strum::{FromRepr, IntoStaticStr, VariantArray};
 
-/// Routing bits that may be set in MDF single event specific header event mask, from <https://edms.cern.ch/ui/file/1146861/1.4/rb_note.pdf>.
+/// Routing bits that may be set in MDF single event specific header event mask, defined [here](https://edms.cern.ch/ui/file/1146861/1.4/rb_note.pdf).
 ///
 /// The routing bits used to define data streams, together with the name of the are as follows:
 /// All the above routing bits have been present since the start of physics data taking in Run II. Routing
@@ -29,6 +29,7 @@ pub enum RoutingBit {
 }
 
 impl RoutingBit {
+    /// A bit mask filtering out all routing bits.
     pub const ROUTING_MASK: u128 = {
         let mut mask = 0u128;
         let mut idx = 0;

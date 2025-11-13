@@ -5,7 +5,7 @@ use std::{
 
 use clap::{ColorChoice, Parser};
 use colored::Colorize;
-use master_data_file::MdfRecords;
+use master_data_file::MdfFile;
 use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
 
@@ -28,7 +28,7 @@ pub fn main() -> anyhow::Result<()> {
         ColorChoice::Never => colored::control::set_override(false),
     }
 
-    let x = MdfRecords::mmap_file(&args.file)?;
+    let x = MdfFile::mmap_file(&args.file)?;
 
     let mut output = BufWriter::new(stdout());
 
