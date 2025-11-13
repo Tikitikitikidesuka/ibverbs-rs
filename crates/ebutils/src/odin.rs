@@ -7,7 +7,12 @@ use typed_builder::TypedBuilder;
 use crate::{fragment::Fragment, fragment_type::FragmentType};
 pub use time::UtcDateTime;
 
-/// See <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
+/// This struct defines an how the payload of an ODIN fragment looks like.
+///
+/// You can easily construct an odin payload using the [`OdinPayload::builder()`] method.
+/// This is usually only necessary for testing purposes though.
+///
+/// It is defined in <https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#page=12>.
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable, Debug)]
 pub struct OdinPayload {
@@ -132,10 +137,52 @@ impl OdinPayload {
         (self.misc >> 28 & 0xF) as u8
     }
 
+    /// This is a convenice method that returns the fragment type each odin payload should have.
     pub fn supposed_fragment_type() -> FragmentType {
         FragmentType::Odin
     }
 
+    /// Returns a typed builder for constructing an OdinPayload.
+    ///
+    /// The following setter methods are required:
+    /// - `event_id(u64)`
+    /// - `event_type(u16)`
+    /// - `run_number(u32)`
+    /// - `orbit_id(u32)`
+    /// - `bunch_id(u16)`
+    /// - `partition_id(u32)`
+    /// - `gps_time(UtcDateTime)`
+    /// - `tck(u32)`
+    /// - `trigger_type(u8)`
+    ///
+    /// The following setter methods are optional:
+    /// - `step_number(u16)` (default: 0)
+    /// - `bx_type((bool, bool))` (default: (true, true))
+    /// - `is_nzs_event(bool)` (default: false)
+    /// - `tae(window: u8, central: bool, first: bool)` (default: (0, false, false))
+    /// - `step_run_enable(bool)` (default: false)
+    /// - `calib_type(u8)` (default: 0)
+    ///
+    /// In the end, you can use the `build()` method to construct the OdinPayload, which may return an error if some fields are invalid.
+    ///
+    /// # Example
+    /// ```rust
+    /// use ebutils::odin::OdinPayload;
+    /// use time::UtcDateTime;
+    ///
+    /// let odin = OdinPayload::builder()
+    ///     .event_id(12345)
+    ///     .bunch_id(4)
+    ///     .event_type(5)
+    ///     .run_number(6)
+    ///     .gps_time(UtcDateTime::now())
+    ///     .orbit_id(156)
+    ///     .tck(5656)
+    ///     .partition_id(2)
+    ///     .trigger_type(5)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
     pub fn builder() -> OdinBuilder {
         OdinBuilderInternal::builder()
     }
@@ -153,10 +200,13 @@ impl From<OdinPayload> for Vec<u8> {
     }
 }
 
+/// Error type returned when casting a generic fragment into an Odin fragment fails.
 #[derive(Debug, Error)]
 pub enum FragmentCastError {
+    /// The fragment does not mach the required one.
     #[error("Wrong fragment type: expected {expected} but got {got}")]
     WrongFragmentType { expected: FragmentType, got: u8 },
+    /// The fragment type maches, but its size is wrong.
     #[error("Wrong fragment size: expected {expected} but got {got}")]
     WrongFragmentSize { expected: usize, got: usize },
 }
@@ -176,6 +226,25 @@ impl<'a> From<Fragment<'a, OdinPayload>> for Fragment<'a> {
 }
 
 impl<'a> Fragment<'a> {
+    /// Tries to cast a generic fragment into an Odin fragment.
+    ///
+    /// If successful, this allows to access the odin-specific fields of the payload.
+    /// # Example
+    /// ```
+    /// # use ebutils::{fragment::{Fragment}, FragmentType, odin::OdinPayload, source_id::{SourceId, SubDetector}};
+    /// # let foo = || Fragment::new(
+    /// #       FragmentType::Odin as _,
+    /// #       1,
+    /// #        42,
+    /// #        SourceId::new_odin(1),
+    /// #        &[0u8; std::mem::size_of::<OdinPayload>()][..],
+    /// #    );
+    /// let fragment: Fragment<'_> = foo(); // getting a fragment from somewhere
+    ///
+    /// let odin_fragment: Fragment<'_, OdinPayload> = fragment.try_into_odin().unwrap();
+    ///
+    /// assert_eq!(odin_fragment.payload().event_id(), 0);
+    /// ```
     pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinPayload>, FragmentCastError> {
         if !self
             .fragment_type_parsed()
@@ -199,6 +268,7 @@ impl<'a> Fragment<'a> {
     }
 }
 
+/// Casts an Odin fragment back into a generic fragment.
 impl<'a> Fragment<'a, OdinPayload> {
     pub fn into_generic(self) -> Fragment<'a> {
         self.map_payload(bytes_of)

@@ -8,8 +8,8 @@ use multi_fragment_packet::MultiFragmentPacket;
 
 pub mod builder;
 mod owned;
-pub use owned::MultiEventPacketOwned;
 use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
+pub use owned::MultiEventPacketOwned;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -128,6 +128,8 @@ impl MultiEventPacket {
     }
 
     pub fn mfp_iter(&self) -> MultiEventPacketIterator<'_> {
+        // todo use pre-made iterator like range with map and capture self
+        // to get more performant auxiliary methods (like custom count, nth, ...)
         MultiEventPacketIterator {
             mep: self,
             next_idx: 0,

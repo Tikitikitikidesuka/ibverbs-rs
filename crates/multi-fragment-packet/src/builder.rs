@@ -40,6 +40,7 @@ struct MultiFragmentPacketBuilderInternal {
     fragments: Vec<BuildFragmentData>,
 }
 
+#[doc(hidden)]
 pub struct BuildFragmentData {
     fragment_type: u8,
     data: Vec<u8>,
@@ -207,7 +208,7 @@ mod tests {
     #[test]
     fn test_mfp_builder_align() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.align(), 3);
+        assert_eq!(mfp.align_log(), 3);
     }
 
     #[test]
@@ -248,7 +249,7 @@ mod tests {
             ),
         ];
 
-        let fragments: Vec<Fragment> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.fragment_iter().collect();
         assert_eq!(fragments, expected_fragments);
     }
 

@@ -158,7 +158,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         // set mfps
         for (offset, mfp) in self.offsets_iter(&mut 0).zip(&self.mfps) {
             if mfp.source_id().is_odin() {
-                assert!(mfp.iter().all(|f| {
+                assert!(mfp.fragment_iter().all(|f| {
                     f.fragment_type_parsed()
                         .is_some_and(|t| t == FragmentType::Odin)
                 }));

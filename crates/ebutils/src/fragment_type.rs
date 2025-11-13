@@ -2,7 +2,11 @@ use std::fmt::{Debug, Display};
 
 use strum::FromRepr;
 
-/// As in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>
+/// This enum represents all the known fragment types.
+///
+/// They are documented in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>.
+///
+/// Additionally, some special error marker types are included.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, FromRepr, PartialEq, Eq)]
 pub enum FragmentType {

@@ -29,7 +29,7 @@ impl WriteMdf for MultiEventPacket {
     fn write_mdf(&self, writer: &mut impl Write) -> Result<(), MdfWriterError> {
         let mut record_writer = MdfRecordWriter::with_capacity(self.num_mfps() as _);
 
-        let mut mfp_iterators = self.mfp_iter().map(|mfp| mfp.iter()).collect::<Vec<_>>();
+        let mut mfp_iterators = self.mfp_iter().map(|mfp| mfp.fragment_iter()).collect::<Vec<_>>();
 
         loop {
             for (idx, iter) in mfp_iterators.iter_mut().enumerate() {

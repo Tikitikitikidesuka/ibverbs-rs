@@ -1,19 +1,40 @@
 use std::{borrow::Borrow, ops::Deref};
 
-use crate::{MultiFragmentPacket, MultiFragmentPacketBuilder};
+use crate::{
+    MultiFragmentPacket, MultiFragmentPacketBuilder, MultiFragmentPacketFromRawBytesError,
+};
 
+/// This struct represents an owned [`MultiFragmentPacket`].
+///
+/// Its relationship to [`MultiFragmentPacket`] is as [`String`] to [`str`].
+///
+/// An owned MFP can either be constructed from a `Vec<u8>` or using the [`Self::builder`] method.
 pub struct MultiFragmentPacketOwned {
     data: Vec<u8>,
 }
 
 impl MultiFragmentPacketOwned {
-    /// # Safety
-    /// Vec needs to contain a valid [`MultiFragmentPacket`].
-    #[must_use]
-    pub unsafe fn from_data(data: Vec<u8>) -> Self {
-        Self { data }
+    /// This function tries to create a new owned MFP from raw bytes.
+    ///
+    /// It has the same preconditions as [`MultiFragmentPacket::from_raw_bytes`].
+    pub fn from_data(data: Vec<u8>) -> Result<Self, MultiFragmentPacketFromRawBytesError> {
+        let _test = MultiFragmentPacket::from_raw_bytes(&data)?;
+        Ok(Self { data })
     }
 
+    /// Returns a typed builder to construct an MFP.
+    ///
+    /// The following fields are required:
+    /// - `with_event_id(EventId)`
+    /// - `with_source_id(SourceId)`
+    /// - `with_align_log(u8)`
+    /// - `with_fragment_version(u8)`
+    ///
+    /// To add fragments, use:
+    /// - `add_fragment(FragmentType, impl Into<Vec<u8>>)`
+    /// - `add_fragments(impl IntoIterator over (FragmentType, Into<Vec<u8>>))`
+    /// Note that [`ebutil::OdinPayload`] implements `Into<Vec<u8>>`.
+    /// todo
     pub fn builder() -> MultiFragmentPacketBuilder {
         MultiFragmentPacketBuilder::default()
     }
