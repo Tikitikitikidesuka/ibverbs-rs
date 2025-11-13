@@ -1,14 +1,20 @@
 [package]
 name = "pcie40"
-version = "0.1.0"
-edition = "2024"
 description = "Safe Rust PCIe40 bindings wrapper for the LHCb Event Builder"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
+alignment-utils.workspace = true
+circular-buffer.workspace = true
+
 thiserror.workspace = true
-tracing = "0.1.41"
-alignment-utils = { path = "../alignment-utils" }
-circular-buffer = { path = "../circular-buffer" }
+tracing.workspace = true
 
 [build-dependencies]
 bindgen = { version = "0.72.0" }
+
+[features]
+pcie40-hardware-tests = []

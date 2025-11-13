@@ -1,13 +1,20 @@
 [package]
 name = "multi-event-packet"
-version = "0.1.1"
-edition = "2024"
+description = "Crate for building and reading MEPs."
+authors = ["Jonatan Ziegler"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
-multi-fragment-packet = { path = "../multi-fragment-packet" }
-bincode = { version = "2.0.1", optional = true }
+multi-fragment-packet.workspace = true
+
+bincode = { workspace = true, optional = true }
 thiserror.workspace = true
-tracing = "0.1.41"
+tracing.workspace = true
 
 [features]
 bincode = ["dep:bincode"]
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "master-data-file"
+description = "Crate for reading and writing MDF files."
+authors = ["Jonatan Ziegler"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+multi-fragment-packet.workspace = true
+multi-event-packet.workspace = true
+
+bytemuck.workspace = true
+typed-builder.workspace = true
+thiserror.workspace = true
+strum.workspace = true
+memmap2 = { version = "0.9.9", optional = true }
+
+[lints]
+workspace = true
+
+[features]
+mmap = ["dep:memmap2"]
+
+[dev-dependencies]
+include_bytes_aligned = "0.1.4"

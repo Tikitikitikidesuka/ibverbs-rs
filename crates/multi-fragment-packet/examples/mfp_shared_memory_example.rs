@@ -1,7 +1,9 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use multi_fragment_packet::{Fragment, MultiFragmentPacketBuilder, MultiFragmentPacketRef};
+use multi_fragment_packet::{
+    MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
+};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
 };
@@ -20,12 +22,11 @@ fn main() {
     // [0, , , ]
     println!("Writing MFP 0 to shmem...");
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(0)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(Fragment::new(1, (0..190).collect::<Vec<_>>()).unwrap())
+        .add_fragment(FragmentType::CaloSpecial, (0..190).collect::<Vec<_>>())
         .build();
     mfp_0_256.write(&mut writer).unwrap();
     println!(
@@ -47,12 +48,11 @@ fn main() {
     // [0,1,2, ]
     println!("Writing MFP 2 to shmem...");
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(2)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(Fragment::new(1, (40..255).collect::<Vec<_>>()).unwrap())
+        .add_fragment(FragmentType::FTNZS, (40..255).collect::<Vec<_>>())
         .build();
     mfp_2_256.write(&mut writer).unwrap();
     println!(
@@ -77,12 +77,11 @@ fn main() {
     // [3,3,2,W]
     println!("Writing MFP 3 to shmem (this one sholuld trigger wrap behaviour)...");
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
-        .with_align(4)
+        .with_align_log(4)
         .with_event_id(3)
-        .with_source_id(1)
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .lock_header()
-        .add_fragment(Fragment::new(1, (0..255).collect::<Vec<_>>()).unwrap())
+        .add_fragment(FragmentType::DAQ, (0..255).collect::<Vec<_>>())
         .build();
     mfp_3_512.write(&mut writer).unwrap();
     println!(

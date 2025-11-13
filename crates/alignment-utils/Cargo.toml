@@ -1,5 +1,7 @@
 [package]
 name = "alignment-utils"
-version = "0.1.0"
-edition = "2024"
 description = "Helper functions for integer alignment"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true

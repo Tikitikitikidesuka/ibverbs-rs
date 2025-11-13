@@ -2,16 +2,50 @@
 resolver = "3"
 members = ["crates/*"]
 
+
+[workspace.package]
+version = "0.2.0"
+authors = ["Miguel Hermoso Mantecon", "Jonatan Ziegler"]
+description = "A collection of crates for an LHCb event builder at CERN."
+repository = "https://gitlab.cern.ch/lhcb-online/rusteb"
+edition = "2024"
+
+
 [workspace.dependencies]
+alignment-utils.path = "crates/alignment-utils"
+circular-buffer.path = "crates/circular-buffer"
+master-data-file.path = "crates/master-data-file"
+multi-event-packet.path = "crates/multi-event-packet"
+multi-fragment-packet.path = "crates/multi-fragment-packet"
+pcie40.path = "crates/pcie40"
+shared-memory-buffer.path = "crates/shared-memory-buffer"
+
+
 thiserror = "2.0"
+bytemuck = { version = "1.24", features = ["derive"] }
+bincode = "2.0"
+typed-builder = "0.23"
+strum = { version = "0.27", features = ["derive"] }
+tracing = "0.1.41"
+
+[workspace.lints.clippy]
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+
+
+# ========== Package ===========
+
 
 [package]
 name = "rusteb"
-version = "0.1.0"
-edition = "2024"
-description = "LHCb Event Builder in Rust"
+description = "Crate containing examples and tools utilizing the other rusteb crates."
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
-[dependencies]
+[dev-dependencies]
 thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
 alignment-utils = { path = "crates/alignment-utils" }
@@ -31,14 +65,11 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 
-[[bin]]
-name = "pcie40_to_shmem_reader"
-path = "bin/pcie40_to_shmem_reader.rs"
-
-[[bin]]
-name = "pcie40_to_shmem_receiver"
-path = "bin/pcie40_to_shmem_receiver.rs"
-
-[[bin]]
-name = "mock_pcie40_to_shmem_reader"
-path = "bin/mock_pcie40_to_shmem_reader.rs"
+[dependencies]
+clap = { version = "4.5.51", features = ["derive"] }
+master-data-file = { workspace = true, features = ["mmap"] }
+anyhow = "1.0"
+multi-fragment-packet.workspace = true
+time = { version = "0.3.44", features = ["formatting"] }
+colored = "3.0.0"
+pretty-hex = "0.4.1"

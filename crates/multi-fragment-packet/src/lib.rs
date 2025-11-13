@@ -1,4 +1,4 @@
-mod builder;
+pub mod builder;
 
 #[cfg(feature = "pcie40-io")]
 pub mod pcie40_readable;
@@ -7,6 +7,10 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
+use derive_where::derive_where;
+pub mod fragment_type;
+pub mod odin;
+pub mod source_id;
 
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
@@ -15,13 +19,16 @@ use std::ops::Deref;
 use std::slice;
 use thiserror::Error;
 
+use crate::fragment_type::FragmentType;
+pub use crate::source_id::SourceId;
+
 impl MultiFragmentPacketRef {
     pub const VALID_MAGIC: u16 = 0x40CE;
     pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
 }
 
 /// Type of a source id.
-pub type SourceId = u16;
+pub type EventId = u64;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -32,7 +39,7 @@ pub struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
-    event_id: u64,
+    event_id: EventId,
     source_id: SourceId,
     align: u8,
     fragment_version: u8,
@@ -48,8 +55,13 @@ pub struct MultiFragmentPacket {
 impl MultiFragmentPacket {
     /// # Safety
     /// Vec needs to contain a valid [`MultiFragmentPacket`].
+    #[must_use]
     pub unsafe fn from_data(data: Vec<u8>) -> Self {
         Self { data }
+    }
+
+    pub fn builder() -> MultiFragmentPacketBuilder {
+        MultiFragmentPacketBuilder::default()
     }
 }
 
@@ -93,74 +105,67 @@ impl Borrow<MultiFragmentPacketRef> for MultiFragmentPacket {
     }
 }
 
-pub struct Fragment {
-    fragment_type: u8,
-    fragment_size: u16,
-    data: Vec<u8>,
-}
-
-impl Fragment {
-    pub fn new<T: Into<Vec<u8>>>(fragment_type: u8, data: T) -> Option<Fragment> {
-        let data = data.into();
-        if data.len() > u16::MAX as usize {
-            None
-        } else {
-            let fragment_size = data.len() as u16;
-            Some(Fragment {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
-    }
-
-    pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
-    }
-
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn as_fragment_ref(&self) -> FragmentRef<'_> {
-        FragmentRef {
-            fragment_type: self.fragment_type,
-            fragment_size: self.fragment_size,
-            data: &self.data,
-        }
-    }
-}
-
 #[derive(PartialEq, Eq)]
-pub struct FragmentRef<'a> {
-    fragment_type: u8,
-    fragment_size: u16,
-    data: &'a [u8],
+#[derive_where(Copy, Clone)]
+pub struct Fragment<'a, Data: ?Sized + AsRef<[u8]> = [u8]> {
+    r#type: u8,
+    version: u8,
+    event_id: EventId,
+    source_id: SourceId,
+    data: &'a Data,
 }
 
-impl FragmentRef<'_> {
-    pub fn fragment_type(&self) -> u8 {
-        self.fragment_type
+impl<'a, T: ?Sized + AsRef<[u8]>> Fragment<'a, T> {
+    pub fn new(
+        r#type: u8,
+        version: u8,
+        event_id: EventId,
+        source_id: SourceId,
+        data: &'a T,
+    ) -> Self {
+        Fragment {
+            r#type,
+            version,
+            event_id,
+            source_id,
+            data,
+        }
     }
 
-    pub fn fragment_size(&self) -> u16 {
-        self.fragment_size
+    pub fn fragment_type_raw(&self) -> u8 {
+        self.r#type
     }
 
-    pub fn data(&self) -> &[u8] {
+    pub fn fragment_type_parsed(&self) -> Option<FragmentType> {
+        FragmentType::from_repr(self.fragment_type_raw())
+    }
+
+    pub fn source_id(&self) -> SourceId {
+        self.source_id
+    }
+
+    pub fn event_id(&self) -> EventId {
+        self.event_id
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
+    pub fn payload(&self) -> &T {
         self.data
     }
 
-    pub fn to_owned(&self) -> Fragment {
-        Fragment {
-            fragment_type: self.fragment_type(),
-            fragment_size: self.fragment_size(),
-            data: self.data().to_owned(),
-        }
+    pub fn payload_bytes(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+
+    /// in bytes, excluding the header
+    #[must_use]
+    pub fn fragment_size(&self) -> u16 {
+        size_of_val(self.data)
+            .try_into()
+            .expect("fragment size fits u16")
     }
 }
 
@@ -229,18 +234,22 @@ impl MultiFragmentPacketRef {
         unsafe { self.header().packet_size }
     }
 
-    pub fn event_id(&self) -> u64 {
+    /// Event ID of first fragment in this packet.
+    pub fn event_id(&self) -> EventId {
         unsafe { self.header().event_id }
     }
 
+    /// Fragments in this packet are padded to 2^`align` bytes.
     pub fn source_id(&self) -> SourceId {
         unsafe { self.header().source_id }
     }
 
+    /// Fragments in this packet are padded to 2^`align` bytes.
     pub fn align(&self) -> u8 {
         unsafe { self.header().align }
     }
 
+    /// Version of the data format of the fragments.
     pub fn fragment_version(&self) -> u8 {
         unsafe { self.header().fragment_version }
     }
@@ -255,6 +264,7 @@ impl MultiFragmentPacketRef {
         }
     }
 
+    /// in bytes, excluding the header (only data)
     pub fn fragment_size(&self, index: usize) -> Option<u16> {
         if index < self.fragment_count() as usize {
             let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
@@ -271,7 +281,7 @@ impl MultiFragmentPacketRef {
     }
 
     /// No random access, O(n)
-    pub fn fragment(&self, index: usize) -> Option<FragmentRef<'_>> {
+    pub fn fragment(&self, index: usize) -> Option<Fragment<'_>> {
         self.iter().nth(index)
     }
 
@@ -325,7 +335,7 @@ pub struct MultiFragmentPacketIter<'a> {
 }
 
 impl<'a> Iterator for MultiFragmentPacketIter<'a> {
-    type Item = FragmentRef<'a>;
+    type Item = Fragment<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let fragment_type = self.packet.fragment_type(self.index)?;
@@ -334,12 +344,16 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
+        let event_id = self.packet.event_id() + self.index as EventId;
+
         self.offset += alignment_utils::align_up_pow2(fragment_size as usize, self.packet.align());
         self.index += 1;
 
-        Some(FragmentRef {
-            fragment_type,
-            fragment_size,
+        Some(Fragment {
+            event_id,
+            source_id: self.packet.source_id(),
+            version: self.packet.fragment_version(),
+            r#type: fragment_type,
             data,
         })
     }
@@ -380,7 +394,7 @@ impl Display for MultiFragmentPacketRef {
     }
 }
 
-impl Debug for FragmentRef<'_> {
+impl Debug for Fragment<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let data_preview = if self.data.len() > 16 {
             format!("{:02X?}... ({} bytes)", &self.data[0..16], self.data.len())
@@ -389,19 +403,23 @@ impl Debug for FragmentRef<'_> {
         };
 
         f.debug_struct("Fragment")
-            .field("type", &self.fragment_type)
-            .field("size", &self.fragment_size)
+            .field("type", &self.r#type)
+            .field("size", &self.fragment_size())
             .field("data", &data_preview)
+            .field("version", &self.version)
+            .field("event_id", &self.event_id)
+            .field("source_id", &self.source_id)
             .finish()
     }
 }
 
-impl Display for FragmentRef<'_> {
+impl Display for Fragment<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "Fragment[type={}, size={}]",
-            self.fragment_type, self.fragment_size
+            self.r#type,
+            self.fragment_size()
         )
     }
 }
@@ -453,46 +471,6 @@ mod bincode {
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
             encoder.writer().write(self.raw_packet_data())
-        }
-    }
-
-    impl bincode::Decode<()> for Fragment {
-        fn decode<D: bincode::de::Decoder<Context = ()>>(
-            decoder: &mut D,
-        ) -> Result<Self, bincode::error::DecodeError> {
-            let fragment_type = bincode::Decode::decode(decoder)?;
-            let fragment_size = bincode::Decode::decode(decoder)?;
-
-            let mut data = vec![0u8; fragment_size as _];
-            decoder.reader().read(&mut data)?;
-
-            Ok(Self {
-                fragment_type,
-                fragment_size,
-                data,
-            })
-        }
-    }
-
-    impl bincode::Encode for Fragment {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            encoder.writer().write(self.data())
-        }
-    }
-
-    impl<'a> bincode::Encode for FragmentRef<'a> {
-        fn encode<E: bincode::enc::Encoder>(
-            &self,
-            encoder: &mut E,
-        ) -> Result<(), bincode::error::EncodeError> {
-            self.fragment_type.encode(encoder)?;
-            self.fragment_size.encode(encoder)?;
-            encoder.writer().write(self.data())
         }
     }
 }
@@ -561,7 +539,7 @@ mod tests {
     fn test_mfp_source_id_getter() {
         let data = demo_multi_fragment_packet_data();
         let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
-        assert_eq!(mfp.source_id(), 1);
+        assert_eq!(mfp.source_id().0, 1);
     }
 
     #[test]
@@ -635,17 +613,21 @@ mod tests {
         let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
 
         // Check first fragment using direct comparison
-        let expected_fragment0 = FragmentRef {
-            fragment_type: 0,
-            fragment_size: 4,
+        let expected_fragment0 = Fragment {
+            r#type: 0,
+            version: 1,
+            event_id: 1,
+            source_id: SourceId(1),
             data: &[0, 1, 2, 3][..],
         };
         assert_eq!(mfp.fragment(0).unwrap(), expected_fragment0);
 
         // Check last fragment using direct comparison
-        let expected_fragment4 = FragmentRef {
-            fragment_type: 4,
-            fragment_size: 12,
+        let expected_fragment4 = Fragment {
+            r#type: 4,
+            source_id: SourceId(1),
+            event_id: 5,
+            version: 1,
             data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
         };
         assert_eq!(mfp.fragment(4).unwrap(), expected_fragment4);
@@ -660,34 +642,44 @@ mod tests {
         let mfp = MultiFragmentPacketRef::ref_from_raw_bytes(&data).unwrap();
 
         let expected_fragments = vec![
-            FragmentRef {
-                fragment_type: 0,
-                fragment_size: 4,
+            Fragment {
+                r#type: 0,
                 data: &[0, 1, 2, 3][..],
+                version: 1,
+                event_id: 1,
+                source_id: SourceId(1),
             },
-            FragmentRef {
-                fragment_type: 1,
-                fragment_size: 5,
+            Fragment {
+                r#type: 1,
                 data: &[0, 1, 2, 3, 4][..],
+                version: 1,
+                event_id: 2,
+                source_id: SourceId(1),
             },
-            FragmentRef {
-                fragment_type: 2,
-                fragment_size: 8,
+            Fragment {
+                r#type: 2,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
+                version: 1,
+                event_id: 3,
+                source_id: SourceId(1),
             },
-            FragmentRef {
-                fragment_type: 3,
-                fragment_size: 9,
+            Fragment {
+                r#type: 3,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+                version: 1,
+                event_id: 4,
+                source_id: SourceId(1),
             },
-            FragmentRef {
-                fragment_type: 4,
-                fragment_size: 12,
+            Fragment {
+                r#type: 4,
                 data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+                version: 1,
+                event_id: 5,
+                source_id: SourceId(1),
             },
         ];
 
-        let fragments: Vec<FragmentRef> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.iter().collect();
         assert_eq!(fragments, expected_fragments);
     }
 

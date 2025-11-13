@@ -5,12 +5,13 @@ use std::{
     slice,
 };
 
-use multi_fragment_packet::{MultiFragmentPacketRef, SourceId};
+use multi_fragment_packet::{EventId, MultiFragmentPacketRef, SourceId};
 
 use crate::builder::MultiEventPacketBuilder;
 
 pub mod builder;
 
+/// Container type owning a [`MultiEventPacketRef`].
 pub struct MultiEventPacket {
     data: Box<[u32]>, // assures alignement of u32
 }
@@ -66,6 +67,9 @@ impl MultiEventPacket {
     }
 }
 
+/// MultiEventPacket reference data type.
+///
+/// Its relationship to [`MultiEventPacket`] is as [`str`] to [`String`].
 #[repr(C, packed)]
 pub struct MultiEventPacketRef {
     header: MultiEventPacketConstHeader,
@@ -128,12 +132,29 @@ impl MultiEventPacketRef {
             .map(|v| *v as usize * size_of::<u32>())
     }
 
-    pub fn get_mep(&self, idx: usize) -> Option<&MultiFragmentPacketRef> {
+    pub fn get_mfp(&self, idx: usize) -> Option<&MultiFragmentPacketRef> {
         // SAFETY: MFPs are located at the given offset (in bytes!) and expected to be valid.
         // SAFETY: Returned lifetime is same as data
         self.mfp_offset_bytes(idx).map(|off| unsafe {
             &*(self as *const Self as *const MultiFragmentPacketRef).byte_add(off)
         })
+    }
+
+    pub fn get_odin_mfp(&self) -> &MultiFragmentPacketRef {
+        // As MFPs are sorted by source id, the odin mfp is first.
+        let mfp = self.get_mfp(0).expect("odin mfp exists");
+        assert!(mfp.source_id().is_odin());
+        mfp
+    }
+
+    pub fn event_id_range(&self) -> Range<EventId> {
+        let first = self.mfp_iter().next().expect("non empty mep");
+        let start = first.event_id();
+
+        Range {
+            start,
+            end: start + first.fragment_count() as EventId,
+        }
     }
 
     pub fn header_size(&self) -> usize {
@@ -233,7 +254,7 @@ impl<'a> Iterator for MultiEventPacketIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.end.is_none_or(|end| self.next_idx < end) {
-            let ret = self.mep.get_mep(self.next_idx);
+            let ret = self.mep.get_mfp(self.next_idx);
             self.next_idx += 1;
             ret
         } else {
