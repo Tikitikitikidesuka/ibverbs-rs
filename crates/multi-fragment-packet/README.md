@@ -17,6 +17,9 @@ MFPs are obtained from the PCIe40 readout cards, which are connected to the dete
 
 The MFP format is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.3).
 
+## Examples
+> todo how to read mfp from pcie40
+
 ## Features
 - `pcie40-io`: PCIe40 integration
 - `shmem-io`: Shared memory integration

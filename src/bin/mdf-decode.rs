@@ -4,7 +4,9 @@
 
 This binary is a simple tool to view MDF files.
 ## Example
-`mdf-decode /path/to/file.mdf`
+```bash
+mdf-decode /path/to/file.mdf
+```
 
 Output:
 <head>

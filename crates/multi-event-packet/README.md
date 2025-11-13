@@ -23,5 +23,25 @@ The advantage of this not yet completely sorted format (having just the data for
 
 The MEP format is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.4).
 
+## Example
+```no_run
+# use multi_event_packet::MultiEventPacketBuilder;
+# use ebutils::{odin::dummy_odin_payload, FragmentType, SourceId, SubDetector};
+# use multi_fragment_packet::MultiFragmentPacket;
+let mfp1: &MultiFragmentPacket = todo!();
+let mfp2: &MultiFragmentPacket = todo!();
+
+// 🛠 build
+let mep = MultiEventPacketBuilder::with_capacity(2)
+    .add_mfp_ref(mfp1).unwrap()
+    .add_mfp_ref(mfp2).unwrap()
+    .build().unwrap();
+
+// 💲 profit 
+for mfp in mep.mfp_iter_srcid_range(SubDetector::Odin.source_id_range()) {
+    // do something with mfp
+}
+```
+
 ## Features
 - `bincode`: [Bincode](https://docs.rs/bincode/latest/bincode/) integration allowing to encode and decode MEPs.

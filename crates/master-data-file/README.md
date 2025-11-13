@@ -18,6 +18,30 @@ One MDF record inside an MDF file contains data from all the sources of all sub-
 The MDF format (a bit out of date and with some errors) is defined [here](https://edms.cern.ch/ui/file/784588/2/Online_Raw_Data_Format.pdf#page=5).
 For the specialized format, the content of the fragment, called "banks" is described [here](https://edms.cern.ch/ui/file/565851/5/edms-565851.5.pdf#page=10).
 
+
+## Example
+```no_run
+# use master_data_file::MdfFile;
+// read file
+let mdf_file = MdfFile::from_data(include_bytes!("test.mdf"));
+for record in mdf_file.mdf_record_iter() {
+    if let Ok(record) = record.try_into_single_event() {
+        for fragment in record.fragments() {
+            // do something with the fragment
+        }
+    }
+}
+
+// write file
+# use multi_event_packet::MultiEventPacket;
+use master_data_file::WriteMdf;
+
+let mdf: &MultiEventPacket = todo!();
+let file = std::fs::File::open("/tmp/test.mdf").unwrap();
+let buf = std::io::BufWriter::new(file);
+mdf.write_mdf(&mut buf).unwrap();
+```
+
 ## Features
 - `mmap`: Allows to mmap MDF files for easier on-demand reading.
 - `mep`: Add ability to wriet MEPs to an MDF file.
