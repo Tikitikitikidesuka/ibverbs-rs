@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 multi-fragment-packet.workspace = true
 multi-event-packet.workspace = true
+ebutils.workspace = true
 
 bytemuck.workspace = true
 typed-builder.workspace = true

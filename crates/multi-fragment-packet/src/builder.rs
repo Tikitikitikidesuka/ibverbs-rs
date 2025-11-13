@@ -1,12 +1,12 @@
+use ebutils::fragment_type::FragmentType;
 use typed_builder::TypedBuilder;
 
 use crate::{
-    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef, SourceId,
-    fragment_type::FragmentType,
+    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketOwned, SourceId,
 };
 
 #[derive(TypedBuilder)]
-#[builder(build_method(into = crate::MultiFragmentPacket),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
+#[builder(build_method(into = crate::MultiFragmentPacketOwned),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
     pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>>) {
         self.fragments.push(BuildFragmentData {
             fragment_type: fragment_type as u8,
@@ -20,7 +20,7 @@ use crate::{
     }
     ))]
 struct MultiFragmentPacketBuilderInternal {
-    #[builder(default = MultiFragmentPacketRef::VALID_MAGIC, setter(prefix="with_"))]
+    #[builder(default = MultiFragmentPacket::VALID_MAGIC, setter(prefix="with_"))]
     magic: u16,
     /// Event ID of first fragment in this packet.
     #[builder(setter(prefix = "with_"))]
@@ -55,17 +55,15 @@ impl MultiFragmentPacketBuilder {
     }
 }
 
-impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
+impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwned {
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         let header_size = size_of::<MultiFragmentPacketHeader>();
         let fragment_count = other.fragments.len();
         let fragment_count_u16 = u16::try_from(fragment_count).expect("fragment not too large");
-        let fragment_types_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
-        let fragment_sizes_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
+        let fragment_types_size = ebutils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
+        let fragment_sizes_size = ebutils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
         let fragments_size = other.fragments.iter().fold(0, |acc, fragment| {
-            acc + alignment_utils::align_up_pow2(fragment.data.len(), other.align)
+            acc + ebutils::align_up_pow2(fragment.data.len(), other.align)
         });
         let packet_size = header_size + fragment_types_size + fragment_sizes_size + fragments_size;
 
@@ -130,25 +128,27 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacket {
             write_bytes(&mut data, &mut cursor, fragment_data);
 
             // Skip padding (already zeroed)
-            let aligned_size = alignment_utils::align_up_pow2(fragment.data.len(), other.align);
+            let aligned_size = ebutils::align_up_pow2(fragment.data.len(), other.align);
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        MultiFragmentPacket { data }
+        unsafe { MultiFragmentPacketOwned::from_data(data) }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use ebutils::source_id::SubDetector;
+
     use crate::{Fragment, SourceId};
 
     use super::*;
 
-    fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
+    fn demo_multi_fragment_packet_data() -> MultiFragmentPacketOwned {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
             .with_event_id(1)
-            .with_source_id(SourceId::new(crate::source_id::SubDetector::MuonA, 156))
+            .with_source_id(SourceId::new(SubDetector::MuonA, 156))
             .with_align_log(3)
             .with_fragment_version(1)
             .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3])
@@ -190,10 +190,7 @@ mod tests {
     #[test]
     fn test_mfp_builder_source_id() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(
-            mfp.source_id(),
-            SourceId::new(crate::source_id::SubDetector::MuonA, 156)
-        );
+        assert_eq!(mfp.source_id(), SourceId::new(SubDetector::MuonA, 156));
     }
 
     #[test]
@@ -207,44 +204,38 @@ mod tests {
         let mfp = demo_multi_fragment_packet_data();
 
         dbg!(&mfp.fragment(1));
-        let source_id = SourceId::new(crate::source_id::SubDetector::MuonA, 156);
+        let source_id = SourceId::new(SubDetector::MuonA, 156);
 
         let expected_fragments = vec![
-            Fragment {
-                r#type: FragmentType::DAQ as _,
-                data: &[0, 1, 2, 3][..],
-                version: 1,
-                event_id: 1,
+            Fragment::new(FragmentType::DAQ as _, 1, 1, source_id, &[0, 1, 2, 3][..]),
+            Fragment::new(
+                FragmentType::DAQ as _,
+                1,
+                2,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::DAQ as _,
-                data: &[0, 1, 2, 3, 4][..],
-                version: 1,
-                event_id: 2,
+                &[0, 1, 2, 3, 4][..],
+            ),
+            Fragment::new(
+                FragmentType::Calo as _,
+                1,
+                3,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::Calo as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
-                version: 1,
-                event_id: 3,
+                &[0, 1, 2, 3, 4, 5, 6, 7][..],
+            ),
+            Fragment::new(
+                FragmentType::GaudiHeader as _,
+                1,
+                4,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::GaudiHeader as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
-                version: 1,
-                event_id: 4,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+            ),
+            Fragment::new(
+                FragmentType::HltRoutingBits as _,
+                1,
+                5,
                 source_id,
-            },
-            Fragment {
-                r#type: FragmentType::HltRoutingBits as _,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
-                version: 1,
-                event_id: 5,
-                source_id,
-            },
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            ),
         ];
 
         let fragments: Vec<Fragment> = mfp.iter().collect();

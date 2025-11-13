@@ -12,10 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alignment-utils"
-version = "0.2.0"
-
-[[package]]
 name = "anstream"
 version = "0.6.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -280,6 +276,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ebutils"
+version = "0.2.0"
+dependencies = [
+ "bytemuck",
+ "derive-where",
+ "derive_more",
+ "strum",
+ "thiserror",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -357,6 +364,7 @@ name = "master-data-file"
 version = "0.2.0"
 dependencies = [
  "bytemuck",
+ "ebutils",
  "include_bytes_aligned",
  "memmap2",
  "multi-event-packet",
@@ -400,8 +408,8 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 name = "mock-buffers"
 version = "0.2.0"
 dependencies = [
- "alignment-utils",
  "circular-buffer",
+ "ebutils",
  "thiserror",
 ]
 
@@ -410,6 +418,7 @@ name = "multi-event-packet"
 version = "0.2.0"
 dependencies = [
  "bincode",
+ "ebutils",
  "multi-fragment-packet",
  "thiserror",
  "tracing",
@@ -419,12 +428,10 @@ dependencies = [
 name = "multi-fragment-packet"
 version = "0.2.0"
 dependencies = [
- "alignment-utils",
  "bincode",
  "bytemuck",
  "circular-buffer",
- "derive-where",
- "derive_more",
+ "ebutils",
  "pcie40",
  "shared-memory-buffer",
  "strum",
@@ -485,9 +492,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "pcie40"
 version = "0.2.0"
 dependencies = [
- "alignment-utils",
  "bindgen",
  "circular-buffer",
+ "ebutils",
  "thiserror",
  "tracing",
 ]
@@ -577,11 +584,11 @@ checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 name = "rusteb"
 version = "0.2.0"
 dependencies = [
- "alignment-utils",
  "anyhow",
  "circular-buffer",
  "clap",
  "colored",
+ "ebutils",
  "master-data-file",
  "multi-fragment-packet",
  "pcie40",
@@ -635,8 +642,8 @@ dependencies = [
 name = "shared-memory-buffer"
 version = "0.2.0"
 dependencies = [
- "alignment-utils",
  "circular-buffer",
+ "ebutils",
  "libc",
  "nix",
  "thiserror",

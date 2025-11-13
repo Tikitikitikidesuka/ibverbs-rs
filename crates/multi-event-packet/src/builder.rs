@@ -1,13 +1,12 @@
 use std::{borrow::Cow, slice};
 
-use multi_fragment_packet::{
-    MultiFragmentPacket, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
-};
+use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketOwned};
 use thiserror::Error;
 use tracing::instrument;
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 
 use crate::{
-    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketRef, Offset, header_size,
+    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
     slice_as_bytes_mut, src_ids_size,
 };
 
@@ -31,7 +30,7 @@ pub type Result<T, E = EventBuilderError> = std::result::Result<T, E>;
 
 #[derive(Default)]
 pub struct MultiEventPacketBuilder<'a> {
-    mfps: Vec<Cow<'a, MultiFragmentPacketRef>>,
+    mfps: Vec<Cow<'a, MultiFragmentPacket>>,
     mfp_align: Option<usize>,
     odin_added: bool,
 }
@@ -54,7 +53,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     ///
     /// Also checks wether a odin fragment was already added when trying to add another one.
     /// This is checked when adding an mft automatically.
-    pub fn check_mfp_event_compatiblity(&self, test_mfp: &MultiFragmentPacketRef) -> Result<()> {
+    pub fn check_mfp_event_compatiblity(&self, test_mfp: &MultiFragmentPacket) -> Result<()> {
         if let Some(reference_mfp) = self.mfps.first() {
             if test_mfp.event_id() != reference_mfp.event_id() {
                 return Err(EventBuilderError::MismatchingEventId {
@@ -75,7 +74,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(())
     }
 
-    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacketRef) -> Result<&mut Self> {
+    pub fn add_mfp_ref(&mut self, mfp: &'a MultiFragmentPacket) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(mfp)?;
         if mfp.source_id().is_odin() {
             self.odin_added = true;
@@ -84,7 +83,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         Ok(self)
     }
 
-    pub fn add_mfp(&mut self, mfp: MultiFragmentPacket) -> Result<&mut Self> {
+    pub fn add_mfp(&mut self, mfp: MultiFragmentPacketOwned) -> Result<&mut Self> {
         self.check_mfp_event_compatiblity(&mfp)?;
         if mfp.source_id().is_odin() {
             self.odin_added = true;
@@ -102,7 +101,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     ///
     /// In case of `Err`, the builder is not reset!
     #[instrument(skip(self))]
-    pub fn build(&mut self) -> Result<MultiEventPacket> {
+    pub fn build(&mut self) -> Result<MultiEventPacketOwned> {
         if !self.odin_added {
             return Err(EventBuilderError::NoOdinFragment);
         }
@@ -119,7 +118,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
         // set header
         {
             let header = unsafe { &mut *(data.as_mut_ptr() as *mut MultiEventPacketConstHeader) };
-            header.magic = MultiEventPacketRef::MAGIC;
+            header.magic = MultiEventPacket::MAGIC;
             header.num_mfps = num_mfps;
             header.packet_size = (total_size / size_of::<u32>())
                 .try_into()
@@ -172,7 +171,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
         self.reset_mfps();
 
-        Ok(MultiEventPacket { data })
+        Ok(unsafe { MultiEventPacketOwned::from_data(data) })
     }
 
     /// Clears the internal buffer, removing all mfps, but not the alignment. Does not deallocate
@@ -199,12 +198,13 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 #[cfg(test)]
 mod test {
-    use multi_fragment_packet::{
-        MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
-        source_id::SubDetector,
+    use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
+    use ebutils::{
+        fragment_type::FragmentType,
+        source_id::{SourceId, SubDetector},
     };
 
-    use crate::{MultiEventPacket, MultiEventPacketRef};
+    use crate::{MultiEventPacket, MultiEventPacketOwned};
 
     #[test]
     fn test_build_mep() {
@@ -213,7 +213,7 @@ mod test {
             .with_event_id(123456)
             .with_align_log(u64_align)
             .with_fragment_version(22)
-            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::Odin, 0))
             .add_fragment(
                 FragmentType::Odin,
@@ -228,7 +228,7 @@ mod test {
             .with_event_id(123456)
             .with_align_log(u64_align)
             .with_fragment_version(25)
-            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::MuonA, 21))
             .add_fragment(
                 FragmentType::DAQ,
@@ -239,7 +239,7 @@ mod test {
             .with_event_id(123456)
             .with_align_log(u64_align)
             .with_fragment_version(25)
-            .with_magic(MultiFragmentPacketRef::VALID_MAGIC)
+            .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::Rich1, 55))
             .add_fragment(
                 FragmentType::DAQ,
@@ -251,14 +251,14 @@ mod test {
             )
             .build();
 
-        let mut mep = MultiEventPacket::builder();
+        let mut mep = MultiEventPacketOwned::builder();
         mep.add_mfp(mfp).unwrap();
         mep.add_mfp_ref(&mfp2).err().unwrap(); // expect errors as wrong num fragments
         mep.add_mfp_ref(&mfp3).unwrap();
         mep.add_mfp_ref(&mfp3).unwrap(); // expect errors as wrong num fragments
         let mep = mep.build().unwrap();
 
-        assert_eq!(mep.magic(), MultiEventPacketRef::MAGIC);
+        assert_eq!(mep.magic(), MultiEventPacket::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
         assert_eq!(mep.packet_size_u32(), 107);
         assert_eq!(
@@ -287,12 +287,12 @@ mod test {
         );
         for fp in mep.mfp_iter() {
             println!("{fp:?}");
-            assert_eq!(fp.magic(), MultiFragmentPacketRef::VALID_MAGIC);
+            assert_eq!(fp.magic(), MultiFragmentPacket::VALID_MAGIC);
         }
     }
 
     #[test]
     fn test_no_odin() {
-        MultiEventPacket::builder().build().unwrap_err();
+        MultiEventPacketOwned::builder().build().unwrap_err();
     }
 }

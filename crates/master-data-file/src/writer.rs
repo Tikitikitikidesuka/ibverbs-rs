@@ -1,7 +1,7 @@
 use std::io::{Result as IoResult, Write};
 
-use multi_event_packet::MultiEventPacketRef;
-use multi_fragment_packet::Fragment;
+use multi_event_packet::MultiEventPacket;
+use ebutils::fragment::Fragment;
 
 use crate::{MdfHeader, fragment::MdfFragmentHeader};
 
@@ -51,7 +51,7 @@ impl<'a> MdfRecordWriter<'a> {
     }
 }
 
-impl WriteMdf for MultiEventPacketRef {
+impl WriteMdf for MultiEventPacket {
     fn write_mdf(&self, writer: &mut impl Write) -> IoResult<()> {
         let mut record_writer = MdfRecordWriter::with_capacity(self.num_mfps() as _);
 
@@ -79,13 +79,15 @@ impl WriteMdf for MultiEventPacketRef {
 mod test {
     use std::io::Write;
 
-    use multi_event_packet::MultiEventPacket;
-    use multi_fragment_packet::{
-        MultiFragmentPacket, SourceId, fragment_type::FragmentType, source_id::SubDetector,
+    use multi_event_packet::MultiEventPacketOwned;
+    use multi_fragment_packet::MultiFragmentPacketOwned;
+    use ebutils::{
+        fragment_type::FragmentType,
+        source_id::{SourceId, SubDetector},
     };
 
     use crate::{
-        MdfRecordRef, MdfRecords, WriteMdf,
+        MdfRecord, MdfRecords, WriteMdf,
         header::{SingleEvent, Unknown},
     };
 
@@ -106,9 +108,9 @@ mod test {
 
         let u32_align = align_of::<u32>().ilog2().try_into().unwrap();
 
-        let mep = MultiEventPacket::builder()
+        let mep = MultiEventPacketOwned::builder()
             .add_mfp(
-                MultiFragmentPacket::builder()
+                MultiFragmentPacketOwned::builder()
                     .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(1)
@@ -121,7 +123,7 @@ mod test {
             )
             .unwrap()
             .add_mfp(
-                MultiFragmentPacket::builder()
+                MultiFragmentPacketOwned::builder()
                     .with_align_log(u32_align)
                     .with_event_id(0)
                     .with_fragment_version(22)
@@ -141,19 +143,13 @@ mod test {
 
         println!("as written {:02X?}", mdf);
 
-        let record = unsafe { &*(mdf.as_ref() as *const [u8] as *const MdfRecordRef<SingleEvent>) };
+        let record = unsafe { &*(mdf.as_ref() as *const [u8] as *const MdfRecord<SingleEvent>) };
         println!("{:?}", record.generic_header);
 
         let records = MdfRecords::from_data(&mdf);
         println!("in record {:08X?}", records.data);
         println!("Records {records:#?}");
-        let record = unsafe {
-            &*(records
-                .data
-                .as_ref()
-                .as_ptr()
-                .cast::<MdfRecordRef<Unknown>>())
-        };
+        let record = unsafe { &*(records.data.as_ref().as_ptr().cast::<MdfRecord<Unknown>>()) };
         println!("3: {:?}", record.generic_header);
         let records = records
             .mdf_record_iter()

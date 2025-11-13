@@ -4,8 +4,8 @@ use core::slice;
 use std::{fmt::Debug, io::Write};
 
 use bytemuck::{Pod, Zeroable, cast_ref};
-use multi_fragment_packet::{EventId, Fragment, SourceId};
 use std::io::Result as IoResult;
+use ebutils::{EventId, Uninstantiatable, fragment::Fragment, source_id::SourceId};
 
 use crate::{MdfFromDataError, truncate_data, writer::WriteMdf};
 
@@ -55,20 +55,24 @@ impl<'a> WriteMdf for Fragment<'a> {
 
 #[repr(align(4))]
 /// Aka bank.
-pub(crate) struct MdfFragmentRef {
+///
+/// May only ever exist as `&MdfFragment`.
+// todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
+pub(crate) struct MdfFragment {
     header: MdfFragmentHeader,
+    _unin: Uninstantiatable,
 }
 
-impl Debug for MdfFragmentRef {
+impl Debug for MdfFragment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MdfFragmentRef")
+        f.debug_struct("MdfFragment")
             .field("header", &self.header)
             .field("data", &truncate_data(self.data()))
             .finish()
     }
 }
 
-impl MdfFragmentRef {
+impl MdfFragment {
     /// `slice` needs to contain at least one full correct MDF.
     /// `slice` may be larger towards the end.
     pub fn from_data(slice: &[u32]) -> Result<(&Self, &[u32]), MdfFromDataError> {

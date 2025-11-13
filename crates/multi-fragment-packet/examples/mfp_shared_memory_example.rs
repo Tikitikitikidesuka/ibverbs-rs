@@ -1,9 +1,8 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use multi_fragment_packet::{
-    MultiFragmentPacketBuilder, MultiFragmentPacketRef, SourceId, fragment_type::FragmentType,
-};
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
+use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
 };
@@ -31,18 +30,18 @@ fn main() {
     mfp_0_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_0_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1, , ]
     // Writable is also implemented for the buffered entry so one can be
     // read and written again without copying it out of the buffer
     println!("Writing MFP 0 again to shmem...");
-    let read_mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
     read_mfp.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(read_mfp.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [0,1,2, ]
@@ -57,19 +56,19 @@ fn main() {
     mfp_2_256.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_2_256.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
     println!("Reading first instance of MFP 0 from shmem...");
-    let read_mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
     println!("Read: {}", *read_mfp);
     println!("Discarding it...");
     read_mfp.discard().unwrap();
 
     // [ , ,2, ]
     println!("Reading second instance of MFP 0 from shmem...");
-    let read_mfp = MultiFragmentPacketRef::read(&mut reader).unwrap();
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
     println!("Read: {}", *read_mfp);
     println!("Discarding it...");
     read_mfp.discard().unwrap();
@@ -86,12 +85,12 @@ fn main() {
     mfp_3_512.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
-        alignment_utils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
+        ebutils::align_up_pow2(mfp_3_512.packet_size() as usize, writer.alignment_pow2())
     );
 
     // [ , , , ]
     println!("Reading MFPs 0 and 3 from shmem...");
-    let read_entries = MultiFragmentPacketRef::read_multiple(&mut reader, 2).unwrap();
+    let read_entries = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
     read_entries.iter().for_each(|entry| {
         println!("Read many: {}", entry);
     });

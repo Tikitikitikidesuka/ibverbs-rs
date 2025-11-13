@@ -7,7 +7,7 @@ This repository contains the following sub-crates:
 - [`shared-memory-buffer`](crates/shared-memory-buffer/)
 - [`mock-buffers`](crates/mock-buffers/)
 - [`circular-buffer`](crates/circular-buffer/)
-- [`alignment-utils`](crates/alignment-utils/): Utilities for aligning memory addresses. Probably can mostly be replaced by rust internal functions.
+- [`ebutils`](crates/ebutils/): Utilities for aligning memory addresses. Probably can mostly be replaced by rust internal functions.
 - [`multi-fragment-packet`](crates/multi-fragment-packet/): Library for reading (and constructing) MFPs.
 - [`multi-event-packet`](crates/multi-event-packet/): Library for assembling and reading MEPs.
 - [`master-data-file`](crates/master-data-file/): Library for reading and writing MDF files.

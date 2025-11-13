@@ -1,4 +1,4 @@
-use crate::MultiFragmentPacketRef;
+use crate::MultiFragmentPacket;
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
     ReadGuard,
@@ -22,7 +22,7 @@ pub enum PCIe40TypedReadError {
     StreamError(#[from] PCIe40StreamError),
 }
 
-impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
+impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
     type ReadResult<'a>
         = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
     where
@@ -47,7 +47,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
 
         // Verify enough data for the whole entry and alignment
         let aligned_size =
-            alignment_utils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
+            ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
         if readable_region.len() < aligned_size {
             return Err(PCIe40TypedReadError::NotEnoughData);
         }
@@ -59,7 +59,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
     }
 }
 
-impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRef {
+impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
     type MultiReadResult<'a>
         = Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
     where
@@ -93,10 +93,8 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacketRe
             }
 
             // Verify enough data for the whole entry and alignment
-            let aligned_size = alignment_utils::align_up_pow2(
-                mfp_mem.packet_size() as usize,
-                reader.alignment_pow2(),
-            );
+            let aligned_size =
+                ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
                 return Err(PCIe40TypedReadError::NotEnoughData);
             }
