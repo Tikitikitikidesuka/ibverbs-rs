@@ -21,6 +21,7 @@ rust-check:
     - cargo check --all-features --offline
     - cargo clippy --all-features --no-deps --offline # -- -D warnings
     - cargo fmt -- --check
+  when: always
 
 # Run standard tests (excluding hardware tests)
 rust-test:
@@ -28,6 +29,7 @@ rust-test:
   stage: test
   script:
     - cargo test --all --all-features --offline
+  when: always
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
@@ -55,3 +57,4 @@ pages:
       - public
   only:
     - master
+  when: always
