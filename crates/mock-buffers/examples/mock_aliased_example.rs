@@ -36,7 +36,7 @@ fn write_to_contiguous_buffer(writer: &mut MockAliasedBufferWriter, data: &[u8])
     if data.len() > writable_region.len() {
         Err(())
     } else {
-        writable_region[..data.len()].copy_from_slice(&data);
+        writable_region[..data.len()].copy_from_slice(data);
         writer.advance_write_pointer(data.len()).map_err(|_| ())?;
         Ok(())
     }

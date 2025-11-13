@@ -2,7 +2,12 @@ use std::{borrow::Borrow, ops::Deref};
 
 use crate::{MultiEventPacket, builder::MultiEventPacketBuilder};
 
-/// Container type owning a [`MultiEventPacket`].
+/// This struct represents an owned [`MultiEventPacket`].
+///
+/// Its relationship to [`MultiEventPacket`] is as [`String`] to [`str`].
+///
+/// An owned MEP can be constructed using the [`MultiEventPacketBuilder`].
+#[derive(Clone)]
 pub struct MultiEventPacketOwned {
     data: Box<[u32]>, // assures alignement of u32
 }
@@ -30,10 +35,12 @@ impl Borrow<MultiEventPacket> for MultiEventPacketOwned {
 }
 
 impl MultiEventPacketOwned {
+    /// Returns a new builder instance for building a owned MEP.
     pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
         MultiEventPacketBuilder::new()
     }
 
+    /// Creates a new owned MEP from a boxed slice of `u32`.
     /// # Safety
     /// Data needs to be a valid [`MultiEventPacket`].
     pub unsafe fn from_data(data: Box<[u32]>) -> Self {

@@ -1,3 +1,4 @@
+#![doc = include_str!("../README.md")]
 pub mod builder;
 
 #[cfg(feature = "pcie40-io")]
@@ -16,20 +17,16 @@ pub use owned::MultiFragmentPacketOwned;
 
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
+use std::ops::Range;
 use std::slice;
 use thiserror::Error;
-
-impl MultiFragmentPacket {
-    pub const VALID_MAGIC: u16 = 0x40CE;
-    pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
-}
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
-pub struct MultiFragmentPacketHeader {
+struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
     packet_size: u32,
@@ -39,7 +36,15 @@ pub struct MultiFragmentPacketHeader {
     fragment_version: u8,
 }
 
-/// May only ever exist as `&MultiFragmentPacket`.
+/// This struct represents a multi-fragment packet in memory.
+///
+/// It can be thought of as similar to [`str`] in a way that it only ever exist behind references `&MultiFragmentPacket`, never owned.
+/// If you want an owned version, use [`MultiFragmentPacketOwned`].
+/// There also exists a builder for that using [`MultiFragmentPacketOwned::builder`].
+/// Its relationship to [`MultiFragmentPacketOwned`] is as [`str`] to [`String`].
+///
+/// See the [module level documentation](crate#what-is-an-mfp) for more details on what an MFP actually represents.
+/// The MFP format is defined [here](https://edms.cern.ch/ui/file/2100937/5/edms_2100937_raw_data_format_run3.pdf#section.3).
 // todo add an external type once they stabilize github.com/rust-lang/rust/issues/43467
 #[repr(C, packed)]
 pub struct MultiFragmentPacket {
@@ -51,7 +56,15 @@ pub struct MultiFragmentPacket {
 }
 
 impl MultiFragmentPacket {
-    pub fn ref_from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
+    /// The valid value for the header magic field.
+    pub const VALID_MAGIC: u16 = 0x40CE;
+    /// The size of the header in bytes.
+    pub const HEADER_SIZE: usize = size_of::<MultiFragmentPacketHeader>();
+
+    /// Casts a byte slice to an MFP checking for the magic number and size.
+    ///
+    /// The passed slice must only be at least as large as the MFP, it may be larger as well.
+    pub fn from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
         // Check if there is enough data for the header
         if data.len() < Self::HEADER_SIZE {
             Err(
@@ -72,50 +85,70 @@ impl MultiFragmentPacket {
             })?
         }
 
+        if mfp.packet_size() as usize > data.len() {
+            Err(
+                MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
+                    required_data: mfp.packet_size() as usize,
+                    available_data: data.len(),
+                },
+            )?;
+        }
+
         Ok(mfp)
     }
 
-    pub fn magic_field_offset() -> usize {
+    pub(crate) fn magic_field_offset() -> usize {
         offset_of!(MultiFragmentPacketHeader, magic)
     }
 
-    pub fn magic_field_size() -> usize {
+    pub(crate) fn magic_field_size() -> usize {
         size_of::<u16>()
     }
 
+    /// Returns the magic number stored in the header.
     pub fn magic(&self) -> u16 {
-        unsafe { self.header().magic }
+        self.header().magic
     }
 
+    /// Returns the number of fragments in this packet.
     pub fn fragment_count(&self) -> u16 {
-        unsafe { self.header().fragment_count }
+        self.header().fragment_count
     }
 
-    /// Packet size **in byets** including header.
+    /// Returns the packet size **in byets** including header.
     pub fn packet_size(&self) -> u32 {
-        unsafe { self.header().packet_size }
+        self.header().packet_size
     }
 
-    /// Event ID of first fragment in this packet.
+    /// Returns the Event ID of first fragment in this packet.
+    ///
+    /// The event ids of the fragments are sequential, so the event id of fragment `n` is `event_id() + n`.
     pub fn event_id(&self) -> EventId {
-        unsafe { self.header().event_id }
+        self.header().event_id
     }
 
-    /// Fragments in this packet are padded to 2^`align` bytes.
+    /// Returns the Source ID of all of the fragments in this packet.
+    ///
+    /// One MFP always originates from a single source.
     pub fn source_id(&self) -> SourceId {
-        unsafe { self.header().source_id }
+        self.header().source_id
     }
 
-    /// Fragments in this packet are padded to 2^`align` bytes.
-    pub fn align(&self) -> u8 {
-        unsafe { self.header().align }
+    /// Fragments in this packet are padded to 2^`align_log` bytes.
+    pub fn align_log(&self) -> u8 {
+        self.header().align
     }
 
-    /// Version of the data format of the fragments.
+    /// Returns the version of the data format of the fragments.
+    ///
+    /// Each fragment in an MFP has the same version.
     pub fn fragment_version(&self) -> u8 {
-        unsafe { self.header().fragment_version }
+        self.header().fragment_version
     }
 
+    /// Returns the type of the fragment at the given index.
+    ///
+    /// Returns `None` if the index is out of bounds.
     pub fn fragment_type(&self, index: usize) -> Option<u8> {
         if index < self.fragment_count() as usize {
             let fragment_type_ptr = unsafe { self.fragment_type_ptr().add(index) };
@@ -126,7 +159,9 @@ impl MultiFragmentPacket {
         }
     }
 
-    /// in bytes, excluding the header (only data)
+    /// Returns the size in bytes, excluding the header (only data) of the fragment at the given index.
+    ///
+    /// Returns `None` if the index is out of bounds.
     pub fn fragment_size(&self, index: usize) -> Option<u16> {
         if index < self.fragment_count() as usize {
             let fragment_size_ptr = unsafe { self.fragment_size_ptr().add(index) };
@@ -137,18 +172,27 @@ impl MultiFragmentPacket {
         }
     }
 
-    /// No random access, O(n)
+    /// Returns the data of the fragment at the given index as a byte slice.
+    ///
+    /// For more convenient access, consider using [`Self::fragment`] instead.
+    ///
+    /// No random access, `O(n)`. Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
     pub fn fragment_data(&self, index: usize) -> Option<&[u8]> {
-        let frag = self.iter().nth(index)?;
+        let frag = self.fragment_iter().nth(index)?;
         Some(frag.payload_bytes())
     }
 
-    /// No random access, O(n)
+    /// Returns a reference to the fragment at the given index.
+    ///
+    /// No random access, `O(n)`. Use [`Self::fragment_iter`] instead when accessing multiple/all fragments.
     pub fn fragment(&self, index: usize) -> Option<Fragment<'_>> {
-        self.iter().nth(index)
+        self.fragment_iter().nth(index)
     }
 
-    pub fn iter(&self) -> MultiFragmentPacketIter<'_> {
+    /// Returns an iterator over all fragments in this packet.
+    ///
+    /// The iterator yields [`Fragment`] references, which can tried to be cast to a specific fragment type, e.g. with [`Fragment::try_into_odin`].
+    pub fn fragment_iter(&self) -> MultiFragmentPacketIter<'_> {
         MultiFragmentPacketIter {
             packet: self,
             offset: 0,
@@ -156,6 +200,7 @@ impl MultiFragmentPacket {
         }
     }
 
+    /// Returns the entire packed as byte slice.
     pub fn raw_packet_data(&self) -> &[u8] {
         unsafe {
             slice::from_raw_parts(
@@ -165,15 +210,29 @@ impl MultiFragmentPacket {
         }
     }
 
+    /// Returns a range over the event ids this MFP contains.
+    pub fn event_id_range(&self) -> Range<EventId> {
+        let start = self.event_id();
+
+        Range {
+            start,
+            end: start + self.fragment_count() as EventId,
+        }
+    }
+
+    /// Reinterprets a byte slice as a reference to a MultiFragmentPacket without any checks.
+    /// # Safety
+    /// The passed data must be at least as large as the header size, and as the size indicated in the header.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
-        // Cast to MFP type to read its attributes
-        unsafe { &*(data.as_ptr() as *const MultiFragmentPacket) }
+        // SAFETY: See function preconditions
+        unsafe { &*(data.as_ptr().cast()) }
     }
 
-    unsafe fn header(&self) -> &MultiFragmentPacketHeader {
-        unsafe { &*(self as *const Self as *const MultiFragmentPacketHeader) }
+    fn header(&self) -> &MultiFragmentPacketHeader {
+        &self.header
     }
 
+    // todo reduce the unsafe code hereafter.
     unsafe fn fragment_type_ptr(&self) -> *const u8 {
         unsafe { ((self as *const Self) as *const u8).add(Self::HEADER_SIZE) }
     }
@@ -191,8 +250,10 @@ impl MultiFragmentPacket {
     }
 }
 
+/// Errors that can be encountered when trying to construct a MultiFragmentPacket from raw bytes.
 #[derive(Debug, Error)]
 pub enum MultiFragmentPacketFromRawBytesError {
+    /// Not enough bytes presented to decode MFP.
     #[error(
         "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
     )]
@@ -201,6 +262,7 @@ pub enum MultiFragmentPacketFromRawBytesError {
         required_data: usize,
     },
 
+    /// Invalid magic for an MFP.
     #[error(
         "Magic bytes on the header are corrupted: Expected {expected_magic:x?}, found {read_magic:x?}"
     )]
@@ -210,6 +272,7 @@ pub enum MultiFragmentPacketFromRawBytesError {
     },
 }
 
+/// An iterator for iterating over all the [`Fragment`]s in a [`MultiFragmentPacket`].
 pub struct MultiFragmentPacketIter<'a> {
     packet: &'a MultiFragmentPacket,
     offset: usize,
@@ -223,12 +286,13 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
         let fragment_type = self.packet.fragment_type(self.index)?;
         let fragment_size = self.packet.fragment_size(self.index)?;
 
+        // todo this may be possible without unsafe code using a body slice
         let data_start = unsafe { self.packet.fragment_data_ptr().add(self.offset) };
         let data = unsafe { slice::from_raw_parts(data_start, fragment_size as usize) };
 
         let event_id = self.packet.event_id() + self.index as EventId;
 
-        self.offset += ebutils::align_up_pow2(fragment_size as usize, self.packet.align());
+        self.offset += ebutils::align_up_pow2(fragment_size as usize, self.packet.align_log());
         self.index += 1;
 
         Some(Fragment::new(
@@ -239,24 +303,34 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
             data,
         ))
     }
-}
 
-impl ExactSizeIterator for MultiFragmentPacketIter<'_> {
-    fn len(&self) -> usize {
-        self.packet.fragment_count() as usize
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // remaining length!
+        let size = self.packet.fragment_count() as usize - self.index;
+        (size, Some(size))
     }
 }
 
+impl ExactSizeIterator for MultiFragmentPacketIter<'_> {} // size shall be implemented in Iterator
+
 impl Debug for MultiFragmentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let frags = self
+            .fragment_iter()
+            .map(|f| match f.try_into_odin() {
+                Ok(odin) => Box::new(odin) as Box<dyn Debug>,
+                Err(_) => Box::new(f) as Box<dyn Debug>,
+            })
+            .collect::<Vec<_>>();
         f.debug_struct("MultiFragmentPacket")
             .field("magic", &format!("{:#04X}", self.magic()))
             .field("fragment_count", &self.fragment_count())
             .field("packet_size", &self.packet_size())
             .field("event_id", &self.event_id())
             .field("source_id", &self.source_id())
-            .field("align", &self.align())
+            .field("align", &self.align_log())
             .field("fragment_version", &self.fragment_version())
+            .field("fragments", &frags)
             .finish()
     }
 }
@@ -303,7 +377,8 @@ mod bincode {
             data[0..HEADER_SIZE].copy_from_slice(&bytes);
             decoder.reader().read(&mut data[HEADER_SIZE..])?;
 
-            Ok(unsafe { Self::from_data(data) })
+            // SAFETY: is a valid MFP in terms of the function because magic and size match.
+            Ok(unsafe { Self::from_data_unchecked(data) })
         }
     }
 
@@ -362,21 +437,21 @@ mod tests {
     #[test]
     fn test_mfp_magic_packet_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.magic(), 0x40CE);
     }
 
     #[test]
     fn test_mfp_fragment_count_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.fragment_count(), 5);
     }
 
     #[test]
     fn test_mfp_packet_size_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.raw_packet_data().len(), mfp.packet_size() as usize);
         assert_eq!(mfp.packet_size(), 96);
     }
@@ -384,35 +459,35 @@ mod tests {
     #[test]
     fn test_mfp_event_id_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.event_id(), 1);
     }
 
     #[test]
     fn test_mfp_source_id_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.source_id().0, 1);
     }
 
     #[test]
     fn test_mfp_align_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
-        assert_eq!(mfp.align(), 3);
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
+        assert_eq!(mfp.align_log(), 3);
     }
 
     #[test]
     fn test_mfp_fragment_version_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
         assert_eq!(mfp.fragment_version(), 1);
     }
 
     #[test]
     fn test_mfp_fragment_type_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         // Check all fragment types
         assert_eq!(mfp.fragment_type(0), Some(0));
@@ -428,7 +503,7 @@ mod tests {
     #[test]
     fn test_mfp_fragment_size_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         // Check all fragment sizes
         assert_eq!(mfp.fragment_size(0), Some(4));
@@ -444,7 +519,7 @@ mod tests {
     #[test]
     fn test_mfp_fragment_data_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         // Check all fragment data
         assert_eq!(mfp.fragment_data(0), Some(&[0, 1, 2, 3][..]));
@@ -463,20 +538,20 @@ mod tests {
     #[test]
     fn test_exact_size_iterator() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
-        let iter = mfp.iter();
+        let iter = mfp.fragment_iter();
         assert_eq!(iter.len(), 5);
 
         // After consuming some elements, len() should still report total length
-        let mut iter = mfp.iter();
+        let mut iter = mfp.fragment_iter();
         iter.next();
         iter.next();
         assert_eq!(iter.len(), 5);
 
         // Confirm we can iterate through all elements
         let mut count = 0;
-        let iter = mfp.iter();
+        let iter = mfp.fragment_iter();
         for _ in iter {
             count += 1;
         }
@@ -486,7 +561,7 @@ mod tests {
     #[test]
     fn test_mfp_raw_packet_data() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         let raw_data = mfp.raw_packet_data();
 
@@ -498,7 +573,7 @@ mod tests {
     #[test]
     fn test_mfp_fragment_getter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         // Check first fragment using direct comparison
         let expected_fragment0 = Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]);
@@ -521,7 +596,7 @@ mod tests {
     #[test]
     fn test_mfp_iter() {
         let data = demo_multi_fragment_packet_data();
-        let mfp = MultiFragmentPacket::ref_from_raw_bytes(&data).unwrap();
+        let mfp = MultiFragmentPacket::from_raw_bytes(&data).unwrap();
 
         let expected_fragments = vec![
             Fragment::new(0, 1, 1, SourceId(1), &[0, 1, 2, 3][..]),
@@ -537,7 +612,7 @@ mod tests {
             ),
         ];
 
-        let fragments: Vec<Fragment> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.fragment_iter().collect();
         assert_eq!(fragments, expected_fragments);
     }
 }

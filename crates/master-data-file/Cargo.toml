@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 multi-fragment-packet.workspace = true
-multi-event-packet.workspace = true
+multi-event-packet = { workspace = true, optional = true }
 ebutils.workspace = true
 
 bytemuck.workspace = true
@@ -21,7 +21,9 @@ memmap2 = { version = "0.9.9", optional = true }
 workspace = true
 
 [features]
+default = ["mep"]
 mmap = ["dep:memmap2"]
+mep = ["dep:multi-event-packet"]
 
 [dev-dependencies]
 include_bytes_aligned = "0.1.4"

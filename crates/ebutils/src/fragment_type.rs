@@ -2,9 +2,13 @@ use std::fmt::{Debug, Display};
 
 use strum::FromRepr;
 
-/// As in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>
+/// This enum represents all the known fragment types.
+///
+/// They are documented in <https://gitlab.cern.ch/lhcb/LHCb/-/blob/v53r0/Event/DAQEvent/include/Event/RawBank.h>.
+///
+/// Additionally, some special error marker types are included.
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, FromRepr)]
+#[derive(Copy, Clone, Debug, FromRepr, PartialEq, Eq)]
 pub enum FragmentType {
     L0Calo = 0,        //  0
     L0DU,              //  1
@@ -108,12 +112,5 @@ pub enum FragmentType {
 impl Display for FragmentType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}({})", *self as u8)
-    }
-}
-
-impl PartialEq for FragmentType {
-    fn eq(&self, other: &Self) -> bool {
-        (*self as u8) < FragmentType::DaqErrorBase as u8
-            && core::mem::discriminant(self) == core::mem::discriminant(other)
     }
 }
