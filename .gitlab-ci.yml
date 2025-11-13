@@ -49,7 +49,7 @@ pages:
     - cargo doc --workspace --no-deps --all-features --offline
     - mkdir -p public
     - cp -r target/doc/* public/
-    - echo '<meta http-equiv="refresh" content="0; url=rusteb/index.html">' > public/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
   artifacts:
     paths:
       - public
