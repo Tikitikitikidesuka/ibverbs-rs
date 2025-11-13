@@ -23,8 +23,7 @@ impl super::internal::Sealed for SingleEvent {}
 /// ## Safety
 /// Size is 28, multiple of 4.
 unsafe impl SpecificHeaderType for SingleEvent {
-    #[allow(clippy::cast_possible_truncation)]
-    const HEADER_TYPE: u8 = (size_of::<SingleEvent>() / size_of::<u32>()) as u8;
+    const HEADER_TYPE: u8 = 3;
 
     fn header_type_and_size() -> SpecificHeaderTypeAndSize {
         SpecificHeaderTypeAndSize::from_type_and_size(Self::HEADER_TYPE, Self::HEADER_SIZE_U32)

@@ -16,6 +16,7 @@ pub use single_event::SingleEvent;
 /// ## Safety
 /// Size of type needs to be multiple of 4.
 pub unsafe trait SpecificHeaderType: internal::Sealed + Copy + Pod + Debug {
+    /// Value stored in the header type field for a given specific header type.
     const HEADER_TYPE: u8;
     fn header_type_and_size() -> SpecificHeaderTypeAndSize;
 }
