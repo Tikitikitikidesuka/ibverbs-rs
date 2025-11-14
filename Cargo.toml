@@ -45,7 +45,6 @@ authors.workspace = true
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
-
 [dev-dependencies]
 thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
@@ -58,8 +57,7 @@ multi-fragment-packet = { path = "crates/multi-fragment-packet", features = [
 ] }
 # Setting feature "release_max_level_info" makes sure compiled release binaries
 # do not contain traces on levels higher than Info. Its important for performance.
-tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+
 
 [profile.release]
 opt-level = 3
@@ -73,3 +71,5 @@ anyhow = "1.0"
 multi-fragment-packet.workspace = true
 colored = "3.0.0"
 pretty-hex = "0.4.1"
+tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }

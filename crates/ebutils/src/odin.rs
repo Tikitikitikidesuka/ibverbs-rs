@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use bytemuck::{Pod, Zeroable, bytes_of};
 use thiserror::Error;
+use tracing::warn;
 use typed_builder::TypedBuilder;
 
 use crate::{fragment::Fragment, fragment_type::FragmentType};
@@ -31,6 +32,12 @@ pub struct OdinPayload {
 impl OdinPayload {
     /// The number of bunches that fit into LHC. This dictates the maximal number of bunch crossings.
     pub const BUNCH_PER_ORBIT: u16 = 3564;
+
+    /// The version such fragments should have, as configured in an MFP.
+    pub const FRAGMENT_VERSION: u8 = 7;
+
+    /// The type such odin fragments should have.
+    pub const FRAGMENT_TYPE: FragmentType = FragmentType::Odin;
 
     /// This is the Run Number as set by the central ECS at the start of a run.
     pub fn run_number(self) -> u32 {
@@ -140,11 +147,6 @@ impl OdinPayload {
         (self.misc >> 28 & 0xF) as u8
     }
 
-    /// This is a convenice method that returns the fragment type each odin payload should have.
-    pub fn supposed_fragment_type() -> FragmentType {
-        FragmentType::Odin
-    }
-
     /// Returns a typed builder for constructing an OdinPayload.
     ///
     /// The following setter methods are required:
@@ -209,9 +211,12 @@ pub enum FragmentCastError {
     /// The fragment does not mach the required one.
     #[error("Wrong fragment type: expected {expected} but got {got}")]
     WrongFragmentType { expected: FragmentType, got: u8 },
-    /// The fragment type maches, but its size is wrong.
+    /// The fragment type matches, but its size is wrong.
     #[error("Wrong fragment size: expected {expected} but got {got}")]
     WrongFragmentSize { expected: usize, got: usize },
+    /// The fragment type matches, but the version is not supported.
+    #[error("Unsupported fragment version: got {got} but only {supported} are supported")]
+    WrongFragmentVersion { supported: String, got: u8 },
 }
 
 impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinPayload> {
@@ -259,11 +264,30 @@ impl<'a> Fragment<'a> {
             });
         }
 
+        if self.version() != OdinPayload::FRAGMENT_VERSION {
+            warn!(
+                "Encountered unsupported fragment version {} for odin fragment",
+                self.version(),
+            );
+            return Err(FragmentCastError::WrongFragmentVersion {
+                got: self.version(),
+                supported: OdinPayload::FRAGMENT_VERSION.to_string(),
+            });
+        }
+
         let odin = bytemuck::try_from_bytes(self.payload_bytes()).map_err(|e| match e {
-            bytemuck::PodCastError::SizeMismatch => FragmentCastError::WrongFragmentSize {
-                expected: size_of::<OdinPayload>(),
-                got: self.payload_bytes().len(),
-            },
+            bytemuck::PodCastError::SizeMismatch => {
+                warn!(
+                    "Encountered wrong fragment size of {} (expected {}) for odin fragment (version {})",
+                    self.payload_bytes().len(),
+                    size_of::<OdinPayload>(),
+                    self.version()
+                );
+                FragmentCastError::WrongFragmentSize {
+                    expected: size_of::<OdinPayload>(),
+                    got: self.payload_bytes().len(),
+                }
+            }
             e => panic!("{e:?}"),
         })?;
 

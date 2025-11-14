@@ -1,4 +1,4 @@
-use ebutils::{FragmentType, OdinPayload, SourceId, odin::UtcDateTime};
+use ebutils::{OdinPayload, SourceId, odin::UtcDateTime};
 
 use crate::MultiFragmentPacketOwned;
 
@@ -23,7 +23,7 @@ impl OdinMock {
         let fragments = (0..self.frags_per_mfp).map(|i| {
             let event_id = mfp_index * self.frags_per_mfp + i;
             (
-                FragmentType::Odin,
+                OdinPayload::FRAGMENT_TYPE,
                 OdinPayload::builder()
                     .event_id(event_id)
                     .event_type(0)
@@ -51,7 +51,7 @@ impl OdinMock {
             .with_align_log(self.align_log)
             .with_source_id(self.source_id)
             .with_event_id(mfp_index * self.frags_per_mfp)
-            .with_fragment_version(0)
+            .with_fragment_version(OdinPayload::FRAGMENT_VERSION)
             .add_fragments(fragments)
             .build()
     }
