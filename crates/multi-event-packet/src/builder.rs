@@ -33,8 +33,9 @@ use crate::{
 #[derive(Default)]
 pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
-    mfp_align: Option<usize>,
     odin_added: bool,
+    // general settings, don't get reset
+    mfp_align: Option<usize>,
     allow_superfluous_odin_mfp: bool,
 }
 
@@ -211,6 +212,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     /// This is useful if you want to avoid any allocations while building MEPs.
     pub fn reset_mfps(&mut self) {
         self.mfps.clear();
+        self.odin_added = false;
     }
 
     /// Generates the MFP offsets in bytes from the start of the header.
