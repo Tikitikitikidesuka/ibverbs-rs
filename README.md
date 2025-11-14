@@ -15,6 +15,10 @@ This repository contains the following sub-crates:
 - [`mock-buffers`](crates/mock-buffers/README.md)
 - [`circular-buffer`](crates/circular-buffer/README.md)
 
+
+The following binaries are provided:
+- [`mdf-reader`](src/bin/mdf-reader.rs): Simple tool to inspect MDF files, similar to `pcie40_mdfreader`.
+
 Additionally, there are some examples in the [`examples`](examples) directory.
 
 ## Overview of data formats and their relationships
