@@ -46,6 +46,10 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+[lib]
+name = "rusteb"
+path = "src/lib.rs"
+
 [dev-dependencies]
 thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
