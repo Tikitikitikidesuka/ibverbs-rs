@@ -35,6 +35,7 @@ pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
     mfp_align: Option<usize>,
     odin_added: bool,
+    allow_superfluous_odin_fragments: bool,
 }
 
 impl<'a> MultiEventPacketBuilder<'a> {
@@ -72,10 +73,20 @@ impl<'a> MultiEventPacketBuilder<'a> {
             }
         }
 
-        if self.odin_added && test_mfp.source_id().is_odin() {
+        if self.odin_added
+            && test_mfp.source_id().is_odin()
+            && !self.allow_superfluous_odin_fragments
+        {
             return Err(EventBuilderError::SuperfluousOdinFragment);
         }
         Ok(())
+    }
+
+    /// Allows to add more than one odin fragment.
+    ///
+    /// Generally, this is unwanted and disabled but may be useful for testing purposes when only odin fragments are created.
+    pub fn allow_superfluous_odin_fragments(&mut self) {
+        self.allow_superfluous_odin_fragments = true;
     }
 
     /// Adds an MFP to this builder, only requiring a reference to it.
