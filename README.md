@@ -17,8 +17,7 @@ The sub-crates represent the major components of the Event Builder:
 - [`mock-buffers`](crates/mock-buffers/): Mock buffers with the `circular-buffer` traits for testing purposes.
 - [`circular-buffer`](crates/circular-buffer/): Trait defining circular buffer abstractions for interoperability between
   `pcie40` buffers and `shared-memory` buffers.
-- [`ebutils`](crates/ebutils/): Utilities for aligning memory addresses. Probably can mostly be replaced by rust
-  internal functions.
+- [`ebutils`](crates/ebutils/): Utility crate containing definitions for common types like source IDs and fragments.
 - [`multi-fragment-packet`](crates/multi-fragment-packet/): Library for reading and constructing MFPs.
 - [`multi-event-packet`](crates/multi-event-packet/): Library for assembling and reading MEPs.
 - [`master-data-file`](crates/master-data-file/): Library for reading and writing MDF files.
@@ -31,5 +30,5 @@ Additionally, there are some examples in the [`examples`](examples) directory.
 - **Multi Event Packet** *(MEP, pronounced /mæp/)*: Multiple MFPs for the same events but from different sources concatenated
 - **Master Data File** *(MDF)*: File format that stores all the fragments for one event together. An MDF file contains many MDF records for many events.
 
-<!-- To update this, click on the link, edit in browser, and then generate new link under "Actions"-->
-[![](https://mermaid.ink/img/pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA?type=png)](https://mermaid.live/edit#pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA)
+<!-- To update this, click on the link, edit in browser, and then generate new link under "Actions". Make sure to change `img` to `svg` in the path to get an svg image.-->
+[![](https://mermaid.ink/svg/pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA?type=png)](https://mermaid.live/edit#pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA)
