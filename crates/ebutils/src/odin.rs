@@ -37,7 +37,7 @@ impl OdinPayload {
     pub const FRAGMENT_VERSION: u8 = 7;
 
     /// The type such odin fragments should have.
-    pub const FRAGMENT_TYPE: FragmentType = FragmentType::Odin;
+    pub const FRAGMENT_TYPE: FragmentType = FragmentType::ODIN;
 
     /// This is the Run Number as set by the central ECS at the start of a run.
     pub fn run_number(self) -> u32 {
@@ -256,10 +256,10 @@ impl<'a> Fragment<'a> {
     pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinPayload>, FragmentCastError> {
         if !self
             .fragment_type_parsed()
-            .is_some_and(|t| t == FragmentType::Odin)
+            .is_some_and(|t| t == FragmentType::ODIN)
         {
             return Err(FragmentCastError::WrongFragmentType {
-                expected: FragmentType::Odin,
+                expected: FragmentType::ODIN,
                 got: self.fragment_type_raw(),
             });
         }
@@ -514,7 +514,7 @@ mod test {
 
         let odin_payload = dummy_odin_payload(12345);
         let fragment: Fragment<'_, super::OdinPayload> = Fragment::new(
-            FragmentType::Odin as _,
+            FragmentType::ODIN as _,
             1,
             0,
             SourceId::new(SubDetector::Odin, 0),

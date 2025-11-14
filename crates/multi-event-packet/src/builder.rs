@@ -191,7 +191,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
             if mfp.source_id().is_odin() {
                 assert!(mfp.fragment_iter().all(|f| {
                     f.fragment_type_parsed()
-                        .is_some_and(|t| t == FragmentType::Odin)
+                        .is_some_and(|t| t == FragmentType::ODIN)
                 }));
             }
             let data = cast_slice_mut(data.as_mut());
@@ -274,8 +274,8 @@ mod test {
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::Odin, 0))
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(123456))
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(123457))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(123456))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(123457))
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)

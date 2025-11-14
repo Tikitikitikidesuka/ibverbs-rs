@@ -184,9 +184,9 @@ mod test {
                     .with_event_id(0)
                     .with_fragment_version(1)
                     .with_source_id(SourceId::new_odin(0))
-                    .add_fragment(FragmentType::Odin, odin1)
+                    .add_fragment(FragmentType::ODIN, odin1)
                     .add_fragment(
-                        FragmentType::Odin,
+                        FragmentType::ODIN,
                         OdinPayload::builder()
                             .event_id(1)
                             .run_number(42)
@@ -254,7 +254,7 @@ mod test {
         assert_eq!(fragments[0].payload(), odin1.as_ref());
         assert_eq!(
             fragments[0].fragment_type_parsed(),
-            Some(FragmentType::Odin)
+            Some(FragmentType::ODIN)
         );
         assert_eq!(fragments[0].source_id().0, 0);
 

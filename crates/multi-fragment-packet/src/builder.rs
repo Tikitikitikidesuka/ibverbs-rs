@@ -63,7 +63,7 @@ impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwne
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         if other.source_id.is_odin()
             && !other.fragments.iter().all(|f| {
-                f.fragment_type == FragmentType::Odin as u8
+                f.fragment_type == FragmentType::ODIN as u8
                     && f.data.len() == size_of::<OdinPayload>()
             })
         {
@@ -263,12 +263,12 @@ mod tests {
             .with_source_id(SourceId::new_odin(1))
             .with_align_log(3)
             .with_fragment_version(1)
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(42))
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(43))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(42))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(43))
             .build();
 
         let fragment = mfp.fragment(0).unwrap();
-        assert_eq!(fragment.fragment_type_parsed(), Some(FragmentType::Odin));
+        assert_eq!(fragment.fragment_type_parsed(), Some(FragmentType::ODIN));
         let odin_payload = fragment
             .try_into_odin()
             .expect("valid Odin fragment")
