@@ -1,21 +1,15 @@
-use crate::aliased_buffer::MockAliasedBufferWriter;
-use crate::aliased_readable::VALID_MAGIC;
-use crate::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry};
-use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum WriteError {
-    #[error("Not enough space for requested type")]
-    NotEnoughSpace,
-}
+use crate::mock_buffers::WriteError;
+use crate::mock_buffers::aliased::{MockAliasedBufferWriter, VALID_MAGIC};
+use crate::mock_buffers::dynamic_size_element::{
+    BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry,
+};
+use crate::{CircularBufferWritable, CircularBufferWriter};
 
 fn write_diary_entry<T: DiaryEntry + MockWritable>(
     diary_entry: &T,
     writer: &mut MockAliasedBufferWriter,
 ) -> Result<(), WriteError> {
-    let aligned_size =
-        ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
+    let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
 
     let writable_region = writer.writable_region();
 

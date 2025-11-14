@@ -1,27 +1,21 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use mock_buffers::aliased_buffer::{
-    MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
-};
-use mock_buffers::dynamic_size_element::{BufferedDiaryEntry, MockWritable, OwnedDiaryEntry};
+use circular_buffer::mock_buffers::{BufferedDiaryEntry, MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter, MockWritable, OwnedDiaryEntry};
 
 fn main() {
     // [ , , , ]
     let mut demo_buffer = MockAliasedBuffer::new(128, 5).unwrap();
 
-    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer);
-    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer);
+    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer).unwrap();
+    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer).unwrap();
 
     // [0, , , ]
     let writable_entry_0_32 = OwnedDiaryEntry::new(1, 1, 2000, "First B)".to_string());
     writable_entry_0_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_0_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_0_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -35,10 +29,7 @@ fn main() {
     writable_entry_2_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_2_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_2_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -52,10 +43,7 @@ fn main() {
     writable_entry_3_64.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_3_64.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_3_64.buffered_size(), writer.alignment_pow2())
     );
 
     // [ , , , ]

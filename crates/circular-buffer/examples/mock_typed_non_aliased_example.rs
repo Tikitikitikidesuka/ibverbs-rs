@@ -1,9 +1,9 @@
+use circular_buffer::mock_buffers::{
+    BufferedDiaryEntry, MockNonAliasedBuffer, MockNonAliasedBufferReader,
+    MockNonAliasedBufferWriter, MockWritable, OwnedDiaryEntry,
+};
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
-};
-use mock_buffers::dynamic_size_element::{BufferedDiaryEntry, MockWritable, OwnedDiaryEntry};
-use mock_buffers::non_aliased_buffer::{
-    MockNonAliasedBuffer, MockNonAliasedBufferReader, MockNonAliasedBufferWriter,
 };
 
 fn main() {
@@ -18,10 +18,7 @@ fn main() {
     writable_entry_0_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_0_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_0_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -35,10 +32,7 @@ fn main() {
     writable_entry_2_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_2_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_2_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -57,10 +51,7 @@ fn main() {
     writable_entry_3_64.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_3_64.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_3_64.buffered_size(), writer.alignment_pow2())
     );
 
     // [ , , , ]

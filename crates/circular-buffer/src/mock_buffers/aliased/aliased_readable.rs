@@ -1,24 +1,10 @@
-use crate::aliased_buffer::MockAliasedBufferReader;
-use crate::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
-use circular_buffer::{
+use crate::mock_buffers::ReadError;
+use crate::mock_buffers::aliased::{MockAliasedBufferReader, VALID_MAGIC};
+use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
+use crate::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
     ReadGuard,
 };
-use thiserror::Error;
-
-pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
-
-#[derive(Debug, Error)]
-pub enum ReadError {
-    #[error("Type not found on buffer")]
-    NotFound,
-
-    #[error("Not enough data for requested type")]
-    NotEnoughData,
-
-    #[error("Data is corrupt for requested type")]
-    CorruptData,
-}
 
 impl CircularBufferReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
     type ReadResult<'a> = Result<ReadGuard<'a, MockAliasedBufferReader, Self>, ReadError>;
@@ -85,8 +71,7 @@ impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry
 
             // Verify enough data for whole entry and alignment
             let total_length = size_of::<Self>() + diary_entry_mem.note().len();
-            let aligned_size =
-                ebutils::align_up_pow2(total_length, reader.alignment_pow2());
+            let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
                 return Err(ReadError::NotEnoughData);
             }

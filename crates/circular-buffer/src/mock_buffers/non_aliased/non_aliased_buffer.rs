@@ -1,4 +1,5 @@
-use circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use crate::{CircularBufferReader, CircularBufferWriter};
+
 use thiserror::Error;
 
 pub struct MockNonAliasedBuffer {
@@ -54,7 +55,7 @@ impl MockNonAliasedBufferWriter {
 }
 
 #[derive(Debug, Error)]
-pub enum MockNonAliasedAdvanceError {
+pub enum NonAliasedAdvanceError {
     #[error("Not enough data available")]
     OutOfBounds,
     #[error("Result address not aligned")]
@@ -62,7 +63,7 @@ pub enum MockNonAliasedAdvanceError {
 }
 
 impl CircularBufferReader for MockNonAliasedBufferReader {
-    type AdvanceResult = Result<(), MockNonAliasedAdvanceError>;
+    type AdvanceResult = Result<(), NonAliasedAdvanceError>;
     type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
 
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
@@ -70,14 +71,14 @@ impl CircularBufferReader for MockNonAliasedBufferReader {
 
         // Check alignment
         if !ebutils::check_alignment_pow2(bytes, buf.alignment_pow2) {
-            return Err(MockNonAliasedAdvanceError::NotAligned);
+            return Err(NonAliasedAdvanceError::NotAligned);
         }
 
         // Check enough data available
         let (primary_region, secondary_region) = self.readable_region();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
-            return Err(MockNonAliasedAdvanceError::OutOfBounds);
+            return Err(NonAliasedAdvanceError::OutOfBounds);
         }
 
         // Handle wrapping when advancing
@@ -108,7 +109,7 @@ impl CircularBufferReader for MockNonAliasedBufferReader {
 }
 
 impl CircularBufferWriter for MockNonAliasedBufferWriter {
-    type AdvanceResult = Result<(), MockNonAliasedAdvanceError>;
+    type AdvanceResult = Result<(), NonAliasedAdvanceError>;
     type WriteableRegionResult<'a> = (&'a mut [u8], &'a mut [u8]);
 
     fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
@@ -116,14 +117,14 @@ impl CircularBufferWriter for MockNonAliasedBufferWriter {
 
         // Check alignment
         if !ebutils::check_alignment_pow2(bytes, buf.alignment_pow2) {
-            return Err(MockNonAliasedAdvanceError::NotAligned);
+            return Err(NonAliasedAdvanceError::NotAligned);
         }
 
         // Check enough data available
         let (primary_region, secondary_region) = self.writable_region();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
-            return Err(MockNonAliasedAdvanceError::OutOfBounds);
+            return Err(NonAliasedAdvanceError::OutOfBounds);
         }
 
         // Handle wrapping when advancing

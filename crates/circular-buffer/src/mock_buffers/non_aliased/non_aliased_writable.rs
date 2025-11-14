@@ -1,14 +1,10 @@
-use crate::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry};
-use crate::non_aliased_buffer::MockNonAliasedBufferWriter;
-use crate::non_aliased_readable::{VALID_MAGIC, WRAP_MAGIC};
-use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
-use thiserror::Error;
+use crate::mock_buffers::dynamic_size_element::{
+    BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry,
+};
+use crate::{CircularBufferWritable, CircularBufferWriter};
 
-#[derive(Debug, Error)]
-pub enum WriteError {
-    #[error("Not enough space for requested type")]
-    NotEnoughSpace,
-}
+use crate::mock_buffers::non_aliased::{MockNonAliasedBufferWriter, VALID_MAGIC, WRAP_MAGIC};
+use crate::mock_buffers::WriteError;
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for BufferedDiaryEntry {
     type WriteResult = Result<(), WriteError>;
@@ -30,8 +26,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
     diary_entry: &T,
     writer: &mut MockNonAliasedBufferWriter,
 ) -> Result<(), WriteError> {
-    let aligned_size =
-        ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
+    let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
     let (primary_region, secondary_region) = writer.writable_region();
 
     // Determine which region to write to and calculate advance size

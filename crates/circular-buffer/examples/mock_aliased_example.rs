@@ -1,15 +1,15 @@
-use circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use mock_buffers::aliased_buffer::{
+use circular_buffer::mock_buffers::{
     MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
 };
+use circular_buffer::{CircularBufferReader, CircularBufferWriter};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
     let mut demo_buffer = MockAliasedBuffer::new(16, 1).unwrap();
 
     // Create reader and writer
-    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer);
-    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer);
+    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer).unwrap();
+    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer).unwrap();
 
     write_to_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_contiguous_buffer(&reader);
