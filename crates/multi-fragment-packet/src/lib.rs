@@ -7,6 +7,8 @@ pub mod pcie40_readable;
 #[cfg(feature = "shmem-io")]
 pub mod shared_memory_element;
 
+pub mod odin_mock;
+
 pub use builder::MultiFragmentPacketBuilder;
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;

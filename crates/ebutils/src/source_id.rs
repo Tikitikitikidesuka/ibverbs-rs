@@ -112,6 +112,6 @@ mod test {
 
     #[test]
     fn test_sub_id() {
-        assert_eq!(SubDetector::UtC.to_source_id(0x3).0, 0x3003);
+        assert_eq!(SubDetector::Tdet.to_source_id(0x3).0, 0x7803);
     }
 }

@@ -29,6 +29,9 @@ pub struct OdinPayload {
 
 #[deny(clippy::cast_sign_loss)]
 impl OdinPayload {
+    /// The number of bunches that fit into LHC. This dictates the maximal number of bunch crossings.
+    pub const BUNCH_PER_ORBIT: u16 = 3564;
+
     /// This is the Run Number as set by the central ECS at the start of a run.
     pub fn run_number(self) -> u32 {
         self.run_number
@@ -318,8 +321,7 @@ struct OdinBuilderInternal {
     /// increases monotonically and it is reset at every start run. The first event is identified by Event ID = 0.
     event_id: u64,
     // misc
-    /// This is the bunch crossing ID of the accepted event. It starts at 0 and wraps around at 3563.
-    /// 12 bit values.
+    /// This is the bunch crossing ID of the accepted event. It starts at 0 and wraps around after 3563 (3564 possible values).
     bunch_id: u16,
     /// The expected bunch crossing type for `(beam1, beam2)`. `false` mean no beam, `true` means beam.
     /// It is produced by an internal sequencer which is loaded
@@ -359,8 +361,7 @@ struct TaeConfig {
 impl From<OdinBuilderInternal> for Result<OdinPayload, OdinBuilderError> {
     fn from(builder: OdinBuilderInternal) -> Self {
         let mut misc: u32 = 0;
-        if builder.bunch_id >= (1 << 12) {
-            // todo check actual max "wraps around at 3563": at or after?
+        if builder.bunch_id >= OdinPayload::BUNCH_PER_ORBIT {
             return Err(OdinBuilderError::BunchIdTooLarge(builder.bunch_id));
         }
         misc |= (builder.bunch_id as u32) & ((1 << 12) - 1);
@@ -404,7 +405,7 @@ impl From<OdinBuilderInternal> for Result<OdinPayload, OdinBuilderError> {
 
 #[derive(Debug, Error)]
 pub enum OdinBuilderError {
-    #[error("Bunch ID too large: {0}, must be less than {top}", top = 1 << 12)]
+    #[error("Bunch ID too large: {0}, must be less than {top}, the maximally possible number of bunches pre orbit", top = OdinPayload::BUNCH_PER_ORBIT)]
     BunchIdTooLarge(u16),
     #[error("Trigger type too large: {0}, must be less than 16")]
     TriggerTypeTooLarge(u8),
