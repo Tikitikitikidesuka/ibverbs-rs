@@ -56,7 +56,7 @@ impl OdinMock {
             .build()
     }
 
-    pub fn fragment_iterator(&self) -> impl Iterator<Item = MultiFragmentPacketOwned> {
+    pub fn mfp_iterator(&self) -> impl Iterator<Item = MultiFragmentPacketOwned> {
         (0..).map(|i| self.generate_odin_mfp(i))
     }
 }
