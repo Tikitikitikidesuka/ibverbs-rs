@@ -35,7 +35,7 @@ pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
     mfp_align: Option<usize>,
     odin_added: bool,
-    allow_superfluous_odin_fragments: bool,
+    allow_superfluous_odin_mfp: bool,
 }
 
 impl<'a> MultiEventPacketBuilder<'a> {
@@ -73,20 +73,18 @@ impl<'a> MultiEventPacketBuilder<'a> {
             }
         }
 
-        if self.odin_added
-            && test_mfp.source_id().is_odin()
-            && !self.allow_superfluous_odin_fragments
-        {
-            return Err(EventBuilderError::SuperfluousOdinFragment);
+        if self.odin_added && test_mfp.source_id().is_odin() && !self.allow_superfluous_odin_mfp {
+            return Err(EventBuilderError::SuperfluousOdinMfp);
         }
         Ok(())
     }
 
-    /// Allows to add more than one odin fragment.
+    /// Allows to add more than one odin MFP.
     ///
     /// Generally, this is unwanted and disabled but may be useful for testing purposes when only odin fragments are created.
-    pub fn allow_superfluous_odin_fragments(&mut self) {
-        self.allow_superfluous_odin_fragments = true;
+    /// This is saved across resets.
+    pub fn allow_superfluous_odin_mfp(&mut self) {
+        self.allow_superfluous_odin_mfp = true;
     }
 
     /// Adds an MFP to this builder, only requiring a reference to it.
@@ -247,7 +245,7 @@ pub enum EventBuilderError {
     MismatchingFragmentCount { expected: u16, got: u16 },
     /// You tried to add more than one ODIN MFP.
     #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
-    SuperfluousOdinFragment,
+    SuperfluousOdinMfp,
     /// You tried to build an MFP without an odin fragment.
     #[error("No odin MFP was added. Exactly one Odin MFP is required.")]
     NoOdinFragment,
