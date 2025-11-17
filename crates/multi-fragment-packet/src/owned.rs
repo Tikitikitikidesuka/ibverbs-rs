@@ -58,7 +58,7 @@ impl MultiFragmentPacketOwned {
 impl AsRef<MultiFragmentPacket> for MultiFragmentPacketOwned {
     fn as_ref(&self) -> &MultiFragmentPacket {
         // SAFETY: by invariant of this type a valid MFP.
-        unsafe { MultiFragmentPacket::unchecked_ref_from_raw_bytes(self.data.as_slice()) }
+        unsafe { MultiFragmentPacket::unchecked_ref_from_raw_bytes(&self.body) }
     }
 }
 
