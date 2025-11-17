@@ -1,4 +1,4 @@
-use circular_buffer::CircularBufferMultiReadable;
+use circular_buffer::CircularBufferReadable;
 use multi_fragment_packet::MultiFragmentPacket;
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError,

@@ -1,5 +1,5 @@
+use circular_buffer::{CircularBufferReadable, ReadGuard};
 use ebutils::IsPow2Result;
-use circular_buffer::CircularBufferMultiReadable;
 use multi_fragment_packet::MultiFragmentPacket;
 use pcie40::ctrl::PCIe40ControllerManager;
 use pcie40::reader::PCIe40Reader;
@@ -39,7 +39,7 @@ fn main() {
 
     loop {
         println!("Loading 5 MFPs...");
-        match MultiFragmentPacket::read_multiple(&mut reader, 5) {
+        match MultiFragmentPacket::read(&mut reader, 5) {
             Ok(mfps) => {
                 println!("Read MFP[0]: {:?}", mfps[0]);
                 println!("Read MFP[1]: {:?}", mfps[1]);
