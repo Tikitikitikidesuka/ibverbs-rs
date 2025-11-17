@@ -95,7 +95,6 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
 
             // Verify valid magic packet
             if mfp_mem.magic() != Self::VALID_MAGIC {
-                error!("Corrupted MFP read:\n{:?}", mfp_mem.raw_packet_data());
                 return Err(PCIe40TypedReadError::CorruptData);
             }
 
