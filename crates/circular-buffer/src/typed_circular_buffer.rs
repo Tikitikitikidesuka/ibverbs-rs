@@ -1,25 +1,29 @@
+use std::error::Error;
 use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use std::ops::Deref;
 
-pub trait CircularBufferReadable<R: CircularBufferReader> {
-    type ReadResult<'a>
+pub trait CircularBufferReadable<'guard, 'buf, Reader: CircularBufferReader + 'buf>
+where 'buf: 'guard {
+    type ReadGuard: ReadGuard<'guard, Reader, Self>
     where
-        R: 'a;
+        Self: 'guard, Reader: 'buf;
+    type ReadError: Error;
 
-    fn read(reader: &mut R) -> Self::ReadResult<'_>;
+    fn read(reader: &'guard mut Reader, num: usize) -> Result<Self::ReadGuard, Self::ReadError>;
 }
 
-pub trait CircularBufferMultiReadable<R: CircularBufferReader> {
-    type MultiReadResult<'a>
+pub trait ReadGuard<'a, Reader: CircularBufferReader, T: ?Sized + 'a>:
+Deref<Target = [&'a T]>
+{
+    fn discard(self) -> Reader::AdvanceResult
     where
-        R: 'a;
-
-    fn read_multiple(reader: &mut R, num: usize) -> Self::MultiReadResult<'_>;
+        Self: Sized;
 }
 
-pub trait CircularBufferWritable<W: CircularBufferWriter> {
-    type WriteResult;
+pub trait CircularBufferWritable<Writer: CircularBufferWriter> {
+    type WriteError: Error;
 
-    fn write(&self, writer: &mut W) -> Self::WriteResult;
+    fn write(&self, writer: &mut Writer) -> Result<(), Self::WriteError>;
 }
 
 // To write multiple structures, the user can call write many times or implement
