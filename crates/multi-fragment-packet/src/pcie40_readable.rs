@@ -6,6 +6,7 @@ use circular_buffer::{
 use pcie40::reader::PCIe40Reader;
 use pcie40::stream::stream::PCIe40StreamError;
 use thiserror::Error;
+use tracing::error;
 
 /// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
@@ -94,6 +95,7 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
 
             // Verify valid magic packet
             if mfp_mem.magic() != Self::VALID_MAGIC {
+                error!("Corrupted MFP read:\n{:?}", mfp_mem.raw_packet_data());
                 return Err(PCIe40TypedReadError::CorruptData);
             }
 

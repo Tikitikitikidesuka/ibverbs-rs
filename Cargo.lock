@@ -434,6 +434,7 @@ dependencies = [
  "shared-memory-buffer",
  "strum",
  "thiserror",
+ "tracing",
  "typed-builder",
 ]
 
