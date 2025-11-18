@@ -1,8 +1,7 @@
 use crate::{MultiFragmentPacket, MultiFragmentPacketFromRawBytesError};
-use circular_buffer::{CircularBufferReadable, CircularBufferReader, ReadGuard};
-use pcie40::reader::PCIe40Reader;
+use circular_buffer::{CircularBufferReadable, CircularBufferReader, ReadGuard, SizedReadGuard};
+use pcie40::reader::{PCIe40ReadGuard, PCIe40Reader};
 use pcie40::stream::stream::PCIe40StreamError;
-use std::ops::Deref;
 use thiserror::Error;
 
 /// Errors that can occur when reading an MFP from the PCIe40 card.
@@ -23,39 +22,6 @@ pub enum PCIe40TypedReadError {
     /// Error when communicating with the PICe40 stream.
     #[error("Unable to communicate with the stream: {0:?}")]
     StreamError(#[from] PCIe40StreamError),
-}
-
-pub struct PCIe40ReadGuard<'guard, 'buf, T: ?Sized>
-where
-    'buf: 'guard,
-{
-    reader: &'guard mut PCIe40Reader<'buf>,
-    read_data: Vec<&'guard T>,
-    advance_size: usize,
-}
-
-impl<'guard, 'buf, T: ?Sized> Deref for PCIe40ReadGuard<'guard, 'buf, T>
-where
-    'buf: 'guard,
-{
-    type Target = [&'guard T];
-
-    fn deref(&self) -> &Self::Target {
-        self.read_data.as_slice()
-    }
-}
-
-impl<'guard, 'buf, T: ?Sized> ReadGuard<'guard, PCIe40Reader<'buf>, T>
-    for PCIe40ReadGuard<'guard, 'buf, T>
-where
-    'buf: 'guard,
-{
-    fn discard(self) -> <PCIe40Reader<'buf> as CircularBufferReader>::AdvanceResult
-    where
-        Self: Sized,
-    {
-        self.reader.advance_read_pointer(self.advance_size)
-    }
 }
 
 impl<'guard, 'buf> CircularBufferReadable<'guard, 'buf, PCIe40Reader<'buf>> for MultiFragmentPacket
@@ -106,11 +72,7 @@ where
         }
 
         // If all checks are passed, guard the type
-        let read_guard = PCIe40ReadGuard {
-            reader,
-            advance_size,
-            read_data,
-        };
+        let read_guard = PCIe40ReadGuard::from_reader(reader, read_data, advance_size);
 
         Ok(read_guard)
     }
