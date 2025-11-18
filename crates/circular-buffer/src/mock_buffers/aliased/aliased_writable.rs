@@ -5,6 +5,25 @@ use crate::mock_buffers::dynamic_size_element::{
 };
 use crate::{CircularBufferWritable, CircularBufferWriter};
 
+/// Write implementation for diary entries to an aliased circular buffer.
+///
+/// This function writes diary entries into the buffer using a hybrid approach: the fixed-size
+/// header is constructed in-place by casting the writable region to a mutable struct reference,
+/// while the variable-length note content is copied from the source entry into the buffer's
+/// body region.
+///
+/// # Write Process
+///
+/// 1. **Size calculation**: Computes aligned size needed for header + variable-length note
+/// 2. **Space validation**: Ensures sufficient writable space exists
+/// 3. **In-place header construction**: Casts writable bytes to `&mut BufferedDiaryEntry`
+/// 4. **Header population**: Fills day, month, year, note length, and magic fields directly
+/// 5. **Note copy**: Copies note string bytes into the body region following the header
+/// 6. **Pointer advance**: Commits the write by advancing pointer by aligned size
+///
+/// Unlike read operations which return guards for deferred consumption, writes are committed
+/// immediately upon successful completion. The write pointer advancement happens atomically
+/// within this function.
 fn write_diary_entry<T: DiaryEntry + MockWritable>(
     diary_entry: &T,
     writer: &mut MockAliasedBufferWriter,
@@ -44,17 +63,32 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
 }
 
 impl CircularBufferWritable<MockAliasedBufferWriter> for BufferedDiaryEntry {
-    type WriteResult = Result<(), WriteError>;
+    type WriteError = WriteError;
 
-    fn write(&self, writer: &mut MockAliasedBufferWriter) -> Self::WriteResult {
+    /// This implementation delegates to [`write_diary_entry()`] for zero-copy writing. It enables
+    /// writing entries that are already in the buffered format directly into the circular buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteError::NotEnoughSpace`] if insufficient space is available for the entry's
+    /// aligned size.
+    fn write(&self, writer: &mut MockAliasedBufferWriter) -> Result<(), Self::WriteError> {
         write_diary_entry(self, writer)
     }
 }
 
 impl CircularBufferWritable<MockAliasedBufferWriter> for OwnedDiaryEntry {
-    type WriteResult = Result<(), WriteError>;
+    type WriteError = WriteError;
 
-    fn write(&self, writer: &mut MockAliasedBufferWriter) -> Self::WriteResult {
+    /// This implementation delegates to [`write_diary_entry()`] for zero-copy writing. It enables
+    /// writing owned entries (with owned String notes) into the buffered format within the
+    /// circular buffer. The entry's data is transformed into the wire format during the write.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WriteError::NotEnoughSpace`] if insufficient space is available for the entry's
+    /// aligned size.
+    fn write(&self, writer: &mut MockAliasedBufferWriter) -> Result<(), Self::WriteError> {
         write_diary_entry(self, writer)
     }
 }

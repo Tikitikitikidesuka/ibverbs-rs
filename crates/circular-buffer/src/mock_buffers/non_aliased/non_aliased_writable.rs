@@ -3,21 +3,21 @@ use crate::mock_buffers::dynamic_size_element::{
 };
 use crate::{CircularBufferWritable, CircularBufferWriter};
 
-use crate::mock_buffers::non_aliased::{MockNonAliasedBufferWriter, VALID_MAGIC, WRAP_MAGIC};
 use crate::mock_buffers::WriteError;
+use crate::mock_buffers::non_aliased::{MockNonAliasedBufferWriter, VALID_MAGIC, WRAP_MAGIC};
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for BufferedDiaryEntry {
-    type WriteResult = Result<(), WriteError>;
+    type WriteError = WriteError;
 
-    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Self::WriteResult {
+    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
         write_diary_entry(self, writer)
     }
 }
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for OwnedDiaryEntry {
-    type WriteResult = Result<(), WriteError>;
+    type WriteError = WriteError;
 
-    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Self::WriteResult {
+    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
         write_diary_entry(self, writer)
     }
 }

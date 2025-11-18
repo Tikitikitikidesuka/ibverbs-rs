@@ -6,8 +6,8 @@ fn main() {
     let mut demo_buffer = MockNonAliasedBuffer::new(16, 1).unwrap();
 
     // Create reader and writer
-    let mut reader = MockNonAliasedBufferReader::new(&mut demo_buffer);
-    let mut writer = MockNonAliasedBufferWriter::new(&mut demo_buffer);
+    let mut reader = MockNonAliasedBufferReader::new(&mut demo_buffer).unwrap();
+    let mut writer = MockNonAliasedBufferWriter::new(&mut demo_buffer).unwrap();
 
     write_to_non_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_non_contiguous_buffer(&reader);

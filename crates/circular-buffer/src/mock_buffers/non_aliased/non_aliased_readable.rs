@@ -1,64 +1,23 @@
-use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
-use crate::{
-    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
-    ReadGuard,
-};
-
-use crate::mock_buffers::non_aliased::{MockNonAliasedBufferReader, VALID_MAGIC, WRAP_MAGIC};
 use crate::mock_buffers::ReadError;
+use crate::mock_buffers::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry};
+use crate::mock_buffers::non_aliased::{MockNonAliasedBufferReader, VALID_MAGIC, WRAP_MAGIC};
+use crate::{CircularBufferReadable, CircularBufferReader, SizedReadGuard};
 
-impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
-    type ReadResult<'a> = Result<ReadGuard<'a, MockNonAliasedBufferReader, Self>, ReadError>;
+pub type MockNonAliasedBufferReadGuard<'guard, T: ?Sized> =
+    SizedReadGuard<'guard, MockNonAliasedBufferReader, T>;
 
-    fn read(reader: &mut MockNonAliasedBufferReader) -> Self::ReadResult<'_> {
-        let (primary_region, secondary_region) = reader.readable_region();
+impl<'guard, 'buf> CircularBufferReadable<'guard, 'buf, MockNonAliasedBufferReader>
+    for BufferedDiaryEntry
+where
+    'buf: 'guard,
+{
+    type ReadGuard = MockNonAliasedBufferReadGuard<'guard, Self>;
+    type ReadError = ReadError;
 
-        // Check if we have enough data to read the wrap flag
-        if primary_region.len() < Self::magic_bytes_size() {
-            return Err(ReadError::NotEnoughData);
-        }
-
-        // Determine which region to read from based on wrap flag
-        let readable_region =
-            if unsafe { Self::magic_bytes(primary_region.as_ptr()) } == &WRAP_MAGIC {
-                secondary_region
-            } else {
-                primary_region
-            };
-
-        // Validate minimum size for header
-        if readable_region.len() < size_of::<Self>() {
-            return Err(ReadError::NotEnoughData);
-        }
-
-        // Cast to diary entry and validate magic
-        let diary_entry =
-            unsafe { &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self) };
-
-        if diary_entry.magic != VALID_MAGIC {
-            return Err(ReadError::CorruptData);
-        }
-
-        // Calculate total size and validate space
-        let total_length = size_of::<Self>() + diary_entry.note().len();
-        let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
-
-        if readable_region.len() < aligned_size {
-            return Err(ReadError::NotEnoughData);
-        }
-
-        Ok(ReadGuard::new(reader, diary_entry, aligned_size))
-    }
-}
-
-impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
-    type MultiReadResult<'a> =
-        Result<MultiReadGuard<'a, MockNonAliasedBufferReader, Self>, ReadError>;
-
-    fn read_multiple(
-        reader: &mut MockNonAliasedBufferReader,
+    fn read(
+        reader: &'guard mut MockNonAliasedBufferReader,
         num: usize,
-    ) -> Self::MultiReadResult<'_> {
+    ) -> Result<Self::ReadGuard, Self::ReadError> {
         let (primary_region, secondary_region) = reader.readable_region();
         let mut read_data = Vec::with_capacity(num);
         let mut advance_size = 0;
@@ -116,6 +75,10 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
             advance_size += aligned_entry_size;
         }
 
-        Ok(MultiReadGuard::new(reader, read_data, advance_size))
+        Ok(MockNonAliasedBufferReadGuard::from_reader(
+            reader,
+            read_data,
+            advance_size,
+        ))
     }
 }
