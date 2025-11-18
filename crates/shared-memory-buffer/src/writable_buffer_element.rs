@@ -20,9 +20,12 @@ pub enum SharedMemoryTypedWriteError {
 macro_rules! impl_circular_buffer_writable {
     ($type:ty) => {
         impl $crate::CircularBufferWritable<$crate::SharedMemoryBufferWriter> for $type {
-            type WriteResult = Result<(), $crate::SharedMemoryTypedWriteError>;
+            type WriteError = $crate::SharedMemoryTypedWriteError;
 
-            fn write(&self, writer: &mut $crate::SharedMemoryBufferWriter) -> Self::WriteResult {
+            fn write(
+                &self,
+                writer: &mut $crate::SharedMemoryBufferWriter,
+            ) -> Result<(), Self::WriteError> {
                 let aligned_size =
                     ebutils::align_up_pow2(self.length_in_bytes(), writer.alignment_pow2());
                 let (primary_region, secondary_region) = writer.writable_region();
