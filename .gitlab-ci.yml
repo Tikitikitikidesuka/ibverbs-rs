@@ -1,50 +1,37 @@
 stages:
-  - build-image
   - run-jobs
 
 variables:
   RUST_BACKTRACE: 1
-  DOCKERFILE: "$CI_PROJECT_DIR/Dockerfile"
-  RUST_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  RUST_IMAGE: "$CI_REGISTRY_IMAGE:latest"
   #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
-build:
-  stage: build-image
-  image:
-    name: gitlab-registry.cern.ch/ci-tools/docker-image-builder
-    entrypoint: [ "" ]
-  script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $DOCKERFILE --destination $RUST_IMAGE
-  only:
-    - master
-
-.rust_template:
-  tags: [ online_network, docker ]
+.deps_template:
   image: ${RUST_IMAGE}
-  dependencies:
-    - build
+
+.online_template:
+  extends: .deps_template
+  tags: [online_network, docker]
 
 rust-check:
-  extends: .rust_template
+  extends: .deps_template
   stage: run-jobs
   script:
-    - cargo check --all-features --offline
-    - cargo clippy --all-features --no-deps --offline
+    - cargo check --all-features
+    - cargo clippy --all-features --no-deps
     - cargo fmt -- --check
 
 rust-test:
-  extends: .rust_template
+  extends: .deps_template
   stage: run-jobs
   script:
-    - cargo test --all --all-features --offline
+    - cargo test --all --all-features
 
 pages:
-  extends: .rust_template
+  extends: .deps_template
   stage: run-jobs
   script:
-    - cargo doc --workspace --no-deps --all-features --offline
+    - cargo doc --workspace --no-deps --all-features
     - mkdir -p public
     - cp -r target/doc/* public/
     - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
@@ -54,7 +41,7 @@ pages:
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 #rust-test-hardware:
-#extends: .rust_template
+#extends: .online_template
 #stage: test
 #script:
 #- cargo test --features hardware-tests
