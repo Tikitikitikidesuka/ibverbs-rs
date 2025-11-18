@@ -1,6 +1,6 @@
 use crate::stream::mapped_stream::PCIe40MappedStream;
 use crate::stream::stream::PCIe40StreamError;
-use circular_buffer::CircularBufferReader;
+use circular_buffer::{CircularBufferReader, SizedReadGuard};
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
@@ -125,3 +125,5 @@ impl<'r> CircularBufferReader for PCIe40Reader<'r> {
             [self.read_offset..(self.read_offset + available_bytes)])
     }
 }
+
+pub type PCIe40ReadGuard<'guard, 'buf, T> = SizedReadGuard<'guard, PCIe40Reader<'buf>, T>;
