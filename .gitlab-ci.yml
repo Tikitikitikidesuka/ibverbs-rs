@@ -14,7 +14,6 @@ variables:
   image: ${RUST_IMAGE}
 
 .rust_template:
-  tags: [docker-aarch64]
   image: ${RUST_IMAGE}
 
 # Syntax and code quality check
