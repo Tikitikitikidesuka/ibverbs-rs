@@ -152,8 +152,8 @@ impl<D: AsRef<[u32]>> Debug for MdfFile<D> {
         f.debug_list()
             .entries(self.mdf_record_iter().map(|r| {
                 r.try_into_single_event()
-                    .map(|r| r as &dyn Debug)
-                    .unwrap_or(r)
+                    .map(|r| Box::new(r) as Box<dyn Debug> )
+                    .unwrap_or(Box::new(r))
             }))
             .finish()
     }

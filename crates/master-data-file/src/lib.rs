@@ -4,7 +4,6 @@ use core::fmt;
 use std::{fmt::Debug, slice};
 
 use bytemuck::cast_ref;
-use ebutils::Uninstantiatable;
 use ebutils::{EventId, fragment::Fragment, odin::OdinPayload};
 use thiserror::Error;
 
@@ -62,7 +61,7 @@ compile_error!("Only little endian supported!");
 pub struct MdfRecord<H: SpecificHeaderType = Unknown> {
     /// Invariant: sizes are valid (i.e. at least two equal).
     generic_header: MdfHeader<H>,
-    _unin: Uninstantiatable,
+    body: [u32],
 }
 
 impl<H: SpecificHeaderType> MdfRecord<H> {
@@ -152,7 +151,7 @@ impl MdfRecord {
             });
         }
 
-        let record = unsafe { &*data.as_ptr().cast() };
+        let record = unsafe { &*(data as *const [u32] as *const Self) };
 
         Ok((record, &data[length_32..]))
     }

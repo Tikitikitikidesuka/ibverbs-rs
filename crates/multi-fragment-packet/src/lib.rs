@@ -8,9 +8,9 @@ pub mod pcie40_readable;
 pub mod shared_memory_element;
 
 pub use builder::MultiFragmentPacketBuilder;
+use ebutils::EventId;
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;
-use ebutils::{EventId, Uninstantiatable};
 pub mod owned;
 
 pub use owned::MultiFragmentPacketOwned;
@@ -18,7 +18,7 @@ pub use owned::MultiFragmentPacketOwned;
 use std::fmt::{Debug, Display};
 use std::mem::offset_of;
 use std::ops::Range;
-use std::{slice};
+use std::slice;
 use thiserror::Error;
 
 #[cfg(not(target_endian = "little"))]
