@@ -1,63 +1,66 @@
 stages:
-  - check
-  - test
-  - docs
+  - build-image
+  - run-jobs
 
 variables:
-  RUST_IMAGE: "gitlab-registry.cern.ch/lhcb-online/rusteb:latest"
   RUST_BACKTRACE: 1
+  DOCKERFILE: "$CI_PROJECT_DIR/Dockerfile"
+  RUST_IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
   #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
-# Common configuration to be extended
-.rust_hardware-template:
-  tags: [online_network, docker]
-  image: ${RUST_IMAGE}
+build:
+  stage: build-image
+  image:
+    name: gitlab-registry.cern.ch/ci-tools/docker-image-builder
+    entrypoint: [ "" ]
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $DOCKERFILE \
+      --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA \
+      --destination $CI_REGISTRY_IMAGE:latest
+  only:
+    - master
 
 .rust_template:
+  tags: [ online_network, docker ]
   image: ${RUST_IMAGE}
+  dependencies:
+    - build
 
-# Syntax and code quality check
 rust-check:
   extends: .rust_template
-  stage: check
+  stage: run-jobs
   script:
-    - cargo check --all-features
-    - cargo clippy --all-features --no-deps # -- -D warnings
+    - cargo check --all-features --offline
+    - cargo clippy --all-features --no-deps --offline
     - cargo fmt -- --check
-  when: always
 
-# Run standard tests (excluding hardware tests)
 rust-test:
   extends: .rust_template
-  stage: test
+  stage: run-jobs
   script:
-    - cargo test --all --all-features
-  when: always
+    - cargo test --all --all-features --offline
 
-# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
-# Run tests including hardware tests
-#rust-test-hardware:
-  #extends: .rust_template
-  #stage: test
-  #script:
-    #- cargo test --features hardware-tests
-  #tags:
-    #- online_network
-    #- docker
-    ##- pcie40-hardware # Add a specific tag for runners with the hardware
-
-# Build and publish documentation to GitLab Pages
 pages:
   extends: .rust_template
-  stage: docs
+  stage: run-jobs
   script:
-    - cargo doc --workspace --no-deps --all-features
+    - cargo doc --workspace --no-deps --all-features --offline
     - mkdir -p public
     - cp -r target/doc/* public/
     - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
   artifacts:
     paths:
       - public
-  only:
-    - master
-  when: always
+
+# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
+#rust-test-hardware:
+#extends: .rust_template
+#stage: test
+#script:
+#- cargo test --features hardware-tests
+#tags:
+#- online_network
+#- docker
+##- pcie40-hardware # Add a specific tag for runners with the hardware
