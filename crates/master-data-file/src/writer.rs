@@ -235,7 +235,7 @@ mod test {
         let records = MdfFile::from_data(&mdf);
         println!("in record {:08X?}", records.data());
         println!("Records {records:#?}");
-        let record = unsafe { &*(records.data() as *const [u32] as *const MdfRecord<Unknown>) };
+        let record = MdfRecord::from_data(records.data()).unwrap().0;
         println!("3: {:?}", record.generic_header);
         let records = records
             .mdf_record_iter()

@@ -21,6 +21,7 @@ pub mod rounting_bits;
 pub mod writer;
 
 pub use file::MdfFile;
+use multi_fragment_packet::MultiFragmentPacket;
 #[cfg(feature = "mep")]
 pub use writer::WriteMdf;
 
@@ -151,7 +152,9 @@ impl MdfRecord {
             });
         }
 
-        let record = unsafe { &*(data as *const [u32] as *const Self) };
+        let record = unsafe {
+            &*(&data[..data.len() - header_data.len()] as *const [u32] as *const MdfRecord)
+        };
 
         Ok((record, &data[length_32..]))
     }
@@ -180,7 +183,8 @@ impl MdfRecord {
 /// Error indicating why an MDF record could not be read from raw data.
 #[derive(Debug, Error)]
 pub enum MdfFromDataError {
-    #[error("Slice is to small to even read the header: is {0}, but header is at least {hdr} u32 words", hdr = MdfHeader::<Unknown>::HEADER_SIZE_MIN_U32)]
+    #[error("Slice is to small to even read the header: is {0}, but header is at least {hdr} u32 words", hdr = MdfHeader::<Unknown>::HEADER_SIZE_MIN_U32
+    )]
     TooSmallForHeader(usize),
     #[error("Header length do not match: {0:?}")]
     HeaderLengthMismatch([u32; 3]),
@@ -306,7 +310,6 @@ impl MdfRecord<MultiPurpose> {
 
 #[cfg(test)]
 mod test {
-
     use include_bytes_aligned::include_bytes_aligned;
 
     use crate::file::MdfFile;

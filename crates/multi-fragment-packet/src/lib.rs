@@ -225,7 +225,7 @@ impl MultiFragmentPacket {
     /// The passed data must be at least as large as the header size, and as the size indicated in the header.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
         // SAFETY: See function preconditions
-        unsafe { &*(data as *const [u8] as *const MultiFragmentPacket) }
+        unsafe { &*(&data[..data.len() - Self::HEADER_SIZE] as *const [u8] as *const MultiFragmentPacket) }
     }
 
     fn header(&self) -> &MultiFragmentPacketHeader {
