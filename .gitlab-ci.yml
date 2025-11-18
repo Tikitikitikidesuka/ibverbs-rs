@@ -9,8 +9,12 @@ variables:
   #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
 # Common configuration to be extended
-.rust_template:
+.rust_hardware-template:
   tags: [online_network, docker]
+  image: ${RUST_IMAGE}
+
+.rust_template:
+  tags: [docker]
   image: ${RUST_IMAGE}
 
 # Syntax and code quality check
@@ -18,8 +22,8 @@ rust-check:
   extends: .rust_template
   stage: check
   script:
-    - cargo check --all-features --offline
-    - cargo clippy --all-features --no-deps --offline # -- -D warnings
+    - cargo check --all-features
+    - cargo clippy --all-features --no-deps # -- -D warnings
     - cargo fmt -- --check
   when: always
 
@@ -28,7 +32,7 @@ rust-test:
   extends: .rust_template
   stage: test
   script:
-    - cargo test --all --all-features --offline
+    - cargo test --all --all-features
   when: always
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
@@ -48,7 +52,7 @@ pages:
   extends: .rust_template
   stage: docs
   script:
-    - cargo doc --workspace --no-deps --all-features --offline
+    - cargo doc --workspace --no-deps --all-features
     - mkdir -p public
     - cp -r target/doc/* public/
     - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
