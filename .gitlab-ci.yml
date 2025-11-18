@@ -21,6 +21,7 @@ rust-check:
     - cargo check --all-features --offline
     - cargo clippy --all-features --no-deps --offline # -- -D warnings
     - cargo fmt -- --check
+  when: always
 
 # Run standard tests (excluding hardware tests)
 rust-test:
@@ -28,6 +29,7 @@ rust-test:
   stage: test
   script:
     - cargo test --all --all-features --offline
+  when: always
 
 # TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
 # Run tests including hardware tests
@@ -49,9 +51,10 @@ pages:
     - cargo doc --workspace --no-deps --all-features --offline
     - mkdir -p public
     - cp -r target/doc/* public/
-    - echo '<meta http-equiv="refresh" content="0; url=rusteb/index.html">' > public/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
   artifacts:
     paths:
       - public
   only:
     - master
+  when: always
