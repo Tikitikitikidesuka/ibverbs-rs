@@ -38,13 +38,13 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
         debug!("Attempting to advance the buffer's write pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !alignment_utils::check_alignment_pow2(bytes, 1) {
+        if !ebutils::check_alignment_pow2(bytes, 1) {
             warn!("Aborting write pointer advance due to failed 2 byte alignment violation");
             return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
         }
 
         debug!("Checking buffer's alignment");
-        if !alignment_utils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
+        if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
             warn!("Aborting write pointer advance due to buffer's alignment violation");
             return Err(SharedMemoryBufferAdvanceError::NotAligned);
         }

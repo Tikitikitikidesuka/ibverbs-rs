@@ -1,57 +1,51 @@
 stages:
-  - check
-  - test
-  - docs
+  - run-jobs
 
 variables:
-  RUST_IMAGE: "gitlab-registry.cern.ch/mhermoso/pcie40-rs:latest"
   RUST_BACKTRACE: 1
+  RUST_IMAGE: "$CI_REGISTRY_IMAGE:latest"
   #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
 
-# Common configuration to be extended
-.rust_template:
-  tags: [online_network, docker]
+.deps_template:
   image: ${RUST_IMAGE}
 
-# Syntax and code quality check
+.online_template:
+  extends: .deps_template
+  tags: [online_network, docker]
+
 rust-check:
-  extends: .rust_template
-  stage: check
+  extends: .deps_template
+  stage: run-jobs
   script:
     - cargo check --all-features
-    - cargo clippy --all-features --no-deps # -- -D warnings
+    - cargo clippy --all-features --no-deps
     - cargo fmt -- --check
 
-# Run standard tests (excluding hardware tests)
 rust-test:
-  extends: .rust_template
-  stage: test
+  extends: .deps_template
+  stage: run-jobs
   script:
     - cargo test --all --all-features
 
-# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
-# Run tests including hardware tests
-#rust-test-hardware:
-  #extends: .rust_template
-  #stage: test
-  #script:
-    #- cargo test --features hardware-tests
-  #tags:
-    #- online_network
-    #- docker
-    ##- pcie40-hardware # Add a specific tag for runners with the hardware
-
-# Build and publish documentation to GitLab Pages
 pages:
-  extends: .rust_template
-  stage: docs
+  extends: .deps_template
+  stage: run-jobs
   script:
-    - cargo doc --no-deps --all-features
+    - cargo doc --workspace --no-deps --all-features
     - mkdir -p public
     - cp -r target/doc/* public/
-    - echo '<meta http-equiv="refresh" content="0; url=pcie40_rs/index.html">' > public/index.html
+    - echo '<meta http-equiv="refresh" content="0; url=rusteb">' > public/index.html
   artifacts:
     paths:
       - public
-  only:
-    - master
+
+# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
+#rust-test-hardware:
+#extends: .online_template
+#stage: test
+#script:
+#- cargo test --features hardware-tests
+#tags:
+#- online_network
+#- docker
+##- pcie40-hardware # Add a specific tag for runners with the hardware
