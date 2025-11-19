@@ -22,6 +22,10 @@ The sub-crates represent the major components of the Event Builder:
 - [`multi-event-packet`](crates/multi-event-packet/): Library for assembling and reading MEPs.
 - [`master-data-file`](crates/master-data-file/): Library for reading and writing MDF files.
 
+
+The following binaries are provided:
+- [`mdf-reader`](src/bin/mdf-reader.rs): Simple tool to inspect MDF files, similar to `pcie40_mdfreader`.
+
 Additionally, there are some examples in the [`examples`](examples) directory.
 
 ## Overview of data formats and their relationships

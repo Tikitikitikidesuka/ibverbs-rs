@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use bytemuck::{Pod, Zeroable, bytes_of};
 use thiserror::Error;
+use tracing::warn;
 use typed_builder::TypedBuilder;
 
 use crate::{fragment::Fragment, fragment_type::FragmentType};
@@ -29,6 +30,15 @@ pub struct OdinPayload {
 
 #[deny(clippy::cast_sign_loss)]
 impl OdinPayload {
+    /// The number of bunches that fit into LHC. This dictates the maximal number of bunch crossings.
+    pub const BUNCH_PER_ORBIT: u16 = 3564;
+
+    /// The version such fragments should have, as configured in an MFP.
+    pub const FRAGMENT_VERSION: u8 = 7;
+
+    /// The type such odin fragments should have.
+    pub const FRAGMENT_TYPE: FragmentType = FragmentType::ODIN;
+
     /// This is the Run Number as set by the central ECS at the start of a run.
     pub fn run_number(self) -> u32 {
         self.run_number
@@ -137,11 +147,6 @@ impl OdinPayload {
         (self.misc >> 28 & 0xF) as u8
     }
 
-    /// This is a convenice method that returns the fragment type each odin payload should have.
-    pub fn supposed_fragment_type() -> FragmentType {
-        FragmentType::Odin
-    }
-
     /// Returns a typed builder for constructing an OdinPayload.
     ///
     /// The following setter methods are required:
@@ -206,9 +211,12 @@ pub enum FragmentCastError {
     /// The fragment does not mach the required one.
     #[error("Wrong fragment type: expected {expected} but got {got}")]
     WrongFragmentType { expected: FragmentType, got: u8 },
-    /// The fragment type maches, but its size is wrong.
+    /// The fragment type matches, but its size is wrong.
     #[error("Wrong fragment size: expected {expected} but got {got}")]
     WrongFragmentSize { expected: usize, got: usize },
+    /// The fragment type matches, but the version is not supported.
+    #[error("Unsupported fragment version: got {got} but only {supported} are supported")]
+    WrongFragmentVersion { supported: String, got: u8 },
 }
 
 impl<'a> TryFrom<Fragment<'a>> for Fragment<'a, OdinPayload> {
@@ -248,19 +256,38 @@ impl<'a> Fragment<'a> {
     pub fn try_into_odin(&self) -> Result<Fragment<'a, OdinPayload>, FragmentCastError> {
         if !self
             .fragment_type_parsed()
-            .is_some_and(|t| t == FragmentType::Odin)
+            .is_some_and(|t| t == FragmentType::ODIN)
         {
             return Err(FragmentCastError::WrongFragmentType {
-                expected: FragmentType::Odin,
+                expected: FragmentType::ODIN,
                 got: self.fragment_type_raw(),
             });
         }
 
+        if self.version() != OdinPayload::FRAGMENT_VERSION {
+            warn!(
+                "Encountered unsupported fragment version {} for odin fragment",
+                self.version(),
+            );
+            return Err(FragmentCastError::WrongFragmentVersion {
+                got: self.version(),
+                supported: OdinPayload::FRAGMENT_VERSION.to_string(),
+            });
+        }
+
         let odin = bytemuck::try_from_bytes(self.payload_bytes()).map_err(|e| match e {
-            bytemuck::PodCastError::SizeMismatch => FragmentCastError::WrongFragmentSize {
-                expected: size_of::<OdinPayload>(),
-                got: self.payload_bytes().len(),
-            },
+            bytemuck::PodCastError::SizeMismatch => {
+                warn!(
+                    "Encountered wrong fragment size of {} (expected {}) for odin fragment (version {})",
+                    self.payload_bytes().len(),
+                    size_of::<OdinPayload>(),
+                    self.version()
+                );
+                FragmentCastError::WrongFragmentSize {
+                    expected: size_of::<OdinPayload>(),
+                    got: self.payload_bytes().len(),
+                }
+            }
             e => panic!("{e:?}"),
         })?;
 
@@ -318,8 +345,7 @@ struct OdinBuilderInternal {
     /// increases monotonically and it is reset at every start run. The first event is identified by Event ID = 0.
     event_id: u64,
     // misc
-    /// This is the bunch crossing ID of the accepted event. It starts at 0 and wraps around at 3563.
-    /// 12 bit values.
+    /// This is the bunch crossing ID of the accepted event. It starts at 0 and wraps around after 3563 (3564 possible values).
     bunch_id: u16,
     /// The expected bunch crossing type for `(beam1, beam2)`. `false` mean no beam, `true` means beam.
     /// It is produced by an internal sequencer which is loaded
@@ -359,8 +385,7 @@ struct TaeConfig {
 impl From<OdinBuilderInternal> for Result<OdinPayload, OdinBuilderError> {
     fn from(builder: OdinBuilderInternal) -> Self {
         let mut misc: u32 = 0;
-        if builder.bunch_id >= (1 << 12) {
-            // todo check actual max "wraps around at 3563": at or after?
+        if builder.bunch_id >= OdinPayload::BUNCH_PER_ORBIT {
             return Err(OdinBuilderError::BunchIdTooLarge(builder.bunch_id));
         }
         misc |= (builder.bunch_id as u32) & ((1 << 12) - 1);
@@ -404,7 +429,7 @@ impl From<OdinBuilderInternal> for Result<OdinPayload, OdinBuilderError> {
 
 #[derive(Debug, Error)]
 pub enum OdinBuilderError {
-    #[error("Bunch ID too large: {0}, must be less than {top}", top = 1 << 12)]
+    #[error("Bunch ID too large: {0}, must be less than {top}, the maximally possible number of bunches pre orbit", top = OdinPayload::BUNCH_PER_ORBIT)]
     BunchIdTooLarge(u16),
     #[error("Trigger type too large: {0}, must be less than 16")]
     TriggerTypeTooLarge(u8),
@@ -489,7 +514,7 @@ mod test {
 
         let odin_payload = dummy_odin_payload(12345);
         let fragment: Fragment<'_, super::OdinPayload> = Fragment::new(
-            FragmentType::Odin as _,
+            FragmentType::ODIN as _,
             1,
             0,
             SourceId::new(SubDetector::Odin, 0),

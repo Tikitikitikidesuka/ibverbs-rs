@@ -1,11 +1,11 @@
 /*!
-# 💫🛠️ MDF decode
-[![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch/mdf_decode)
+# 💫🛠️ MDF Reader
+[![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch/mdf_reader)
 
 This binary is a simple tool to view MDF files.
 ## Example
 ```bash
-mdf-decode /path/to/file.mdf
+mdf-reader /path/to/file.mdf
 ```
 
 Output:
@@ -58,10 +58,10 @@ Output:
 ```text
 Crate containing examples and tools utilizing the other rusteb crates.
 
-Usage: mdf-decode [OPTIONS] <FILE>
+Usage: mdf-reader [OPTIONS] <FILE>
 
 Arguments:
-  <FILE>  File to decode
+  <FILE>  File to read
 
 Options:
       --color <COLOR>  Controls whether colored output is used [default: auto] [possible values: auto, always, never]
@@ -78,21 +78,29 @@ use std::{
 use clap::{ColorChoice, Parser};
 use colored::Colorize;
 use master_data_file::MdfFile;
-use pretty_hex::{Hex, HexConfig, config_hex};
+use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
+use tracing::{debug, level_filters::LevelFilter, trace};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// File to decode
+    /// File to read
     file: PathBuf,
     #[arg(long, default_value_t)]
     /// Controls whether colored output is used
     color: ColorChoice,
+    #[arg(long, default_value_t = LevelFilter::WARN)]
+    log_level: LevelFilter,
 }
 
 pub fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    tracing_subscriber::FmtSubscriber::builder()
+        .with_max_level(args.log_level)
+        .init();
+    trace!("Initialized logging.");
+    debug!("Using arguments: {:?}", args);
 
     match args.color {
         ColorChoice::Auto => (),
@@ -101,6 +109,7 @@ pub fn main() -> anyhow::Result<()> {
     }
 
     let x = MdfFile::mmap_file(&args.file)?;
+    trace!("Opened file {:?} with mmap", args.file);
 
     let mut output = BufWriter::new(stdout());
 

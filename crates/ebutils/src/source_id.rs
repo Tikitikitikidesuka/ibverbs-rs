@@ -45,7 +45,7 @@ impl SourceId {
 
     /// Returns the 11 sub detector specific bits of this source id.
     pub fn sub_part(self) -> u16 {
-        self.0 & (1 << ((SourceId::BITS - SubDetector::BITS) - 1))
+        self.0 & ((1 << (SourceId::BITS - SubDetector::BITS)) - 1)
     }
 
     /// Returns true if this is the source id for odin fragments.
@@ -112,6 +112,6 @@ mod test {
 
     #[test]
     fn test_sub_id() {
-        assert_eq!(SubDetector::UtC.to_source_id(0x3).0, 0x3003);
+        assert_eq!(SubDetector::Tdet.to_source_id(0x3).0, 0x7803);
     }
 }

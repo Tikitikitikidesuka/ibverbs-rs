@@ -33,8 +33,10 @@ use crate::{
 #[derive(Default)]
 pub struct MultiEventPacketBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
-    mfp_align: Option<usize>,
     odin_added: bool,
+    // general settings, don't get reset
+    mfp_align: Option<usize>,
+    allow_superfluous_odin_mfp: bool,
 }
 
 impl<'a> MultiEventPacketBuilder<'a> {
@@ -72,10 +74,18 @@ impl<'a> MultiEventPacketBuilder<'a> {
             }
         }
 
-        if self.odin_added && test_mfp.source_id().is_odin() {
-            return Err(EventBuilderError::SuperfluousOdinFragment);
+        if self.odin_added && test_mfp.source_id().is_odin() && !self.allow_superfluous_odin_mfp {
+            return Err(EventBuilderError::SuperfluousOdinMfp);
         }
         Ok(())
+    }
+
+    /// Allows to add more than one odin MFP.
+    ///
+    /// Generally, this is unwanted and disabled but may be useful for testing purposes when only odin fragments are created.
+    /// This is saved across resets.
+    pub fn allow_superfluous_odin_mfp(&mut self) {
+        self.allow_superfluous_odin_mfp = true;
     }
 
     /// Adds an MFP to this builder, only requiring a reference to it.
@@ -182,7 +192,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
             if mfp.source_id().is_odin() {
                 assert!(mfp.fragment_iter().all(|f| {
                     f.fragment_type_parsed()
-                        .is_some_and(|t| t == FragmentType::Odin)
+                        .is_some_and(|t| t == FragmentType::ODIN)
                 }));
             }
             let data = cast_slice_mut(data.as_mut());
@@ -202,6 +212,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     /// This is useful if you want to avoid any allocations while building MEPs.
     pub fn reset_mfps(&mut self) {
         self.mfps.clear();
+        self.odin_added = false;
     }
 
     /// Generates the MFP offsets in bytes from the start of the header.
@@ -236,7 +247,7 @@ pub enum EventBuilderError {
     MismatchingFragmentCount { expected: u16, got: u16 },
     /// You tried to add more than one ODIN MFP.
     #[error("An odin MFP was already added (Sub detector 0), you tried to add another one.")]
-    SuperfluousOdinFragment,
+    SuperfluousOdinMfp,
     /// You tried to build an MFP without an odin fragment.
     #[error("No odin MFP was added. Exactly one Odin MFP is required.")]
     NoOdinFragment,
@@ -265,8 +276,8 @@ mod test {
             .with_fragment_version(22)
             .with_magic(MultiFragmentPacket::VALID_MAGIC)
             .with_source_id(SourceId::new(SubDetector::Odin, 0))
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(123456))
-            .add_fragment(FragmentType::Odin, dummy_odin_payload(123457))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(123456))
+            .add_fragment(FragmentType::ODIN, dummy_odin_payload(123457))
             .build();
         let mfp2 = MultiFragmentPacketBuilder::new()
             .with_event_id(123456)

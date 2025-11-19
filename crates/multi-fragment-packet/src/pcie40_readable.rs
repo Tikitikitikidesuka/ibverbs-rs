@@ -6,6 +6,7 @@ use circular_buffer::{
 use pcie40::reader::PCIe40Reader;
 use pcie40::stream::stream::PCIe40StreamError;
 use thiserror::Error;
+use tracing::error;
 
 /// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
