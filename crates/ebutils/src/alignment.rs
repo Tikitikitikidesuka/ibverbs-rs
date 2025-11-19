@@ -1,4 +1,17 @@
-/// Returns the smallest multiple of `alignment` higher or equal to `n`
+/// Returns the smallest multiple of `alignment` that is greater than or equal to `n`.
+///
+/// If either argument is `0`, the function returns `n` unchanged.
+///
+/// If `alignment` is a power of two, this delegates to [`align_up_pow2`].
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::align_up;
+/// assert_eq!(align_up(10, 4), 12);
+/// assert_eq!(align_up(8, 4), 8);
+/// assert_eq!(align_up(0, 4), 0);
+/// ```
 pub fn align_up(n: usize, alignment: usize) -> usize {
     if n == 0 || alignment == 0 {
         return n;
@@ -22,7 +35,21 @@ pub fn align_up(n: usize, alignment: usize) -> usize {
     }
 }
 
-/// Returns the highest multiple of `alignment` lower or equal to `n`
+
+/// Returns the largest multiple of `alignment` that is less than or equal to `n`.
+///
+/// If either argument is `0`, the function returns `n` unchanged.
+///
+/// If `alignment` is a power of two, this delegates to [`align_down_pow2`].
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::align_down;
+/// assert_eq!(align_down(10, 4), 8);
+/// assert_eq!(align_down(8, 4), 8);
+/// assert_eq!(align_down(0, 4), 0);
+/// ```
 pub fn align_down(n: usize, alignment: usize) -> usize {
     if n == 0 || alignment == 0 {
         return n;
@@ -42,7 +69,17 @@ pub fn align_down(n: usize, alignment: usize) -> usize {
     }
 }
 
-/// Returns the smallest multiple of 2^`exponent` higher or equal to `n`
+/// Returns the smallest multiple of `2^exponent` that is greater than or equal to `n`.
+///
+/// This function assumes `exponent < usize::BITS`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::align_up_pow2;
+/// assert_eq!(align_up_pow2(10, 2), 12); // align to 4
+/// assert_eq!(align_up_pow2(8, 3), 8);  // align to 8
+/// ```
 pub fn align_up_pow2(n: usize, exponent: u8) -> usize {
     // Step 1: Calculate alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -72,7 +109,16 @@ pub fn align_up_pow2(n: usize, exponent: u8) -> usize {
     size_plus_mask & inverted_mask
 }
 
-/// Returns the highest multiple of 2^`exponent` lower or equal to `n`
+
+/// Returns the largest multiple of `2^exponent` that is less than or equal to `n`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::align_down_pow2;
+/// assert_eq!(align_down_pow2(10, 3), 8); // align to 8
+/// assert_eq!(align_down_pow2(8, 3), 8);
+/// ```
 pub fn align_down_pow2(n: usize, exponent: u8) -> usize {
     // Calculate the alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -95,7 +141,19 @@ pub fn align_down_pow2(n: usize, exponent: u8) -> usize {
     n & inverted_mask
 }
 
-/// Returns true if `n` is a multiple of `alignment`.
+/// Returns `true` if `n` is a multiple of `alignment`.
+///
+/// If either argument is `0`, the function returns `true`.
+///
+/// If `alignment` is a power of two, this delegates to [`check_alignment_pow2`].
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::check_alignment;
+/// assert!(check_alignment(16, 4));
+/// assert!(!check_alignment(18, 4));
+/// ```
 pub fn check_alignment(n: usize, alignment: usize) -> bool {
     if n == 0 || alignment == 0 {
         return true;
@@ -114,7 +172,15 @@ pub fn check_alignment(n: usize, alignment: usize) -> bool {
     }
 }
 
-/// Returns true if `n` is a multiple of 2^`exponent`.
+/// Returns `true` if `size` is a multiple of `2^exponent`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::check_alignment_pow2;
+/// assert!(check_alignment_pow2(16, 4)); // 16 is aligned to 16
+/// assert!(!check_alignment_pow2(18, 4));
+/// ```
 pub fn check_alignment_pow2(size: usize, exponent: u8) -> bool {
     // Calculate the alignment value (2^exponent)
     let alignment = 1 << exponent;
@@ -128,7 +194,19 @@ pub fn check_alignment_pow2(size: usize, exponent: u8) -> bool {
     (size & mask) == 0
 }
 
-/// Wraps `n` with modulus `wrap`.
+/// Returns `n` wrapped modulo `wrap`.
+///
+/// If `wrap` is `0`, returns `n`.
+///
+/// If `wrap` is a power of two, this delegates to [`wrap_around_pow2`].
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::wrap_around;
+/// assert_eq!(wrap_around(10, 4), 2);
+/// assert_eq!(wrap_around(10, 0), 10);
+/// ```
 pub fn wrap_around(n: usize, wrap: usize) -> usize {
     if wrap == 0 {
         return n;
@@ -144,7 +222,14 @@ pub fn wrap_around(n: usize, wrap: usize) -> usize {
     }
 }
 
-/// Wraps `n` with modulus 2^`wrap_pow2`.
+/// Wraps `n` with modulus `2^wrap_pow2`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::wrap_around_pow2;
+/// assert_eq!(wrap_around_pow2(10, 2), 2); // wrap by 4
+/// ```
 pub fn wrap_around_pow2(n: usize, wrap_pow2: u8) -> usize {
     // Calculate the wrap value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -161,22 +246,27 @@ pub fn wrap_around_pow2(n: usize, wrap_pow2: u8) -> usize {
     n & mask
 }
 
-/// Returns 2^`exponent`
+/// Returns `2^exponent`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::pow2;
+/// assert_eq!(pow2(3), 8);
+/// ```
 pub fn pow2(exponent: u8) -> usize {
     1 << exponent
 }
 
-/// Enum representing a result of `is_pow2`
-pub enum IsPow2Result {
-    /// The input is equal to 2^`self.0`
-    Yes(u8),
-    /// The input is not a power of 2
-    No,
-}
-
-/// Returns `Some(u8)` if input `n` is a power of 2.
-/// The enclosed `u8` is the exponent of 2, p, such that `n = 2^p`.
-/// Otherwise, returns `None`.
+/// Returns `Some(exponent)` if `n` is a power of two, otherwise `None`.
+///
+/// # Examples
+///
+/// ```
+/// # use ebutils::pow2_exponent;
+/// assert_eq!(pow2_exponent(8), Some(3));
+/// assert_eq!(pow2_exponent(10), None);
+/// ```
 pub fn pow2_exponent(n: usize) -> Option<u8> {
     if n != 0 && (n & (n - 1)) == 0 {
         Some(n.trailing_zeros().try_into().expect("bits fit into u8"))
