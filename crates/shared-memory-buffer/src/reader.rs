@@ -1,6 +1,7 @@
 use crate::buffer_backend::SharedMemoryReadBuffer;
 use crate::buffer_status::PtrStatus;
 use circular_buffer::CircularBufferReader;
+use std::convert::Infallible;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
@@ -42,11 +43,13 @@ impl SharedMemoryBufferReader {
 }
 
 impl CircularBufferReader for SharedMemoryBufferReader {
-    type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
-    type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
+    type AdvanceStatus = ();
+    type AdvanceError = SharedMemoryBufferAdvanceError;
+    type ReadableRegion<'buf_ref> = (&'buf_ref [u8], &'buf_ref [u8]);
+    type ReadableRegionError = Infallible;
 
     #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
-    fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
+    fn advance_read_pointer(&mut self, bytes: usize) -> Result<Self::AdvanceStatus, Self::AdvanceError>{
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
@@ -62,7 +65,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
         }
 
         debug!("Checking buffer's available space on readable region");
-        let (primary_region, secondary_region) = self.readable_region();
+        let (primary_region, secondary_region) = self.readable_region().unwrap();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
             warn!("Aborting read pointer advance due to insufficient buffer readable region space");
@@ -77,7 +80,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
     }
 
     #[instrument(skip_all, fields(shmem = self.buffer.name()))]
-    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
+    fn readable_region(&self) -> Result<Self::ReadableRegion<'_>, Infallible> {
         debug!("Attempting to get the buffer's readable region");
 
         debug!("Getting the buffer's write pointer and complete byte slice");
@@ -97,7 +100,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
             let secondary_region = &[];
 
             debug!("Got the primary region and put an empty slice on secondary successfully");
-            (primary_region, secondary_region)
+            Ok((primary_region, secondary_region))
         } else {
             debug!("Readable region wraps around");
             // Primary region: from read_ptr to end
@@ -106,7 +109,7 @@ impl CircularBufferReader for SharedMemoryBufferReader {
             let secondary_region = &buffer_slice[..write_status.ptr() as usize];
 
             debug!("Got the two regions successfully");
-            (primary_region, secondary_region)
+            Ok((primary_region, secondary_region))
         }
     }
 }

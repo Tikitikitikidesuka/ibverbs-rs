@@ -32,7 +32,7 @@ impl<'guard, Reader: CircularBufferReader, T: ?Sized> Deref for SizedReadGuard<'
 impl<'guard, Reader: CircularBufferReader, T: ?Sized> ReadGuard<'guard, Reader, T>
     for SizedReadGuard<'guard, Reader, T>
 {
-    fn discard(self) -> Reader::AdvanceResult
+    fn discard(self) -> Result<Reader::AdvanceStatus, Reader::AdvanceError>
     where
         Self: Sized,
     {

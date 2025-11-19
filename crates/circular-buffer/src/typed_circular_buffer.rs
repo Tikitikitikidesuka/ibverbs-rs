@@ -22,15 +22,16 @@ where
 pub trait ReadGuard<'guard, Reader: CircularBufferReader + ?Sized, T: ?Sized + 'guard>:
 Deref<Target = [&'guard T]>
 {
-    fn discard(self) -> Reader::AdvanceResult
+    fn discard(self) -> Result<Reader::AdvanceStatus, Reader::AdvanceError>
     where
         Self: Sized;
 }
 
 pub trait CircularBufferWritable<Writer: CircularBufferWriter> {
+    type WriteStatus;
     type WriteError: Error;
 
-    fn write(&self, writer: &mut Writer) -> Result<(), Self::WriteError>;
+    fn write(&self, writer: &mut Writer) -> Result<Self::WriteStatus, Self::WriteError>;
 }
 
 // To write multiple structures, the user can call write many times or implement
