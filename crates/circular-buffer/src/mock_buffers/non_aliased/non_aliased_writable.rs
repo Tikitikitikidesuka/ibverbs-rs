@@ -7,6 +7,7 @@ use crate::mock_buffers::WriteError;
 use crate::mock_buffers::non_aliased::{MockNonAliasedBufferWriter, VALID_MAGIC, WRAP_MAGIC};
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for BufferedDiaryEntry {
+    type WriteStatus = ();
     type WriteError = WriteError;
 
     fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
@@ -15,6 +16,7 @@ impl CircularBufferWritable<MockNonAliasedBufferWriter> for BufferedDiaryEntry {
 }
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for OwnedDiaryEntry {
+    type WriteStatus = ();
     type WriteError = WriteError;
 
     fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
@@ -27,7 +29,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
     writer: &mut MockNonAliasedBufferWriter,
 ) -> Result<(), WriteError> {
     let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
-    let (primary_region, secondary_region) = writer.writable_region();
+    let (primary_region, secondary_region) = writer.writable_region().unwrap();
 
     // Determine which region to write to and calculate advance size
     let (writable_region, advance_size) = if aligned_size <= primary_region.len() {

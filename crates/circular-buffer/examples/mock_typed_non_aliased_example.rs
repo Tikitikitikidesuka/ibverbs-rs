@@ -8,8 +8,8 @@ fn main() {
     // [ , , , ]
     let mut demo_buffer = MockNonAliasedBuffer::new(128, 5).unwrap();
 
-    let mut reader = MockNonAliasedBufferReader::new(&mut demo_buffer).unwrap();
-    let mut writer = MockNonAliasedBufferWriter::new(&mut demo_buffer).unwrap();
+    let mut reader = MockNonAliasedBufferReader::new(demo_buffer.clone()).unwrap();
+    let mut writer = MockNonAliasedBufferWriter::new(demo_buffer.clone()).unwrap();
 
     // [0, , , ]
     let writable_entry_0_32 = OwnedDiaryEntry::new(1, 1, 2000, "First B)".to_string());

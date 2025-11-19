@@ -3,11 +3,11 @@ use circular_buffer::mock_buffers::{MockNonAliasedBuffer, MockNonAliasedBufferRe
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
-    let mut demo_buffer = MockNonAliasedBuffer::new(16, 1).unwrap();
+    let demo_buffer = MockNonAliasedBuffer::new(16, 1).unwrap();
 
     // Create reader and writer
-    let mut reader = MockNonAliasedBufferReader::new(&mut demo_buffer).unwrap();
-    let mut writer = MockNonAliasedBufferWriter::new(&mut demo_buffer).unwrap();
+    let mut reader = MockNonAliasedBufferReader::new(demo_buffer.clone()).unwrap();
+    let mut writer = MockNonAliasedBufferWriter::new(demo_buffer.clone()).unwrap();
 
     write_to_non_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_non_contiguous_buffer(&reader);
@@ -32,7 +32,7 @@ fn write_to_non_contiguous_buffer(
     writer: &mut MockNonAliasedBufferWriter,
     data: &[u8],
 ) -> Result<(), ()> {
-    let (primary_region, secondary_region) = writer.writable_region();
+    let (primary_region, secondary_region) = writer.writable_region().unwrap();
 
     if data.len() > primary_region.len() + secondary_region.len() {
         Err(())
@@ -55,7 +55,7 @@ fn write_to_non_contiguous_buffer(
 }
 
 fn print_non_contiguous_buffer(reader: &MockNonAliasedBufferReader) {
-    let (primary_region, secondary_region) = reader.readable_region();
+    let (primary_region, secondary_region) = reader.readable_region().unwrap();
 
     println!("\nREAD: ");
     println!("Primary: {:?}", primary_region);
