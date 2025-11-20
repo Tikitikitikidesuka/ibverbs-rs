@@ -6,10 +6,10 @@ use circular_buffer::mock_buffers::{
 
 fn main() {
     // [ , , , ]
-    let mut demo_buffer = MockAliasedBuffer::new(128, 5).unwrap();
+    let demo_buffer = MockAliasedBuffer::new(128, 5).unwrap();
 
-    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer).unwrap();
-    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer).unwrap();
+    let mut reader = MockAliasedBufferReader::new(demo_buffer.clone()).unwrap();
+    let mut writer = MockAliasedBufferWriter::new(demo_buffer.clone()).unwrap();
 
     // [0, , , ]
     let writable_entry_0_32 = OwnedDiaryEntry::new(1, 1, 2000, "First B)".to_string());

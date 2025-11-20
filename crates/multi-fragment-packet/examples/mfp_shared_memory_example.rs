@@ -1,6 +1,5 @@
 use circular_buffer::{CircularBufferReadable, CircularBufferWritable, ReadGuard};
-use ebutils::{fragment_type::FragmentType, source_id::SourceId, SubDetector};
-use ebutils::odin::dummy_odin_payload;
+use ebutils::{fragment_type::FragmentType, SubDetector};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,

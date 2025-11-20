@@ -57,7 +57,7 @@ where
         reader: &'guard mut MockAliasedBufferReader,
         num: usize,
     ) -> Result<Self::ReadGuard, Self::ReadError> {
-        let readable_region = reader.readable_region();
+        let readable_region = reader.readable_region().unwrap();
 
         let mut advance_size = 0;
         let mut read_data = Vec::with_capacity(num);

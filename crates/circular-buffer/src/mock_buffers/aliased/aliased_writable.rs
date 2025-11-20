@@ -30,7 +30,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
 ) -> Result<(), WriteError> {
     let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
 
-    let writable_region = writer.writable_region();
+    let writable_region = writer.writable_region().unwrap();
 
     // Validate enough space for write
     if aligned_size > writable_region.len() {
@@ -63,6 +63,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
 }
 
 impl CircularBufferWritable<MockAliasedBufferWriter> for BufferedDiaryEntry {
+    type WriteStatus = ();
     type WriteError = WriteError;
 
     /// This implementation delegates to [`write_diary_entry()`] for zero-copy writing. It enables
@@ -78,6 +79,7 @@ impl CircularBufferWritable<MockAliasedBufferWriter> for BufferedDiaryEntry {
 }
 
 impl CircularBufferWritable<MockAliasedBufferWriter> for OwnedDiaryEntry {
+    type WriteStatus = ();
     type WriteError = WriteError;
 
     /// This implementation delegates to [`write_diary_entry()`] for zero-copy writing. It enables

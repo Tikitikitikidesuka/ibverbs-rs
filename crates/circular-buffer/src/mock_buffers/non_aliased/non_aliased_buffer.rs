@@ -1,6 +1,7 @@
 use crate::{CircularBufferReader, CircularBufferWriter};
 use std::convert::Infallible;
 use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
+use std::slice;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -283,19 +284,19 @@ impl CircularBufferReader for MockNonAliasedBufferReader {
         &mut self,
         bytes: usize,
     ) -> Result<Self::AdvanceStatus, Self::AdvanceError> {
+        let mut buffer_guard = self.buffer.inner.lock().unwrap();
+
         // Check alignment
         if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2) {
             return Err(NonAliasedAdvanceError::NotAligned);
         }
 
         // Check enough data available
-        let (primary_region, secondary_region) = self.readable_region().unwrap();
+        let (primary_region, secondary_region) = buffer_guard.readable_region();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
             return Err(NonAliasedAdvanceError::OutOfBounds);
         }
-
-        let mut buffer_guard = self.buffer.inner.lock().unwrap();
 
         // Handle wrapping when advancing
         if buffer_guard.read_ptr + bytes >= buffer_guard.buffer.len() {
@@ -326,24 +327,26 @@ impl CircularBufferReader for MockNonAliasedBufferReader {
     /// A tuple of `(primary_slice, secondary_slice)` containing all readable data.
     fn readable_region(&self) -> Result<Self::ReadableRegion<'_>, Infallible> {
         let buffer_guard = self.buffer.inner.lock().unwrap();
+        let (primary_region, secondary_region) = buffer_guard.readable_region();
+        let primary_region =
+            unsafe { &*slice_from_raw_parts(primary_region.as_ptr(), primary_region.len()) };
+        let secondary_region =
+            unsafe { &*slice_from_raw_parts(secondary_region.as_ptr(), secondary_region.len()) };
+        Ok((primary_region, secondary_region))
+    }
+}
 
-        if buffer_guard.same_page {
+impl MockNonAliasedBufferInner {
+    fn readable_region(&self) -> (&[u8], &[u8]) {
+        if self.same_page {
             // Primary: from read_ptr to write_ptr, Secondary: empty
-            let primary_region =
-                &buffer_guard.buffer[buffer_guard.read_ptr..buffer_guard.write_ptr];
-            let primary_region =
-                unsafe { &*slice_from_raw_parts(primary_region.as_ptr(), primary_region.len()) };
-            Ok((primary_region, &[]))
+            let primary_region = &self.buffer[self.read_ptr..self.write_ptr];
+            (primary_region, &[])
         } else {
             // Primary: from read_ptr to end, Secondary: from start to write_ptr
-            let primary_region = &buffer_guard.buffer[buffer_guard.read_ptr..];
-            let primary_region =
-                unsafe { &*slice_from_raw_parts(primary_region.as_ptr(), primary_region.len()) };
-            let secondary_region = &buffer_guard.buffer[..buffer_guard.write_ptr];
-            let secondary_region = unsafe {
-                &*slice_from_raw_parts(secondary_region.as_ptr(), secondary_region.len())
-            };
-            Ok((primary_region, secondary_region))
+            let primary_region = &self.buffer[self.read_ptr..];
+            let secondary_region = &self.buffer[..self.write_ptr];
+            (primary_region, secondary_region)
         }
     }
 }
@@ -422,23 +425,28 @@ impl CircularBufferWriter for MockNonAliasedBufferWriter {
     /// A tuple of `(primary_slice, secondary_slice)` containing all writable space.
     fn writable_region(&mut self) -> Result<Self::WriteableRegion<'_>, Infallible> {
         let mut buffer_guard = self.buffer.inner.lock().unwrap();
-
-        let buffer = unsafe {
-            &mut *slice_from_raw_parts_mut(
-                buffer_guard.buffer.as_mut_ptr(),
-                buffer_guard.buffer.len(),
-            )
+        let (primary_region, secondary_region) = buffer_guard.writable_region();
+        let primary_region = unsafe {
+            &mut *slice_from_raw_parts_mut(primary_region.as_mut_ptr(), primary_region.len())
         };
+        let secondary_region = unsafe {
+            &mut *slice_from_raw_parts_mut(secondary_region.as_mut_ptr(), secondary_region.len())
+        };
+        Ok((primary_region, secondary_region))
+    }
+}
 
-        if buffer_guard.same_page {
+impl MockNonAliasedBufferInner {
+    fn writable_region(&mut self) -> (&mut [u8], &mut [u8]) {
+        if self.same_page {
             // Primary: from write_ptr to end, Secondary: from start to read_ptr
-            let (before_read, after_read) = buffer.split_at_mut(buffer_guard.read_ptr);
-            let primary_region = &mut after_read[buffer_guard.write_ptr - buffer_guard.read_ptr..];
-            Ok((primary_region, before_read))
+            let (before_read, after_read) = self.buffer.split_at_mut(self.read_ptr);
+            let primary_region = &mut after_read[self.write_ptr - self.read_ptr..];
+            (primary_region, before_read)
         } else {
             // Primary: from write_ptr to read_ptr, Secondary: empty
-            let primary_region = &mut buffer[buffer_guard.write_ptr..buffer_guard.read_ptr];
-            Ok((primary_region, &mut []))
+            let primary_region = &mut self.buffer[self.write_ptr..self.read_ptr];
+            (primary_region, &mut [])
         }
     }
 }

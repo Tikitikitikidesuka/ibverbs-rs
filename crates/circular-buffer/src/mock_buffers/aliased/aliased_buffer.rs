@@ -1,5 +1,7 @@
 use crate::{CircularBufferReader, CircularBufferWriter};
-
+use std::convert::Infallible;
+use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 /// A mock implementation of an aliased single-producer single-consumer ring buffer.
@@ -21,13 +23,18 @@ use thiserror::Error;
 /// The [pcie40](../../pcie40) crate's _PCIe40 readout card_ buffer is an aliased spsc ring buffer.
 #[derive(Debug, Clone)]
 pub struct MockAliasedBuffer {
+    inner: Arc<Mutex<MockAliasedBufferInner>>,
     alignment_pow2: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct MockAliasedBufferInner {
     read_ptr: usize,
     write_ptr: usize,
     read_locked: bool,
     write_locked: bool,
     same_page: bool,
-    buffer: Vec<u8>, // Double the requested capacity for simulated aliasing
+    buffer: Vec<u8>,
 }
 
 impl MockAliasedBuffer {
@@ -67,13 +74,15 @@ impl MockAliasedBuffer {
             Err("Capacity does not match alignment")
         } else {
             Ok(Self {
+                inner: Arc::new(Mutex::new(MockAliasedBufferInner {
+                    read_ptr: 0,
+                    write_ptr: 0,
+                    read_locked: false,
+                    write_locked: false,
+                    same_page: true,
+                    buffer: vec![0; capacity * 2], // Double size for aliasing
+                })),
                 alignment_pow2,
-                read_ptr: 0,
-                write_ptr: 0,
-                read_locked: false,
-                write_locked: false,
-                same_page: true,
-                buffer: vec![0; capacity * 2], // Double size for aliasing
             })
         }
     }
@@ -83,7 +92,7 @@ impl MockAliasedBuffer {
     /// This flag is set when a [`MockAliasedBufferReader`] is created and cleared
     /// when it is dropped. It prevents multiple readers from being created simultaneously.
     pub fn read_locked(&self) -> bool {
-        self.read_locked
+        self.inner.lock().unwrap().read_locked
     }
 
     /// Returns `true` if the buffer currently has an active writer.
@@ -91,9 +100,11 @@ impl MockAliasedBuffer {
     /// This flag is set when a [`MockAliasedBufferWriter`] is created and cleared
     /// when it is dropped. It prevents multiple writers from being created simultaneously.
     pub fn write_locked(&self) -> bool {
-        self.write_locked
+        self.inner.lock().unwrap().write_locked
     }
+}
 
+impl MockAliasedBufferInner {
     /// Replicates written data to maintain the aliased memory illusion.
     ///
     /// After data is written to the buffer, this method ensures the "aliased" copy
@@ -156,27 +167,7 @@ impl MockAliasedBuffer {
 /// ensuring the buffer outlives the reader. It is the responsibility of the user to
 /// ensure this.
 pub struct MockAliasedBufferReader {
-    buffer: *mut MockAliasedBuffer,
-}
-
-/// A writer for [`MockAliasedBuffer`] that implements [`CircularBufferWriter`].
-///
-/// Provides write access to the buffer's writable region and manages the write
-/// pointer position. This mock writer maintains the aliased memory layout by automatically
-/// replicating written data between the real and aliased regions when the write
-/// pointer is advanced.
-///
-/// Only one writer can exist for a buffer at a time. Attempting to create a second
-/// writer will fail. The buffer is automatically unlocked when the writer is dropped.
-///
-/// # Safety
-///
-/// Contains a raw pointer to the underlying buffer. Ring buffers are generally external
-/// to the program (DMA, RDMA, inter-process communications, etc.) so there is no way of
-/// ensuring the buffer outlives the writer. It is the responsibility of the user to
-/// ensure this.
-pub struct MockAliasedBufferWriter {
-    buffer: *mut MockAliasedBuffer,
+    buffer: MockAliasedBuffer,
 }
 
 impl MockAliasedBufferReader {
@@ -202,17 +193,19 @@ impl MockAliasedBufferReader {
     /// # use circular_buffer::mock_buffers::{MockAliasedBuffer, MockAliasedBufferReader};
     /// #
     /// let mut buffer = MockAliasedBuffer::new(1024, 3).unwrap();
-    /// let reader = MockAliasedBufferReader::new(&mut buffer).unwrap();
+    /// let reader = MockAliasedBufferReader::new(buffer.clone()).unwrap();
     ///
     /// // This will fail because a reader already exists
-    /// assert!(MockAliasedBufferReader::new(&mut buffer).is_err());
+    /// assert!(MockAliasedBufferReader::new(buffer.clone()).is_err());
     /// ```
-    pub fn new(buffer: &mut MockAliasedBuffer) -> Result<Self, &'static str> {
-        if buffer.read_locked() {
-            Err("Buffer already has a reader")
-        } else {
-            Ok(Self { buffer })
+    pub fn new(buffer: MockAliasedBuffer) -> Result<Self, &'static str> {
+        let mut buffer_guard = buffer.inner.lock().unwrap();
+        if buffer_guard.read_locked {
+            return Err("Buffer already has a reader");
         }
+        buffer_guard.read_locked = true;
+        drop(buffer_guard);
+        Ok(Self { buffer })
     }
 
     /// Returns the alignment requirement as a power of 2.
@@ -221,7 +214,7 @@ impl MockAliasedBufferReader {
     /// pointer can be advanced. For example, a return value of `3` means 8-byte
     /// alignment (2^3 = 8), requiring all read advances to be multiples of 8 bytes.
     pub fn alignment_pow2(&self) -> u8 {
-        unsafe { &*self.buffer }.alignment_pow2
+        self.buffer.alignment_pow2
     }
 }
 
@@ -231,8 +224,28 @@ impl Drop for MockAliasedBufferReader {
     /// This allows a new reader to be created for the buffer after this one
     /// goes out of scope.
     fn drop(&mut self) {
-        unsafe { &mut *self.buffer }.read_locked = false;
+        self.buffer.inner.lock().unwrap().read_locked = false;
     }
+}
+
+/// A writer for [`MockAliasedBuffer`] that implements [`CircularBufferWriter`].
+///
+/// Provides write access to the buffer's writable region and manages the write
+/// pointer position. This mock writer maintains the aliased memory layout by automatically
+/// replicating written data between the real and aliased regions when the write
+/// pointer is advanced.
+///
+/// Only one writer can exist for a buffer at a time. Attempting to create a second
+/// writer will fail. The buffer is automatically unlocked when the writer is dropped.
+///
+/// # Safety
+///
+/// Contains a raw pointer to the underlying buffer. Ring buffers are generally external
+/// to the program (DMA, RDMA, inter-process communications, etc.) so there is no way of
+/// ensuring the buffer outlives the writer. It is the responsibility of the user to
+/// ensure this.
+pub struct MockAliasedBufferWriter {
+    buffer: MockAliasedBuffer,
 }
 
 impl MockAliasedBufferWriter {
@@ -258,17 +271,19 @@ impl MockAliasedBufferWriter {
     /// # use circular_buffer::mock_buffers::{MockAliasedBuffer, MockAliasedBufferWriter};
     /// #
     /// let mut buffer = MockAliasedBuffer::new(1024, 3).unwrap();
-    /// let writer = MockAliasedBufferWriter::new(&mut buffer).unwrap();
+    /// let writer = MockAliasedBufferWriter::new(buffer.clone()).unwrap();
     ///
     /// // This will fail because a writer already exists
-    /// assert!(MockAliasedBufferWriter::new(&mut buffer).is_err());
+    /// assert!(MockAliasedBufferWriter::new(buffer.clone()).is_err());
     /// ```
-    pub fn new(buffer: &mut MockAliasedBuffer) -> Result<Self, &'static str> {
-        if buffer.write_locked() {
-            Err("Buffer already has a writer")
-        } else {
-            Ok(Self { buffer })
+    pub fn new(buffer: MockAliasedBuffer) -> Result<Self, &'static str> {
+        let mut buffer_guard = buffer.inner.lock().unwrap();
+        if buffer_guard.write_locked {
+            return Err("Buffer already has a writer");
         }
+        buffer_guard.write_locked = true;
+        drop(buffer_guard);
+        Ok(Self { buffer })
     }
 
     /// Returns the alignment requirement as a power of 2.
@@ -277,7 +292,7 @@ impl MockAliasedBufferWriter {
     /// pointer can be advanced. For example, a return value of `3` means 8-byte
     /// alignment (2^3 = 8), requiring all write advances to be multiples of 8 bytes.
     pub fn alignment_pow2(&self) -> u8 {
-        unsafe { &*self.buffer }.alignment_pow2
+        self.buffer.alignment_pow2
     }
 }
 
@@ -287,7 +302,7 @@ impl Drop for MockAliasedBufferWriter {
     /// This allows a new writer to be created for the buffer after this one
     /// goes out of scope.
     fn drop(&mut self) {
-        unsafe { &mut *self.buffer }.write_locked = false;
+        self.buffer.inner.lock().unwrap().write_locked = false;
     }
 }
 
@@ -303,8 +318,10 @@ pub enum AliasedBufferAdvanceError {
 }
 
 impl CircularBufferReader for MockAliasedBufferReader {
-    type AdvanceResult = Result<(), AliasedBufferAdvanceError>;
-    type ReadableRegionResult<'a> = &'a [u8];
+    type AdvanceStatus = ();
+    type AdvanceError = AliasedBufferAdvanceError;
+    type ReadableRegion<'buf_ref> = &'buf_ref [u8];
+    type ReadableRegionError = Infallible;
 
     /// Advances the read pointer by the specified number of bytes.
     ///
@@ -327,27 +344,30 @@ impl CircularBufferReader for MockAliasedBufferReader {
     ///   properly aligned to the buffer's alignment requirement
     /// * [`AliasedBufferAdvanceError::OutOfBounds`] - Not enough data available
     ///   to advance by the requested amount
-    fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
-        let buf = unsafe { &mut *self.buffer };
+    fn advance_read_pointer(
+        &mut self,
+        bytes: usize,
+    ) -> Result<Self::AdvanceStatus, Self::AdvanceError> {
+        let mut buffer_guard = self.buffer.inner.lock().unwrap();
 
         // Check alignment
-        if !ebutils::check_alignment_pow2(bytes, buf.alignment_pow2) {
+        if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2) {
             return Err(AliasedBufferAdvanceError::NotAligned);
         }
 
         // Check enough data available
-        let available = self.readable_region().len();
+        let available = buffer_guard.readable_region().len();
         if bytes > available {
             return Err(AliasedBufferAdvanceError::OutOfBounds);
         }
 
         // Handle wrapping when advancing
-        let capacity = buf.buffer.len() / 2;
-        if buf.read_ptr + bytes >= capacity {
-            buf.read_ptr = (buf.read_ptr + bytes) % capacity;
-            buf.same_page = !buf.same_page;
+        let capacity = buffer_guard.buffer.len() / 2;
+        if buffer_guard.read_ptr + bytes >= capacity {
+            buffer_guard.read_ptr = (buffer_guard.read_ptr + bytes) % capacity;
+            buffer_guard.same_page = !buffer_guard.same_page;
         } else {
-            buf.read_ptr += bytes;
+            buffer_guard.read_ptr += bytes;
         }
 
         Ok(())
@@ -368,23 +388,35 @@ impl CircularBufferReader for MockAliasedBufferReader {
     /// # Returns
     ///
     /// A slice containing all readable data starting at the current read position.
-    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
-        let buf = unsafe { &*self.buffer };
+    fn readable_region(&self) -> Result<Self::ReadableRegion<'_>, Infallible> {
+        let buffer_guard = self.buffer.inner.lock().unwrap();
+        let readable_region = buffer_guard.readable_region();
+        let readable_region =
+            unsafe { &*slice_from_raw_parts(readable_region.as_ptr(), readable_region.len()) };
+        Ok(readable_region)
+    }
+}
 
-        let available = if buf.same_page {
-            buf.write_ptr - buf.read_ptr
+impl MockAliasedBufferInner {
+    fn readable_region(&self) -> &[u8] {
+        let available = if self.same_page {
+            self.write_ptr - self.read_ptr
         } else {
-            let capacity = buf.buffer.len() / 2;
-            capacity - buf.read_ptr + buf.write_ptr
+            let capacity = self.buffer.len() / 2;
+            capacity - self.read_ptr + self.write_ptr
         };
 
-        &buf.buffer[buf.read_ptr..buf.read_ptr + available]
+        let readable_region = &self.buffer[self.read_ptr..self.read_ptr + available];
+
+        readable_region
     }
 }
 
 impl CircularBufferWriter for MockAliasedBufferWriter {
-    type AdvanceResult = Result<(), AliasedBufferAdvanceError>;
-    type WriteableRegionResult<'a> = &'a mut [u8];
+    type AdvanceStatus = ();
+    type AdvanceError = AliasedBufferAdvanceError;
+    type WriteableRegion<'buf_ref> = &'buf_ref mut [u8];
+    type WriteableRegionError = Infallible;
 
     /// Advances the write pointer by the specified number of bytes.
     ///
@@ -409,30 +441,34 @@ impl CircularBufferWriter for MockAliasedBufferWriter {
     ///   properly aligned to the buffer's alignment requirement
     /// * [`AliasedBufferAdvanceError::OutOfBounds`] - Not enough space available
     ///   to advance by the requested amount
-    fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
-        let buf = unsafe { &mut *self.buffer };
+    fn advance_write_pointer(
+        &mut self,
+        bytes: usize,
+    ) -> Result<Self::AdvanceStatus, Self::AdvanceError> {
+        let mut buffer_guard = self.buffer.inner.lock().unwrap();
 
         // Check alignment
-        if !ebutils::check_alignment_pow2(bytes, buf.alignment_pow2) {
+        if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2) {
             return Err(AliasedBufferAdvanceError::NotAligned);
         }
 
         // Check enough space available
-        let available = self.writable_region().len();
+        let available = buffer_guard.writable_region().len();
         if bytes > available {
             return Err(AliasedBufferAdvanceError::OutOfBounds);
         }
 
         // CRITICAL: Replicate the alias
-        buf.replicate_alias(buf.write_ptr, bytes);
+        let write_ptr = buffer_guard.write_ptr;
+        buffer_guard.replicate_alias(write_ptr, bytes);
 
         // Handle wrapping when advancing
-        let capacity = buf.buffer.len() / 2;
-        if buf.write_ptr + bytes >= capacity {
-            buf.write_ptr = (buf.write_ptr + bytes) % capacity;
-            buf.same_page = !buf.same_page;
+        let capacity = buffer_guard.buffer.len() / 2;
+        if buffer_guard.write_ptr + bytes >= capacity {
+            buffer_guard.write_ptr = (buffer_guard.write_ptr + bytes) % capacity;
+            buffer_guard.same_page = !buffer_guard.same_page;
         } else {
-            buf.write_ptr += bytes;
+            buffer_guard.write_ptr += bytes;
         }
 
         Ok(())
@@ -453,16 +489,25 @@ impl CircularBufferWriter for MockAliasedBufferWriter {
     /// # Returns
     ///
     /// A mutable slice containing all writable space starting at the current write position.
-    fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
-        let buf = unsafe { &mut *self.buffer };
+    fn writable_region(&mut self) -> Result<Self::WriteableRegion<'_>, Infallible> {
+        let mut buffer_guard = self.buffer.inner.lock().unwrap();
+        let writable_region = buffer_guard.writable_region();
+        let writable_region = unsafe {
+            &mut *slice_from_raw_parts_mut(writable_region.as_mut_ptr(), writable_region.len())
+        };
+        Ok(writable_region)
+    }
+}
 
-        let available = if buf.same_page {
-            let capacity = buf.buffer.len() / 2;
-            capacity - buf.write_ptr + buf.read_ptr
+impl MockAliasedBufferInner {
+    fn writable_region(&mut self) -> &mut [u8] {
+        let available = if self.same_page {
+            let capacity = self.buffer.len() / 2;
+            capacity - self.write_ptr + self.read_ptr
         } else {
-            buf.read_ptr - buf.write_ptr
+            self.read_ptr - self.write_ptr
         };
 
-        &mut buf.buffer[buf.write_ptr..buf.write_ptr + available]
+        &mut self.buffer[self.write_ptr..self.write_ptr + available]
     }
 }

@@ -1,11 +1,11 @@
 //! Mock buffers, readers and writers to exemplify and test the interfaces defined by the crate.
 //! Available with the `mock-buffers` feature.
 
-//mod aliased;
+mod aliased;
 mod dynamic_size_element;
 mod non_aliased;
 
-//pub use aliased::*;
+pub use aliased::*;
 pub use dynamic_size_element::*;
 pub use non_aliased::*;
 use thiserror::Error;

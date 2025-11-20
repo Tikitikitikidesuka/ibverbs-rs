@@ -5,11 +5,11 @@ use circular_buffer::{CircularBufferReader, CircularBufferWriter};
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
-    let mut demo_buffer = MockAliasedBuffer::new(16, 1).unwrap();
+    let demo_buffer = MockAliasedBuffer::new(16, 1).unwrap();
 
     // Create reader and writer
-    let mut reader = MockAliasedBufferReader::new(&mut demo_buffer).unwrap();
-    let mut writer = MockAliasedBufferWriter::new(&mut demo_buffer).unwrap();
+    let mut reader = MockAliasedBufferReader::new(demo_buffer.clone()).unwrap();
+    let mut writer = MockAliasedBufferWriter::new(demo_buffer.clone()).unwrap();
 
     write_to_contiguous_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_contiguous_buffer(&reader);
@@ -31,7 +31,7 @@ fn main() {
 }
 
 fn write_to_contiguous_buffer(writer: &mut MockAliasedBufferWriter, data: &[u8]) -> Result<(), ()> {
-    let writable_region = writer.writable_region();
+    let writable_region = writer.writable_region().unwrap();
 
     if data.len() > writable_region.len() {
         Err(())
