@@ -2,6 +2,7 @@ use crate::buffer_backend::SharedMemoryWriteBuffer;
 use crate::buffer_status::PtrStatus;
 use crate::reader::SharedMemoryBufferAdvanceError;
 use circular_buffer::CircularBufferWriter;
+use std::convert::Infallible;
 use tracing::{debug, instrument, warn};
 
 pub struct SharedMemoryBufferWriter {
@@ -30,11 +31,16 @@ impl SharedMemoryBufferWriter {
 }
 
 impl CircularBufferWriter for SharedMemoryBufferWriter {
-    type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
-    type WriteableRegionResult<'a> = (&'a mut [u8], &'a mut [u8]);
+    type AdvanceStatus = ();
+    type AdvanceError = SharedMemoryBufferAdvanceError;
+    type WriteableRegion<'buf_ref> = (&'buf_ref mut [u8], &'buf_ref mut [u8]);
+    type WriteableRegionError = Infallible;
 
     #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
-    fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
+    fn advance_write_pointer(
+        &mut self,
+        bytes: usize,
+    ) -> Result<Self::AdvanceStatus, Self::AdvanceError> {
         debug!("Attempting to advance the buffer's write pointer by {bytes} bytes");
 
         debug!("Checking minimum 2 byte alignment due to pointer representation");
@@ -50,7 +56,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
         }
 
         debug!("Checking buffer's available space on writable region");
-        let (primary_region, secondary_region) = self.writable_region();
+        let (primary_region, secondary_region) = self.writable_region().unwrap();
         let available = primary_region.len() + secondary_region.len();
         if bytes > available {
             warn!(
@@ -69,7 +75,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
     }
 
     #[instrument(skip_all, fields(shmem = self.buffer.name()))]
-    fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
+    fn writable_region(&mut self) -> Result<Self::WriteableRegion<'_>, Infallible> {
         debug!("Attempting to get the buffer's writable region");
 
         debug!("Getting the buffer's read pointer and complete byte slice");
@@ -89,7 +95,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
                 &mut after_read[(self.write_status.ptr() as usize - read_status.ptr() as usize)..];
 
             debug!("Got the two regions successfully");
-            (primary_region, before_read)
+            Ok((primary_region, before_read))
         } else {
             debug!("Writable region does no wrap around");
             // Primary region: from write_ptr to read_ptr
@@ -98,7 +104,7 @@ impl CircularBufferWriter for SharedMemoryBufferWriter {
                 &mut buffer_slice[self.write_status.ptr() as usize..read_status.ptr() as usize];
 
             debug!("Got the primary region and put an empty slice on secondary successfully");
-            (primary_region, &mut [])
+            Ok((primary_region, &mut []))
         }
     }
 }

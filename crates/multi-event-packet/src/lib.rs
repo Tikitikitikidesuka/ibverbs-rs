@@ -40,7 +40,7 @@ pub(crate) struct MultiEventPacketConstHeader {
 #[repr(C, packed)]
 pub struct MultiEventPacket {
     header: MultiEventPacketConstHeader,
-    _unin: Uninstantiatable,
+    body: [u8],
 }
 
 impl MultiEventPacket {
@@ -187,7 +187,12 @@ impl MultiEventPacket {
     /// Assumes data contains a valid MEP, with MFPs sorted by srcid.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
-        unsafe { &*(data.as_ptr() as *const MultiEventPacket) }
+        const HEADER_SIZE_MIN_U32: usize =
+            size_of::<MultiEventPacketConstHeader>() / size_of::<u32>();
+
+        unsafe {
+            &*(&data[..data.len() - HEADER_SIZE_MIN_U32] as *const [u32] as *const MultiEventPacket)
+        }
     }
 }
 

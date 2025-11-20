@@ -1,9 +1,6 @@
-use crate::MultiFragmentPacket;
-use circular_buffer::{
-    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferReader, MultiReadGuard,
-    ReadGuard,
-};
-use pcie40::reader::PCIe40Reader;
+use crate::{MultiFragmentPacket, MultiFragmentPacketFromRawBytesError};
+use circular_buffer::{CircularBufferReadable, CircularBufferReader, ReadGuard, SizedReadGuard};
+use pcie40::reader::{PCIe40ReadGuard, PCIe40Reader};
 use pcie40::stream::stream::PCIe40StreamError;
 use thiserror::Error;
 use tracing::error;
@@ -28,54 +25,20 @@ pub enum PCIe40TypedReadError {
     StreamError(#[from] PCIe40StreamError),
 }
 
-impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
-    type ReadResult<'a>
-        = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
+impl<'guard, 'buf> CircularBufferReadable<'guard, 'buf, PCIe40Reader<'buf>> for MultiFragmentPacket
+where
+    'buf: 'guard,
+{
+    type ReadGuard
+        = PCIe40ReadGuard<'guard, 'buf, Self>
     where
-        Self: 'a,
-        PCIe40Reader<'r>: 'a;
+        Self: 'guard;
+    type ReadError = PCIe40TypedReadError;
 
-    fn read<'a>(reader: &'a mut PCIe40Reader<'r>) -> Self::ReadResult<'a> {
-        let readable_region = reader.readable_region()?;
-
-        // Verify enough data for header
-        if readable_region.len() < Self::HEADER_SIZE {
-            return Err(PCIe40TypedReadError::NotEnoughData);
-        }
-
-        // Cast to mfp
-        let mfp_mem = unsafe { &*(readable_region[..size_of::<Self>()].as_ptr() as *const Self) };
-
-        // Verify valid magic packet
-        if mfp_mem.magic() != Self::VALID_MAGIC {
-            return Err(PCIe40TypedReadError::CorruptData);
-        }
-
-        // Verify enough data for the whole entry and alignment
-        let aligned_size =
-            ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
-        if readable_region.len() < aligned_size {
-            return Err(PCIe40TypedReadError::NotEnoughData);
-        }
-
-        // If all checks are passed, guard the type
-        let read_guard = ReadGuard::new(reader, mfp_mem, aligned_size);
-
-        Ok(read_guard)
-    }
-}
-
-impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
-    type MultiReadResult<'a>
-        = Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
-    where
-        Self: 'a,
-        PCIe40Reader<'r>: 'a;
-
-    fn read_multiple<'a>(
-        reader: &'a mut PCIe40Reader<'r>,
+    fn read(
+        reader: &'guard mut PCIe40Reader<'buf>,
         num: usize,
-    ) -> Self::MultiReadResult<'a> {
+    ) -> Result<Self::ReadGuard, Self::ReadError> {
         let readable_region = reader.readable_region()?;
 
         let mut advance_size = 0;
@@ -88,30 +51,29 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
             }
 
             // Cast to mfp
-            let mfp_mem = unsafe {
-                &*(readable_region[advance_size..advance_size + size_of::<Self>()].as_ptr()
-                    as *const Self)
+            // Decouple mfp reference from data lifetime but safe because
+            // holding a reference to the reader
+            let mfp = unsafe {
+                &*(MultiFragmentPacket::from_raw_bytes(readable_region[advance_size..].as_ref())
+                    .map_err(|error| match error {
+                        MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable { .. } => {
+                            PCIe40TypedReadError::NotEnoughData
+                        }
+                        MultiFragmentPacketFromRawBytesError::CorruptedMagic { .. } => {
+                            PCIe40TypedReadError::CorruptData
+                        }
+                    })? as *const MultiFragmentPacket)
             };
 
-            // Verify valid magic packet
-            if mfp_mem.magic() != Self::VALID_MAGIC {
-                return Err(PCIe40TypedReadError::CorruptData);
-            }
-
-            // Verify enough data for the whole entry and alignment
-            let aligned_size =
-                ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
-            if readable_region.len() < aligned_size + advance_size {
-                return Err(PCIe40TypedReadError::NotEnoughData);
-            }
+            let aligned_size = ebutils::align_up_pow2(size_of_val(mfp), reader.alignment_pow2());
 
             // Store reference to read entry and add advance size
-            read_data.push(mfp_mem);
+            read_data.push(mfp);
             advance_size += aligned_size;
         }
 
         // If all checks are passed, guard the type
-        let read_guard = MultiReadGuard::new(reader, read_data, advance_size);
+        let read_guard = PCIe40ReadGuard::from_reader(reader, read_data, advance_size);
 
         Ok(read_guard)
     }

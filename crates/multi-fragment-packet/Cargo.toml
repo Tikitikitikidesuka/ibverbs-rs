@@ -35,9 +35,9 @@ required-features = ["shmem-io"]
 [[example]]
 name = "continouous_mfp_pcie40_example"
 path = "examples/continuous_mfp_pcie40_example.rs"
-required-features = ["pcie40-readable"]
+required-features = ["pcie40-io"]
 
 [[example]]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
-required-features = ["pcie40-readable"]
+required-features = ["pcie40-io"]

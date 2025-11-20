@@ -1,4 +1,4 @@
-use circular_buffer::CircularBufferMultiReadable;
+use circular_buffer::{CircularBufferReadable, ReadGuard};
 use multi_fragment_packet::MultiFragmentPacket;
 use pcie40::ctrl::PCIe40ControllerManager;
 use pcie40::reader::PCIe40Reader;
@@ -12,9 +12,9 @@ fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
 
     let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
-    let meta_alignment_pow2 = match ebutils::is_pow2(controller.meta_alignment().unwrap()) {
-        ebutils::IsPow2Result::Yes(pow2) => pow2,
-        ebutils::IsPow2Result::No => {
+    let meta_alignment_pow2 = match ebutils::pow2_exponent(controller.meta_alignment().unwrap()) {
+        Some(pow2) => pow2,
+        None => {
             panic!("Meta alignment is not a power of 2")
         }
     };
@@ -37,14 +37,14 @@ fn main() {
     stdin().read_exact(&mut [0]).unwrap();
 
     println!("Loading 2 MFPs...");
-    let mfps = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
+    let mfps = MultiFragmentPacket::read(&mut reader, 2).unwrap();
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
     println!("Discarding MFPs...");
     mfps.discard().expect("Error discarding");
 
     println!("Loading 2 MFPs...");
-    let mfps = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
+    let mfps = MultiFragmentPacket::read(&mut reader, 2).unwrap();
     println!("Read MFP[0]: {:?}", mfps[0]);
     println!("Read MFP[1]: {:?}", mfps[1]);
     println!("Discarding MFPs...");

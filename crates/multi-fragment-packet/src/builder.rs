@@ -59,7 +59,7 @@ impl MultiFragmentPacketBuilder {
     }
 }
 
-impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwned {
+impl From<MultiFragmentPacketBuilderInternal> for MultiFragmentPacketOwned {
     fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
         if other.source_id.is_odin()
             && !other.fragments.iter().all(|f| {

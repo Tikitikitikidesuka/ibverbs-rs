@@ -10,9 +10,9 @@ pub mod shared_memory_element;
 pub mod odin_mock;
 
 pub use builder::MultiFragmentPacketBuilder;
+use ebutils::EventId;
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;
-use ebutils::{EventId, Uninstantiatable};
 pub mod owned;
 
 pub use owned::MultiFragmentPacketOwned;
@@ -54,7 +54,7 @@ pub struct MultiFragmentPacket {
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
-    _unin: Uninstantiatable,
+    body: [u8],
 }
 
 impl MultiFragmentPacket {
@@ -227,7 +227,7 @@ impl MultiFragmentPacket {
     /// The passed data must be at least as large as the header size, and as the size indicated in the header.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
         // SAFETY: See function preconditions
-        unsafe { &*(data.as_ptr().cast()) }
+        unsafe { &*(&data[..data.len() - Self::HEADER_SIZE] as *const [u8] as *const MultiFragmentPacket) }
     }
 
     fn header(&self) -> &MultiFragmentPacketHeader {
@@ -545,11 +545,11 @@ mod tests {
         let iter = mfp.fragment_iter();
         assert_eq!(iter.len(), 5);
 
-        // After consuming some elements, len() should still report total length
+        // After consuming some elements, len() should report remaining length
         let mut iter = mfp.fragment_iter();
         iter.next();
         iter.next();
-        assert_eq!(iter.len(), 5);
+        assert_eq!(iter.len(), 3);
 
         // Confirm we can iterate through all elements
         let mut count = 0;

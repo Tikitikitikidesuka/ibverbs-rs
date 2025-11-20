@@ -1,5 +1,4 @@
-use ebutils::IsPow2Result;
-use circular_buffer::CircularBufferMultiReadable;
+use circular_buffer::{CircularBufferReadable, ReadGuard};
 use multi_fragment_packet::MultiFragmentPacket;
 use pcie40::ctrl::PCIe40ControllerManager;
 use pcie40::reader::PCIe40Reader;
@@ -13,9 +12,9 @@ fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
 
     let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
-    let meta_alignment_pow2 = match ebutils::is_pow2(controller.meta_alignment().unwrap()) {
-        IsPow2Result::Yes(pow2) => pow2,
-        IsPow2Result::No => {
+    let meta_alignment_pow2 = match ebutils::pow2_exponent(controller.meta_alignment().unwrap()) {
+        Some(pow2) => pow2,
+        None => {
             panic!("Meta alignment is not a power of 2")
         }
     };
@@ -39,7 +38,7 @@ fn main() {
 
     loop {
         println!("Loading 5 MFPs...");
-        match MultiFragmentPacket::read_multiple(&mut reader, 5) {
+        match MultiFragmentPacket::read(&mut reader, 5) {
             Ok(mfps) => {
                 println!("Read MFP[0]: {:?}", mfps[0]);
                 println!("Read MFP[1]: {:?}", mfps[1]);

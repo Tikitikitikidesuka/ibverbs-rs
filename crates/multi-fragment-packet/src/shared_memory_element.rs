@@ -1,14 +1,9 @@
-use crate::{MultiFragmentPacketOwned, MultiFragmentPacket};
-use circular_buffer::CircularBufferWriter;
-use shared_memory_buffer::{
-    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError,
-    SharedMemoryTypedWriteError, WritableSharedMemoryBufferElement, impl_circular_buffer_readable,
-    impl_circular_buffer_writable,
-};
+use crate::{MultiFragmentPacket, MultiFragmentPacketFromRawBytesError, MultiFragmentPacketHeader, MultiFragmentPacketOwned};
+use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
+use shared_memory_buffer::{ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError, SharedMemoryTypedWriteError, WritableSharedMemoryBufferElement, impl_circular_buffer_readable, impl_circular_buffer_writable, SharedMemoryBufferWriter};
 
 const WRAP_MAGIC: u16 = 0xBF31;
 
-impl_circular_buffer_writable!(MultiFragmentPacketOwned);
 impl_circular_buffer_writable!(MultiFragmentPacket);
 impl_circular_buffer_readable!(MultiFragmentPacket);
 
@@ -20,18 +15,15 @@ impl SharedMemoryBufferElement for MultiFragmentPacket {
 
 impl ReadableSharedMemoryBufferElement for MultiFragmentPacket {
     fn cast_to_element(data: &[u8]) -> Result<&Self, SharedMemoryTypedReadError> {
-        // Verify enough data for header
-        if data.len() < Self::HEADER_SIZE {
-            return Err(SharedMemoryTypedReadError::NotEnoughData);
-        }
-
         // Cast to mfp
-        let mfp = unsafe { &*(data[..size_of::<Self>()].as_ptr() as *const Self) };
-
-        // Verify valid magic packet
-        if mfp.magic() != Self::VALID_MAGIC {
-            return Err(SharedMemoryTypedReadError::CorruptData);
-        }
+        let mfp = MultiFragmentPacket::from_raw_bytes(data).map_err(|error| match error {
+            MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable { .. } => {
+                SharedMemoryTypedReadError::NotEnoughData
+            }
+            MultiFragmentPacketFromRawBytesError::CorruptedMagic { .. } => {
+                SharedMemoryTypedReadError::CorruptData
+            }
+        })?;
 
         Ok(mfp)
     }
@@ -42,11 +34,11 @@ impl ReadableSharedMemoryBufferElement for MultiFragmentPacket {
             return Err(SharedMemoryTypedReadError::NotEnoughData);
         }
 
-        // If there is, cast mfp
-        let mfp = unsafe { &*(bytes.as_ptr() as *const Self) };
+        // If there is, cast header
+        let mfp = unsafe { &*(bytes.as_ptr() as *const MultiFragmentPacketHeader) };
 
         // And compare
-        Ok(mfp.magic() == WRAP_MAGIC)
+        Ok(mfp.magic == WRAP_MAGIC)
     }
 }
 
