@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::net::SocketAddr;
 use std::ops::Range;
 use std::time::Duration;
 use thiserror::Error;
@@ -60,6 +61,61 @@ impl TcpExchanger {
             .enable_all()
             .build()?
             .block_on(Self::exchange_all(rank_id, network, data, config))
+    }
+
+    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone>(
+        primary: bool,
+        addr: SocketAddr,
+        data: &T,
+        config: &TcpExchangeConfig,
+    ) -> Result<T, TcpNetworkConfigExchangeError> {
+        let rank = 1 - primary as usize;
+        let peer = 1 - rank;
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                timeout(config.exchange_timeout, async {
+                    if primary {
+                        let listener = TcpListener::bind(addr).await?;
+                        let (mut stream, _) = listener.accept().await?;
+                        let mut results = HashMap::new();
+                        Self::exchange_serve(
+                            data,
+                            rank,
+                            peer..(peer + 1),
+                            &mut stream,
+                            &mut results,
+                        )
+                        .await?;
+
+                        Ok(results.into_values().next().expect("one inserted"))
+                    } else {
+                        let mut stream;
+                        loop {
+                            if let Ok(s) = TcpStream::connect(addr).await {
+                                stream = s;
+                                break;
+                            }
+                            tokio::time::sleep(config.retry_delay).await;
+                        }
+                        let mut results = HashMap::new();
+
+                        Self::exchange_connect(
+                            data,
+                            rank,
+                            peer..(peer + 1),
+                            &mut stream,
+                            &mut results,
+                        )
+                        .await?;
+                        todo!()
+                    }
+                })
+                .await
+                .unwrap_or(Err(Timeout))
+            })
     }
 
     pub async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(

@@ -33,6 +33,7 @@ cast_possible_truncation = "deny"
 cast_possible_wrap = "deny"
 cast_sign_loss = "deny"
 dbg_macro = "warn"
+unwrap_used = "warn"
 
 
 # ========== Package ===========
