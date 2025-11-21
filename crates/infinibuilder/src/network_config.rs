@@ -10,9 +10,16 @@ pub struct NodeConfig {
     pub rankid: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RawNetworkConfig {
     hosts: Vec<NodeConfig>,
+}
+
+impl RawNetworkConfig {
+    pub fn add_host(&mut self, host: NodeConfig) -> &mut Self {
+        self.hosts.push(host);
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
