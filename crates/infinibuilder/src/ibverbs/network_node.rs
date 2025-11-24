@@ -721,26 +721,6 @@ impl IbvNetworkNodeEndpoint {
             connection_endpoints,
         })
     }
-
-    pub fn pair(
-        primary: bool,
-        own_endpoint: &IbvNetworkNodeEndpoint,
-        other_endpoint: &IbvNetworkNodeEndpoint,
-    ) -> IbvNetworkNodeEndpoint {
-        assert_eq!(own_endpoint.connection_endpoints.len(), 2);
-        assert_eq!(other_endpoint.connection_endpoints.len(), 2);
-        let mut endpoints = vec![
-            own_endpoint.connection_endpoints[primary as usize].clone(),
-            other_endpoint.connection_endpoints[primary as usize].clone(),
-        ];
-        if primary {
-            endpoints.reverse();
-        }
-        IbvNetworkNodeEndpoint {
-            rank_id: primary as _,
-            connection_endpoints: endpoints,
-        }
-    }
 }
 
 #[derive(Derivative)]

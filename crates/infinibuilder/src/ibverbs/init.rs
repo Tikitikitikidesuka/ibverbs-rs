@@ -104,7 +104,13 @@ where
     let exchanged_endpoint =
         TcpExchanger::await_exchange_pair(primary, addr, &endpoint, &TcpExchangeConfig::default())?;
 
-    let remote_endpoint = IbvNetworkNodeEndpoint::pair(primary, &endpoint, &exchanged_endpoint);
+    let mut endpoints = [endpoint, exchanged_endpoint];
+
+    if primary {
+        endpoints.reverse();
+    }
+
+    let remote_endpoint = IbvNetworkNodeEndpoint::gather(primary as _, endpoints)?;
 
     let node = prepared_node.connect(remote_endpoint)?;
 
