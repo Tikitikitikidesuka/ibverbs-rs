@@ -5,13 +5,13 @@ use log::{debug, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::{Read, Write};
-use std::net::SocketAddr;
 use std::ops::Range;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::time::timeout;
 
 #[derive(Debug, Error)]
@@ -63,13 +63,13 @@ impl TcpExchanger {
             .block_on(Self::exchange_all(rank_id, network, data, config))
     }
 
-    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone>(
+    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone + Debug>(
         primary: bool,
-        addr: SocketAddr,
+        addr: (&str, u16),
         data: &T,
         config: &TcpExchangeConfig,
     ) -> Result<T, TcpNetworkConfigExchangeError> {
-        let rank = 1 - primary as usize;
+        let rank = primary as usize;
         let peer = 1 - rank;
 
         tokio::runtime::Builder::new_current_thread()
@@ -89,7 +89,6 @@ impl TcpExchanger {
                             &mut results,
                         )
                         .await?;
-
                         Ok(results.into_values().next().expect("one inserted"))
                     } else {
                         let mut stream;
@@ -110,7 +109,7 @@ impl TcpExchanger {
                             &mut results,
                         )
                         .await?;
-                        todo!()
+                        Ok(results.into_values().next().expect("one inserted"))
                     }
                 })
                 .await

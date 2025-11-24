@@ -1,5 +1,3 @@
-use std::net::{SocketAddr, TcpListener};
-
 use crate::barrier::RdmaNetworkNodeBarrier;
 use crate::ibverbs::connection::{IbvConnection, IbvMemoryRegion, IbvRemoteMemoryRegion};
 use crate::ibverbs::network_node::{
@@ -76,7 +74,7 @@ where
 /// Depending on whether `primary` is true or false, comm will be the socket to listen on or connect to, respectively.
 pub fn create_ibv_pair_node<NB, UNB, NT, UNT>(
     primary: bool,
-    comm: SocketAddr,
+    addr: (&str, u16),
     ib_dev: impl Into<String>,
     cq_capacity: usize,
     cq_cache_capacity: usize,
@@ -90,7 +88,7 @@ where
     UNT: RdmaNetworkMemoryRegionComponent<IbvMemoryRegion, IbvRemoteMemoryRegion, Registered = NT>,
     NT: RdmaNetworkNodeTransport<IbvConnection>,
 {
-    let rank = 1 - primary as usize;
+    let rank = primary as usize;
 
     let prepared_node = IbvNetworkNodeBuilder::new()
         .ibv_device(ib_dev)
@@ -103,11 +101,12 @@ where
         .build()?;
 
     let endpoint = prepared_node.endpoint();
+    let exchanged_endpoint =
+        TcpExchanger::await_exchange_pair(primary, addr, &endpoint, &TcpExchangeConfig::default())?;
 
-    let exchanged_endpoints =
-        TcpExchanger::await_exchange_pair(primary, comm, &endpoint, &TcpExchangeConfig::default())?;
+    let remote_endpoint = IbvNetworkNodeEndpoint::pair(primary, &endpoint, &exchanged_endpoint);
 
-    let node = prepared_node.connect(exchanged_endpoints)?;
+    let node = prepared_node.connect(remote_endpoint)?;
 
     Ok(node)
 }
