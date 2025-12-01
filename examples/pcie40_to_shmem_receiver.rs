@@ -1,5 +1,5 @@
 use circular_buffer::CircularBufferMultiReadable;
-use multi_fragment_packet::MultiFragmentPacketRef;
+use multi_fragment_packet::MultiFragmentPacket;
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError,
 };
@@ -46,7 +46,7 @@ fn main() {
             .expect("Error reading MFPs from shared memory");
 
         // Read the MFPs
-        let mfps = MultiFragmentPacketRef::read_multiple(&mut reader, 5)
+        let mfps = MultiFragmentPacket::read_multiple(&mut reader, 5)
             .expect("Error reading MFPs from shared memory");
 
         // Check MFPs follow proper order
@@ -84,9 +84,9 @@ fn shmem_read_mfps(
     reader: &mut SharedMemoryBufferReader,
     num: usize,
     poll_interval: Duration,
-) -> Result<MultiReadGuard<SharedMemoryBufferReader, MultiFragmentPacketRef>, ()> {
+) -> Result<MultiReadGuard<SharedMemoryBufferReader, MultiFragmentPacket>, ()> {
     loop {
-        match MultiFragmentPacketRef::read_multiple(reader, num) {
+        match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(guard) => return Ok(guard),
             Err(
                 SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,
@@ -110,7 +110,7 @@ fn shmem_wait_for_mfps(
     poll_interval: Duration,
 ) -> Result<(), ()> {
     loop {
-        match MultiFragmentPacketRef::read_multiple(reader, num) {
+        match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(_) => return Ok(()),
             Err(
                 SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,

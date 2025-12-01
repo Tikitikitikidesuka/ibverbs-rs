@@ -1,6 +1,9 @@
 ._*
 .idea
 .vscode
-/target
+target
 deploy_config.local
-crates/pcie40/src/bindings.rs
+# crates/pcie40/src/bindings.rs
+vendor
+out
+Run_*

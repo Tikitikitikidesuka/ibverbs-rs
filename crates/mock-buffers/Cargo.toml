@@ -1,13 +1,16 @@
 [package]
 name = "mock-buffers"
-version = "0.1.0"
-edition = "2024"
 description = "Mock buffer implementations for the circular buffer interface of the LHCb Event Builder"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
-thiserror = "2.0.12"
-alignment-utils = { path = "../alignment-utils" }
-circular-buffer = { path = "../circular-buffer" }
+ebutils.workspace = true
+circular-buffer.workspace = true
+
+thiserror.workspace = true
 
 [[example]]
 name = "mock_aliased_example"

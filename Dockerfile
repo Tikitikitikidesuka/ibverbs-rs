@@ -70,6 +70,7 @@ WORKDIR /app
 RUN cargo init
 
 # Copy the entire project
+# Copy project files
 COPY . .
 
 # Vendor dependencies and set config to use them

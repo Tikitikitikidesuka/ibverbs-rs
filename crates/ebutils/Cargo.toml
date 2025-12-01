@@ -1,0 +1,23 @@
+[package]
+name = "ebutils"
+description = "Helper functions for integer alignment"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+
+[dependencies]
+bytemuck.workspace = true
+thiserror.workspace = true
+strum.workspace = true
+typed-builder.workspace = true
+time = "0.3"
+tracing.workspace = true
+
+derive-where = "1.6.0"
+derive_more = { version = "2.0", features = ["full"] }
+
+
+[lints]
+workspace = true

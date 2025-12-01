@@ -1,15 +1,18 @@
 [package]
 name = "shared-memory-buffer"
-version = "0.1.0"
-edition = "2024"
 description = "Safe Rust shared memory buffer implementation for interprocess communication for the LHCb Event Builder"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
+ebutils.workspace = true
+circular-buffer.workspace = true
+
 tracing = "0.1.41"
-thiserror = "2.0.12"
+thiserror.workspace = true
 nix = { version = "0.30.1", features = ["fs"] }
-alignment-utils = { path = "../alignment-utils" }
-circular-buffer = { path = "../circular-buffer" }
 libc = "0.2.174"
 
 [[example]]

@@ -5,12 +5,13 @@ use log::{debug, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::ops::Range;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::time::timeout;
 
 #[derive(Debug, Error)]
@@ -60,6 +61,60 @@ impl TcpExchanger {
             .enable_all()
             .build()?
             .block_on(Self::exchange_all(rank_id, network, data, config))
+    }
+
+    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone + Debug>(
+        primary: bool,
+        addr: (&str, u16),
+        data: &T,
+        config: &TcpExchangeConfig,
+    ) -> Result<T, TcpNetworkConfigExchangeError> {
+        let rank = primary as usize;
+        let peer = 1 - rank;
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(async {
+                timeout(config.exchange_timeout, async {
+                    if primary {
+                        let listener = TcpListener::bind(addr).await?;
+                        let (mut stream, _) = listener.accept().await?;
+                        let mut results = HashMap::new();
+                        Self::exchange_serve(
+                            data,
+                            rank,
+                            peer..(peer + 1),
+                            &mut stream,
+                            &mut results,
+                        )
+                        .await?;
+                        Ok(results.into_values().next().expect("one inserted"))
+                    } else {
+                        let mut stream;
+                        loop {
+                            if let Ok(s) = TcpStream::connect(addr).await {
+                                stream = s;
+                                break;
+                            }
+                            tokio::time::sleep(config.retry_delay).await;
+                        }
+                        let mut results = HashMap::new();
+
+                        Self::exchange_connect(
+                            data,
+                            rank,
+                            peer..(peer + 1),
+                            &mut stream,
+                            &mut results,
+                        )
+                        .await?;
+                        Ok(results.into_values().next().expect("one inserted"))
+                    }
+                })
+                .await
+                .unwrap_or(Err(Timeout))
+            })
     }
 
     pub async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(

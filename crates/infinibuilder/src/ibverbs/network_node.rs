@@ -739,6 +739,12 @@ pub struct IbvNetworkNode<NB, NT> {
     >,
 }
 
+impl<NB, NT> IbvNetworkNode<NB, NT> {
+    pub fn transport_mut(&mut self) -> &mut NT {
+        &mut self.transport
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct IbvNetworkNodeMemoryRegion {
     conn_mrs: Arc<Named<Vec<IbvMemoryRegion>>>,

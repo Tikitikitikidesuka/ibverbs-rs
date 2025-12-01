@@ -1,6 +1,5 @@
 // Communicates when a receive has been issued and waits for its signal
 
-use std::borrow::Borrow;
 use crate::rdma_connection::{
     RdmaConnection, RdmaMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
     RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
@@ -17,6 +16,7 @@ use crate::transport::{
     RdmaNetworkNodeSendTransport, RdmaNetworkNodeWriteTransport, RdmaReceiveParams, RdmaSendParams,
 };
 use derivative::Derivative;
+use std::borrow::Borrow;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
@@ -49,6 +49,14 @@ impl<Connection: RdmaConnection> SyncedTransport<Connection> {
             memory: vec![],
             phantom: Default::default(),
         }
+    }
+
+    pub fn set_post_timeout(&mut self, timeout: Duration) {
+        self.post_timeout = timeout;
+    }
+
+    pub fn get_post_timeout(&self) -> Duration {
+        self.post_timeout
     }
 }
 
