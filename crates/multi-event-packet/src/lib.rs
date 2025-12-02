@@ -6,6 +6,7 @@ use std::{
     slice,
 };
 
+use bytemuck::NoUninit;
 use multi_fragment_packet::MultiFragmentPacket;
 
 pub mod builder;
@@ -18,7 +19,7 @@ pub use owned::MultiEventPacketOwned;
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, NoUninit)]
 #[repr(C, packed(4))] // alignment of u32 ensured
 /// Just the constant-sized part of the MEP header.
 pub(crate) struct MultiEventPacketConstHeader {
@@ -232,6 +233,7 @@ pub(crate) fn offsets_size(num_mfps: usize) -> usize {
     num_mfps * size_of::<u32>()
 }
 
+// Header size in bytes
 pub(crate) fn total_header_size(num_mfps: usize) -> usize {
     size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
 }
