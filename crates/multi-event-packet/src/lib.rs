@@ -6,8 +6,8 @@ use std::{
     slice,
 };
 
-use bytemuck::NoUninit;
-use multi_fragment_packet::MultiFragmentPacket;
+use bytemuck::{AnyBitPattern, NoUninit, cast_ref, cast_slice};
+use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 pub mod builder;
 pub mod owned;
@@ -19,7 +19,7 @@ pub use owned::MultiEventPacketOwned;
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
 
-#[derive(Copy, Clone, NoUninit)]
+#[derive(Copy, Clone, NoUninit, AnyBitPattern)]
 #[repr(C, packed(4))] // alignment of u32 ensured
 /// Just the constant-sized part of the MEP header.
 pub(crate) struct MultiEventPacketConstHeader {
@@ -185,9 +185,42 @@ impl MultiEventPacket {
         }
     }
 
+    /// Converts bytes into MEP, checking magic and packet size.
+    ///
+    /// `data` may be larger that the actual packet.
+    pub fn from_raw_bytes(data: &[u32]) -> Result<&Self, FromRawBytesError> {
+        let header_size_u32 = size_of::<MultiEventPacketConstHeader>() / size_of::<u32>();
+        if data.len() < header_size_u32 {
+            return Err(FromRawBytesError::NotEnoughDataAvailable {
+                available_data: data.len(),
+                required_data: header_size_u32,
+            });
+        }
+
+        let header: &MultiEventPacketConstHeader = cast_slice(&data[..header_size_u32])
+            .first()
+            .expect("exists");
+
+        if header.magic != MultiEventPacket::MAGIC {
+            return Err(FromRawBytesError::CorruptedMagic {
+                read_magic: header.magic,
+                expected_magic: MultiEventPacket::MAGIC,
+            });
+        }
+
+        if header.packet_size as usize > data.len() {
+            return Err(FromRawBytesError::NotEnoughDataAvailable {
+                available_data: data.len(),
+                required_data: header.packet_size as _,
+            });
+        }
+
+        Ok(unsafe { Self::unchecked_from_raw_bytes(data) })
+    }
+
     /// # Safety
     /// Assumes data contains a valid MEP, with MFPs sorted by srcid.
-    unsafe fn unchecked_ref_from_raw_bytes(data: &[u32]) -> &Self {
+    unsafe fn unchecked_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
         unsafe { &*(data.as_ptr() as *const MultiEventPacket) }
     }
@@ -222,6 +255,8 @@ impl Debug for MultiEventPacketOwned {
 }
 
 /// Type of MFP offsets as in the MEP header.
+///
+/// In units of **u32**!
 pub type Offset = u32;
 
 pub(crate) fn src_ids_size(num_mfps: usize) -> usize {

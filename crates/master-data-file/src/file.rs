@@ -121,6 +121,10 @@ pub mod mmap {
         pub fn mmap_file(file: impl AsRef<Path>) -> IoResult<Self> {
             let file = File::open(file)?;
             let map = unsafe { Mmap::map(&file) }?;
+            #[cfg(unix)]
+            {
+                map.advise(memmap2::Advice::Sequential);
+            }
             Ok(MdfFile { data: MemMap(map) })
         }
     }

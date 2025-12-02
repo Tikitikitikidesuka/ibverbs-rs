@@ -208,14 +208,16 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 /// Generates the MFP offsets in bytes from the start of the header.
 /// Also stores the total size in the out parameter.
+/// 
+/// 
 pub(crate) fn offsets_iter(
-    mfp_sizes: impl ExactSizeIterator<Item = usize>,
+    mfp_sizes_bytes: impl ExactSizeIterator<Item = usize>,
     mfp_align: usize,
     total_size: &mut usize,
 ) -> impl Iterator<Item = usize> {
-    *total_size = total_header_size(mfp_sizes.len());
+    *total_size = total_header_size(mfp_sizes_bytes.len());
 
-    mfp_sizes
+    mfp_sizes_bytes
         .map(move |size| size.next_multiple_of(mfp_align))
         .scan(total_size, move |sum, b| {
             let ret = **sum;
@@ -240,8 +242,11 @@ pub(crate) fn write_source_ids(
     for (slot, soruce_id) in slots.iter_mut().zip(source_ids) {
         *slot = soruce_id;
     }
+
+    assert!(slots.is_sorted(), "Source IDs are not sorted! {slots:?}");
 }
 
+/// Offsets in **u32**!
 pub(crate) fn access_offsets(mfp: &[u32], num_mfps: usize) -> &[Offset] {
     let start =
         (size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps)) / size_of::<u32>();

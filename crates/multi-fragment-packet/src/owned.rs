@@ -1,8 +1,6 @@
 use std::{borrow::Borrow, ops::Deref};
 
-use crate::{
-    MultiFragmentPacket, MultiFragmentPacketBuilder, MultiFragmentPacketFromRawBytesError,
-};
+use crate::{FromRawBytesError, MultiFragmentPacket, MultiFragmentPacketBuilder};
 
 /// This struct represents an owned [`MultiFragmentPacket`].
 ///
@@ -19,7 +17,7 @@ impl MultiFragmentPacketOwned {
     /// This function tries to create a new owned MFP from raw bytes.
     ///
     /// It has the same preconditions as [`MultiFragmentPacket::from_raw_bytes`].
-    pub fn from_data(data: Vec<u8>) -> Result<Self, MultiFragmentPacketFromRawBytesError> {
+    pub fn from_data(data: Vec<u8>) -> Result<Self, FromRawBytesError> {
         let _test = MultiFragmentPacket::from_raw_bytes(&data)?;
         Ok(Self { data })
     }

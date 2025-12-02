@@ -66,34 +66,30 @@ impl MultiFragmentPacket {
     /// Casts a byte slice to an MFP checking for the magic number and size.
     ///
     /// The passed slice must only be at least as large as the MFP, it may be larger as well.
-    pub fn from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
+    pub fn from_raw_bytes(data: &[u8]) -> Result<&Self, FromRawBytesError> {
         // Check if there is enough data for the header
         if data.len() < Self::HEADER_SIZE {
-            Err(
-                MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                    required_data: Self::HEADER_SIZE,
-                    available_data: data.len(),
-                },
-            )?;
+            Err(FromRawBytesError::NotEnoughDataAvailable {
+                required_data: Self::HEADER_SIZE,
+                available_data: data.len(),
+            })?;
         }
 
         let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
 
         // Check the magic bytes are not corrupt
         if mfp.magic() != Self::VALID_MAGIC {
-            Err(MultiFragmentPacketFromRawBytesError::CorruptedMagic {
+            Err(FromRawBytesError::CorruptedMagic {
                 read_magic: mfp.magic(),
                 expected_magic: Self::VALID_MAGIC,
             })?
         }
 
         if mfp.packet_size() as usize > data.len() {
-            Err(
-                MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                    required_data: mfp.packet_size() as usize,
-                    available_data: data.len(),
-                },
-            )?;
+            Err(FromRawBytesError::NotEnoughDataAvailable {
+                required_data: mfp.packet_size() as usize,
+                available_data: data.len(),
+            })?;
         }
 
         Ok(mfp)
@@ -254,7 +250,7 @@ impl MultiFragmentPacket {
 
 /// Errors that can be encountered when trying to construct a MultiFragmentPacket from raw bytes.
 #[derive(Debug, Error)]
-pub enum MultiFragmentPacketFromRawBytesError {
+pub enum FromRawBytesError {
     /// Not enough bytes presented to decode MFP.
     #[error(
         "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"

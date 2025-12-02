@@ -24,7 +24,7 @@ impl AsRef<MultiEventPacket> for MultiEventPacketOwned {
     fn as_ref(&self) -> &MultiEventPacket {
         // MultiEventPacket must be guaranteed to be correct already. Since it can only
         // be built by the builder, it is supposed to be guaranteed.
-        unsafe { MultiEventPacket::unchecked_ref_from_raw_bytes(&self.data) }
+        unsafe { MultiEventPacket::unchecked_from_raw_bytes(&self.data) }
     }
 }
 

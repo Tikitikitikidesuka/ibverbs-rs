@@ -25,7 +25,7 @@ impl Stage for StoreMfps {}
 #[allow(private_bounds)]
 pub struct ZeroCopyMepBuilder<S: Stage> {
     buffer: Box<[u32]>,
-    mfp_sizes: Box<[Option<NonZero<usize>>]>,
+    mfp_sizes_bytes: Box<[Option<NonZero<usize>>]>,
     mfp_align: usize,
     stage: S,
 }
@@ -37,18 +37,18 @@ impl<S: Stage> ZeroCopyMepBuilder<S> {
     }
 
     pub fn reset(mut self) -> ZeroCopyMepBuilder<RegisterSizes> {
-        self.mfp_sizes.fill(None);
+        self.mfp_sizes_bytes.fill(None);
 
         ZeroCopyMepBuilder {
             stage: RegisterSizes {},
-            mfp_sizes: self.mfp_sizes,
+            mfp_sizes_bytes: self.mfp_sizes_bytes,
             buffer: self.buffer,
             mfp_align: self.mfp_align,
         }
     }
 
     pub fn num_mfps(&self) -> usize {
-        self.mfp_sizes.len()
+        self.mfp_sizes_bytes.len()
     }
 }
 
@@ -56,16 +56,16 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
     pub fn new(buffer_capacity: usize, num_mfps: usize, mfp_align: usize) -> Self {
         ZeroCopyMepBuilder {
             buffer: vec![0u32; buffer_capacity.div_ceil(size_of::<u32>())].into_boxed_slice(),
-            mfp_sizes: vec![None; num_mfps].into_boxed_slice(),
+            mfp_sizes_bytes: vec![None; num_mfps].into_boxed_slice(),
             mfp_align,
             stage: RegisterSizes {},
         }
     }
 
     /// `idx` needs to be in 0..num_mfps, in correct source id order
-    pub fn register_mfp(&mut self, idx: usize, size_u32: NonZero<usize>) -> &mut Self {
-        let _ = self.mfp_sizes[idx]
-            .replace(size_u32)
+    pub fn register_mfp(&mut self, idx: usize, size_bytes: usize) -> &mut Self {
+        let _ = self.mfp_sizes_bytes[idx]
+            .replace(NonZero::new(size_bytes).expect("non zero"))
             .is_none_or(|_| panic!("mfp {idx} already registered"));
         self
     }
@@ -78,7 +78,7 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
             &mut self.buffer,
             num_mfps,
             offsets_iter(
-                self.mfp_sizes
+                self.mfp_sizes_bytes
                     .iter()
                     .map(|s| s.expect("all mfp sizes are set").into()),
                 self.mfp_align,
@@ -100,34 +100,43 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
         ZeroCopyMepBuilder {
             buffer: self.buffer,
             mfp_align: self.mfp_align,
-            mfp_sizes: self.mfp_sizes,
+            mfp_sizes_bytes: self.mfp_sizes_bytes,
             stage: StoreMfps { total_size },
         }
     }
 }
 
 impl ZeroCopyMepBuilder<StoreMfps> {
+    /// Range in **bytes**!
     pub fn get_mfp_range(&self, index: usize) -> Range<usize> {
-        let offset = access_offsets(&self.buffer, self.num_mfps())[index] as usize;
-        offset..(offset + self.mfp_sizes()[index])
+        let offset =
+            access_offsets(&self.buffer, self.num_mfps())[index] as usize * size_of::<u32>();
+        let size = self.mfp_sizes_bytes()[index];
+        offset..(offset + size)
     }
 
+    /// You need to insure that:
+    /// - at least one odin fragment was added, and
+    /// - that they are added in the correct order of ascending soruce id,
+    /// - all MFPs have the same event id and number of fragments.
+    ///
+    /// The returned range is in bytes within the buffer.
     pub fn finish(mut self) -> (Range<usize>, ZeroCopyMepBuilder<RegisterSizes>) {
         let num_mfps = self.num_mfps();
-        let header_size = total_header_size(num_mfps);
-        let (header, rest) = self.buffer.split_at_mut(header_size);
+        let header_size_u32 = total_header_size(num_mfps) / size_of::<u32>();
+        let (header, rest) = self.buffer.split_at_mut(header_size_u32);
 
         write_source_ids(
             header,
             num_mfps,
             offsets_iter(
-                self.mfp_sizes.iter().copied().map(bytemuck::cast),
+                self.mfp_sizes_bytes.iter().copied().map(bytemuck::cast),
                 self.mfp_align,
                 &mut 0,
             )
-            .map(|offset| {
+            .map(|offset_bytes| {
                 MultiFragmentPacket::from_raw_bytes(bytemuck::cast_slice::<_, u8>(
-                    &rest[(offset - header_size)..],
+                    &rest[(offset_bytes / size_of::<u32>() - header_size_u32)..],
                 ))
                 .expect("valid mfp")
                 .source_id()
@@ -138,16 +147,69 @@ impl ZeroCopyMepBuilder<StoreMfps> {
             0..self.stage.total_size,
             ZeroCopyMepBuilder {
                 buffer: self.buffer,
-                mfp_sizes: self.mfp_sizes,
+                mfp_sizes_bytes: self.mfp_sizes_bytes,
                 mfp_align: self.mfp_align,
                 stage: RegisterSizes {},
             },
         )
     }
 
-    fn mfp_sizes(&self) -> &[usize] {
-        cast_slice(&self.mfp_sizes)
+    fn mfp_sizes_bytes(&self) -> &[usize] {
+        cast_slice(&self.mfp_sizes_bytes)
     }
 }
 
+#[cfg(test)]
+mod test {
+    use std::ptr::slice_from_raw_parts_mut;
 
+    use ebutils::{FragmentType, SourceId};
+    use multi_fragment_packet::MultiFragmentPacketOwned;
+
+    use crate::{MultiEventPacket, zerocopy_builder::ZeroCopyMepBuilder};
+
+    #[test]
+    fn test() {
+        let mut builder = ZeroCopyMepBuilder::new(1 << 12, 2, 4);
+
+        let mfp0 = MultiFragmentPacketOwned::builder()
+            .with_event_id(11)
+            .with_source_id(SourceId::new_odin(0))
+            .with_align_log(2)
+            .with_fragment_version(1)
+            .add_fragments([(FragmentType::ODIN, ebutils::odin::dummy_odin_payload(11))])
+            .build();
+        let mfp1 = MultiFragmentPacketOwned::builder()
+            .with_event_id(11)
+            .with_source_id(SourceId::new(ebutils::SubDetector::UtA, 456))
+            .with_align_log(2)
+            .with_fragment_version(1)
+            .add_fragments([(FragmentType::DAQ, b"hello world!")])
+            .build();
+        builder.register_mfp(1, mfp1.packet_size() as _);
+        builder.register_mfp(0, mfp0.packet_size() as _);
+        let mut builder = builder.start_assembling();
+        let memory = builder.get_buffer_range();
+        let memory: &mut [u8] = bytemuck::cast_slice_mut(unsafe {
+            &mut *slice_from_raw_parts_mut(
+                memory.start,
+                memory.end.offset_from_unsigned(memory.start),
+            )
+        });
+
+        memory[builder.get_mfp_range(1)].copy_from_slice(mfp1.raw_packet_data());
+        memory[builder.get_mfp_range(0)].copy_from_slice(mfp0.raw_packet_data());
+
+        let (range, _builder) = builder.finish();
+
+        let mep = MultiEventPacket::from_raw_bytes(bytemuck::cast_slice(&memory[range]))
+            .expect("valid mep");
+
+        assert_eq!(mep.num_mfps(), 2);
+        assert!(mep.get_mfp(0).unwrap().source_id().is_odin());
+        assert_eq!(
+            mep.get_mfp(1).unwrap().fragment(0).unwrap().payload_bytes(),
+            mfp1.fragment(0).unwrap().payload_bytes()
+        );
+    }
+}
