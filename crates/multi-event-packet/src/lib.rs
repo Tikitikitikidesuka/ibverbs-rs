@@ -9,8 +9,8 @@ use std::{
 use multi_fragment_packet::MultiFragmentPacket;
 
 pub mod builder;
-pub mod zerocopy_builder;
 pub mod owned;
+pub mod zerocopy_builder;
 pub use builder::MultiEventPacketBuilder;
 use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
 pub use owned::MultiEventPacketOwned;
@@ -232,7 +232,7 @@ pub(crate) fn offsets_size(num_mfps: usize) -> usize {
     num_mfps * size_of::<u32>()
 }
 
-pub(crate) fn header_size(num_mfps: usize) -> usize {
+pub(crate) fn total_header_size(num_mfps: usize) -> usize {
     size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
 }
 

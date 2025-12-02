@@ -7,8 +7,8 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
-    src_ids_size,
+    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, src_ids_size,
+    total_header_size,
 };
 
 /// This is a builder struct for constructing an MEP out of MFPs for the same events and different source ids.
@@ -219,7 +219,7 @@ impl<'a> MultiEventPacketBuilder<'a> {
     /// Also stores the total size in the out parameter.
     fn offsets_iter(&self, total_size: &mut usize) -> impl Iterator<Item = usize> {
         let align = self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN);
-        *total_size = header_size(self.mfps.len());
+        *total_size = total_header_size(self.mfps.len());
 
         self.mfps
             .iter()
