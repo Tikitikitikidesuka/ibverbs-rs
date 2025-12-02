@@ -23,28 +23,17 @@ pub struct StoreMfps {
 impl Stage for StoreMfps {}
 
 #[allow(private_bounds)]
-pub struct ZeroCopyMepBuilder<S: Stage> {
-    buffer: Box<[u32]>,
-    mfp_sizes_bytes: Box<[Option<NonZero<usize>>]>,
+pub struct ZeroCopyMepBuilder<'a, S: Stage> {
+    buffer: &'a mut [u32],
+    mfp_sizes_bytes: &'a mut [Option<NonZero<usize>>],
     mfp_align: usize,
     stage: S,
 }
 
 #[allow(private_bounds)]
-impl<S: Stage> ZeroCopyMepBuilder<S> {
+impl<'a, S: Stage> ZeroCopyMepBuilder<'a, S> {
     pub fn get_buffer_range(&mut self) -> Range<*mut u32> {
         self.buffer.as_mut_ptr_range()
-    }
-
-    pub fn reset(mut self) -> ZeroCopyMepBuilder<RegisterSizes> {
-        self.mfp_sizes_bytes.fill(None);
-
-        ZeroCopyMepBuilder {
-            stage: RegisterSizes {},
-            mfp_sizes_bytes: self.mfp_sizes_bytes,
-            buffer: self.buffer,
-            mfp_align: self.mfp_align,
-        }
     }
 
     pub fn num_mfps(&self) -> usize {
@@ -52,11 +41,15 @@ impl<S: Stage> ZeroCopyMepBuilder<S> {
     }
 }
 
-impl ZeroCopyMepBuilder<RegisterSizes> {
-    pub fn new(buffer_capacity: usize, num_mfps: usize, mfp_align: usize) -> Self {
+impl<'a> ZeroCopyMepBuilder<'a, RegisterSizes> {
+    /// Length of mfp_size_cache must match the number of MFPs to construct mep for.
+    pub fn new(buffer: &'a mut [u32], mfp_size_cache: &'a mut [usize], mfp_align: usize) -> Self {
+        let mfp_sizes_bytes = bytemuck::cast_slice_mut(mfp_size_cache);
+        mfp_sizes_bytes.fill(None);
+
         ZeroCopyMepBuilder {
-            buffer: vec![0u32; buffer_capacity.div_ceil(size_of::<u32>())].into_boxed_slice(),
-            mfp_sizes_bytes: vec![None; num_mfps].into_boxed_slice(),
+            buffer,
+            mfp_sizes_bytes,
             mfp_align,
             stage: RegisterSizes {},
         }
@@ -70,12 +63,12 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
         self
     }
 
-    pub fn start_assembling(mut self) -> ZeroCopyMepBuilder<StoreMfps> {
+    pub fn start_assembling(self) -> ZeroCopyMepBuilder<'a, StoreMfps> {
         let num_mfps = self.num_mfps();
         let mut total_size: usize = 0;
 
         write_offsets(
-            &mut self.buffer,
+            self.buffer,
             num_mfps,
             offsets_iter(
                 self.mfp_sizes_bytes
@@ -87,7 +80,7 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
         );
 
         write_const_header(
-            &mut self.buffer,
+            self.buffer,
             MultiEventPacketConstHeader {
                 magic: MultiEventPacket::MAGIC,
                 num_mfps: num_mfps.try_into().expect("number of mfps fits into u16"),
@@ -106,11 +99,11 @@ impl ZeroCopyMepBuilder<RegisterSizes> {
     }
 }
 
-impl ZeroCopyMepBuilder<StoreMfps> {
+impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     /// Range in **bytes**!
     pub fn get_mfp_range(&self, index: usize) -> Range<usize> {
         let offset =
-            access_offsets(&self.buffer, self.num_mfps())[index] as usize * size_of::<u32>();
+            access_offsets(self.buffer, self.num_mfps())[index] as usize * size_of::<u32>();
         let size = self.mfp_sizes_bytes()[index];
         offset..(offset + size)
     }
@@ -121,7 +114,7 @@ impl ZeroCopyMepBuilder<StoreMfps> {
     /// - all MFPs have the same event id and number of fragments.
     ///
     /// The returned range is in bytes within the buffer.
-    pub fn finish(mut self) -> (Range<usize>, ZeroCopyMepBuilder<RegisterSizes>) {
+    pub fn finish(self) -> Range<usize> {
         let num_mfps = self.num_mfps();
         let header_size_u32 = total_header_size(num_mfps) / size_of::<u32>();
         let (header, rest) = self.buffer.split_at_mut(header_size_u32);
@@ -143,19 +136,11 @@ impl ZeroCopyMepBuilder<StoreMfps> {
             }),
         );
 
-        (
-            0..self.stage.total_size,
-            ZeroCopyMepBuilder {
-                buffer: self.buffer,
-                mfp_sizes_bytes: self.mfp_sizes_bytes,
-                mfp_align: self.mfp_align,
-                stage: RegisterSizes {},
-            },
-        )
+        0..self.stage.total_size
     }
 
     fn mfp_sizes_bytes(&self) -> &[usize] {
-        cast_slice(&self.mfp_sizes_bytes)
+        cast_slice(self.mfp_sizes_bytes)
     }
 }
 
@@ -170,46 +155,51 @@ mod test {
 
     #[test]
     fn test() {
-        let mut builder = ZeroCopyMepBuilder::new(1 << 12, 2, 4);
+        let mut buffer = vec![0u32; 1 << 10];
+        let mut cache = [0; 2];
 
-        let mfp0 = MultiFragmentPacketOwned::builder()
-            .with_event_id(11)
-            .with_source_id(SourceId::new_odin(0))
-            .with_align_log(2)
-            .with_fragment_version(1)
-            .add_fragments([(FragmentType::ODIN, ebutils::odin::dummy_odin_payload(11))])
-            .build();
-        let mfp1 = MultiFragmentPacketOwned::builder()
-            .with_event_id(11)
-            .with_source_id(SourceId::new(ebutils::SubDetector::UtA, 456))
-            .with_align_log(2)
-            .with_fragment_version(1)
-            .add_fragments([(FragmentType::DAQ, b"hello world!")])
-            .build();
-        builder.register_mfp(1, mfp1.packet_size() as _);
-        builder.register_mfp(0, mfp0.packet_size() as _);
-        let mut builder = builder.start_assembling();
-        let memory = builder.get_buffer_range();
-        let memory: &mut [u8] = bytemuck::cast_slice_mut(unsafe {
-            &mut *slice_from_raw_parts_mut(
-                memory.start,
-                memory.end.offset_from_unsigned(memory.start),
-            )
-        });
+        for _ in 0..1 {
+            let mut builder = ZeroCopyMepBuilder::new(&mut buffer, &mut cache, 4);
 
-        memory[builder.get_mfp_range(1)].copy_from_slice(mfp1.raw_packet_data());
-        memory[builder.get_mfp_range(0)].copy_from_slice(mfp0.raw_packet_data());
+            let mfp0 = MultiFragmentPacketOwned::builder()
+                .with_event_id(11)
+                .with_source_id(SourceId::new_odin(0))
+                .with_align_log(2)
+                .with_fragment_version(1)
+                .add_fragments([(FragmentType::ODIN, ebutils::odin::dummy_odin_payload(11))])
+                .build();
+            let mfp1 = MultiFragmentPacketOwned::builder()
+                .with_event_id(11)
+                .with_source_id(SourceId::new(ebutils::SubDetector::UtA, 456))
+                .with_align_log(2)
+                .with_fragment_version(1)
+                .add_fragments([(FragmentType::DAQ, b"hello world!")])
+                .build();
+            builder.register_mfp(1, mfp1.packet_size() as _);
+            builder.register_mfp(0, mfp0.packet_size() as _);
+            let mut builder = builder.start_assembling();
+            let memory = builder.get_buffer_range();
+            let memory: &mut [u8] = bytemuck::cast_slice_mut(unsafe {
+                &mut *slice_from_raw_parts_mut(
+                    memory.start,
+                    memory.end.offset_from_unsigned(memory.start),
+                )
+            });
 
-        let (range, _builder) = builder.finish();
+            memory[builder.get_mfp_range(1)].copy_from_slice(mfp1.raw_packet_data());
+            memory[builder.get_mfp_range(0)].copy_from_slice(mfp0.raw_packet_data());
 
-        let mep = MultiEventPacket::from_raw_bytes(bytemuck::cast_slice(&memory[range]))
-            .expect("valid mep");
+            let range = builder.finish();
 
-        assert_eq!(mep.num_mfps(), 2);
-        assert!(mep.get_mfp(0).unwrap().source_id().is_odin());
-        assert_eq!(
-            mep.get_mfp(1).unwrap().fragment(0).unwrap().payload_bytes(),
-            mfp1.fragment(0).unwrap().payload_bytes()
-        );
+            let mep = MultiEventPacket::from_raw_bytes(bytemuck::cast_slice(&memory[range]))
+                .expect("valid mep");
+
+            assert_eq!(mep.num_mfps(), 2);
+            assert!(mep.get_mfp(0).unwrap().source_id().is_odin());
+            assert_eq!(
+                mep.get_mfp(1).unwrap().fragment(0).unwrap().payload_bytes(),
+                mfp1.fragment(0).unwrap().payload_bytes()
+            );
+        }
     }
 }
