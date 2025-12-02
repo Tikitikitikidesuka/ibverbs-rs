@@ -9,6 +9,7 @@ use std::{
 use multi_fragment_packet::MultiFragmentPacket;
 
 pub mod builder;
+pub mod zerocopy_builder;
 pub mod owned;
 pub use builder::MultiEventPacketBuilder;
 use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
