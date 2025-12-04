@@ -8,6 +8,8 @@ pub struct NodeConfig {
     pub port: u16,
     pub ibdev: String,
     pub rankid: usize,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub comment: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -106,12 +108,14 @@ mod tests {
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "tdeb02".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
+                    comment: String::new(),
                 },
             ],
         };
@@ -131,18 +135,21 @@ mod tests {
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 2,
+                    comment: String::new(),
                 },
             ],
         };
@@ -174,6 +181,7 @@ mod tests {
                 port: 8080,
                 ibdev: "mlx5_1".to_string(),
                 rankid: 0,
+                comment: String::new(),
             }],
         };
 
@@ -191,12 +199,14 @@ mod tests {
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 2,
+                    comment: String::new(),
                 },
             ],
         };
@@ -216,12 +226,14 @@ mod tests {
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 2, // Missing rankid 1
+                    comment: String::new(),
                 },
             ],
         };
@@ -243,18 +255,21 @@ mod tests {
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Gap: missing rankid 1 and 2
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Duplicate rankid 3
+                    comment: String::new(),
                 },
             ],
         };
@@ -276,24 +291,28 @@ mod tests {
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1, // Duplicate rankid 1
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "node4".to_string(),
                     port: 10003,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Gap: missing rankid 2
+                    comment: String::new(),
                 },
             ],
         };
@@ -313,12 +332,14 @@ mod tests {
                     port: 9000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
+                    comment: String::new(),
                 },
                 NodeConfig {
                     hostname: "test2".to_string(),
                     port: 9001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
+                    comment: String::new(),
                 },
             ],
         };
