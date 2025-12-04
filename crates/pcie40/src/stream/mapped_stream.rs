@@ -3,12 +3,12 @@ use crate::stream::locked_stream::PCIe40LockedStream;
 use crate::stream::stream::PCIe40StreamError;
 use tracing::{debug, instrument, trace, warn};
 
-pub struct PCIe40MappedStream<'a> {
+pub struct PCIe40MappedStream {
     locked_stream: PCIe40LockedStream,
-    buffer: &'a [u8],
+    buffer: *const [u8],
 }
 
-impl Drop for PCIe40MappedStream<'_> {
+impl Drop for PCIe40MappedStream {
     fn drop(&mut self) {
         debug!(
             "Drop called on PCIe40MappedBuffer for device {} stream {}",
@@ -18,8 +18,8 @@ impl Drop for PCIe40MappedStream<'_> {
     }
 }
 
-impl<'a> PCIe40MappedStream<'a> {
-    pub(super) fn new(locked_stream: PCIe40LockedStream, buffer: &'a [u8]) -> Self {
+impl PCIe40MappedStream {
+    pub(super) fn new(locked_stream: PCIe40LockedStream, buffer: *const [u8]) -> Self {
         Self {
             locked_stream,
             buffer,
@@ -34,13 +34,12 @@ impl<'a> PCIe40MappedStream<'a> {
 
         trace!(
             "Calling p40_stream_unmap({}, {:p})",
-            self.locked_stream.stream.stream_fd,
-            self.buffer.as_ptr() as *mut std::os::raw::c_void
+            self.locked_stream.stream.stream_fd, self.buffer as *mut std::os::raw::c_void
         );
         unsafe {
             p40_stream_unmap(
                 self.locked_stream.stream.stream_fd,
-                self.buffer.as_ptr() as *mut std::os::raw::c_void,
+                self.buffer as *mut std::os::raw::c_void,
             )
         }
         debug!(
@@ -50,7 +49,7 @@ impl<'a> PCIe40MappedStream<'a> {
     }
 }
 
-impl PCIe40MappedStream<'_> {
+impl PCIe40MappedStream {
     /// Returns a slice to the whole buffer.
     /// The real buffer is half the size of the returned one. It is aliased in
     ///virtual memory to always allow contiguous access to its contents.
@@ -58,7 +57,8 @@ impl PCIe40MappedStream<'_> {
     /// # Safety
     /// The buffer's data might change due to the DMA access from the card, so it is not really immutable
     pub unsafe fn data(&self) -> &[u8] {
-        self.buffer
+        // SAFETY: Pointer points to buffer whose lifetime is tied to self.
+        unsafe { &*self.buffer }
     }
 
     pub fn size(&self) -> usize {

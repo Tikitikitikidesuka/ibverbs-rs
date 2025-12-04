@@ -128,7 +128,7 @@ impl PCIe40LockedStream {
         device_id = self.stream.device_id(),
         stream_type = ?self.stream.stream_type()
     ))]
-    pub fn map_buffer<'a>(self) -> Result<PCIe40MappedStream<'a>, PCIe40StreamError> {
+    pub fn map_buffer(self) -> Result<PCIe40MappedStream, PCIe40StreamError> {
         debug!(
             "Mapping buffer for stream {} on device {}",
             self.stream.stream_type(),
@@ -181,7 +181,7 @@ impl PCIe40LockedStream {
         );
 
         Ok(PCIe40MappedStream::new(self, unsafe {
-            slice::from_raw_parts(buff_ptr as *const u8, buff_size as usize)
+            std::ptr::slice_from_raw_parts(buff_ptr as *const u8, buff_size as usize)
         }))
     }
 }

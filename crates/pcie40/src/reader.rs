@@ -4,8 +4,8 @@ use circular_buffer::CircularBufferReader;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
-pub struct PCIe40Reader<'a> {
-    mapped_buffer: PCIe40MappedStream<'a>,
+pub struct PCIe40Reader {
+    mapped_buffer: PCIe40MappedStream,
     read_offset: usize,
     alignment_pow2: u8,
 }
@@ -38,13 +38,13 @@ pub enum PCIe40AdvanceError {
     NotAligned,
 }
 
-impl<'a> PCIe40Reader<'a> {
+impl PCIe40Reader {
     #[instrument(skip_all, fields(
         device_id = mapped_buffer.device_id(),
         alignment_pow2 = alignment_pow2
     ))]
     pub fn new(
-        mapped_buffer: PCIe40MappedStream<'a>,
+        mapped_buffer: PCIe40MappedStream,
         alignment_pow2: u8,
     ) -> Result<Self, PCIe40ReaderInstanceError> {
         debug!("Creating PCIe40Reader instance");
@@ -82,13 +82,12 @@ impl<'a> PCIe40Reader<'a> {
     }
 }
 
-impl<'r> CircularBufferReader for PCIe40Reader<'r> {
+impl CircularBufferReader for PCIe40Reader {
     type AdvanceResult = Result<(), PCIe40AdvanceError>;
     type ReadableRegionResult<'a>
         = Result<&'a [u8], PCIe40StreamError>
     where
-        Self: 'a,
-        'r: 'a;
+        Self: 'a;
 
     #[instrument(skip_all, fields(device_id = self.mapped_buffer.device_id(), bytes = bytes))]
     fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
