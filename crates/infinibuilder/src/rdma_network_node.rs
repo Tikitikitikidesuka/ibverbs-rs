@@ -105,22 +105,19 @@ pub trait RdmaSendTransportNetworkNode: RdmaMemoryRegionNetworkNode {
         send_params_iter: impl IntoIterator<
             Item = impl Borrow<RdmaSendParams<'a, Self::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    ) -> impl Iterator<Item = Result<Self::WorkRequest, Self::PostError>>
     where
         <Self as RdmaMemoryRegionNetworkNode>::MemoryRegion: 'a,
     {
-        send_params_iter
-            .into_iter()
-            .map(|send_params| {
-                let send_params = send_params.borrow();
-                self.post_send(
-                    peer_rank_id,
-                    send_params.memory_region,
-                    send_params.memory_range.clone(),
-                    send_params.immediate_data.clone(),
-                )
-            })
-            .collect()
+        send_params_iter.into_iter().map(move |send_params| {
+            let send_params = send_params.borrow();
+            self.post_send(
+                peer_rank_id,
+                send_params.memory_region,
+                send_params.memory_range.clone(),
+                send_params.immediate_data,
+            )
+        })
     }
 }
 
@@ -143,22 +140,21 @@ pub trait RdmaReceiveTransportNetworkNode: RdmaMemoryRegionNetworkNode {
     fn post_receive_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         peer_rank_id: usize,
-        receive_params_iter: impl IntoIterator<Item = impl Borrow<RdmaReceiveParams<'a, Self::MemoryRegion, Range>>>,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+        receive_params_iter: impl IntoIterator<
+            Item = impl Borrow<RdmaReceiveParams<'a, Self::MemoryRegion, Range>>,
+        >,
+    ) -> impl Iterator<Item = Result<Self::WorkRequest, Self::PostError>>
     where
         <Self as RdmaMemoryRegionNetworkNode>::MemoryRegion: 'a,
     {
-        receive_params_iter
-            .into_iter()
-            .map(|receive_params| {
-                let receive_params = receive_params.borrow();
-                self.post_receive(
-                    peer_rank_id,
-                    receive_params.memory_region,
-                    receive_params.memory_range.clone(),
-                )
-            })
-            .collect()
+        receive_params_iter.into_iter().map(move |receive_params| {
+            let receive_params = receive_params.borrow();
+            self.post_receive(
+                peer_rank_id,
+                receive_params.memory_region,
+                receive_params.memory_range.clone(),
+            )
+        })
     }
 }
 
@@ -192,25 +188,22 @@ pub trait RdmaWriteTransportNetworkNode:
         write_params_iter: impl IntoIterator<
             Item = impl Borrow<RdmaWriteParams<'a, Self::MemoryRegion, Self::RemoteMemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    ) -> impl Iterator<Item = Result<Self::WorkRequest, Self::PostError>>
     where
         <Self as RdmaMemoryRegionNetworkNode>::MemoryRegion: 'a,
         <Self as RdmaRemoteMemoryRegionNetworkNode>::RemoteMemoryRegion: 'a,
     {
-        write_params_iter
-            .into_iter()
-            .map(|write_params| {
-                let write_params = write_params.borrow();
-                self.post_write(
-                    peer_rank_id,
-                    write_params.local_memory_region,
-                    write_params.local_memory_range.clone(),
-                    write_params.remote_memory_region,
-                    write_params.remote_memory_range.clone(),
-                    write_params.immediate_data.clone(),
-                )
-            })
-            .collect()
+        write_params_iter.into_iter().map(move |write_params| {
+            let write_params = write_params.borrow();
+            self.post_write(
+                peer_rank_id,
+                write_params.local_memory_region,
+                write_params.local_memory_range.clone(),
+                write_params.remote_memory_region,
+                write_params.remote_memory_range.clone(),
+                write_params.immediate_data,
+            )
+        })
     }
 }
 

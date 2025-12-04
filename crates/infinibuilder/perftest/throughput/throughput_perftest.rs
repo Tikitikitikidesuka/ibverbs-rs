@@ -61,7 +61,7 @@ fn main() {
         CentralizedBarrier::new(),
         SyncedTransport::with_post_timeout(Duration::from_millis(1000)),
     )
-        .unwrap();
+    .unwrap();
 
     let local_mr = node.local_mr(mem_name).unwrap();
 
@@ -128,7 +128,7 @@ fn run_sender<MemoryRegion, Node: RdmaNetworkNode<MemoryRegion = MemoryRegion>>(
             let slot_idx = issued_sends % num_send_configs;
             // BUG WAS HERE: was using issued_sends / num_send_configs instead of %
             let wrs = node.post_send_batch(1, send_configs[slot_idx].as_slice());
-            batched_wrs[slot_idx] = wrs;
+            batched_wrs[slot_idx] = wrs.collect();
             issued_sends += 1;
         } else {
             // Otherwise, wait
@@ -191,7 +191,7 @@ fn run_receiver<MemoryRegion, Node: RdmaNetworkNode<MemoryRegion = MemoryRegion>
         if issued_recvs < num_posts && (issued_recvs - finished_recvs) < num_recv_configs {
             let slot_idx = issued_recvs % num_recv_configs;
             let wrs = node.post_receive_batch(0, recv_configs[slot_idx].as_slice());
-            batched_wrs[slot_idx] = wrs;
+            batched_wrs[slot_idx] = wrs.collect();
             issued_recvs += 1;
         } else {
             // Wait for completion

@@ -68,7 +68,6 @@ impl<Connection: RdmaConnection> SyncedTransport<Connection> {
 /// A connection is only able to send when the counter remote issued receives
 /// is higher than the counter of local issued sends.
 /// When it sends, it adds one to its local counter of issued sends.
-
 const BYTES_PER_CONNECTION: usize = 3 * size_of::<u64>();
 
 fn setup_memory(num_connections: usize) -> Vec<u8> {
@@ -97,6 +96,7 @@ impl<Connection: RdmaConnection> SyncedTransport<Connection> {
         unsafe { (&mut self.memory[rank_id * BYTES_PER_CONNECTION] as *mut u8 as *mut u64).add(2) }
     }
 
+    #[warn(clippy::erasing_op)]
     fn local_issued_receives_mr_range(&self) -> impl RangeBounds<usize> {
         (0 * size_of::<u64>())..(1 * size_of::<u64>())
     }

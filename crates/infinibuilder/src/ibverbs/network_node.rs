@@ -23,6 +23,7 @@ use crate::transport::{
     RdmaNetworkNodeReceiveTransport, RdmaNetworkNodeSendImmediateDataTransport,
     RdmaNetworkNodeSendTransport, RdmaNetworkNodeTransport, RdmaNetworkNodeWriteTransport,
 };
+use auto_enums::auto_enum;
 use derivative::Derivative;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -850,8 +851,7 @@ impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetwo
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_send(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
@@ -859,38 +859,36 @@ impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetwo
                 memory_range,
                 immediate_data,
             )
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 
+    #[auto_enum(Iterator)]
     fn post_send_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         peer_rank_id: usize,
         send_params_iter: impl IntoIterator<
             Item = impl Borrow<RdmaSendParams<'a, Self::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    ) -> impl Iterator<Item = Result<Self::WorkRequest, Self::PostError>>
     where
         <Self as RdmaMemoryRegionNetworkNode>::MemoryRegion: 'a,
     {
         if peer_rank_id == self.all_group.self_rank_id() {
             return send_params_iter
                 .into_iter()
-                .map(|_| Err(ConnectionTransportPostError::SelfPeerRankId))
-                .collect();
+                .map(|_| Err(ConnectionTransportPostError::SelfPeerRankId));
         }
 
         if peer_rank_id > self.greatest_rank_id {
-            return send_params_iter
-                .into_iter()
-                .map(|_| {
-                    Err(ConnectionTransportPostError::InvalidPeerRankId(
-                        peer_rank_id,
-                    ))
-                })
-                .collect();
+            return send_params_iter.into_iter().map(move |_| {
+                Err(ConnectionTransportPostError::InvalidPeerRankId(
+                    peer_rank_id,
+                ))
+            });
         }
 
-        self.transport
+        return self
+            .transport
             .post_send_batch(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
@@ -900,12 +898,11 @@ impl<NB, NT: RdmaNetworkNodeSendTransport<IbvConnection>> RdmaSendTransportNetwo
                         memory_region: &send_params.borrow().memory_region.conn_mrs.data
                             [peer_rank_id],
                         memory_range: send_params.borrow().memory_range.clone(),
-                        immediate_data: send_params.borrow().immediate_data.clone(),
+                        immediate_data: send_params.borrow().immediate_data,
                     }),
             )
             .into_iter()
-            .map(|result| result.map_err(|e| ConnectionTransportPostError::RdmaPostError(e)))
-            .collect()
+            .map(|result| result.map_err(ConnectionTransportPostError::RdmaPostError));
     }
 }
 
@@ -931,46 +928,43 @@ impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTranspor
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_receive(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
                 &memory_region.conn_mrs.data[peer_rank_id],
                 memory_range,
             )
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 
+    #[auto_enum(Iterator)]
     fn post_receive_batch<'a, Range: RangeBounds<usize> + Clone>(
         &mut self,
         peer_rank_id: usize,
         receive_params_iter: impl IntoIterator<
             Item = impl Borrow<RdmaReceiveParams<'a, Self::MemoryRegion, Range>>,
         >,
-    ) -> Vec<Result<Self::WorkRequest, Self::PostError>>
+    ) -> impl Iterator<Item = Result<Self::WorkRequest, Self::PostError>>
     where
         <Self as RdmaMemoryRegionNetworkNode>::MemoryRegion: 'a,
     {
         if peer_rank_id == self.all_group.self_rank_id() {
             return receive_params_iter
                 .into_iter()
-                .map(|_| Err(ConnectionTransportPostError::SelfPeerRankId))
-                .collect();
+                .map(|_| Err(ConnectionTransportPostError::SelfPeerRankId));
         }
 
         if peer_rank_id > self.greatest_rank_id {
-            return receive_params_iter
-                .into_iter()
-                .map(|_| {
-                    Err(ConnectionTransportPostError::InvalidPeerRankId(
-                        peer_rank_id,
-                    ))
-                })
-                .collect();
+            return receive_params_iter.into_iter().map(move |_| {
+                Err(ConnectionTransportPostError::InvalidPeerRankId(
+                    peer_rank_id,
+                ))
+            });
         }
 
-        self.transport
+        return self
+            .transport
             .post_receive_batch(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
@@ -983,8 +977,7 @@ impl<NB, NT: RdmaNetworkNodeReceiveTransport<IbvConnection>> RdmaReceiveTranspor
                     }),
             )
             .into_iter()
-            .map(|result| result.map_err(|e| ConnectionTransportPostError::RdmaPostError(e)))
-            .collect()
+            .map(|result| result.map_err(ConnectionTransportPostError::RdmaPostError));
     }
 }
 
@@ -1013,8 +1006,7 @@ impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNet
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_write(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
@@ -1024,7 +1016,7 @@ impl<NB, NT: RdmaNetworkNodeWriteTransport<IbvConnection>> RdmaWriteTransportNet
                 remote_memory_range,
                 immediate_data,
             )
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 }
 
@@ -1052,8 +1044,7 @@ impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetwo
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_read(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
@@ -1062,7 +1053,7 @@ impl<NB, NT: RdmaNetworkNodeReadTransport<IbvConnection>> RdmaReadTransportNetwo
                 &remote_memory_region.conn_mrs.data[peer_rank_id],
                 remote_memory_range,
             )
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 }
 
@@ -1087,14 +1078,13 @@ impl<NB, NT: RdmaNetworkNodeSendImmediateDataTransport<IbvConnection>>
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_send_immediate_data(
                 peer_rank_id,
                 &mut self.connections[peer_rank_id],
                 immediate_data,
             )
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 }
 
@@ -1118,10 +1108,9 @@ impl<NB, NT: RdmaNetworkNodeReceiveImmediateDataTransport<IbvConnection>>
             ));
         }
 
-        Ok(self
-            .transport
+        self.transport
             .post_receive_immediate_data(peer_rank_id, &mut self.connections[peer_rank_id])
-            .map_err(|e| ConnectionTransportPostError::RdmaPostError(e))?)
+            .map_err(ConnectionTransportPostError::RdmaPostError)
     }
 }
 

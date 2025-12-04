@@ -27,6 +27,7 @@ bincode = "2.0"
 typed-builder = "0.23"
 strum = { version = "0.27", features = ["derive"] }
 tracing = "0.1.41"
+auto_enums = "0.8"
 
 [workspace.lints.clippy]
 cast_possible_truncation = "deny"
