@@ -31,21 +31,21 @@ log = "0.4.27"
 bon = "3.8.1"
 auto_enums.workspace = true
 
-[[bin]]
-name = "restructure_network_test"
-path = "bin/restructure_network_test.rs"
+# [[bin]]
+# name = "restructure_network_test"
+# path = "bin/restructure_network_test.rs"
 
-[[bin]]
-name = "restructure_test"
-path = "bin/restructure_test.rs"
+# [[bin]]
+# name = "restructure_test"
+# path = "bin/restructure_test.rs"
 
-[[bin]]
-name = "throughput_perftest"
-path = "perftest/throughput/throughput_perftest.rs"
+# [[bin]]
+# name = "throughput_perftest"
+# path = "perftest/throughput/throughput_perftest.rs"
 
-[[bin]]
-name = "barrier_perftest"
-path = "perftest/barrier/barrier_perftest.rs"
+# [[bin]]
+# name = "barrier_perftest"
+# path = "perftest/barrier/barrier_perftest.rs"
 
 # [[bin]]
 # name = "network_config"
@@ -55,9 +55,9 @@ path = "perftest/barrier/barrier_perftest.rs"
 # name = "throughput_bench"
 # path = "bin/throughput_bench.rs"
 
-[[bin]]
-name = "loopback"
-path = "bin/loopback.rs"
+# [[bin]]
+# name = "loopback"
+# path = "bin/loopback.rs"
 
 # [[bin]]
 # name = "new_ib_test"
@@ -71,9 +71,9 @@ path = "bin/loopback.rs"
 # name = "test"
 # path = "bin/test.rs"
 
-[[bin]]
-name = "simple_test"
-path = "bin/simple_test.rs"
+# [[bin]]
+# name = "simple_test"
+# path = "bin/simple_test.rs"
 
 # [[bin]]
 # name = "synchronization"

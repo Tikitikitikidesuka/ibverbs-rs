@@ -80,6 +80,14 @@ impl PCIe40Reader {
     pub fn alignment_pow2(&self) -> u8 {
         self.alignment_pow2
     }
+
+    pub unsafe fn get_buffer(&self) -> &[u8] {
+        unsafe { self.mapped_buffer.data() }
+    }
+
+    pub fn read_offset(&self) -> usize {
+        self.read_offset
+    }
 }
 
 impl CircularBufferReader for PCIe40Reader {

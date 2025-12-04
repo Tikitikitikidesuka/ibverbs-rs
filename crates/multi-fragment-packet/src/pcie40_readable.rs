@@ -28,14 +28,14 @@ pub enum PCIe40TypedReadError {
     StreamError(#[from] PCIe40StreamError),
 }
 
-impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
+impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
     type ReadResult<'a>
-        = Result<ReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
+        = Result<ReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
     where
         Self: 'a,
-        PCIe40Reader<'r>: 'a;
+        PCIe40Reader: 'a;
 
-    fn read<'a>(reader: &'a mut PCIe40Reader<'r>) -> Self::ReadResult<'a> {
+    fn read<'a>(reader: &'a mut PCIe40Reader) -> Self::ReadResult<'a> {
         let readable_region = reader.readable_region()?;
 
         // Verify enough data for header
@@ -65,21 +65,18 @@ impl<'r> CircularBufferReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
     }
 }
 
-impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
+impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
     type MultiReadResult<'a>
-        = Result<MultiReadGuard<'a, PCIe40Reader<'r>, Self>, PCIe40TypedReadError>
+        = Result<MultiReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
     where
-        Self: 'a,
-        PCIe40Reader<'r>: 'a;
+        Self: 'a;
 
-    fn read_multiple<'a>(
-        reader: &'a mut PCIe40Reader<'r>,
-        num: usize,
-    ) -> Self::MultiReadResult<'a> {
+    fn read_multiple<'a>(reader: &'a mut PCIe40Reader, num: usize) -> Self::MultiReadResult<'a> {
         let readable_region = reader.readable_region()?;
 
         let mut advance_size = 0;
         let mut read_data = Vec::with_capacity(num);
+        let mut offsets = Vec::with_capacity(num);
 
         for _ in 0..num {
             // Verify enough data for header
@@ -89,7 +86,7 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
 
             // Cast to mfp
             let mfp_mem = unsafe {
-                &*(readable_region[advance_size..advance_size + size_of::<Self>()].as_ptr()
+                &*(readable_region[advance_size..advance_size + size_of::<Self>()].as_ptr() // ! Is this correct? size_of::<MFP>()  is just the header, or undefined if unsized later on.
                     as *const Self)
             };
 
@@ -107,11 +104,14 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader<'r>> for MultiFragmentPacket {
 
             // Store reference to read entry and add advance size
             read_data.push(mfp_mem);
+
+            let start = reader.read_offset() + advance_size;
+            offsets.push(start..start + mfp_mem.packet_size() as usize);
             advance_size += aligned_size;
         }
 
         // If all checks are passed, guard the type
-        let read_guard = MultiReadGuard::new(reader, read_data, advance_size);
+        let read_guard = MultiReadGuard::new(reader, read_data, offsets, advance_size);
 
         Ok(read_guard)
     }
