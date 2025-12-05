@@ -89,8 +89,8 @@ impl PCIe40Reader {
         self.read_offset
     }
 
-    pub fn stream_fd(&self) -> i32 {
-        self.mapped_buffer.stream_fd()
+    pub fn dma_buffer_fd(&self) -> i32 {
+        self.mapped_buffer.dma_buffer_fd()
     }
 }
 
