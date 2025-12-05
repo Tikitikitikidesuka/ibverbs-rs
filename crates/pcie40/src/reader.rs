@@ -88,6 +88,10 @@ impl PCIe40Reader {
     pub fn read_offset(&self) -> usize {
         self.read_offset
     }
+
+    pub fn stream_fd(&self) -> i32 {
+        self.mapped_buffer.stream_fd()
+    }
 }
 
 impl CircularBufferReader for PCIe40Reader {

@@ -329,6 +329,10 @@ impl PCIe40Stream {
         self.stream_format
     }
 
+    pub fn stream_fd(&self) -> i32 {
+        self.stream_fd
+    }
+
     #[instrument(skip_all, fields(
         device_id = self.device_id,
         stream_type = ?self.stream_type

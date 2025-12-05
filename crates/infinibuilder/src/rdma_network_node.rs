@@ -300,18 +300,47 @@ pub trait RdmaReceiveImmediateDataTransportNetworkNode {
 }
 
 #[derive(Debug, Clone)]
-pub struct RdmaNamedMemory {
-    pub(super) id: String,
-    pub(super) ptr: *mut u8,
-    pub(super) length: usize,
+pub enum RdmaNamedMemory {
+    Normal {
+        id: String,
+        ptr: *mut u8,
+        length: usize,
+    },
+    Dma {
+        id: String,
+        ptr: *mut u8,
+        file_descriptor: i32,
+        length: usize,
+    },
 }
 
 impl RdmaNamedMemory {
     pub fn new(id: impl Into<String>, ptr: *mut u8, length: usize) -> Self {
-        Self {
+        Self::Normal {
             id: id.into(),
             ptr,
             length,
+        }
+    }
+
+    pub fn new_dma(
+        id: impl Into<String>,
+        file_descriptor: i32,
+        ptr: *mut u8,
+        length: usize,
+    ) -> Self {
+        Self::Dma {
+            id: id.into(),
+            ptr,
+            file_descriptor,
+            length,
+        }
+    }
+
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Normal { id, .. } => id,
+            Self::Dma { id, .. } => id,
         }
     }
 }

@@ -26,6 +26,10 @@ impl PCIe40MappedStream {
         }
     }
 
+    pub fn stream_fd(&self) -> i32 {
+        self.locked_stream.stream.stream_fd()
+    }
+
     fn unmap_buffer(&mut self) {
         debug!(
             "Unmapping buffer for stream {} on device {}",

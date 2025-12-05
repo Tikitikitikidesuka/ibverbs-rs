@@ -633,7 +633,7 @@ impl<
                 let local_mrs: Vec<_> = connections
                     .iter()
                     .map(|conn| {
-                        conn.local_mr(&memory.id).ok_or(
+                        conn.local_mr(&memory.id()).ok_or(
                             IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
                                 "Missing transport local memory for conn {idx}"
                             )),
@@ -645,7 +645,7 @@ impl<
                 let remote_mrs: Vec<_> = connections
                     .iter()
                     .map(|conn| {
-                        conn.remote_mr(&memory.id).ok_or(
+                        conn.remote_mr(&memory.id()).ok_or(
                             IbvNetworkNodeBuildError::TransportMemoryRegisterError(format!(
                                 "Missing transport remote memory for conn {idx}"
                             )),
@@ -654,18 +654,18 @@ impl<
                     .collect::<Result<Vec<_>, _>>()?;
 
                 Ok((
-                    memory.id.clone(),
+                    memory.id().into(),
                     MemoryRegionPair {
                         local_mr: IbvNetworkNodeMemoryRegion {
-                            conn_mrs: Arc::new(Named::new(memory.id.clone(), local_mrs)),
+                            conn_mrs: Arc::new(Named::new(memory.id().to_string(), local_mrs)),
                         },
                         remote_mr: IbvNetworkNodeRemoteMemoryRegion {
-                            conn_mrs: Arc::new(Named::new(memory.id.clone(), remote_mrs)),
+                            conn_mrs: Arc::new(Named::new(memory.id().to_string(), remote_mrs)),
                         },
                     },
                 ))
             })
-            .collect::<Result<HashMap<_, _>, IbvNetworkNodeBuildError>>()?;
+            .collect::<Result<HashMap<String, _>, IbvNetworkNodeBuildError>>()?;
 
         Ok(IbvNetworkNode {
             rank_id: self.rank_id,

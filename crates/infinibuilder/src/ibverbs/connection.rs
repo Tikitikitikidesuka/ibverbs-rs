@@ -3,15 +3,15 @@ use crate::ibverbs::completion_queue::CachedCompletionQueue;
 use crate::ibverbs::work_request::IbvWorkRequest;
 use crate::rdma_connection::{
     RdmaMemoryRegionConnection, RdmaNamedMemoryRegionConnection,
-    RdmaNamedRemoteMemoryRegionConnection, RdmaPostReadConnection,
-    RdmaPostReceiveConnection, RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
+    RdmaNamedRemoteMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
+    RdmaPostReceiveImmediateDataConnection, RdmaPostSendConnection,
     RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection,
 };
 use crate::rdma_network_node::RdmaNamedMemory;
 use derivative::Derivative;
 use ibverbs::{
-    CompletionQueue, Context, MemoryRegion, PreparedQueuePair, ProtectionDomain, QueuePair,
-    QueuePairEndpoint, RemoteMemoryRegion,
+    CompletionQueue, Context, DEFAULT_ACCESS_FLAGS, MemoryRegion, PreparedQueuePair,
+    ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -267,16 +267,37 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
         let mut registered_mr_ids = HashSet::new();
         for mr in &self.mrs.mrs {
             // Check id has not been previously registered
-            if !registered_mr_ids.contains(&mr.id) {
-                let mr_endpoint = pd
-                    .register(mr.ptr, mr.length)
-                    .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
-                registered_mr_ids.insert(mr.id.clone());
-                mr_endpoints.push((mr.id.clone(), mr_endpoint));
-            } else {
+            if registered_mr_ids.contains(mr.id()) {
                 return Err(IbvConnectionBuildError::MemoryRegionDuplicateRegister(
-                    mr.id.clone(),
+                    mr.id().to_string(),
                 ));
+            }
+            match mr {
+                RdmaNamedMemory::Normal { id, ptr, length } => {
+                    let mr_endpoint = pd
+                        .register(*ptr, *length)
+                        .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
+                    registered_mr_ids.insert(id.clone());
+                    mr_endpoints.push((id.clone(), mr_endpoint));
+                }
+                RdmaNamedMemory::Dma {
+                    id,
+                    ptr,
+                    file_descriptor,
+                    length,
+                } => {
+                    let mr_endpoint = pd
+                        .register_dmabuf(
+                            *file_descriptor,
+                            *ptr as u64,
+                            *length,
+                            DEFAULT_ACCESS_FLAGS,
+                        )
+                        .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
+
+                    registered_mr_ids.insert(id.clone());
+                    mr_endpoints.push((id.clone(), mr_endpoint));
+                }
             }
         }
         mr_endpoints.sort_by(|a, b| a.0.cmp(&b.0));
