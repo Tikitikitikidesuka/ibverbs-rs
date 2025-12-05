@@ -282,8 +282,8 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                 }
                 RdmaNamedMemory::Dma {
                     id,
-                    ptr,
                     file_descriptor,
+                    ptr,
                     length,
                 } => {
                     let mr_endpoint = pd
@@ -291,7 +291,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                             *file_descriptor,
                             *ptr as u64,
                             *length,
-                            DEFAULT_ACCESS_FLAGS,
+                            ibverbs::ibv_access_flags::IBV_ACCESS_RELAXED_ORDERING,
                         )
                         .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
 
