@@ -291,7 +291,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                             *file_descriptor,
                             *ptr as u64,
                             *length,
-                            ibverbs::ibv_access_flags::IBV_ACCESS_RELAXED_ORDERING,
+                            DEFAULT_ACCESS_FLAGS,
                         )
                         .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
 
