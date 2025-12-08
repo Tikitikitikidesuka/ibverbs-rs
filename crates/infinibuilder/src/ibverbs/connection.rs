@@ -13,6 +13,7 @@ use ::ibverbs::{
     ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion, ibv_access_flags,
 };
 use derivative::Derivative;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -274,13 +275,16 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                     mr.id().to_string(),
                 ));
             }
+            debug!("Registering memory region {mr:?}");
             match mr {
                 RdmaNamedMemory::Normal { id, ptr, length } => {
                     let mr_endpoint = pd
                         .register_with_permissions(
                             *ptr,
                             *length,
-                            DEFAULT_ACCESS_FLAGS
+                            ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
+                                | ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                                | ibv_access_flags::IBV_ACCESS_REMOTE_READ
                                 | ibv_access_flags::IBV_ACCESS_HUGETLB
                                 | ibv_access_flags::IBV_ACCESS_ON_DEMAND,
                         )
