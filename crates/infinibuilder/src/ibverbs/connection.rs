@@ -1,6 +1,6 @@
-use crate::ibverbs::Named;
 use crate::ibverbs::completion_queue::CachedCompletionQueue;
 use crate::ibverbs::work_request::IbvWorkRequest;
+use crate::ibverbs::{self, Named};
 use crate::rdma_connection::{
     RdmaMemoryRegionConnection, RdmaNamedMemoryRegionConnection,
     RdmaNamedRemoteMemoryRegionConnection, RdmaPostReadConnection, RdmaPostReceiveConnection,
@@ -8,11 +8,11 @@ use crate::rdma_connection::{
     RdmaPostSendImmediateDataConnection, RdmaPostWriteConnection, RdmaRemoteMemoryRegionConnection,
 };
 use crate::rdma_network_node::RdmaNamedMemory;
-use derivative::Derivative;
-use ibverbs::{
+use ::ibverbs::{
     CompletionQueue, Context, DEFAULT_ACCESS_FLAGS, MemoryRegion, PreparedQueuePair,
-    ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion,
+    ProtectionDomain, QueuePair, QueuePairEndpoint, RemoteMemoryRegion, ibv_access_flags,
 };
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -198,7 +198,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
     }
 
     fn open_context(&self) -> Result<Context, IbvConnectionBuildError> {
-        ibverbs::devices()
+        ::ibverbs::devices()
             .map_err(|e| IbvConnectionBuildError::DeviceListUnaccessible(e))?
             .iter()
             .find(|d| match d.name() {
@@ -238,12 +238,14 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
         pd: &ProtectionDomain,
         cq: &CompletionQueue,
     ) -> Result<PreparedQueuePair, IbvConnectionBuildError> {
-        pd.create_qp(cq, cq, ibverbs::ibv_qp_type::IBV_QPT_RC)
+        pd.create_qp(cq, cq, ::ibverbs::ibv_qp_type::IBV_QPT_RC)
             .map_err(|e| IbvConnectionBuildError::QueuePairCreationError(e))?
             .set_access(
-                ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
-                    | ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
-                    | ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
+                ::ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
+                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
+                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_HUGETLB
+                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_ON_DEMAND,
             )
             .set_max_recv_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
             .set_max_send_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
@@ -275,7 +277,13 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
             match mr {
                 RdmaNamedMemory::Normal { id, ptr, length } => {
                     let mr_endpoint = pd
-                        .register(*ptr, *length)
+                        .register_with_permissions(
+                            *ptr,
+                            *length,
+                            DEFAULT_ACCESS_FLAGS
+                                | ibv_access_flags::IBV_ACCESS_HUGETLB
+                                | ibv_access_flags::IBV_ACCESS_ON_DEMAND,
+                        )
                         .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
                     registered_mr_ids.insert(id.clone());
                     mr_endpoints.push((id.clone(), mr_endpoint));
