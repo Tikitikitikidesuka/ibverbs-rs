@@ -306,10 +306,9 @@ pub enum RdmaNamedMemory {
         ptr: *mut u8,
         length: usize,
     },
-    Dma {
+    HugeTlb {
         id: String,
         ptr: *mut u8,
-        file_descriptor: i32,
         length: usize,
     },
 }
@@ -323,16 +322,10 @@ impl RdmaNamedMemory {
         }
     }
 
-    pub fn new_dma(
-        id: impl Into<String>,
-        file_descriptor: i32,
-        ptr: *mut u8,
-        length: usize,
-    ) -> Self {
-        Self::Dma {
+    pub fn new_hugetlb(id: impl Into<String>, ptr: *mut u8, length: usize) -> Self {
+        Self::HugeTlb {
             id: id.into(),
             ptr,
-            file_descriptor,
             length,
         }
     }
@@ -340,7 +333,7 @@ impl RdmaNamedMemory {
     pub fn id(&self) -> &str {
         match self {
             Self::Normal { id, .. } => id,
-            Self::Dma { id, .. } => id,
+            Self::HugeTlb { id, .. } => id,
         }
     }
 }

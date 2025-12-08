@@ -244,9 +244,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
             .set_access(
                 ::ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
                     | ::ibverbs::ibv_access_flags::IBV_ACCESS_REMOTE_READ
-                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
-                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_HUGETLB
-                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_ON_DEMAND,
+                    | ::ibverbs::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
             )
             .set_max_recv_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
             .set_max_send_wr(self.cq_params.capacity.min(u32::MAX as usize) as u32)
@@ -279,6 +277,13 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
             match mr {
                 RdmaNamedMemory::Normal { id, ptr, length } => {
                     let mr_endpoint = pd
+                        .register(*ptr, *length)
+                        .map_err(IbvConnectionBuildError::MemoryRegionRegisterError)?;
+                    registered_mr_ids.insert(id.clone());
+                    mr_endpoints.push((id.clone(), mr_endpoint));
+                }
+                RdmaNamedMemory::HugeTlb { id, ptr, length } => {
+                    let mr_endpoint = pd
                         .register_with_permissions(
                             *ptr,
                             *length,
@@ -288,25 +293,7 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                                 | ibv_access_flags::IBV_ACCESS_HUGETLB
                                 | ibv_access_flags::IBV_ACCESS_ON_DEMAND,
                         )
-                        .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
-                    registered_mr_ids.insert(id.clone());
-                    mr_endpoints.push((id.clone(), mr_endpoint));
-                }
-                RdmaNamedMemory::Dma {
-                    id,
-                    file_descriptor,
-                    ptr,
-                    length,
-                } => {
-                    let mr_endpoint = pd
-                        .register_dmabuf(
-                            *file_descriptor,
-                            *ptr as u64,
-                            *length,
-                            DEFAULT_ACCESS_FLAGS,
-                        )
-                        .map_err(|e| IbvConnectionBuildError::MemoryRegionRegisterError(e))?;
-
+                        .map_err(IbvConnectionBuildError::MemoryRegionRegisterError)?;
                     registered_mr_ids.insert(id.clone());
                     mr_endpoints.push((id.clone(), mr_endpoint));
                 }
