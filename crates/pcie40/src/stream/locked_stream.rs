@@ -137,6 +137,7 @@ impl PCIe40LockedStream {
 
         trace!("Calling p40_stream_map({})", self.stream.stream_fd);
         let buff_ptr = unsafe { p40_stream_map(self.stream.stream_fd) };
+        println!("buff_ptr {buff_ptr:?}");
         trace!("p40_stream_map returned {:p}", buff_ptr);
 
         if buff_ptr.is_null() {

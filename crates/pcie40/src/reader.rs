@@ -85,6 +85,10 @@ impl PCIe40Reader {
         unsafe { self.mapped_buffer.data() }
     }
 
+    pub fn get_buffer_ptr(&self) -> *const u8 {
+        self.mapped_buffer.data_ptr()
+    }
+
     pub fn read_offset(&self) -> usize {
         self.read_offset
     }
