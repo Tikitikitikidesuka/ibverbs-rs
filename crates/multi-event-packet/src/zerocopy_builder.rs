@@ -1,7 +1,7 @@
 use std::{num::NonZero, ops::Range};
 
-use bytemuck::cast_slice;
-use multi_fragment_packet::MultiFragmentPacket;
+use bytemuck::{cast_slice, checked::cast};
+use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader,
@@ -106,6 +106,10 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
             access_offsets(self.buffer, self.num_mfps())[index] as usize * size_of::<u32>();
         let size = self.mfp_sizes_bytes()[index];
         offset..(offset + size)
+    }
+
+    pub fn get_mfp(&self, index: usize) -> Result<&MultiFragmentPacket, FromRawBytesError> {
+        MultiFragmentPacket::from_raw_bytes(cast_slice(&self.buffer[self.get_mfp_range(index)]))
     }
 
     /// You need to insure that:
