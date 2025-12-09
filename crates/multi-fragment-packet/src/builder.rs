@@ -1,313 +1,82 @@
-use crate::{Fragment, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketRef};
-use alignment_utils;
-use std::marker::PhantomData;
+#![doc(hidden)]
+use std::fmt::Debug;
 
-pub struct MagicDefault;
-pub struct MagicSet;
-pub struct EventIdNotSet;
-pub struct EventIdSet;
-pub struct SourceIdNotSet;
-pub struct SourceIdSet;
-pub struct AlignNotSet;
-pub struct AlignSet;
-pub struct FragmentVersionNotSet;
-pub struct FragmentVersionSet;
-pub struct HeaderUnlocked;
-pub struct HeaderLocked;
+use ebutils::{fragment_type::FragmentType, odin::OdinPayload};
+use typed_builder::TypedBuilder;
 
-pub struct MultiFragmentPacketBuilder<
-    MagicStatus,
-    EventIdStatus,
-    SourceIdStatus,
-    AlignStatus,
-    FragmentVersionStatus,
-    HeaderLockStatus,
-> {
+use crate::{
+    EventId, MultiFragmentPacket, MultiFragmentPacketHeader, MultiFragmentPacketOwned, SourceId,
+};
+
+#[derive(TypedBuilder)]
+#[builder(build_method(into = crate::MultiFragmentPacketOwned),builder_type(name=MultiFragmentPacketBuilder, vis="pub"),mutators(
+    pub fn add_fragment(&mut self, fragment_type: FragmentType, data: impl Into<Vec<u8>> + Debug) {
+        self.fragments.push(BuildFragmentData {
+            fragment_type: fragment_type as u8,
+            data: data.into(),
+        });
+    }
+
+    /// Add fragments by iterator of `(fragment_type, data)`.
+    pub fn add_fragments(&mut self, iter: impl IntoIterator<Item=(FragmentType, impl Into<Vec<u8>>)>) {
+        self.fragments.extend(iter.into_iter().map(|(ty, dat)| BuildFragmentData { fragment_type: ty as _, data: dat.into()}));
+    }
+    ))]
+struct MultiFragmentPacketBuilderInternal {
+    #[builder(default = MultiFragmentPacket::VALID_MAGIC, setter(prefix="with_"))]
     magic: u16,
-    event_id: u64,
-    source_id: u16,
+    /// Event ID of first fragment in this packet.
+    #[builder(setter(prefix = "with_"))]
+    event_id: EventId,
+    /// Source ID of the fragments in this packet.
+    #[builder(setter(prefix = "with_"))]
+    source_id: SourceId,
+    /// Fragments in this packet are padded to 2^`align` bytes.
+    #[builder(setter(prefix = "with_", suffix = "_log"))]
     align: u8,
+    /// Version of the data format of the fragments.
+    #[builder(setter(prefix = "with_"))]
     fragment_version: u8,
-    fragments: Vec<Fragment>,
-    _typestate_phantom: PhantomData<(
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderLockStatus,
-    )>,
+    #[builder(default, via_mutators)]
+    fragments: Vec<BuildFragmentData>,
 }
 
-impl
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdNotSet,
-        SourceIdNotSet,
-        AlignNotSet,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn new() -> Self {
-        Self {
-            magic: MultiFragmentPacketRef::VALID_MAGIC,
-            event_id: 0,
-            source_id: 0,
-            align: 0,
-            fragment_version: 0,
-            fragments: Vec::new(),
-            _typestate_phantom: PhantomData,
-        }
-    }
+#[doc(hidden)]
+pub struct BuildFragmentData {
+    fragment_type: u8,
+    data: Vec<u8>,
 }
 
-impl Default
-    for MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdNotSet,
-        SourceIdNotSet,
-        AlignNotSet,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
+impl Default for MultiFragmentPacketBuilder {
     fn default() -> Self {
-        Self::new()
+        MultiFragmentPacketBuilderInternal::builder()
     }
 }
 
-impl<EventIdStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicDefault,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_magic(
-        self,
-        magic: u16,
-    ) -> MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
+impl MultiFragmentPacketBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl From<MultiFragmentPacketBuilderInternal> for crate::MultiFragmentPacketOwned {
+    fn from(other: MultiFragmentPacketBuilderInternal) -> Self {
+        if other.source_id.is_odin()
+            && !other.fragments.iter().all(|f| {
+                f.fragment_type == FragmentType::Odin as u8
+                    && f.data.len() == size_of::<OdinPayload>()
+            })
+        {
+            panic!("Source ID indicates Odin fragments, but not all fragments are of Odin type");
         }
-    }
-}
 
-impl<MagicStatus, SourceIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdNotSet,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_event_id(
-        self,
-        event_id: u64,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdSet,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, AlignStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdNotSet,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_source_id(
-        self,
-        source_id: u16,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdSet,
-        AlignStatus,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, SourceIdStatus, FragmentVersionStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignNotSet,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_align(
-        self,
-        align: u8,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignSet,
-        FragmentVersionStatus,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus, EventIdStatus, SourceIdStatus, AlignStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionNotSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn with_fragment_version(
-        self,
-        fragment_version: u8,
-    ) -> MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdStatus,
-        SourceIdStatus,
-        AlignStatus,
-        FragmentVersionSet,
-        HeaderUnlocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl<MagicStatus>
-    MultiFragmentPacketBuilder<
-        MagicStatus,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderUnlocked,
-    >
-{
-    pub fn lock_header(
-        self,
-    ) -> MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderLocked,
-    > {
-        MultiFragmentPacketBuilder {
-            magic: self.magic,
-            event_id: self.event_id,
-            source_id: self.source_id,
-            align: self.align,
-            fragment_version: self.fragment_version,
-            fragments: self.fragments,
-            _typestate_phantom: PhantomData,
-        }
-    }
-}
-
-impl
-    MultiFragmentPacketBuilder<
-        MagicSet,
-        EventIdSet,
-        SourceIdSet,
-        AlignSet,
-        FragmentVersionSet,
-        HeaderLocked,
-    >
-{
-    pub fn add_fragment(mut self, fragment: Fragment) -> Self {
-        self.fragments.push(fragment);
-        self
-    }
-
-    pub fn add_fragments<I>(mut self, fragments: I) -> Self
-    where
-        I: IntoIterator<Item = Fragment>,
-    {
-        self.fragments.extend(fragments);
-        self
-    }
-
-    // Method can be easily parallelized by calculating indexes instead of extending the vector
-    // Probably not worth doing. Overhead will most likely make it slower for average sized MFPs
-    pub fn build(self) -> MultiFragmentPacket {
         let header_size = size_of::<MultiFragmentPacketHeader>();
-        let fragment_count = self.fragments.len();
-        let fragment_types_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
-        let fragment_sizes_size =
-            alignment_utils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
-        let fragments_size = self.fragments.iter().fold(0, |acc, fragment| {
-            acc + alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align)
+        let fragment_count = other.fragments.len();
+        let fragment_count_u16 = u16::try_from(fragment_count).expect("fragment not too large");
+        let fragment_types_size = ebutils::align_up_pow2(fragment_count * size_of::<u8>(), 2);
+        let fragment_sizes_size = ebutils::align_up_pow2(fragment_count * size_of::<u16>(), 2);
+        let fragments_size = other.fragments.iter().fold(0, |acc, fragment| {
+            acc + ebutils::align_up_pow2(fragment.data.len(), other.align)
         });
         let packet_size = header_size + fragment_types_size + fragment_sizes_size + fragments_size;
 
@@ -322,24 +91,30 @@ impl
             *offset = end;
         };
 
-        write_bytes(&mut data, &mut cursor, &self.magic.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.magic.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &fragment_count_u16.to_le_bytes());
         write_bytes(
             &mut data,
             &mut cursor,
-            &(fragment_count as u16).to_le_bytes(),
+            &u32::try_from(packet_size)
+                .expect("packet size fits u32")
+                .to_le_bytes(),
         );
-        write_bytes(&mut data, &mut cursor, &(packet_size as u32).to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.event_id.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.source_id.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.align.to_le_bytes());
-        write_bytes(&mut data, &mut cursor, &self.fragment_version.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.event_id.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.source_id.0.to_le_bytes());
+        write_bytes(&mut data, &mut cursor, &other.align.to_le_bytes());
+        write_bytes(
+            &mut data,
+            &mut cursor,
+            &other.fragment_version.to_le_bytes(),
+        );
 
         // Write fragment types
-        self.fragments.iter().for_each(|fragment| {
+        other.fragments.iter().for_each(|fragment| {
             write_bytes(
                 &mut data,
                 &mut cursor,
-                &fragment.fragment_type().to_le_bytes(),
+                &fragment.fragment_type.to_le_bytes(),
             );
         });
 
@@ -347,11 +122,13 @@ impl
         cursor = header_size + fragment_types_size;
 
         // Write fragment sizes
-        self.fragments.iter().for_each(|fragment| {
+        other.fragments.iter().for_each(|fragment| {
             write_bytes(
                 &mut data,
                 &mut cursor,
-                &fragment.fragment_size().to_le_bytes(),
+                &u16::try_from(fragment.data.len())
+                    .expect("fragment size fits u16")
+                    .to_le_bytes(),
             );
         });
 
@@ -359,38 +136,43 @@ impl
         cursor = header_size + fragment_types_size + fragment_sizes_size;
 
         // Write fragment data
-        self.fragments.iter().for_each(|fragment| {
-            let fragment_data = fragment.data();
+        other.fragments.iter().for_each(|fragment| {
+            let fragment_data = &fragment.data;
             write_bytes(&mut data, &mut cursor, fragment_data);
 
             // Skip padding (already zeroed)
-            let aligned_size =
-                alignment_utils::align_up_pow2(fragment.fragment_size() as usize, self.align);
+            let aligned_size = ebutils::align_up_pow2(fragment.data.len(), other.align);
             cursor = cursor - fragment_data.len() + aligned_size;
         });
 
-        MultiFragmentPacket { data }
+        // SAFETY: is a valid MFP in terms of the function because magic and size match by construction.
+        unsafe { MultiFragmentPacketOwned::from_data_unchecked(data) }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::FragmentRef;
+    use ebutils::{odin::dummy_odin_payload, source_id::SubDetector};
 
-    fn demo_multi_fragment_packet_data() -> MultiFragmentPacket {
+    use crate::{Fragment, SourceId};
+
+    use super::*;
+
+    fn demo_multi_fragment_packet_data() -> MultiFragmentPacketOwned {
         MultiFragmentPacketBuilder::new()
             .with_magic(0x40CE)
             .with_event_id(1)
-            .with_source_id(1)
-            .with_align(3)
+            .with_source_id(SourceId::new(SubDetector::MuonA, 156))
+            .with_align_log(3)
             .with_fragment_version(1)
-            .lock_header()
-            .add_fragment(Fragment::new(0, vec![0, 1, 2, 3]).unwrap())
-            .add_fragment(Fragment::new(1, vec![0, 1, 2, 3, 4]).unwrap())
-            .add_fragment(Fragment::new(2, vec![0, 1, 2, 3, 4, 5, 6, 7]).unwrap())
-            .add_fragment(Fragment::new(3, vec![0, 1, 2, 3, 4, 5, 6, 7, 8]).unwrap())
-            .add_fragment(Fragment::new(4, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap())
+            .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3])
+            .add_fragment(FragmentType::DAQ, vec![0, 1, 2, 3, 4])
+            .add_fragment(FragmentType::Calo, vec![0, 1, 2, 3, 4, 5, 6, 7])
+            .add_fragment(FragmentType::GaudiHeader, vec![0, 1, 2, 3, 4, 5, 6, 7, 8])
+            .add_fragment(
+                FragmentType::HltRoutingBits,
+                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            )
             .build()
     }
 
@@ -422,48 +204,75 @@ mod tests {
     #[test]
     fn test_mfp_builder_source_id() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.source_id(), 1);
+        assert_eq!(mfp.source_id(), SourceId::new(SubDetector::MuonA, 156));
     }
 
     #[test]
     fn test_mfp_builder_align() {
         let mfp = demo_multi_fragment_packet_data();
-        assert_eq!(mfp.align(), 3);
+        assert_eq!(mfp.align_log(), 3);
     }
 
     #[test]
     fn test_mfp_builder_fragments() {
         let mfp = demo_multi_fragment_packet_data();
 
+        let source_id = SourceId::new(SubDetector::MuonA, 156);
+
         let expected_fragments = vec![
-            FragmentRef {
-                fragment_type: 0,
-                fragment_size: 4,
-                data: &[0, 1, 2, 3][..],
-            },
-            FragmentRef {
-                fragment_type: 1,
-                fragment_size: 5,
-                data: &[0, 1, 2, 3, 4][..],
-            },
-            FragmentRef {
-                fragment_type: 2,
-                fragment_size: 8,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7][..],
-            },
-            FragmentRef {
-                fragment_type: 3,
-                fragment_size: 9,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
-            },
-            FragmentRef {
-                fragment_type: 4,
-                fragment_size: 12,
-                data: &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
-            },
+            Fragment::new(FragmentType::DAQ as _, 1, 1, source_id, &[0, 1, 2, 3][..]),
+            Fragment::new(
+                FragmentType::DAQ as _,
+                1,
+                2,
+                source_id,
+                &[0, 1, 2, 3, 4][..],
+            ),
+            Fragment::new(
+                FragmentType::Calo as _,
+                1,
+                3,
+                source_id,
+                &[0, 1, 2, 3, 4, 5, 6, 7][..],
+            ),
+            Fragment::new(
+                FragmentType::GaudiHeader as _,
+                1,
+                4,
+                source_id,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8][..],
+            ),
+            Fragment::new(
+                FragmentType::HltRoutingBits as _,
+                1,
+                5,
+                source_id,
+                &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11][..],
+            ),
         ];
 
-        let fragments: Vec<FragmentRef> = mfp.iter().collect();
+        let fragments: Vec<Fragment> = mfp.fragment_iter().collect();
         assert_eq!(fragments, expected_fragments);
+    }
+
+    #[test]
+    fn test_odin_mfp() {
+        let mfp = MultiFragmentPacketBuilder::new()
+            .with_magic(0x40CE)
+            .with_event_id(42)
+            .with_source_id(SourceId::new_odin(1))
+            .with_align_log(3)
+            .with_fragment_version(1)
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(42))
+            .add_fragment(FragmentType::Odin, dummy_odin_payload(43))
+            .build();
+
+        let fragment = mfp.fragment(0).unwrap();
+        assert_eq!(fragment.fragment_type_parsed(), Some(FragmentType::Odin));
+        let odin_payload = fragment
+            .try_into_odin()
+            .expect("valid Odin fragment")
+            .payload();
+        assert_eq!(odin_payload.event_id(), 42);
     }
 }

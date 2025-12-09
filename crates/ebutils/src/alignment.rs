@@ -4,7 +4,13 @@ pub fn align_up(n: usize, alignment: usize) -> usize {
     }
 
     if let IsPow2Result::Yes(_) = is_pow2(alignment) {
-        align_up_pow2(n, alignment.trailing_zeros() as u8)
+        align_up_pow2(
+            n,
+            alignment
+                .trailing_zeros()
+                .try_into()
+                .expect("bits fit into u8"),
+        )
     } else {
         let remainder = n % alignment;
         if remainder == 0 {
@@ -21,7 +27,13 @@ pub fn align_down(n: usize, alignment: usize) -> usize {
     }
 
     if let IsPow2Result::Yes(_) = is_pow2(alignment) {
-        align_down_pow2(n, alignment.trailing_zeros() as u8)
+        align_down_pow2(
+            n,
+            alignment
+                .trailing_zeros()
+                .try_into()
+                .expect("bits fit into u8"),
+        )
     } else {
         // Integer division naturally rounds down
         (n / alignment) * alignment
@@ -85,9 +97,15 @@ pub fn check_alignment(n: usize, alignment: usize) -> bool {
     }
 
     if let IsPow2Result::Yes(_) = is_pow2(alignment) {
-        check_alignment_pow2(n, alignment.trailing_zeros() as u8)
+        check_alignment_pow2(
+            n,
+            alignment
+                .trailing_zeros()
+                .try_into()
+                .expect("bits fit into u8"),
+        )
     } else {
-        n % alignment == 0
+        n.is_multiple_of(alignment)
     }
 }
 
@@ -110,7 +128,10 @@ pub fn wrap_around(n: usize, wrap: usize) -> usize {
     }
 
     if let IsPow2Result::Yes(_) = is_pow2(wrap) {
-        wrap_around_pow2(n, wrap.trailing_zeros() as u8)
+        wrap_around_pow2(
+            n,
+            wrap.trailing_zeros().try_into().expect("bits fit into u8"),
+        )
     } else {
         n % wrap
     }
@@ -142,7 +163,7 @@ pub enum IsPow2Result {
 }
 pub fn is_pow2(n: usize) -> IsPow2Result {
     if n != 0 && (n & (n - 1)) == 0 {
-        IsPow2Result::Yes(n.trailing_zeros() as u8)
+        IsPow2Result::Yes(n.trailing_zeros().try_into().expect("bits fit into u8"))
     } else {
         IsPow2Result::No
     }

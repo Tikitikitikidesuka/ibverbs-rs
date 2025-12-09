@@ -48,7 +48,7 @@ fn write_to_non_contiguous_buffer(
 
         Ok(())
     } else {
-        primary_region[..data.len()].copy_from_slice(&data);
+        primary_region[..data.len()].copy_from_slice(data);
 
         writer.advance_write_pointer(data.len()).map_err(|_| ())?;
 

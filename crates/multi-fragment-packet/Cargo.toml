@@ -1,19 +1,30 @@
 [package]
 name = "multi-fragment-packet"
-version = "0.1.0"
-edition = "2024"
 description = "Multi Fragment Packet structure for the LHCb Event Builder"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
-thiserror = "2.0.12"
-pcie40 = { path = "../pcie40", optional = true }
-alignment-utils = { path = "../alignment-utils" }
-circular-buffer = { path = "../circular-buffer" }
-shared-memory-buffer = { path = "../shared-memory-buffer", optional = true }
+pcie40 = { workspace = true, optional = true }
+ebutils.workspace = true
+circular-buffer.workspace = true
+shared-memory-buffer = { workspace = true, optional = true }
+
+thiserror.workspace = true
+bincode = { workspace = true, optional = true }
+typed-builder.workspace = true
+bytemuck.workspace = true
+strum.workspace = true
 
 [features]
 pcie40-io = ["dep:pcie40"]
 shmem-io = ["dep:shared-memory-buffer"]
+bincode = ["dep:bincode"]
+
+[lints]
+workspace = true
 
 [[example]]
 name = "mfp_shared_memory_example"
@@ -29,4 +40,3 @@ required-features = ["pcie40-readable"]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
 required-features = ["pcie40-readable"]
-

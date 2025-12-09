@@ -1,20 +1,61 @@
 [workspace]
 resolver = "3"
-members = ["crates/alignment-utils", "crates/circular-buffer", "crates/infinibuilder", "crates/mock-buffers", "crates/multi-fragment-packet", "crates/pcie40", "crates/shared-memory-buffer"]
+members = ["crates/*"]
+
+
+[workspace.package]
+version = "0.2.0"
+authors = ["Miguel Hermoso Mantecon", "Jonatan Ziegler"]
+description = "A collection of crates for an LHCb event builder at CERN."
+repository = "https://gitlab.cern.ch/lhcb-online/rusteb"
+edition = "2024"
+
+
+[workspace.dependencies]
+ebutils.path = "crates/ebutils"
+circular-buffer.path = "crates/circular-buffer"
+master-data-file.path = "crates/master-data-file"
+multi-event-packet.path = "crates/multi-event-packet"
+multi-fragment-packet.path = "crates/multi-fragment-packet"
+pcie40.path = "crates/pcie40"
+shared-memory-buffer.path = "crates/shared-memory-buffer"
+
+
+thiserror = "2.0"
+bytemuck = { version = "1.24", features = ["derive"] }
+bincode = "2.0"
+typed-builder = "0.23"
+strum = { version = "0.27", features = ["derive"] }
+tracing = "0.1.41"
+
+[workspace.lints.clippy]
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+dbg_macro = "warn"
+
+
+# ========== Package ===========
+
 
 [package]
-name = "pcie40-rs"
-version = "0.1.0"
-edition = "2024"
-description = "Rust bindings for the PCIe40 drivers"
+name = "rusteb"
+description = "Crate containing examples and tools utilizing the other rusteb crates."
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
-[dependencies]
-thiserror = "2.0.12"
+[dev-dependencies]
+thiserror.workspace = true
 pcie40 = { path = "crates/pcie40" }
-alignment-utils = { path = "crates/alignment-utils" }
+ebutils = { path = "crates/ebutils" }
 circular-buffer = { path = "crates/circular-buffer" }
 shared-memory-buffer = { path = "crates/shared-memory-buffer" }
-multi-fragment-packet = { path = "crates/multi-fragment-packet", features = ["pcie40-io", "shmem-io"] }
+multi-fragment-packet = { path = "crates/multi-fragment-packet", features = [
+    "pcie40-io",
+    "shmem-io",
+] }
 # Setting feature "release_max_level_info" makes sure compiled release binaries
 # do not contain traces on levels higher than Info. Its important for performance.
 tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
@@ -25,16 +66,10 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 
-[[bin]]
-name = "pcie40_to_shmem_reader"
-path = "bin/pcie40_to_shmem_reader.rs"
-
-[[bin]]
-name = "pcie40_to_shmem_receiver"
-path = "bin/pcie40_to_shmem_receiver.rs"
-
-[[bin]]
-name = "mock_pcie40_to_shmem_reader"
-path = "bin/mock_pcie40_to_shmem_reader.rs"
-
-
+[dependencies]
+clap = { version = "4.5.51", features = ["derive"] }
+master-data-file = { workspace = true, features = ["mmap"] }
+anyhow = "1.0"
+multi-fragment-packet.workspace = true
+colored = "3.0.0"
+pretty-hex = "0.4.1"
