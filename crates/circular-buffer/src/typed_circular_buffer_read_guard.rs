@@ -57,6 +57,10 @@ impl<'a, R: CircularBufferReader, T> MultiReadGuard<'a, R, T> {
         self.reader.advance_read_pointer(self.advance_size)
     }
 
+    pub fn get_reader(&self) -> &R {
+        &self.reader
+    }
+
     /// iterator over ranges of indices in the underlying buffer where the data lies.
     ///
     /// Useful if used with DMA.
