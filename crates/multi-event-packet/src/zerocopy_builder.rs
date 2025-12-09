@@ -109,7 +109,9 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     }
 
     pub fn get_mfp(&self, index: usize) -> Result<&MultiFragmentPacket, FromRawBytesError> {
-        MultiFragmentPacket::from_raw_bytes(cast_slice(&self.buffer[self.get_mfp_range(index)]))
+        MultiFragmentPacket::from_raw_bytes(cast_slice(dbg!(
+            &self.buffer[self.get_mfp_range(index)]
+        )))
     }
 
     /// You need to insure that:
