@@ -311,6 +311,11 @@ pub enum RdmaNamedMemory {
         ptr: *mut u8,
         length: usize,
     },
+    Dma {
+        id: String,
+        fd: i32,
+        length: usize,
+    },
 }
 
 impl RdmaNamedMemory {
@@ -330,10 +335,19 @@ impl RdmaNamedMemory {
         }
     }
 
+    pub fn new_dma(id: impl Into<String>, fd: i32, length: usize) -> Self {
+        Self::Dma {
+            id: id.into(),
+            fd,
+            length,
+        }
+    }
+
     pub fn id(&self) -> &str {
         match self {
             Self::Normal { id, .. } => id,
             Self::HugeTlb { id, .. } => id,
+            Self::Dma { id, .. } => id,
         }
     }
 }

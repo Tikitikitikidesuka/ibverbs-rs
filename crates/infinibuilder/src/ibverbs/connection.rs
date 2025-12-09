@@ -274,30 +274,28 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                 ));
             }
             println!("Registering memory region {mr:?}");
-            match mr {
-                RdmaNamedMemory::Normal { id, ptr, length } => {
-                    let mr_endpoint = pd
-                        .register(*ptr, *length)
-                        .map_err(IbvConnectionBuildError::MemoryRegionRegisterError)?;
-                    registered_mr_ids.insert(id.clone());
-                    mr_endpoints.push((id.clone(), mr_endpoint));
-                }
-                RdmaNamedMemory::HugeTlb { id, ptr, length } => {
-                    let mr_endpoint = pd
-                        .register_with_permissions(
-                            *ptr,
-                            *length,
-                            ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
-                                | ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
-                                | ibv_access_flags::IBV_ACCESS_REMOTE_READ
-                                | ibv_access_flags::IBV_ACCESS_HUGETLB
-                                | ibv_access_flags::IBV_ACCESS_ON_DEMAND,
-                        )
-                        .map_err(IbvConnectionBuildError::MemoryRegionRegisterError)?;
-                    registered_mr_ids.insert(id.clone());
-                    mr_endpoints.push((id.clone(), mr_endpoint));
-                }
-            }
+            let mr_endpoint = match mr {
+                RdmaNamedMemory::Normal { id, ptr, length } => pd
+                    .register(*ptr, *length)
+                    .map_err(IbvConnectionBuildError::MemoryRegionRegisterError),
+                RdmaNamedMemory::HugeTlb { id, ptr, length } => pd
+                    .register_with_permissions(
+                        *ptr,
+                        *length,
+                        ibv_access_flags::IBV_ACCESS_LOCAL_WRITE
+                            | ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                            | ibv_access_flags::IBV_ACCESS_REMOTE_READ
+                            | ibv_access_flags::IBV_ACCESS_HUGETLB
+                            | ibv_access_flags::IBV_ACCESS_ON_DEMAND,
+                    )
+                    .map_err(IbvConnectionBuildError::MemoryRegionRegisterError),
+                RdmaNamedMemory::Dma { id, fd, length } => pd
+                    .register_dmabuf(*fd, 0, *length, ibv_access_flags::IBV_ACCESS_REMOTE_READ)
+                    .map_err(IbvConnectionBuildError::MemoryRegionRegisterError),
+            }?;
+
+            registered_mr_ids.insert(mr.id().to_string());
+            mr_endpoints.push((mr.id().to_string(), mr_endpoint));
         }
         mr_endpoints.sort_by(|a, b| a.0.cmp(&b.0));
         Ok(mr_endpoints)
