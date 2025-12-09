@@ -109,7 +109,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     }
 
     pub fn get_mfp(&self, index: usize) -> Result<&MultiFragmentPacket, FromRawBytesError> {
-        let data = cast_slice(&self.buffer[self.get_mfp_range(index)]);
+        let data = &cast_slice::<_, u8>(self.buffer)[self.get_mfp_range(index)];
         println!("{:?}", &data[0..50]);
         MultiFragmentPacket::from_raw_bytes(data)
     }
@@ -119,7 +119,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     /// - that they are added in the correct order of ascending soruce id,
     /// - all MFPs have the same event id and number of fragments.
     ///
-    /// The returned range is in bytes within the buffer.
+    /// The returned range is in **bytes** within the buffer.
     pub fn finish(self) -> Range<usize> {
         let num_mfps = self.num_mfps();
         let header_size_u32 = total_header_size(num_mfps) / size_of::<u32>();
