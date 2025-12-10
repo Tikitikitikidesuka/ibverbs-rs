@@ -1,10 +1,15 @@
 [package]
 name = "infiniband-rs"
-version = "0.1.0"
-edition = "2024"
+authors = ["Miguel Hermoso Mantecon"]
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
+ibverbs-sys = "0.3.2"
+log = "0.4.29"
+nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] }
 
-[build-dependencies]
-bindgen = "0.72.1"
-cmake = "0.1.54"
+[[bin]]
+path = "bin/demo.rs"
+name = "demo"

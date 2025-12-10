@@ -1,5 +1,6 @@
-mod bindings;
+pub mod devices;
+pub mod context;
 
-fn main() {
-    bindings::ibv_reg_mr()
-}
+// TODO: This modules will become private after connection type is implemented
+pub mod protection_domain;
+pub mod completion_queue;

@@ -1,4 +1,0 @@
-[submodule "crates/infiniband-rs/vendor/rdma-core"]
-	path = crates/infiniband-rs/vendor/rdma-core
-	url = https://github.com/linux-rdma/rdma-core.git
-	branch = stable-v60
