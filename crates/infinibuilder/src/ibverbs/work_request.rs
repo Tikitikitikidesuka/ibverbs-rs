@@ -69,7 +69,6 @@ impl RdmaWorkRequest for IbvWorkRequest {
         };
 
         if let Some(wc) = cq.consume(self.wr_id) {
-            dbg!(wc);
             let new_status = match wc.error() {
                 None => RdmaWorkRequestStatus::Success(IbvWorkCompletion::new(wc)),
                 Some((status, vendor_code)) => match IbvWorkErrorCode::try_from(status as u32) {
