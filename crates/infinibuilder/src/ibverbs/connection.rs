@@ -273,7 +273,6 @@ impl IbvConnectionBuilder<BuilderIbvDeviceName, BuilderCqParams, BuilderMemoryRe
                     mr.id().to_string(),
                 ));
             }
-            println!("Registering memory region {mr:?}");
             let mr_endpoint = match mr {
                 RdmaNamedMemory::Normal { id, ptr, length } => pd
                     .register(*ptr, *length)
