@@ -6,7 +6,7 @@ use std::{
     slice,
 };
 
-use bytemuck::{AnyBitPattern, NoUninit, cast_ref, cast_slice};
+use bytemuck::{AnyBitPattern, NoUninit, cast_slice};
 use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 pub mod builder;

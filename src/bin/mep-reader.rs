@@ -1,8 +1,6 @@
 use std::{
     io::{BufWriter, ErrorKind, stdout},
-    iter::once,
     path::PathBuf,
-    process::Output,
 };
 
 use anyhow::bail;
@@ -10,7 +8,6 @@ use clap::{ColorChoice, Parser};
 use colored::Colorize;
 use ebutils::Fragment;
 use multi_event_packet::MultiEventPacketOwned;
-use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
 use tracing::{debug, level_filters::LevelFilter, trace};
 
@@ -65,7 +62,7 @@ fn run(args: &Args) -> std::io::Result<()> {
         mep.event_id_range(),
         ", each with".black(),
         mep.get_mfp(0).unwrap().fragment_count(),
-        "fragments",
+        "fragments".black(),
     )?;
 
     for mfp in mep.mfp_iter() {
@@ -89,13 +86,7 @@ fn run(args: &Args) -> std::io::Result<()> {
             frag.pretty_print(&mut output, 4)?;
         }
         if !args.expand_mfps && mfp.fragment_count() > 0 {
-            writeln!(
-                output,
-                "    {}{}{}",
-                "... and ",
-                mfp.fragment_count() - 1,
-                " more ..."
-            )?;
+            writeln!(output, "    ... and {} more ...", mfp.fragment_count() - 1,)?;
         }
         output.flush()?;
     }

@@ -1,6 +1,6 @@
 use std::{num::NonZero, ops::Range};
 
-use bytemuck::{cast_slice, checked::cast};
+use bytemuck::cast_slice;
 use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 use crate::{

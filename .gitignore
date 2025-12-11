@@ -7,3 +7,4 @@ deploy_config.local
 vendor
 out
 Run_*
+demo*

@@ -123,7 +123,7 @@ pub mod mmap {
             let map = unsafe { Mmap::map(&file) }?;
             #[cfg(unix)]
             {
-                map.advise(memmap2::Advice::Sequential);
+                map.advise(memmap2::Advice::Sequential)?;
             }
             Ok(MdfFile { data: MemMap(map) })
         }

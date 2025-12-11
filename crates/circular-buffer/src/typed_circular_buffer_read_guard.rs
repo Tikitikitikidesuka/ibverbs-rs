@@ -58,7 +58,7 @@ impl<'a, R: CircularBufferReader, T> MultiReadGuard<'a, R, T> {
     }
 
     pub fn get_reader(&self) -> &R {
-        &self.reader
+        self.reader
     }
 
     /// iterator over ranges of indices in the underlying buffer where the data lies.

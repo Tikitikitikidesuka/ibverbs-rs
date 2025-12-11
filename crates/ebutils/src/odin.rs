@@ -453,7 +453,7 @@ pub fn dummy_odin_payload(event_id: u64) -> OdinPayload {
         .partition_id(2)
         .trigger_type(5)
         .build()
-        .unwrap()
+        .expect("valid")
 }
 
 #[cfg(test)]

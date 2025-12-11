@@ -95,10 +95,12 @@ impl MultiFragmentPacket {
         Ok(mfp)
     }
 
+    #[allow(unused)]
     pub(crate) fn magic_field_offset() -> usize {
         offset_of!(MultiFragmentPacketHeader, magic)
     }
 
+    #[allow(unused)]
     pub(crate) fn magic_field_size() -> usize {
         size_of::<u16>()
     }
