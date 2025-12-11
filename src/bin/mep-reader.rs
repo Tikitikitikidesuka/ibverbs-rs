@@ -56,11 +56,13 @@ fn run(args: &Args) -> std::io::Result<()> {
 
     writeln!(
         output,
-        "{} {} {:?}{} {} {}",
+        "{} {} {:?}{} {} {} {} {}",
         "MEP".bold().green(),
         "for events with ID".black(),
         mep.event_id_range(),
-        ", each with".black(),
+        ",",
+        mep.num_mfps(),
+        "MFPs, each with".black(),
         mep.get_mfp(0).unwrap().fragment_count(),
         "fragments".black(),
     )?;
