@@ -18,6 +18,12 @@ tracing.workspace = true
 derive-where = "1.6.0"
 derive_more = { version = "2.0", features = ["full"] }
 
+# todo behind feature
+colored = { workspace = true, optional = true }
+pretty-hex = { workspace = true, optional = true }
 
 [lints]
 workspace = true
+
+[features]
+pretty = ["dep:colored", "dep:pretty-hex"]

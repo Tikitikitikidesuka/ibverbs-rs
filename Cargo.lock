@@ -439,8 +439,10 @@ name = "ebutils"
 version = "0.2.0"
 dependencies = [
  "bytemuck",
+ "colored",
  "derive-where",
  "derive_more",
+ "pretty-hex",
  "strum",
  "thiserror",
  "time",
@@ -784,6 +786,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "ebutils",
+ "memmap2",
  "multi-fragment-packet",
  "thiserror",
  "tracing",
@@ -1049,6 +1052,7 @@ dependencies = [
  "colored",
  "ebutils",
  "master-data-file",
+ "multi-event-packet",
  "multi-fragment-packet",
  "pcie40",
  "pretty-hex",

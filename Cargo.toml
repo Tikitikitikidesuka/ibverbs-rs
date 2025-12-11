@@ -28,6 +28,9 @@ typed-builder = "0.23"
 strum = { version = "0.27", features = ["derive"] }
 tracing = "0.1.41"
 auto_enums = "0.8"
+memmap2 = "0.9.9"
+colored = "3.0.0"
+pretty-hex = "0.4.1"
 
 [workspace.lints.clippy]
 cast_possible_truncation = "deny"
@@ -76,7 +79,9 @@ clap = { version = "4.5.51", features = ["derive"] }
 master-data-file = { workspace = true, features = ["mmap"] }
 anyhow = "1.0"
 multi-fragment-packet.workspace = true
-colored = "3.0.0"
-pretty-hex = "0.4.1"
+ebutils = { workspace = true, features = ["pretty"] }
+multi-event-packet = { workspace = true, features = ["mmap"] }
+colored.workspace = true
+pretty-hex.workspace = true
 tracing = { version = "0.1.41" }                                       #, features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
