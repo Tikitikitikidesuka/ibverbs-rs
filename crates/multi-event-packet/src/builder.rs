@@ -208,8 +208,8 @@ impl<'a> MultiEventPacketBuilder<'a> {
 
 /// Generates the MFP offsets in bytes from the start of the header.
 /// Also stores the total size in the out parameter.
-/// 
-/// 
+///
+///
 pub(crate) fn offsets_iter(
     mfp_sizes_bytes: impl ExactSizeIterator<Item = usize>,
     mfp_align: usize,

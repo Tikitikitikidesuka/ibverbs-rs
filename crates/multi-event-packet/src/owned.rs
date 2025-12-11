@@ -1,5 +1,7 @@
 use std::{borrow::Borrow, ops::Deref};
 
+use multi_fragment_packet::FromRawBytesError;
+
 use crate::{MultiEventPacket, builder::MultiEventPacketBuilder};
 
 /// This struct represents an owned [`MultiEventPacket`].
@@ -49,6 +51,15 @@ impl<D: AsRef<[u32]>> MultiEventPacketOwned<D> {
     pub unsafe fn from_data(data: D) -> Self {
         Self { data }
     }
+
+    /// Creates a new (owned) MEP from some kind of data provider that implements `AsRef<[u32]>`.
+    ///
+    /// This function checks wether the header contains valid magic and a compatible size.
+    pub fn try_from_data(data: D) -> Result<Self, FromRawBytesError> {
+        // assure converting from data is successful
+        MultiEventPacket::from_raw_bytes(data.as_ref())?;
+        Ok(Self { data })
+    }
 }
 
 #[cfg(feature = "mmap")]
@@ -83,8 +94,9 @@ pub mod mmap {
                 map.advise(memmap2::Advice::Sequential)?;
             }
 
-            // todo enforce valid mep...
-            Ok(unsafe { Self::from_data(MemMap(map)) })
+            let map = MemMap(map);
+
+            Self::try_from_data(map).map_err(std::io::Error::other)
         }
     }
 }

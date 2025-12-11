@@ -60,7 +60,7 @@ fn run(args: &Args) -> std::io::Result<()> {
         "MEP".bold().green(),
         "for events with ID".black(),
         mep.event_id_range(),
-        ",",
+        ",".black(),
         mep.num_mfps(),
         "MFPs, each with".black(),
         mep.get_mfp(0).unwrap().fragment_count(),
