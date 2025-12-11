@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-use crate::bindings;
 
 pub struct IbConnection {
     //mrs: HashMap<String, Mr>,
@@ -63,21 +62,39 @@ impl IbConnection {
     // for scoped treads. In this way, the created work requests have a well defined lifetime —that of
     // the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
     // If they have not been polled at the end of the scope, they will be polled automatically.
-    pub fn scope<R>(&mut self, f: impl FnOnce(&mut IbConnectionScope) -> R) -> R {
+    pub fn scope<'env, F, R>(&mut self, f: F) -> R
+    where
+        F: for<'scope> FnOnce(&'scope mut IbConnectionScope<'scope, 'env>) -> R,
+    {
         todo!()
     }
 }
 
-pub struct IbConnectionScope<'scope> {
+pub struct IbConnectionScope<'scope, 'env: 'scope> {
     inner: &'scope mut IbConnection,
     wrs: Vec<WorkRequest<'scope>>,
     cq: Rc<RefCell<CachedCompletionQueue>>,
+    // for invariance of lifetimes, see std::thread::scope
+    scope: PhantomData<&'scope mut &'scope ()>,
+    env: PhantomData<&'env mut &'env ()>,
 }
 
-impl<'scope> IbConnectionScope<'scope> {
+impl<'scope, 'env> From<WorkRequest<'env>> for ScopedWorkRequest<'scope, 'env> {
+    fn from(value: WorkRequest<'env>) -> Self {
+        ScopedWorkRequest {
+            inner: value,
+            env: PhantomData,
+        }
+    }
+}
+
+impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping sends can be done concurrently
-    pub fn post_send<'a>(&mut self, slice: &'a [u8]) -> io::Result<WorkRequest<'a>> {
+    pub fn post_send(
+        &'scope mut self,
+        slice: &'env [u8],
+    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -88,12 +105,15 @@ impl<'scope> IbConnectionScope<'scope> {
 
         self.wrs.push(wr.clone());
 
-        Ok(wr)
+        Ok(wr.into())
     }
 
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping receives can be done concurrently
-    pub fn post_receive<'a>(&mut self, slice: &'a mut [u8]) -> io::Result<WorkRequest<'a>> {
+    pub fn post_receive(
+        &'scope mut self,
+        slice: &'env mut [u8],
+    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -104,16 +124,16 @@ impl<'scope> IbConnectionScope<'scope> {
 
         self.wrs.push(wr.clone());
 
-        Ok(wr)
+        Ok(wr.into())
     }
 
     // Safety: The data at the remote memory region might be modified while the read is done.
     // It is the user's responsibility to ensure it is stable while the read is in progress.
-    pub unsafe fn post_read<'a>(
-        &mut self,
-        from_slice: &RemoteMrSlice,
-        into_slice: &'a mut [u8],
-    ) -> io::Result<WorkRequest<'a>> {
+    pub unsafe fn post_read(
+        &'scope mut self,
+        from_slice: &'env RemoteMrSlice,
+        into_slice: &'env mut [u8],
+    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -124,16 +144,16 @@ impl<'scope> IbConnectionScope<'scope> {
 
         self.wrs.push(wr.clone());
 
-        Ok(wr)
+        Ok(wr.into())
     }
 
     // Safety: The data at the remote memory region will be modified regardless of its mutability
     // status. It is the user's responsibility to ensure no use of the memory is being done concurrently.
-    pub unsafe fn post_write<'a>(
-        &mut self,
-        from_slice: &'a [u8],
-        into_slice: &RemoteMrSlice,
-    ) -> io::Result<WorkRequest<'a>> {
+    pub unsafe fn post_write(
+        &'scope mut self,
+        from_slice: &'env [u8],
+        into_slice: &'env RemoteMrSlice,
+    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -144,17 +164,22 @@ impl<'scope> IbConnectionScope<'scope> {
 
         self.wrs.push(wr.clone());
 
-        Ok(wr)
+        Ok(wr.into())
     }
 }
 
 pub struct CachedCompletionQueue;
 
+pub struct ScopedWorkRequest<'scope, 'env: 'scope> {
+    inner: WorkRequest<'env>,
+    env: PhantomData<&'scope mut &'scope ()>,
+}
+
 #[derive(Clone)]
-pub struct WorkRequest<'a> {
+pub struct WorkRequest<'env> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    _data_lifetime: PhantomData<&'a [u8]>,
+    _data_lifetime: PhantomData<&'env [u8]>,
 }
 
 pub struct WorkCompletion;
@@ -162,9 +187,7 @@ pub struct WorkCompletion;
 type WorkRequestStatus = Option<WorkCompletionResult>;
 type WorkCompletionResult = Result<WorkCompletion, io::Error>;
 
-
-
-impl WorkRequest {
+impl WorkRequest<'_> {
     // Returns None if the work request is not yet complete.
     // Otherwise returns the completion status of the work request.
     // The completion status can be Ok(WorkCompletion) or Err(io::Error).
@@ -216,7 +239,6 @@ pub struct Mr {
     mr: *const ibv_mr,
 }
 
-
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMr {
     endpoint: (),
@@ -230,7 +252,10 @@ pub struct RemoteMrSlice<'a> {
 
 impl RemoteMr {
     pub fn slice(&self, range: impl RangeBounds<usize>) -> RemoteMrSlice {
-        RemoteMrSlice { mr: self, range }
+        RemoteMrSlice {
+            mr: self,
+            range: todo!(),
+        }
     }
 }
 
