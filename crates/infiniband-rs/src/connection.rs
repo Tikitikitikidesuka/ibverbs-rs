@@ -1,10 +1,13 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::error::Error;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
 pub struct IbConnection {
     //mrs: HashMap<String, Mr>,
@@ -16,7 +19,7 @@ impl IbConnection {
         todo!()
     }
 
-    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> io::Result<()> {
+    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> Result {
         //self.inner.register_mr(name, region)
         todo!()
     }
@@ -33,12 +36,12 @@ impl IbConnection {
     // Safety: When sharing an mr, it is exposed to be mutated remotely
     // by the peer at any point. It is the user's responsibility to ensure
     // a protocol to comply with Rust's memory safety guarantees.
-    pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
+    pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> Result {
         //self.inner.share_mr(mr)
         todo!()
     }
 
-    pub fn accept_shared_mr(&mut self) -> io::Result<RemoteMr> {
+    pub fn accept_shared_mr(&mut self) -> Result<RemoteMr> {
         //self.inner.accept_shared_mr()
         todo!()
     }
@@ -48,7 +51,7 @@ impl IbConnection {
         todo!()
     }
 
-    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
+    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
         //self.inner.deregister_mr(mr)
         todo!()
     }
@@ -62,9 +65,9 @@ impl IbConnection {
     // for scoped treads. In this way, the created work requests have a well defined lifetime —that of
     // the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
     // If they have not been polled at the end of the scope, they will be polled automatically.
-    pub fn scope<'env, F, R>(&mut self, f: F) -> R
+    pub fn scope<'env, F, R>(&mut self, f: F) -> Result<R>
     where
-        F: for<'scope> FnOnce(&'scope mut IbConnectionScope<'scope, 'env>) -> R,
+        F: for<'scope> FnOnce(&'scope mut IbConnectionScope<'scope, 'env>) -> Result<R>,
     {
         todo!()
     }
@@ -94,7 +97,7 @@ impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
     pub fn post_send(
         &'scope mut self,
         slice: &'env [u8],
-    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
+    ) -> Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -113,7 +116,7 @@ impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
     pub fn post_receive(
         &'scope mut self,
         slice: &'env mut [u8],
-    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
+    ) -> Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -133,7 +136,7 @@ impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
         &'scope mut self,
         from_slice: &'env RemoteMrSlice,
         into_slice: &'env mut [u8],
-    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
+    ) -> Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -153,7 +156,7 @@ impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
         &'scope mut self,
         from_slice: &'env [u8],
         into_slice: &'env RemoteMrSlice,
-    ) -> io::Result<ScopedWorkRequest<'scope, 'env>> {
+    ) -> Result<ScopedWorkRequest<'scope, 'env>> {
         // TODO: Post to infiniband hardware
 
         let wr = WorkRequest {
@@ -185,7 +188,7 @@ pub struct WorkRequest<'env> {
 pub struct WorkCompletion;
 
 type WorkRequestStatus = Option<WorkCompletionResult>;
-type WorkCompletionResult = Result<WorkCompletion, io::Error>;
+type WorkCompletionResult = Result<WorkCompletion>;
 
 impl WorkRequest<'_> {
     // Returns None if the work request is not yet complete.
