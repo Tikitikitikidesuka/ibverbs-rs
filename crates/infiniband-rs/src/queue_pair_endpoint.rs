@@ -1,0 +1,14 @@
+use crate::global_id::IbvGid;
+
+/// An identifier for the network endpoint of a `QueuePair`.
+///
+/// Internally, this contains the `QueuePair`'s `qp_num`, as well as the context's `lid` and `gid`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct IbvQueuePairEndpoint {
+    /// the `QueuePair`'s `qp_num`
+    pub num: u32,
+    /// the context's `lid`
+    pub lid: u16,
+    /// the context's `gid`, used for global routing
+    pub gid: Option<IbvGid>,
+}

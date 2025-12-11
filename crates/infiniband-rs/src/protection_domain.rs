@@ -1,5 +1,5 @@
-use crate::completion_queue::IbvCompletionQueueInner;
 use crate::context::IbvContextInner;
+use crate::memory_region::IbvMemoryRegion;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
@@ -10,22 +10,66 @@ pub struct IbvProtectionDomain {
 }
 
 impl IbvProtectionDomain {
-    // TODO: VERIFY
     pub(super) fn allocate(context: Arc<IbvContextInner>) -> io::Result<Self> {
         let pd = unsafe { ibv_alloc_pd(context.ctx) };
         if pd.is_null() {
-            Err(io::Error::other("obv_alloc_pd returned null"))
+            Err(io::Error::other(io::Error::last_os_error()))
         } else {
             Ok(IbvProtectionDomain {
-                inner: Arc::new(IbvProtectionDomainInner { _ctx: context, pd }),
+                inner: Arc::new(IbvProtectionDomainInner { context, pd }),
             })
+        }
+    }
+
+    /// Registers memory with the given access flags.
+    ///
+    /// # Safety
+    /// The user is responsible for ensuring the memory registered
+    /// is not deallocated for as long as it is registered.
+    pub unsafe fn register_mr_with_permissions(
+        &self,
+        memory: *mut [u8],
+        access_flags: ibv_access_flags,
+    ) -> io::Result<IbvMemoryRegion> {
+        unsafe {
+            IbvMemoryRegion::register_with_permissions(self.inner.clone(), memory, access_flags)
+        }
+    }
+
+    /// Registers a DMA-BUF with the given access flags.
+    ///
+    /// # Arguments
+    /// * `fd` - The file descriptor of the DMA-BUF to be registered.
+    /// * `offset`, `len` - The MR starts at `offset` of the dma-buf and its size is `len`.
+    /// * `iova` - The argument iova specifies the virtual base address of the MR when accessed through a lkey or rkey.
+    ///   Note: `iova` must have the same page offset as `offset`
+    ///
+    /// # Safety
+    /// The DMA-BUF and its mapped memory must not be deallocated while they remain registered.
+    pub unsafe fn register_dmabuf(
+        &self,
+        fd: i32,
+        offset: u64,
+        len: usize,
+        iova: u64,
+        access_flags: ibv_access_flags,
+    ) -> io::Result<IbvMemoryRegion> {
+        unsafe {
+            IbvMemoryRegion::register_dmabuf(
+                self.inner.clone(),
+                fd,
+                offset,
+                len,
+                iova,
+                access_flags,
+            )
         }
     }
 }
 
-struct IbvProtectionDomainInner {
-    _ctx: Arc<IbvContextInner>,
-    pd: *mut ibv_pd,
+pub(super) struct IbvProtectionDomainInner {
+    pub(super) context: Arc<IbvContextInner>,
+    pub(super) pd: *mut ibv_pd,
 }
 
 unsafe impl Sync for IbvProtectionDomainInner {}
@@ -49,7 +93,7 @@ impl std::fmt::Debug for IbvProtectionDomainInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvProtectionDomainInner")
             .field("handle", &(unsafe { *self.pd }).handle)
-            .field("context", &self._ctx)
+            .field("context", &self.context)
             .finish()
     }
 }

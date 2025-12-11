@@ -7,6 +7,10 @@ use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 use std::{io, ptr};
 
+/// The first port (port #1) of each HCA is an InfiniBand port
+/// and the second port (port #2) is an Ethernet port.
+pub(super) const IB_PORT: u8 = 1;
+
 #[derive(Debug)]
 pub struct IbvContext {
     inner: Arc<IbvContextInner>,
@@ -58,9 +62,7 @@ impl IbvContext {
         let errno = unsafe {
             ibv_query_port(
                 ibv_ctx,
-                // The first port (port #1) of each HCA is an InfiniBand port
-                // and the second port (port #2) is an Ethernet port.
-                1,
+                IB_PORT,
                 &mut port_attr as *mut ibv_port_attr as *mut _,
             )
         };
