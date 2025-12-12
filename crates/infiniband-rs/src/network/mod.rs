@@ -12,9 +12,6 @@ pub enum NetworkNodeError {
     #[error("Infiniband error occurred: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("Timeout while polling occurred.")]
-    PollTimeout,
-
     #[error("Some errors occured during a network multi-node operation: {0:?}")]
     MultiOperationError(Vec<NetworkNodeError>),
 }

@@ -30,6 +30,8 @@ impl NetworkNode {
             .map_err(Into::into)
     }
 
+    /// Sends messages to multiple peers in paralell (hardware).
+    // todo what to do with immediate data?
     pub fn scatter<'a>(&mut self, data: impl Iterator<Item = (Rank, &'a [u8])>) -> Result {
         let requests = data
             .map(|(peer, data)| {
@@ -43,9 +45,37 @@ impl NetworkNode {
         let results: Vec<_> = requests
             .into_iter()
             .map(|request| {
-                request?
+                Ok(request?
                     .spin_poll(self.poll_timeout)
-                    .ok_or(NetworkNodeError::PollTimeout)
+                    .expect("poll timed out")) // we cannot return an error here, as the slice is still used.
+            })
+            .flat_map(Result::err)
+            .collect();
+
+        if results.is_empty() {
+            Ok(())
+        } else {
+            Err(NetworkNodeError::MultiOperationError(results))
+        }
+    }
+
+    /// Receives messages from multiple peers in parallel (hardware).
+    pub fn gather<'a>(&mut self, data: impl Iterator<Item = (Rank, &'a mut [u8])>) -> Result {
+        let requests = data
+            .map(|(peer, data)| {
+                let connection = self.get_connection(peer)?;
+                // SAFETY: we always poll all the work requests to completion before returning.
+                unsafe { connection.receive_unpolled(data) }.map_err(NetworkNodeError::from)
+            })
+            .collect::<Vec<_>>();
+
+        // we need to poll all of them to completion, even if an error occurs.
+        let results: Vec<_> = requests
+            .into_iter()
+            .map(|request| {
+                Ok(request?
+                    .spin_poll(self.poll_timeout)
+                    .expect("poll timed out")) // we cannot return an error here, as the slice is still used.
             })
             .flat_map(Result::err)
             .collect();

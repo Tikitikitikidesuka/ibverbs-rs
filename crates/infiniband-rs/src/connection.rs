@@ -78,6 +78,7 @@ impl IbConnection {
 
     // todo do we want to return the poll duration / number of local bytes written?
     // todo do these functions assert that the slice length maches exact? how would we do that?
+    // todo what about immediate data? extra function or include?
     pub fn send_polled<'a>(&mut self, data: &'a [u8]) -> Result<()> {
         todo!()
     }
