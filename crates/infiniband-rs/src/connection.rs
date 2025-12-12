@@ -96,13 +96,13 @@ impl IbConnection {
 
     /// # Safety
     /// The caller must ensure that the work request is polled to completion before the end of `'a`.
-    unsafe fn send_unpolled<'a>(&mut self, data: &'a [u8]) -> Result<WorkRequest<'a>> {
+    pub unsafe fn send_unpolled<'a>(&mut self, data: &'a [u8]) -> Result<WorkRequest<'a>> {
         todo!()
     }
 
     /// # Safety
     /// The caller must ensure that the work request is polled to completion before the end of `'a`.
-    unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
+    pub unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
         todo!()
     }
 }
@@ -236,7 +236,7 @@ impl WorkRequest<'_> {
 
     // Polls the work request until it is complete or the timeout is reached.
     // Timeout is represented as None ouptut.
-    fn spin_poll(&mut self, timeout: Duration) -> Option<WorkCompletionResult> {
+    pub fn spin_poll(&mut self, timeout: Duration) -> Option<WorkCompletionResult> {
         const ELAPSED_CHECK_ITERS: usize = 1024;
         self.spin_poll_batched::<ELAPSED_CHECK_ITERS>(timeout)
     }
@@ -246,7 +246,7 @@ impl WorkRequest<'_> {
     // To avoid getting time every iteration,
     // only check timeout every ELAPSED_CHECK_ITERS iterations.
     // For performance, this should be a power of 2 (for the modulus operation).
-    fn spin_poll_batched<const TIMEOUT_CHECK_ITERS: usize>(
+    pub fn spin_poll_batched<const TIMEOUT_CHECK_ITERS: usize>(
         &mut self,
         timeout: Duration,
     ) -> Option<WorkCompletionResult> {

@@ -9,6 +9,7 @@ repository.workspace = true
 ibverbs-sys = "0.3.2"
 log = "0.4.29"
 nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] }
+thiserror.workspace = true
 
 [[bin]]
 path = "bin/demo.rs"
