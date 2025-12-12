@@ -79,25 +79,45 @@ impl IbConnection {
     // todo do we want to return the poll duration / number of local bytes written?
     // todo do these functions assert that the slice length maches exact? how would we do that?
     // todo what about immediate data? extra function or include?
-    pub fn send_polled<'a>(&mut self, data: &'a [u8]) -> Result<()> {
+    pub fn send<'a>(&mut self, data: &'a [u8]) -> Result<()> {
         todo!()
     }
 
-    pub fn receive_polled<'a>(&mut self, data: &'a mut [u8]) -> Result<()> {
+    pub fn send_immediate<'a>(&mut self, immediate: u32) -> Result<()> {
         todo!()
     }
 
-    pub fn send_paralell<'a>(&mut self, data: impl Iterator<Item = &'a [u8]>) -> Result<()> {
+    pub fn send_with_immediate<'a>(&mut self, data: &'a [u8], immediate: u32) -> Result<()> {
         todo!()
     }
 
-    pub fn receive_paralell<'a>(&mut self, data: impl Iterator<Item = &'a mut [u8]>) -> Result<()> {
+    pub fn receive<'a>(&mut self, data: &'a mut [u8]) -> Result<Option<u32>> {
         todo!()
+    }
+
+    pub fn send_paralell<'a>(
+        &mut self,
+        data: impl Iterator<Item = (&'a [u8], Option<u32>)>,
+    ) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive_paralell<'a>(
+        &mut self,
+        data: impl Iterator<Item = &'a mut [u8]>,
+    ) -> Result<impl Iterator<Item = Option<u32>>> {
+        todo!();
+        Ok([].into_iter())
     }
 
     /// # Safety
     /// The caller must ensure that the work request is polled to completion before the end of `'a`.
-    pub unsafe fn send_unpolled<'a>(&mut self, data: &'a [u8]) -> Result<WorkRequest<'a>> {
+    pub unsafe fn send_unpolled<'a>(
+        &mut self,
+        data: &'a [u8],
+        immediate: Option<u32>,
+    ) -> Result<WorkRequest<'a>> {
+        // todo if data.is_empty() only send immediate
         todo!()
     }
 
@@ -222,6 +242,12 @@ pub struct WorkRequest<'env> {
 }
 
 pub struct WorkCompletion;
+
+impl WorkCompletion {
+    pub fn immediate_data(&self) -> Option<u32> {
+        todo!()
+    }
+}
 
 type WorkRequestStatus = Option<WorkCompletionResult>;
 type WorkCompletionResult = Result<WorkCompletion>;
