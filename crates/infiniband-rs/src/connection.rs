@@ -7,6 +7,8 @@ use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use crate::unsafe_member::UnsafeMember;
+
 pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
 pub struct IbConnection {
@@ -89,6 +91,18 @@ impl IbConnection {
     }
 
     pub fn receive_paralell<'a>(&mut self, data: impl Iterator<Item = &'a mut [u8]>) -> Result<()> {
+        todo!()
+    }
+
+    /// # Safety
+    /// The caller must ensure that the work request is polled to completion before the end of `'a`.
+    unsafe fn send_unpolled<'a>(&mut self, data: &'a [u8]) -> Result<WorkRequest<'a>> {
+        todo!()
+    }
+
+    /// # Safety
+    /// The caller must ensure that the work request is polled to completion before the end of `'a`.
+    unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
         todo!()
     }
 }
@@ -202,7 +216,8 @@ pub struct CachedCompletionQueue;
 pub struct WorkRequest<'env> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    _data_lifetime: PhantomData<&'env [u8]>,
+    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
+    _data_lifetime: UnsafeMember<PhantomData<&'env [u8]>>,
 }
 
 pub struct WorkCompletion;
