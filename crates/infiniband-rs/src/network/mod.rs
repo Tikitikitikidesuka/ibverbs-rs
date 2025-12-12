@@ -14,6 +14,8 @@ pub enum NetworkNodeError {
 
     #[error("Some errors occured during a network multi-node operation: {0:?}")]
     MultiOperationError(Vec<NetworkNodeError>),
+    #[error("Barrier counter missmatch.")]
+    BarrierMismatch,
 }
 
 pub type Result<T = ()> = std::result::Result<T, NetworkNodeError>;

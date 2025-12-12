@@ -15,9 +15,14 @@ pub struct NetworkNode {
     connections: Vec<IbConnection>,
     rank: Rank,
     poll_timeout: Duration,
+    barrier_counter: u32,
 }
 
 impl NetworkNode {
+    pub fn network_size(&self) -> usize {
+        self.connections.len()
+    }
+
     pub fn send(&mut self, peer: Rank, data: &[u8]) -> Result {
         self.get_connection(peer)?.send(data).map_err(Into::into)
     }
@@ -36,6 +41,12 @@ impl NetworkNode {
 
     pub fn receive(&mut self, peer: Rank, data: &mut [u8]) -> Result<Option<u32>> {
         self.get_connection(peer)?.receive(data).map_err(Into::into)
+    }
+
+    pub fn receive_immediate(&mut self, peer: Rank) -> Result<u32> {
+        self.get_connection(peer)?
+            .receive_immediate()
+            .map_err(Into::into)
     }
 
     /// Sends messages to multiple peers in paralell (hardware).
@@ -110,8 +121,39 @@ impl NetworkNode {
         }
     }
 
-    pub fn network_size(&self) -> usize {
-        self.connections.len()
+    /// Peers shall not include master.
+    // todo split into two functions
+    pub fn centralized_barrier(
+        &mut self,
+        master: Rank,
+        peers: impl Iterator<Item = Rank> + Clone,
+        timeout: Duration,
+    ) -> Result {
+        let barrier_counter = self.barrier_counter;
+        self.barrier_counter += 1;
+
+        // todo timeout?
+        if self.rank == master {
+            if !self
+                .gather(peers.clone().map(|r| (r, &mut [] as &mut [u8])))?
+                .iter()
+                .all(|b| *b == Some(barrier_counter))
+            {
+                return Err(NetworkNodeError::BarrierMismatch);
+            }
+
+            self.scatter(peers.map(|rank| (rank, &[] as &[u8], Some(barrier_counter))))
+        } else {
+            self.send_immediate(master, barrier_counter)?;
+
+            let immediate = self.receive_immediate(master)?;
+
+            if immediate != barrier_counter {
+                return Err(NetworkNodeError::BarrierMismatch);
+            }
+
+            Ok(())
+        }
     }
 
     fn get_connection(&mut self, peer: usize) -> Result<&mut IbConnection> {

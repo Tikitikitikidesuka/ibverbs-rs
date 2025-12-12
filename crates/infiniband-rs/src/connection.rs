@@ -95,6 +95,10 @@ impl IbConnection {
         todo!()
     }
 
+    pub fn receive_immediate<'a>(&mut self) -> Result<u32> {
+        todo!()
+    }
+
     pub fn send_paralell<'a>(
         &mut self,
         data: impl Iterator<Item = (&'a [u8], Option<u32>)>,
