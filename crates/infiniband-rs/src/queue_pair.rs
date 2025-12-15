@@ -39,3 +39,6 @@ impl Debug for IbvQueuePair {
             .finish()
     }
 }
+
+impl IbvQueuePair {
+}

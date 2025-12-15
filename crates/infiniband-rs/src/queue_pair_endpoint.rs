@@ -9,6 +9,4 @@ pub struct IbvQueuePairEndpoint {
     pub num: u32,
     /// the context's `lid`
     pub lid: u16,
-    /// the context's `gid`, used for global routing
-    pub gid: Option<IbvGid>,
 }

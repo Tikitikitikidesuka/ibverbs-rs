@@ -48,37 +48,14 @@ impl IbvContext {
             return Err(io::Error::other("failed to open device"));
         }
 
+        let context = Self { inner: Arc::new(IbvContextInner { ctx: ibv_ctx }) };
+
         // Check that the port is active/armed.
-        Self::query_port(ibv_ctx)?;
+        context.inner.query_port()?;
 
-        Ok(Self {
-            inner: Arc::new(IbvContextInner { ctx: ibv_ctx }),
-        })
+        Ok(context)
     }
 
-    /// Checks the port is ACTIVE or ARMED
-    fn query_port(ibv_ctx: *mut ibv_context) -> io::Result<ibv_port_attr> {
-        let mut port_attr = ibv_port_attr::default();
-        let errno = unsafe {
-            ibv_query_port(
-                ibv_ctx,
-                IB_PORT,
-                &mut port_attr as *mut ibv_port_attr as *mut _,
-            )
-        };
-        if errno != 0 {
-            return Err(io::Error::from_raw_os_error(errno));
-        }
-
-        match port_attr.state {
-            ibv_port_state::IBV_PORT_ACTIVE | ibv_port_state::IBV_PORT_ARMED => {}
-            _ => {
-                return Err(io::Error::other("port is not ACTIVE or ARMED"));
-            }
-        }
-
-        Ok(port_attr)
-    }
 }
 
 pub(super) struct IbvContextInner {
@@ -105,5 +82,31 @@ impl std::fmt::Debug for IbvContextInner {
         f.debug_struct("IbvContext")
             .field("device", &IbvDevice(&(unsafe { &*self.ctx }).device))
             .finish()
+    }
+}
+
+impl IbvContextInner {
+    /// Checks the port is ACTIVE or ARMED
+    pub(super) fn query_port(&self) -> io::Result<ibv_port_attr> {
+        let mut port_attr = ibv_port_attr::default();
+        let errno = unsafe {
+            ibv_query_port(
+                self.ctx,
+                IB_PORT,
+                &mut port_attr as *mut ibv_port_attr as *mut _,
+            )
+        };
+        if errno != 0 {
+            return Err(io::Error::from_raw_os_error(errno));
+        }
+
+        match port_attr.state {
+            ibv_port_state::IBV_PORT_ACTIVE | ibv_port_state::IBV_PORT_ARMED => {}
+            _ => {
+                return Err(io::Error::other("port is not ACTIVE or ARMED"));
+            }
+        }
+
+        Ok(port_attr)
     }
 }

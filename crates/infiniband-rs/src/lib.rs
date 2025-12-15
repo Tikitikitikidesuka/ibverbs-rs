@@ -10,3 +10,4 @@ mod queue_pair_endpoint;
 mod global_id;
 mod global_unique_id;
 mod prepared_queue_pair;
+pub mod queue_pair_builder;

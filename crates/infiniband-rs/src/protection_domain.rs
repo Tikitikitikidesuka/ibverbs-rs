@@ -1,5 +1,7 @@
+use crate::completion_queue::IbvCompletionQueue;
 use crate::context::IbvContextInner;
 use crate::memory_region::IbvMemoryRegion;
+use crate::queue_pair_builder::IbvRcQueuePairBuilder;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
@@ -64,6 +66,18 @@ impl IbvProtectionDomain {
                 access_flags,
             )
         }
+    }
+
+    pub fn create_qp(
+        &self,
+        send_cq: &IbvCompletionQueue,
+        receive_cq: &IbvCompletionQueue,
+    ) -> IbvRcQueuePairBuilder {
+        IbvRcQueuePairBuilder::new(
+            self.inner.clone(),
+            send_cq.inner.clone(),
+            receive_cq.inner.clone(),
+        )
     }
 }
 
