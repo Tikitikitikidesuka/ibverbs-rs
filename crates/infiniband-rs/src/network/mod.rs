@@ -1,6 +1,8 @@
 use thiserror::Error;
 
+pub mod network_config;
 pub mod node;
+pub mod tcp_exchanger;
 
 #[derive(Error, Debug)]
 pub enum NetworkNodeError {

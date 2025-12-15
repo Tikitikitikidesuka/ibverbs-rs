@@ -372,9 +372,11 @@ checksum = "4ee796ad498c8d9a1d68e477df8f754ed784ef875de1414ebdaf169f70a6a784"
 name = "infiniband-rs"
 version = "0.2.0"
 dependencies = [
+ "bincode",
  "ibverbs-sys",
  "log",
  "nix",
+ "serde",
  "thiserror",
 ]
 
@@ -684,6 +686,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]

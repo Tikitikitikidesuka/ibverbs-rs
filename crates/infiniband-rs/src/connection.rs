@@ -75,6 +75,8 @@ impl IbConnection {
     // {
     //     todo!()
     // }
+    
+    // todo do those actually need mutable access?
 
     // todo do we want to return the poll duration / number of local bytes written?
     // todo do these functions assert that the slice length maches exact? how would we do that?
