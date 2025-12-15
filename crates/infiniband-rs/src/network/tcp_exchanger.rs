@@ -1,6 +1,6 @@
 use crate::network::network_config::{NetworkConfig, NodeConfig};
 use TcpNetworkConfigExchangeError::*;
-use bincode::{decode_from_slice, encode_to_vec};
+use bincode::{Decode, Encode, decode_from_slice, encode_to_vec};
 use log::{debug, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,7 @@ struct ExchangeMessage<T> {
 }
 
 impl TcpExchanger {
-    pub fn await_exchange_all<T: Serialize + DeserializeOwned + Clone>(
+    pub fn await_exchange_all<T: Encode + Decode<()> + Clone>(
         rank_id: usize,
         network: &NetworkConfig,
         data: &T,
@@ -71,7 +71,7 @@ impl TcpExchanger {
     }
 
     // todo no longer needed?
-    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone + Debug>(
+    pub fn await_exchange_pair<T: Encode + Decode<()> + Clone + Debug>(
         primary: bool,
         addr: (&str, u16),
         data: &T,
@@ -125,7 +125,7 @@ impl TcpExchanger {
             })
     }
 
-    async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(
+    async fn exchange_all<T: Encode + Decode<()> + Clone>(
         rank_id: usize,
         network: &NetworkConfig,
         data: &T,
@@ -160,7 +160,7 @@ impl TcpExchanger {
             .collect())
     }
 
-    async fn exchange_all_serve<T: Serialize + DeserializeOwned>(
+    async fn exchange_all_serve<T: Encode + Decode<()>>(
         data: &T,
         self_node: &NodeConfig,
         remote_rank_ids: Range<usize>,
@@ -188,7 +188,7 @@ impl TcpExchanger {
             .collect())
     }
 
-    async fn exchange_all_connect<T: Serialize + DeserializeOwned>(
+    async fn exchange_all_connect<T: Encode + Decode<()>>(
         data: &T,
         self_node: &NodeConfig,
         remote_rank_ids: Range<usize>,
@@ -229,7 +229,7 @@ impl TcpExchanger {
             .collect())
     }
 
-    async fn exchange_serve<T: Serialize + DeserializeOwned>(
+    async fn exchange_serve<T: Encode + Decode<()>>(
         data: &T,
         self_rank_id: usize,
         remote_rank_ids: Range<usize>,
@@ -246,7 +246,7 @@ impl TcpExchanger {
         Ok(())
     }
 
-    async fn exchange_connect<T: Serialize + DeserializeOwned>(
+    async fn exchange_connect<T: Encode + Decode<()>>(
         data: &T,
         self_rank_id: usize,
         remote_rank_ids: Range<usize>,
@@ -263,7 +263,7 @@ impl TcpExchanger {
         Ok(())
     }
 
-    fn insert_if_valid<T: Serialize + DeserializeOwned>(
+    fn insert_if_valid<T: Encode + Decode<()>>(
         incoming_data: ExchangeMessage<T>,
         received: &mut HashMap<usize, T>,
         valid_range: Range<usize>,
@@ -288,7 +288,7 @@ impl TcpExchanger {
         }
     }
 
-    async fn read_stream<T: DeserializeOwned>(
+    async fn read_stream<T: Decode<()>>(
         stream: &mut (impl AsyncReadExt + Unpin),
     ) -> Result<ExchangeMessage<T>, TcpNetworkConfigExchangeError> {
         let mut size_buf = [0u8; size_of::<u32>()];
@@ -300,7 +300,7 @@ impl TcpExchanger {
         Ok(decode_from_slice(msg_buf.as_slice(), Self::bincode_config())?.0)
     }
 
-    async fn write_stream<T: Serialize>(
+    async fn write_stream<T: Encode>(
         rank_id: usize,
         data: &T,
         stream: &mut (impl AsyncWriteExt + Unpin),

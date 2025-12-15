@@ -12,7 +12,7 @@ nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] 
 thiserror.workspace = true
 serde.workspace = true
 bincode.workspace = true
-tokio.workspace = true
+tokio = {version= "1.48", features = ["net",  "io-util", "time", "rt"]}
 
 [[bin]]
 path = "bin/demo.rs"
