@@ -3,7 +3,7 @@ use std::time::Duration;
 use nix::poll::PollTimeout;
 
 use crate::{
-    connection::{self, IbConnection, WorkCompletion},
+    connection::{self, IbConnection, RemoteMrSlice, WorkCompletion, WorkRequest},
     network::{NetworkNodeError, Result},
 };
 
@@ -12,7 +12,7 @@ pub type Rank = usize;
 pub struct NetworkNode {
     // vec of connections to all nodes of the network
     // including self
-    connections: Vec<IbConnection>,
+    pub(crate) connections: Vec<IbConnection>,
     rank: Rank,
     poll_timeout: Duration,
     barrier_counter: u32,
@@ -22,6 +22,76 @@ impl NetworkNode {
     pub fn network_size(&self) -> usize {
         self.connections.len()
     }
+
+    pub fn rank(&self) -> Rank {
+        self.rank
+    }
+
+    // memory regions
+
+    /// on error, some memory regions may be registered
+    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> Result {
+        let name = name.into();
+        self.connections_to_other()
+            .map(|conn| {
+                conn.register_mr(name.clone(), region)
+                    .map_err(NetworkNodeError::from)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(())
+    }
+
+    /// on error, some memory regions may be registered
+    pub fn register_dmabuf_mr(
+        &mut self,
+        name: impl Into<String>,
+        fd: i32,
+        region: *mut [u8],
+    ) -> Result<()> {
+        let name = name.into();
+        self.connections_to_other()
+            .map(|conn| {
+                conn.register_dmabuf_mr(name.clone(), fd, region)
+                    .map_err(NetworkNodeError::from)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(())
+    }
+
+    // todo not clear how to share memory regions
+
+    // // Safety: When sharing an mr, it is exposed to be mutated remotely
+    // // by the peer at any point. It is the user's responsibility to ensure
+    // // a protocol to comply with Rust's memory safety guarantees.
+    // pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> Result {
+    //     self.connections_to_other()
+    //         .map(|conn| unsafe { conn.share_mr(&name) }.map_err(NetworkNodeError::from))
+    //         .collect::<Result<Vec<_>>>()?;
+
+    //     Ok(())
+    // }
+
+    // pub fn accept_shared_mr(&mut self) -> Result<RemoteMr> {
+    //     self.connections_to_other().map(|conn| conn.acce)
+    // }
+
+    // pub fn remote_mr(&mut self, name: impl AsRef<str>) -> Option<RemoteMr> {
+    //     //self.inner.remote_mr(name)
+    //     todo!()
+    // }
+
+    /// on error, some memory regions may still be registered
+    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
+        self.connections_to_other()
+            .map(|conn| conn.deregister_mr(&name).map_err(NetworkNodeError::from))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(())
+    }
+
+    // send / receive
 
     pub fn send(&mut self, peer: Rank, data: &[u8]) -> Result {
         self.get_connection(peer)?.send(data).map_err(Into::into)
@@ -48,6 +118,38 @@ impl NetworkNode {
             .receive_immediate()
             .map_err(Into::into)
     }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo, do we need to make it unsafe if it does unsafe things on the *other* side?
+    ///
+    /// Furthermore, he caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_write<'a>(
+        &mut self,
+        peer: Rank,
+        data: &'a [u8],
+        remote_slice: RemoteMrSlice,
+    ) -> Result<WorkRequest<'a>> {
+        let connection = self.get_connection(peer)?;
+        unsafe { connection.remote_write(data, remote_slice) }.map_err(Into::into)
+    }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo
+    ///
+    /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_read<'a>(
+        &mut self,
+        peer: Rank,
+        remote_slice: RemoteMrSlice,
+        data: &'a mut [u8],
+    ) -> Result<WorkRequest<'a>> {
+        let connection = self.get_connection(peer)?;
+        unsafe { connection.remote_read(remote_slice, data) }.map_err(Into::into)
+    }
+
+    // network operations
 
     /// Sends messages to multiple peers in paralell (hardware).
     /// `data`: Iterator over tuples of peer rank, data slice, and optional immediate data.
@@ -156,7 +258,7 @@ impl NetworkNode {
         }
     }
 
-    fn get_connection(&mut self, peer: usize) -> Result<&mut IbConnection> {
+    pub(crate) fn get_connection(&mut self, peer: usize) -> Result<&mut IbConnection> {
         // todo allow self connection?
         if peer == self.rank {
             return Err(NetworkNodeError::SelfConnection);
@@ -172,5 +274,12 @@ impl NetworkNode {
                 })?;
 
         Ok(connection)
+    }
+
+    fn connections_to_other(&mut self) -> impl Iterator<Item = &mut IbConnection> {
+        self.connections
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(i, c)| (i != self.rank).then_some(c))
     }
 }

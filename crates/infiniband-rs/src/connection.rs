@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 use std::marker::PhantomData;
+use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -75,7 +76,7 @@ impl IbConnection {
     // {
     //     todo!()
     // }
-    
+
     // todo do those actually need mutable access?
 
     // todo do we want to return the poll duration / number of local bytes written?
@@ -143,7 +144,7 @@ impl IbConnection {
     pub unsafe fn remote_write<'a>(
         &mut self,
         data: &'a [u8],
-        remote_slice: RemoteMrSlice<'a>,
+        remote_slice: RemoteMrSlice,
     ) -> Result<WorkRequest<'a>> {
         todo!()
     }
@@ -155,7 +156,7 @@ impl IbConnection {
     /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
     pub unsafe fn remote_read<'a>(
         &mut self,
-        remote_slice: RemoteMrSlice<'a>,
+        remote_slice: RemoteMrSlice,
         data: &'a mut [u8],
     ) -> Result<WorkRequest<'a>> {
         todo!()
@@ -343,17 +344,28 @@ pub struct RemoteMr {
     endpoint: (),
 }
 
+// todo why take a reference if `RemoteMr' is `Copy`?
 #[derive(Debug)]
-pub struct RemoteMrSlice<'a> {
-    mr: &'a RemoteMr,
+pub struct RemoteMrSlice {
+    mr: RemoteMr,
     range: std::ops::Range<usize>,
 }
 
 impl RemoteMr {
     pub fn slice(&self, range: impl RangeBounds<usize>) -> RemoteMrSlice {
         RemoteMrSlice {
-            mr: self,
-            range: todo!(),
+            mr: *self,
+            range: match (range.start_bound().cloned(), range.end_bound().cloned()) {
+                (Included(a), Included(b)) => a..b + 1,
+                (Included(a), Excluded(b)) => a..b,
+                (Included(_), std::ops::Bound::Unbounded) => todo!(),
+                (Excluded(a), Included(b)) => a + 1..b + 1,
+                (Excluded(a), Excluded(b)) => a + 1..b,
+                (Excluded(_), std::ops::Bound::Unbounded) => todo!(),
+                (std::ops::Bound::Unbounded, Included(_)) => todo!(),
+                (std::ops::Bound::Unbounded, Excluded(_)) => todo!(),
+                (std::ops::Bound::Unbounded, std::ops::Bound::Unbounded) => todo!(),
+            },
         }
     }
 }
