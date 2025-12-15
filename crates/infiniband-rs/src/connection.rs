@@ -114,8 +114,10 @@ impl IbConnection {
         Ok([].into_iter())
     }
 
+    // unsafe functions
+
     /// # Safety
-    /// The caller must ensure that the work request is polled to completion before the end of `'a`.
+    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
     pub unsafe fn send_unpolled<'a>(
         &mut self,
         data: &'a [u8],
@@ -126,8 +128,34 @@ impl IbConnection {
     }
 
     /// # Safety
-    /// The caller must ensure that the work request is polled to completion before the end of `'a`.
+    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
     pub unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
+        todo!()
+    }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo, do we need to make it unsafe if it does unsafe things on the *other* side?
+    ///
+    /// Furthermore, he caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_write<'a>(
+        &mut self,
+        data: &'a [u8],
+        remote_slice: RemoteMrSlice<'a>,
+    ) -> Result<WorkRequest<'a>> {
+        todo!()
+    }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo
+    ///
+    /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_read<'a>(
+        &mut self,
+        remote_slice: RemoteMrSlice<'a>,
+        data: &'a mut [u8],
+    ) -> Result<WorkRequest<'a>> {
         todo!()
     }
 }
