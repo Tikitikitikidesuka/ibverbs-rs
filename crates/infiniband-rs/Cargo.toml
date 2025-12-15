@@ -9,7 +9,10 @@ repository.workspace = true
 ibverbs-sys = "0.3.2"
 log = "0.4.29"
 nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] }
-typed-builder = "0.23.2"
+thiserror.workspace = true
+serde.workspace = true
+bincode.workspace = true
+tokio = {version= "1.48", features = ["net",  "io-util", "time", "rt"]}
 
 [[bin]]
 path = "bin/demo.rs"

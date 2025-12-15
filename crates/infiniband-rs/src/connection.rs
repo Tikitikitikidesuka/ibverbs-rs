@@ -1,11 +1,16 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::error::Error;
 use std::io;
 use std::marker::PhantomData;
+use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
-use crate::bindings;
+
+use crate::unsafe_member::UnsafeMember;
+
+pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
 pub struct IbConnection {
     //mrs: HashMap<String, Mr>,
@@ -17,7 +22,7 @@ impl IbConnection {
         todo!()
     }
 
-    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> io::Result<()> {
+    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> Result {
         //self.inner.register_mr(name, region)
         todo!()
     }
@@ -34,12 +39,12 @@ impl IbConnection {
     // Safety: When sharing an mr, it is exposed to be mutated remotely
     // by the peer at any point. It is the user's responsibility to ensure
     // a protocol to comply with Rust's memory safety guarantees.
-    pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
+    pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> Result {
         //self.inner.share_mr(mr)
         todo!()
     }
 
-    pub fn accept_shared_mr(&mut self) -> io::Result<RemoteMr> {
+    pub fn accept_shared_mr(&mut self) -> Result<RemoteMr> {
         //self.inner.accept_shared_mr()
         todo!()
     }
@@ -49,122 +54,240 @@ impl IbConnection {
         todo!()
     }
 
-    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
+    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
         //self.inner.deregister_mr(mr)
         todo!()
     }
 
-    // Scoping solves the problem of users being able to access memory regions scheduled for
-    // an RDMA operation before it is complete. If the methods to send, receive, read, write, etc,
-    // were in this class, the returned work requests could be dropped before the operation finished.
-    // If the work requests implemented a Drop trait to poll before being dropped, the user could
-    // forget them beforehand safely anyway, and so access the memory before the operation finished.
-    // The solution for this, as proposed by Jonatan, is to use the same scoping method as the one used
-    // for scoped treads. In this way, the created work requests have a well defined lifetime —that of
-    // the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
-    // If they have not been polled at the end of the scope, they will be polled automatically.
-    pub fn scope<R>(&mut self, f: impl FnOnce(&mut IbConnectionScope) -> R) -> R {
+    /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
+    ///
+    /// Scoping solves the problem of users being able to access memory regions scheduled for
+    /// an RDMA operation before it is complete. If the methods to send, receive, read, write, etc,
+    /// were in this class, the returned work requests could be dropped before the operation finished.
+    /// If the work requests implemented a Drop trait to poll before being dropped, the user could
+    /// forget them beforehand safely anyway, and so access the memory before the operation finished.
+    /// The solution for this, as proposed by Jonatan, is to use the same scoping method as the one used
+    /// for scoped treads. In this way, the created work requests have a well defined lifetime —that of
+    /// the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
+    /// If they have not been polled at the end of the scope, they will be polled automatically.
+    // pub fn scope<'env, F, R>(&mut self, f: F) -> Result<R>
+    // where
+    //     F: for<'scope> FnOnce(&'scope mut IbConnectionScope<'scope, 'env>) -> Result<R>,
+    // {
+    //     todo!()
+    // }
+
+    // todo do those actually need mutable access?
+
+    // todo do we want to return the poll duration / number of local bytes written?
+    // todo do these functions assert that the slice length maches exact? how would we do that?
+    // todo what about immediate data? extra function or include?
+    pub fn send<'a>(&mut self, data: &'a [u8]) -> Result<()> {
+        todo!()
+    }
+
+    pub fn send_immediate<'a>(&mut self, immediate: u32) -> Result<()> {
+        todo!()
+    }
+
+    pub fn send_with_immediate<'a>(&mut self, data: &'a [u8], immediate: u32) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive<'a>(&mut self, data: &'a mut [u8]) -> Result<Option<u32>> {
+        todo!()
+    }
+
+    pub fn receive_immediate<'a>(&mut self) -> Result<u32> {
+        todo!()
+    }
+
+    pub fn send_paralell<'a>(
+        &mut self,
+        data: impl Iterator<Item = (&'a [u8], Option<u32>)>,
+    ) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive_paralell<'a>(
+        &mut self,
+        data: impl Iterator<Item = &'a mut [u8]>,
+    ) -> Result<impl Iterator<Item = Option<u32>>> {
+        todo!();
+        Ok([].into_iter())
+    }
+
+    // unsafe functions
+
+    /// # Safety
+    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn send_unpolled<'a>(
+        &mut self,
+        data: &'a [u8],
+        immediate: Option<u32>,
+    ) -> Result<WorkRequest<'a>> {
+        // todo if data.is_empty() only send immediate
+        todo!()
+    }
+
+    /// # Safety
+    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
+        todo!()
+    }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo, do we need to make it unsafe if it does unsafe things on the *other* side?
+    ///
+    /// Furthermore, he caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_write<'a>(
+        &mut self,
+        data: &'a [u8],
+        remote_slice: RemoteMrSlice,
+    ) -> Result<WorkRequest<'a>> {
+        todo!()
+    }
+
+    /// # Safety
+    /// This method is unsafe because ...
+    /// todo
+    ///
+    /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
+    pub unsafe fn remote_read<'a>(
+        &mut self,
+        remote_slice: RemoteMrSlice,
+        data: &'a mut [u8],
+    ) -> Result<WorkRequest<'a>> {
         todo!()
     }
 }
 
-pub struct IbConnectionScope<'scope> {
-    inner: &'scope mut IbConnection,
-    wrs: Vec<WorkRequest<'scope>>,
-    cq: Rc<RefCell<CachedCompletionQueue>>,
-}
+// pub struct IbConnectionScope<'scope, 'env: 'scope> {
+//     inner: &'scope mut IbConnection,
+//     wrs: Vec<WorkRequest<'scope>>,
+//     cq: Rc<RefCell<CachedCompletionQueue>>,
+//     // for invariance of lifetimes, see std::thread::scope
+//     scope: PhantomData<&'scope mut &'scope ()>,
+//     env: PhantomData<&'env mut &'env ()>,
+// }
 
-impl<'scope> IbConnectionScope<'scope> {
-    // The slice cannot be used again until the work request is consumed,
-    // so no overlapping sends can be done concurrently
-    pub fn post_send<'a>(&mut self, slice: &'a [u8]) -> io::Result<WorkRequest<'a>> {
-        // TODO: Post to infiniband hardware
+// impl<'scope, 'env> From<WorkRequest<'env>> for ScopedWorkRequest<'scope, 'env> {
+//     fn from(value: WorkRequest<'env>) -> Self {
+//         ScopedWorkRequest {
+//             inner: value,
+//             env: PhantomData,
+//         }
+//     }
+// }
 
-        let wr = WorkRequest {
-            wr_id: 0, // Whatever id it is
-            cq: self.cq.clone(),
-            _data_lifetime: PhantomData,
-        };
+// impl<'scope, 'env> IbConnectionScope<'scope, 'env> {
+//     // The slice cannot be used again until the work request is consumed,
+//     // so no overlapping sends can be done concurrently
+//     pub fn post_send(
+//         &'scope mut self,
+//         slice: &'env [u8],
+//     ) -> Result<ScopedWorkRequest<'scope, 'env>> {
+//         // TODO: Post to infiniband hardware
 
-        self.wrs.push(wr.clone());
+//         let wr = WorkRequest {
+//             wr_id: 0, // Whatever id it is
+//             cq: self.cq.clone(),
+//             _data_lifetime: PhantomData,
+//         };
 
-        Ok(wr)
-    }
+//         self.wrs.push(wr.clone());
 
-    // The slice cannot be used again until the work request is consumed,
-    // so no overlapping receives can be done concurrently
-    pub fn post_receive<'a>(&mut self, slice: &'a mut [u8]) -> io::Result<WorkRequest<'a>> {
-        // TODO: Post to infiniband hardware
+//         Ok(wr.into())
+//     }
 
-        let wr = WorkRequest {
-            wr_id: 0, // Whatever id it is
-            cq: self.cq.clone(),
-            _data_lifetime: PhantomData,
-        };
+//     // The slice cannot be used again until the work request is consumed,
+//     // so no overlapping receives can be done concurrently
+//     pub fn post_receive(
+//         &'scope mut self,
+//         slice: &'env mut [u8],
+//     ) -> Result<ScopedWorkRequest<'scope, 'env>> {
+//         // TODO: Post to infiniband hardware
 
-        self.wrs.push(wr.clone());
+//         let wr = WorkRequest {
+//             wr_id: 0, // Whatever id it is
+//             cq: self.cq.clone(),
+//             _data_lifetime: PhantomData,
+//         };
 
-        Ok(wr)
-    }
+//         self.wrs.push(wr.clone());
 
-    // Safety: The data at the remote memory region might be modified while the read is done.
-    // It is the user's responsibility to ensure it is stable while the read is in progress.
-    pub unsafe fn post_read<'a>(
-        &mut self,
-        from_slice: &RemoteMrSlice,
-        into_slice: &'a mut [u8],
-    ) -> io::Result<WorkRequest<'a>> {
-        // TODO: Post to infiniband hardware
+//         Ok(wr.into())
+//     }
 
-        let wr = WorkRequest {
-            wr_id: 0, // Whatever id it is
-            cq: self.cq.clone(),
-            _data_lifetime: PhantomData,
-        };
+//     // Safety: The data at the remote memory region might be modified while the read is done.
+//     // It is the user's responsibility to ensure it is stable while the read is in progress.
+//     pub unsafe fn post_read(
+//         &'scope mut self,
+//         from_slice: &'env RemoteMrSlice,
+//         into_slice: &'env mut [u8],
+//     ) -> Result<ScopedWorkRequest<'scope, 'env>> {
+//         // TODO: Post to infiniband hardware
 
-        self.wrs.push(wr.clone());
+//         let wr = WorkRequest {
+//             wr_id: 0, // Whatever id it is
+//             cq: self.cq.clone(),
+//             _data_lifetime: PhantomData,
+//         };
 
-        Ok(wr)
-    }
+//         self.wrs.push(wr.clone());
 
-    // Safety: The data at the remote memory region will be modified regardless of its mutability
-    // status. It is the user's responsibility to ensure no use of the memory is being done concurrently.
-    pub unsafe fn post_write<'a>(
-        &mut self,
-        from_slice: &'a [u8],
-        into_slice: &RemoteMrSlice,
-    ) -> io::Result<WorkRequest<'a>> {
-        // TODO: Post to infiniband hardware
+//         Ok(wr.into())
+//     }
 
-        let wr = WorkRequest {
-            wr_id: 0, // Whatever id it is
-            cq: self.cq.clone(),
-            _data_lifetime: PhantomData,
-        };
+//     // Safety: The data at the remote memory region will be modified regardless of its mutability
+//     // status. It is the user's responsibility to ensure no use of the memory is being done concurrently.
+//     pub unsafe fn post_write(
+//         &'scope mut self,
+//         from_slice: &'env [u8],
+//         into_slice: &'env RemoteMrSlice,
+//     ) -> Result<ScopedWorkRequest<'scope, 'env>> {
+//         // TODO: Post to infiniband hardware
 
-        self.wrs.push(wr.clone());
+//         let wr = WorkRequest {
+//             wr_id: 0, // Whatever id it is
+//             cq: self.cq.clone(),
+//             _data_lifetime: PhantomData,
+//         };
 
-        Ok(wr)
-    }
-}
+//         self.wrs.push(wr.clone());
+
+//         Ok(wr.into())
+//     }
+// }
 
 pub struct CachedCompletionQueue;
 
+// pub struct ScopedWorkRequest<'scope, 'env: 'scope> {
+//     inner: WorkRequest<'env>,
+//     env: PhantomData<&'scope mut &'scope ()>,
+// }
+
 #[derive(Clone)]
-pub struct WorkRequest<'a> {
+pub struct WorkRequest<'env> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    _data_lifetime: PhantomData<&'a [u8]>,
+    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
+    _data_lifetime: UnsafeMember<PhantomData<&'env [u8]>>,
 }
 
 pub struct WorkCompletion;
 
+impl WorkCompletion {
+    pub fn immediate_data(&self) -> Option<u32> {
+        todo!()
+    }
+}
+
 type WorkRequestStatus = Option<WorkCompletionResult>;
-type WorkCompletionResult = Result<WorkCompletion, io::Error>;
+type WorkCompletionResult = Result<WorkCompletion>;
 
-
-
-impl WorkRequest {
+impl WorkRequest<'_> {
     // Returns None if the work request is not yet complete.
     // Otherwise returns the completion status of the work request.
     // The completion status can be Ok(WorkCompletion) or Err(io::Error).
@@ -175,7 +298,7 @@ impl WorkRequest {
 
     // Polls the work request until it is complete or the timeout is reached.
     // Timeout is represented as None ouptut.
-    fn spin_poll(&mut self, timeout: Duration) -> Option<WorkCompletionResult> {
+    pub fn spin_poll(&mut self, timeout: Duration) -> Option<WorkCompletionResult> {
         const ELAPSED_CHECK_ITERS: usize = 1024;
         self.spin_poll_batched::<ELAPSED_CHECK_ITERS>(timeout)
     }
@@ -185,7 +308,7 @@ impl WorkRequest {
     // To avoid getting time every iteration,
     // only check timeout every ELAPSED_CHECK_ITERS iterations.
     // For performance, this should be a power of 2 (for the modulus operation).
-    fn spin_poll_batched<const TIMEOUT_CHECK_ITERS: usize>(
+    pub fn spin_poll_batched<const TIMEOUT_CHECK_ITERS: usize>(
         &mut self,
         timeout: Duration,
     ) -> Option<WorkCompletionResult> {
@@ -216,21 +339,34 @@ pub struct Mr {
     mr: *const ibv_mr,
 }
 
-
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMr {
     endpoint: (),
 }
 
+// todo why take a reference if `RemoteMr' is `Copy`?
 #[derive(Debug)]
-pub struct RemoteMrSlice<'a> {
-    mr: &'a RemoteMr,
+pub struct RemoteMrSlice {
+    mr: RemoteMr,
     range: std::ops::Range<usize>,
 }
 
 impl RemoteMr {
     pub fn slice(&self, range: impl RangeBounds<usize>) -> RemoteMrSlice {
-        RemoteMrSlice { mr: self, range }
+        RemoteMrSlice {
+            mr: *self,
+            range: match (range.start_bound().cloned(), range.end_bound().cloned()) {
+                (Included(a), Included(b)) => a..b + 1,
+                (Included(a), Excluded(b)) => a..b,
+                (Included(_), std::ops::Bound::Unbounded) => todo!(),
+                (Excluded(a), Included(b)) => a + 1..b + 1,
+                (Excluded(a), Excluded(b)) => a + 1..b,
+                (Excluded(_), std::ops::Bound::Unbounded) => todo!(),
+                (std::ops::Bound::Unbounded, Included(_)) => todo!(),
+                (std::ops::Bound::Unbounded, Excluded(_)) => todo!(),
+                (std::ops::Bound::Unbounded, std::ops::Bound::Unbounded) => todo!(),
+            },
+        }
     }
 }
 
