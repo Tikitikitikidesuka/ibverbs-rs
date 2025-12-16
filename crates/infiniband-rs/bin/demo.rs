@@ -1,7 +1,5 @@
-use ibverbs_sys::ibv_access_flags;
+use infiniband_rs::connection::builder::IbvConnectionBuilder;
 use infiniband_rs::devices::ibv_device_list;
-use infiniband_rs::queue_pair_builder::AccessFlags;
-use std::ptr::slice_from_raw_parts_mut;
 
 const DEVICE: &str = "mlx5_0";
 
@@ -18,39 +16,54 @@ fn main() {
 
     let ctx = device.open().unwrap();
 
-    drop(devices);
-
-    println!("{ctx:?}");
-
-    let cq = ctx.create_cq(3, 0).unwrap();
-
-    println!("{cq:?}");
-
-    let pd = ctx.allocate_pd().unwrap();
-
-    println!("{pd:?}");
+    let prep_conn = IbvConnectionBuilder::new(&ctx).build().unwrap();
+    let endpoint = prep_conn.endpoint();
+    let mut conn = prep_conn.handshake(endpoint).unwrap();
 
     let mut memory = vec![0u8; 1024];
-    let mr = unsafe {
-        pd.register_mr_with_permissions(
-            slice_from_raw_parts_mut(memory.as_mut_ptr(), memory.len()),
-            ibv_access_flags::IBV_ACCESS_LOCAL_WRITE,
-        )
-    }
+    let mr = conn
+        .register_mr("asdf", memory.as_mut_ptr(), memory.len())
+        .unwrap();
+
+    println!("{conn:?}");
+
+    conn.send(&[
+        mr.prepare_send(&memory[0..4]).unwrap(),
+        mr.prepare_send(&memory[4..8]).unwrap(),
+        mr.prepare_send(&memory[8..12]).unwrap(),
+        mr.prepare_send(&memory[12..16]).unwrap(),
+    ])
     .unwrap();
 
-    println!("{mr:?}");
+    let (mem_0, rest) = memory.split_at_mut(4);
+    let (mem_1, rest) = rest.split_at_mut(4);
+    let (mem_2, rest) = rest.split_at_mut(4);
+    let (mem_3, rest) = rest.split_at_mut(4);
+    conn.receive(&mut [
+        mr.prepare_receive(mem_0).unwrap(),
+        mr.prepare_receive(mem_1).unwrap(),
+        mr.prepare_receive(mem_2).unwrap(),
+        mr.prepare_receive(mem_3).unwrap(),
+    ])
+    .unwrap();
 
-    let qp = pd.create_qp(&cq, &cq).with_access_flags(
-        AccessFlags::new()
-            .with_local_write()
-            .with_remote_read()
-            .with_remote_write(),
-    ).build().unwrap();
+    conn.send(vec![
+        mr.prepare_send(&memory[0..4]).unwrap(),
+        mr.prepare_send(&memory[4..8]).unwrap(),
+        mr.prepare_send(&memory[8..12]).unwrap(),
+        mr.prepare_send(&memory[12..16]).unwrap(),
+    ])
+    .unwrap();
 
-    println!("{qp:?}");
-    let qp_endpoint = qp.endpoint();
-    println!("Endpoint: {qp_endpoint:?}");
-    let qp = qp.handshake(qp_endpoint).unwrap();
-    println!("{qp:?}");
+    let (mem_0, rest) = memory.split_at_mut(4);
+    let (mem_1, rest) = rest.split_at_mut(4);
+    let (mem_2, rest) = rest.split_at_mut(4);
+    let (mem_3, rest) = rest.split_at_mut(4);
+    conn.receive(vec![
+        mr.prepare_receive(mem_0).unwrap(),
+        mr.prepare_receive(mem_1).unwrap(),
+        mr.prepare_receive(mem_2).unwrap(),
+        mr.prepare_receive(mem_3).unwrap(),
+    ])
+    .unwrap();
 }

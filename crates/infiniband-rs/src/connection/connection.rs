@@ -4,6 +4,7 @@ use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
 use crate::unsafe_member::UnsafeMember;
+use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
@@ -30,7 +31,7 @@ impl IbvConnection {
         name: impl Into<String>,
         address: *mut u8,
         length: usize,
-    ) -> Result {
+    ) -> io::Result<IbvConnMr> {
         let name = name.into();
         if self.mrs.contains_key(&name) {
             return Err(io::Error::new(
@@ -52,9 +53,15 @@ impl IbvConnection {
             )?
         };
 
+        let out_mr = IbvConnMr {
+            lkey: mr.lkey(),
+            address: mr.address(),
+            length: mr.length(),
+        };
+
         self.mrs.insert(name, mr);
 
-        Ok(())
+        Ok(out_mr)
     }
 
     pub fn register_dmabuf_mr(
@@ -64,7 +71,7 @@ impl IbvConnection {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> Result {
+    ) -> io::Result<IbvConnMr> {
         let name = name.into();
         if self.mrs.contains_key(&name) {
             return Err(io::Error::new(
@@ -88,9 +95,23 @@ impl IbvConnection {
             )?
         };
 
+        let out_mr = IbvConnMr {
+            lkey: mr.lkey(),
+            address: mr.address(),
+            length: mr.length(),
+        };
+
         self.mrs.insert(name, mr);
 
-        Ok(())
+        Ok(out_mr)
+    }
+
+    pub fn get_mr(&self, name: impl AsRef<str>) -> Option<IbvConnMr> {
+        self.mrs.get(name.as_ref()).map(|mr| IbvConnMr {
+            lkey: mr.lkey(),
+            address: mr.address(),
+            length: mr.length(),
+        })
     }
 
     // Safety: When sharing an mr, it is exposed to be mutated remotely
@@ -111,7 +132,7 @@ impl IbvConnection {
         todo!()
     }
 
-    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
+    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
         let name = name.as_ref();
         if let None = self.mrs.remove(name) {
             Err(io::Error::new(
@@ -141,62 +162,46 @@ impl IbvConnection {
     //     todo!()
     // }
 
-    // todo do those actually need mutable access?
+    // todo do those actually need mutable access? -> Probably not
 
-    // todo do we want to return the poll duration / number of local bytes written?
+    // todo do we want to return the poll duration / number of local bytes written? -> Work completions with all the info
     // todo do these functions assert that the slice length maches exact? how would we do that?
     // todo what about immediate data? extra function or include?
-    pub fn send<'a>(&mut self, data: &'a [u8]) -> Result<()> {
+    pub fn send<'a, I>(&mut self, data: I) -> Result<()>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<IbvConnSend<'a>>,
+    {
         todo!()
     }
 
-    pub fn send_immediate<'a>(&mut self, immediate: u32) -> Result<()> {
+    pub fn receive<'a, I>(&mut self, data: I) -> Result<()>
+    where
+        I: IntoIterator,
+        I::Item: BorrowMut<IbvConnReceive<'a>>,
+    {
         todo!()
-    }
-
-    pub fn send_with_immediate<'a>(&mut self, data: &'a [u8], immediate: u32) -> Result<()> {
-        todo!()
-    }
-
-    pub fn receive<'a>(&mut self, data: &'a mut [u8]) -> Result<Option<u32>> {
-        todo!()
-    }
-
-    pub fn receive_immediate<'a>(&mut self) -> Result<u32> {
-        todo!()
-    }
-
-    pub fn send_paralell<'a>(
-        &mut self,
-        data: impl Iterator<Item = (&'a [u8], Option<u32>)>,
-    ) -> Result<()> {
-        todo!()
-    }
-
-    pub fn receive_paralell<'a>(
-        &mut self,
-        data: impl Iterator<Item = &'a mut [u8]>,
-    ) -> Result<impl Iterator<Item = Option<u32>>> {
-        todo!();
-        Ok([].into_iter())
     }
 
     // unsafe functions
 
     /// # Safety
-    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
-    pub unsafe fn send_unpolled<'a>(
-        &mut self,
-        data: &'a [u8],
-        immediate: Option<u32>,
-    ) -> Result<WorkRequest<'a>> {
-        // todo if data.is_empty() only send immediate
+    /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
+    pub unsafe fn send_unpolled<'a, I>(&mut self, data: I) -> Result<WorkRequest<'a>>
+    where
+        I: IntoIterator,
+        I::Item: Borrow<IbvConnSend<'a>>,
+    {
         todo!()
     }
 
     /// # Safety
-    /// The caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
-    pub unsafe fn receive_unpolled<'a>(&mut self, data: &'a mut [u8]) -> Result<WorkRequest<'a>> {
+    /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
+    pub unsafe fn receive_unpolled<'a, I>(&mut self, data: I) -> Result<WorkRequest<'a>>
+    where
+        I: IntoIterator,
+        I::Item: BorrowMut<IbvConnReceive<'a>>,
+    {
         todo!()
     }
 
@@ -398,16 +403,63 @@ impl WorkRequest<'_> {
 // Safety: memory of an mr not allowed to move
 // Can only be mutated locally by user or receive
 #[derive(Debug, Copy, Clone)]
-pub struct Mr {
-    lkey: *const u32,
+pub struct IbvConnMr {
+    lkey: u32,
+    address: *const u8,
+    length: usize,
 }
 
-pub struct MrSlice {
-    mr: Mr,
-    range: std::ops::Range<usize>,
+impl IbvConnMr {
+    pub fn prepare_send<'a>(&self, data: &'a [u8]) -> Option<IbvConnSend<'a>> {
+        self.data_is_contained(data.as_ptr(), data.len())
+            .then_some(IbvConnSend {
+                lkey: self.lkey,
+                data,
+                imm_data: None,
+            })
+    }
+
+    pub fn prepare_send_with_imm<'a>(
+        &self,
+        data: &'a [u8],
+        imm_data: u32,
+    ) -> Option<IbvConnSend<'a>> {
+        self.data_is_contained(data.as_ptr(), data.len())
+            .then_some(IbvConnSend {
+                lkey: self.lkey,
+                data,
+                imm_data: Some(imm_data),
+            })
+    }
+
+    pub fn prepare_receive<'a>(&self, data: &'a mut [u8]) -> Option<IbvConnReceive<'a>> {
+        self.data_is_contained(data.as_ptr(), data.len())
+            .then_some(IbvConnReceive {
+                lkey: self.lkey,
+                data,
+            })
+    }
+
+    fn data_is_contained(&self, data_address: *const u8, data_length: usize) -> bool {
+        let mr_start = self.address as usize;
+        let mr_end = mr_start + self.length;
+        let data_start = data_address as usize;
+        let data_end = data_start + data_length;
+        data_start >= mr_start && data_end <= mr_end
+    }
 }
 
-impl MrSlice {}
+#[derive(Copy, Clone)]
+pub struct IbvConnSend<'a> {
+    lkey: u32,
+    data: &'a [u8],
+    imm_data: Option<u32>,
+}
+
+pub struct IbvConnReceive<'a> {
+    lkey: u32,
+    data: &'a mut [u8],
+}
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMr {
