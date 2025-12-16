@@ -13,7 +13,7 @@ pub(super) const IB_PORT: u8 = 1;
 
 #[derive(Debug)]
 pub struct IbvContext {
-    inner: Arc<IbvContextInner>,
+    pub(super) inner: Arc<IbvContextInner>,
 }
 
 impl IbvContext {
@@ -27,7 +27,7 @@ impl IbvContext {
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     // TODO: This should not be public... This library will expose a connection as an atomic unit
-    pub fn create_cq(&self, min_cq_entries: i32, id: isize) -> io::Result<IbvCompletionQueue> {
+    pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<IbvCompletionQueue> {
         IbvCompletionQueue::create(self.inner.clone(), min_cq_entries, id)
     }
 

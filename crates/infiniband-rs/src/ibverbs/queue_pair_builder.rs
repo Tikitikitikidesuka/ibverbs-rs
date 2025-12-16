@@ -110,22 +110,22 @@ impl IbvRcQueuePairBuilder {
         }
     }
 
-    pub fn with_max_send_wr(&mut self, max_send_wr: u32) -> &mut Self {
+    pub fn with_max_send_wrs(&mut self, max_send_wr: u32) -> &mut Self {
         self.max_send_wr = max_send_wr;
         self
     }
 
-    pub fn with_max_send_sge(&mut self, max_send_sge: u32) -> &mut Self {
+    pub fn with_max_send_sges(&mut self, max_send_sge: u32) -> &mut Self {
         self.max_send_sge = max_send_sge;
         self
     }
 
-    pub fn with_max_recv_wr(&mut self, max_recv_wr: u32) -> &mut Self {
+    pub fn with_max_recv_wrs(&mut self, max_recv_wr: u32) -> &mut Self {
         self.max_recv_wr = max_recv_wr;
         self
     }
 
-    pub fn with_max_recv_sge(&mut self, max_recv_sge: u32) -> &mut Self {
+    pub fn with_max_recv_sges(&mut self, max_recv_sge: u32) -> &mut Self {
         self.max_recv_sge = max_recv_sge;
         self
     }
@@ -181,6 +181,12 @@ impl AccessFlags {
     pub fn with_remote_write(mut self) -> Self {
         self.inner |= ibv_access_flags::IBV_ACCESS_REMOTE_WRITE;
         self
+    }
+}
+
+impl From<AccessFlags> for ibv_access_flags {
+    fn from(value: AccessFlags) -> Self {
+        value.inner
     }
 }
 

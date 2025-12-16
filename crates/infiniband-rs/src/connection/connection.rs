@@ -1,6 +1,11 @@
+use crate::ibverbs::completion_queue::IbvCompletionQueue;
+use crate::ibverbs::memory_region::IbvMemoryRegion;
+use crate::ibverbs::protection_domain::IbvProtectionDomain;
+use crate::ibverbs::queue_pair::IbvQueuePair;
+use crate::ibverbs::queue_pair_builder::AccessFlags;
+use crate::unsafe_member::UnsafeMember;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::error::Error;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Bound::{Excluded, Included};
@@ -8,32 +13,84 @@ use std::ops::RangeBounds;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use crate::unsafe_member::UnsafeMember;
-
 pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
-pub struct IbConnection {
-    //mrs: HashMap<String, Mr>,
+#[derive(Debug)]
+pub struct IbvConnection {
+    pub(super) cq: IbvCompletionQueue,
+    pub(super) pd: IbvProtectionDomain,
+    pub(super) qp: IbvQueuePair,
+    pub(super) mrs: HashMap<String, IbvMemoryRegion>,
     //remote_mrs: HashMap<String, RemoteMr>,
 }
 
-impl IbConnection {
-    pub fn new() {
-        todo!()
-    }
+impl IbvConnection {
+    pub fn register_mr(
+        &mut self,
+        name: impl Into<String>,
+        address: *mut u8,
+        length: usize,
+    ) -> Result {
+        let name = name.into();
+        if self.mrs.contains_key(&name) {
+            return Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                format!("memory region \"{name}\" already registered"),
+            ));
+        }
 
-    pub fn register_mr(&mut self, name: impl Into<String>, region: *mut [u8]) -> Result {
-        //self.inner.register_mr(name, region)
-        todo!()
+        let mr = unsafe {
+            self.pd.register_mr_with_permissions(
+                address,
+                length,
+                // TODO: Start with only local_write and add remote_read and remote_write when shared
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write()
+                    .into(),
+            )?
+        };
+
+        self.mrs.insert(name, mr);
+
+        Ok(())
     }
 
     pub fn register_dmabuf_mr(
         &mut self,
         name: impl Into<String>,
         fd: i32,
-        region: *mut [u8],
-    ) -> io::Result<()> {
-        todo!()
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> Result {
+        let name = name.into();
+        if self.mrs.contains_key(&name) {
+            return Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                format!("memory region \"{name}\" already registered"),
+            ));
+        }
+
+        let mr = unsafe {
+            self.pd.register_dmabuf(
+                fd,
+                offset,
+                length,
+                iova,
+                // TODO: Start with only local_write and add remote_read and remote_write when shared
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write()
+                    .into(),
+            )?
+        };
+
+        self.mrs.insert(name, mr);
+
+        Ok(())
     }
 
     // Safety: When sharing an mr, it is exposed to be mutated remotely
@@ -55,8 +112,15 @@ impl IbConnection {
     }
 
     pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
-        //self.inner.deregister_mr(mr)
-        todo!()
+        let name = name.as_ref();
+        if let None = self.mrs.remove(name) {
+            Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("memory region \"{name}\" not registered"),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -333,11 +397,17 @@ impl WorkRequest<'_> {
 
 // Safety: memory of an mr not allowed to move
 // Can only be mutated locally by user or receive
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Mr {
-    ptr: *mut [u8],
-    mr: *const ibv_mr,
+    lkey: *const u32,
 }
+
+pub struct MrSlice {
+    mr: Mr,
+    range: std::ops::Range<usize>,
+}
+
+impl MrSlice {}
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMr {
@@ -369,5 +439,3 @@ impl RemoteMr {
         }
     }
 }
-
-type ibv_mr = u8;

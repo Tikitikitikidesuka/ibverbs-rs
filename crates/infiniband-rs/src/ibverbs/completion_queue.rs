@@ -22,9 +22,19 @@ impl IbvCompletionQueue {
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     pub(super) fn create(
         context: Arc<IbvContextInner>,
-        min_cq_entries: i32,
+        min_cq_entries: u32,
         id: isize,
     ) -> io::Result<Self> {
+        let min_cq_entries = min_cq_entries.try_into().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "invalid min_cq_entries ({min_cq_entries}) \
+                        (must be 1 and dev_cap.max_cqe)"
+                ),
+            )
+        })?;
+
         let cc = unsafe { ibv_create_comp_channel(context.ctx) };
         if cc.is_null() {
             return Err(io::Error::last_os_error());
@@ -70,6 +80,24 @@ impl IbvCompletionQueue {
             Ok(IbvCompletionQueue {
                 inner: Arc::new(IbvCompletionQueueInner { context, cc, cq }),
             })
+        }
+    }
+
+    pub fn poll<'c>(&self, completions: &'c mut [ibv_wc]) -> io::Result<&'c mut [ibv_wc]> {
+        let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
+        let ops = &mut unsafe { &mut *ctx }.ops;
+        let n = unsafe {
+            ops.poll_cq.as_mut().unwrap()(
+                self.inner.cq,
+                completions.len() as i32,
+                completions.as_mut_ptr(),
+            )
+        };
+
+        if n < 0 {
+            Err(io::Error::other("ibv_poll_cq failed"))
+        } else {
+            Ok(&mut completions[0..n as usize])
         }
     }
 }

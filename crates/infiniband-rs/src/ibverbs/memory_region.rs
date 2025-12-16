@@ -2,6 +2,7 @@ use crate::protection_domain::IbvProtectionDomainInner;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
+use std::slice::from_raw_parts_mut;
 use std::sync::Arc;
 
 pub struct IbvMemoryRegion {
@@ -81,17 +82,28 @@ impl IbvMemoryRegion {
         iova: u64,
         access_flags: ibv_access_flags,
     ) -> io::Result<IbvMemoryRegion> {
-        let mr = unsafe {
-            ibv_reg_dmabuf_mr(pd.pd, offset, len, iova, fd, access_flags.0 as i32)
-        };
+        let mr = unsafe { ibv_reg_dmabuf_mr(pd.pd, offset, len, iova, fd, access_flags.0 as i32) };
 
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {
-            Ok(IbvMemoryRegion {
-                pd,
-                mr,
-            })
+            Ok(IbvMemoryRegion { pd, mr })
         }
+    }
+
+    pub fn lkey(&self) -> u32 {
+        unsafe { *self.mr }.lkey
+    }
+
+    pub fn rkey(&self) -> u32 {
+        unsafe { *self.mr }.rkey
+    }
+
+    pub fn address(&self) -> *mut u8 {
+        unsafe { (*self.mr).addr as *mut u8 }
+    }
+
+    pub fn length(&self) -> usize {
+        unsafe { (*self.mr).length }
     }
 }
