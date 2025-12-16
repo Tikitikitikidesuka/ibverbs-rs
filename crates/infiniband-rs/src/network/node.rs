@@ -3,7 +3,7 @@ use std::time::Duration;
 use nix::poll::PollTimeout;
 
 use crate::{
-    connection::{self, IbConnection, RemoteMrSlice, WorkCompletion, WorkRequest},
+    connection::{self, IbvConnection, RemoteMrSlice, WorkCompletion, WorkRequest},
     network::{NetworkNodeError, Result},
 };
 
@@ -12,7 +12,7 @@ pub type Rank = usize;
 pub struct NetworkNode {
     // vec of connections to all nodes of the network
     // including self
-    pub(crate) connections: Vec<IbConnection>,
+    pub(crate) connections: Vec<IbvConnection>,
     rank: Rank,
     poll_timeout: Duration,
     barrier_counter: u32,
@@ -47,12 +47,14 @@ impl NetworkNode {
         &mut self,
         name: impl Into<String>,
         fd: i32,
-        region: *mut [u8],
+        offset: u64,
+        length: usize,
+        iova: u64,
     ) -> Result<()> {
         let name = name.into();
         self.connections_to_other()
             .map(|conn| {
-                conn.register_dmabuf_mr(name.clone(), fd, region)
+                conn.register_dmabuf_mr(name.clone(), fd, offset, length, iova)
                     .map_err(NetworkNodeError::from)
             })
             .collect::<Result<Vec<_>>>()?;
@@ -258,7 +260,7 @@ impl NetworkNode {
         }
     }
 
-    pub(crate) fn get_connection(&mut self, peer: usize) -> Result<&mut IbConnection> {
+    pub(crate) fn get_connection(&mut self, peer: usize) -> Result<&mut IbvConnection> {
         // todo allow self connection?
         if peer == self.rank {
             return Err(NetworkNodeError::SelfConnection);
@@ -276,7 +278,7 @@ impl NetworkNode {
         Ok(connection)
     }
 
-    fn connections_to_other(&mut self) -> impl Iterator<Item = &mut IbConnection> {
+    fn connections_to_other(&mut self) -> impl Iterator<Item = &mut IbvConnection> {
         self.connections
             .iter_mut()
             .enumerate()
