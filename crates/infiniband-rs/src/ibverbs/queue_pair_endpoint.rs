@@ -1,5 +1,3 @@
-use crate::global_id::IbvGid;
-
 /// An identifier for the network endpoint of a `QueuePair`.
 ///
 /// Internally, this contains the `QueuePair`'s `qp_num`, as well as the context's `lid` and `gid`.

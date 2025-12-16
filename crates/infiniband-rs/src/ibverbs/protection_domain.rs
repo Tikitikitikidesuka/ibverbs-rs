@@ -1,7 +1,7 @@
-use crate::completion_queue::IbvCompletionQueue;
-use crate::context::IbvContextInner;
-use crate::memory_region::IbvMemoryRegion;
-use crate::queue_pair_builder::IbvRcQueuePairBuilder;
+use crate::ibverbs::completion_queue::IbvCompletionQueue;
+use crate::ibverbs::context::IbvContextInner;
+use crate::ibverbs::memory_region::IbvMemoryRegion;
+use crate::ibverbs::queue_pair_builder::IbvRcQueuePairBuilder;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
@@ -30,11 +30,17 @@ impl IbvProtectionDomain {
     /// is not deallocated for as long as it is registered.
     pub unsafe fn register_mr_with_permissions(
         &self,
-        memory: *mut [u8],
+        address: *mut u8,
+        length: usize,
         access_flags: ibv_access_flags,
     ) -> io::Result<IbvMemoryRegion> {
         unsafe {
-            IbvMemoryRegion::register_with_permissions(self.inner.clone(), memory, access_flags)
+            IbvMemoryRegion::register_with_permissions(
+                self.inner.clone(),
+                address,
+                length,
+                access_flags,
+            )
         }
     }
 

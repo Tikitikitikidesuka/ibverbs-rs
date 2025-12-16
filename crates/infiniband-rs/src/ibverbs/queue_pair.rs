@@ -1,5 +1,4 @@
-use crate::memory_region::IbvMemoryRegion;
-use crate::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;

@@ -1,11 +1,9 @@
-use crate::completion_queue::{IbvCompletionQueue, IbvCompletionQueueInner};
-use crate::devices::IbvDevice;
-use crate::protection_domain::IbvProtectionDomain;
+use crate::ibverbs::completion_queue::IbvCompletionQueue;
+use crate::ibverbs::devices::IbvDevice;
+use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use ibverbs_sys::*;
-use std::ffi::c_void;
-use std::os::fd::BorrowedFd;
+use std::io;
 use std::sync::Arc;
-use std::{io, ptr};
 
 /// The first port (port #1) of each HCA is an InfiniBand port
 /// and the second port (port #2) is an Ethernet port.
@@ -48,14 +46,15 @@ impl IbvContext {
             return Err(io::Error::other("failed to open device"));
         }
 
-        let context = Self { inner: Arc::new(IbvContextInner { ctx: ibv_ctx }) };
+        let context = Self {
+            inner: Arc::new(IbvContextInner { ctx: ibv_ctx }),
+        };
 
         // Check that the port is active/armed.
         context.inner.query_port()?;
 
         Ok(context)
     }
-
 }
 
 pub(super) struct IbvContextInner {

@@ -1,7 +1,7 @@
-use crate::completion_queue::IbvCompletionQueueInner;
-use crate::prepared_queue_pair::IbvPreparedQueuePair;
-use crate::protection_domain::IbvProtectionDomainInner;
-use crate::queue_pair::IbvQueuePair;
+use crate::ibverbs::completion_queue::IbvCompletionQueueInner;
+use crate::ibverbs::prepared_queue_pair::IbvPreparedQueuePair;
+use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::queue_pair::IbvQueuePair;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::sync::Arc;

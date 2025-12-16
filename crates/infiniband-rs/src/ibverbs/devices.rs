@@ -1,8 +1,8 @@
-use crate::context::IbvContext;
+use crate::ibverbs::context::IbvContext;
+use crate::ibverbs::global_unique_id::Guid;
 use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
-use crate::global_unique_id::Guid;
 
 pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
     let mut n = 0i32;

@@ -1,8 +1,7 @@
-use crate::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
-use std::slice::from_raw_parts_mut;
 use std::sync::Arc;
 
 pub struct IbvMemoryRegion {
@@ -46,14 +45,15 @@ impl IbvMemoryRegion {
     /// is not deallocated for as long as it is registered.
     pub(super) unsafe fn register_with_permissions(
         pd: Arc<IbvProtectionDomainInner>,
-        memory: *mut [u8],
+        address: *mut u8,
+        length: usize,
         access_flags: ibv_access_flags,
     ) -> io::Result<IbvMemoryRegion> {
         let mr = unsafe {
             ibv_reg_mr(
                 pd.pd,
-                memory as *mut u8 as *mut c_void,
-                memory.len(),
+                address as *mut c_void,
+                length,
                 access_flags.0 as i32,
             )
         };

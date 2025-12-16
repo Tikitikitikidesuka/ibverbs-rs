@@ -1,8 +1,6 @@
-use crate::context::IB_PORT;
-use crate::global_id::IbvGid;
-use crate::queue_pair::IbvQueuePair;
-use crate::queue_pair_builder::MaximumTransferUnit;
-use crate::queue_pair_endpoint::IbvQueuePairEndpoint;
+use crate::ibverbs::context::IB_PORT;
+use crate::ibverbs::queue_pair::IbvQueuePair;
+use crate::ibverbs::queue_pair_endpoint::IbvQueuePairEndpoint;
 use ibverbs_sys::*;
 use std::io;
 

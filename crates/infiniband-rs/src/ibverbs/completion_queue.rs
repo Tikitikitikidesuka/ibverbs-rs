@@ -1,4 +1,4 @@
-use crate::context::IbvContextInner;
+use crate::ibverbs::context::IbvContextInner;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::os::fd::BorrowedFd;
