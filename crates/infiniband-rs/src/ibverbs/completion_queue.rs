@@ -22,14 +22,14 @@ impl IbvCompletionQueue {
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     pub(super) fn create(
         context: Arc<IbvContextInner>,
-        min_cq_entries: u32,
+        min_capacity: u32,
         id: isize,
     ) -> io::Result<Self> {
-        let min_cq_entries = min_cq_entries.try_into().map_err(|_| {
+        let min_cq_entries = min_capacity.try_into().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
-                    "invalid min_cq_entries ({min_cq_entries}) \
+                    "invalid min_cq_entries ({min_capacity}) \
                         (must be 1 and dev_cap.max_cqe)"
                 ),
             )
@@ -78,7 +78,12 @@ impl IbvCompletionQueue {
             Err(err)
         } else {
             Ok(IbvCompletionQueue {
-                inner: Arc::new(IbvCompletionQueueInner { context, cc, cq }),
+                inner: Arc::new(IbvCompletionQueueInner {
+                    context,
+                    cc,
+                    cq,
+                    min_capacity: min_cq_entries as u32,
+                }),
             })
         }
     }
@@ -100,12 +105,17 @@ impl IbvCompletionQueue {
             Ok(&mut completions[0..n as usize])
         }
     }
+
+    pub fn min_capacity(&self) -> u32 {
+        self.inner.min_capacity
+    }
 }
 
 pub(super) struct IbvCompletionQueueInner {
     pub(super) context: Arc<IbvContextInner>,
     pub(super) cq: *mut ibv_cq,
     pub(super) cc: *mut ibv_comp_channel,
+    pub(super) min_capacity: u32,
 }
 
 unsafe impl Send for IbvCompletionQueueInner {}
@@ -114,9 +124,9 @@ unsafe impl Sync for IbvCompletionQueueInner {}
 impl Drop for IbvCompletionQueueInner {
     fn drop(&mut self) {
         let cq = self.cq;
-        let debug_text = format!("{:?}", self);
         let errno = unsafe { ibv_destroy_cq(self.cq) };
         if errno != 0 {
+            let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
                 "({debug_text}) -> Failed to release completion queue with `ibv_destroy_cq({cq:p})`: {e}"
@@ -125,6 +135,7 @@ impl Drop for IbvCompletionQueueInner {
 
         let errno = unsafe { ibv_destroy_comp_channel(self.cc) };
         if errno != 0 {
+            let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
                 "({debug_text}) -> Failed to release completion channel with `ibv_destroy_cq({cq:p})`: {e}"

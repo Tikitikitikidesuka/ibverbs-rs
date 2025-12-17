@@ -1,3 +1,4 @@
+use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::prepared_connection::IbvPreparedConnection;
 use crate::context::IbvContext;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
@@ -48,7 +49,7 @@ impl<'c> IbvConnectionBuilder<'c> {
             .build()?;
 
         Ok(IbvPreparedConnection {
-            cq,
+            cq: IbvCachedCompletionQueue::wrap_cq(cq),
             pd,
             qp,
             mrs: HashMap::new(),

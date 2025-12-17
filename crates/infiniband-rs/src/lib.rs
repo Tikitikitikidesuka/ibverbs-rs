@@ -4,5 +4,3 @@ pub mod connection;
 mod ibverbs;
 pub use ibverbs::context;
 pub use ibverbs::devices;
-
-mod unsafe_member;

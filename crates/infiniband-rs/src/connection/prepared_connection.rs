@@ -6,10 +6,11 @@ use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::IbvQueuePairEndpoint;
 use std::collections::HashMap;
 use std::io;
+use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 
 #[derive(Debug)]
 pub struct IbvPreparedConnection {
-    pub(super) cq: IbvCompletionQueue,
+    pub(super) cq: IbvCachedCompletionQueue,
     pub(super) pd: IbvProtectionDomain,
     pub(super) qp: IbvPreparedQueuePair,
     pub(super) mrs: HashMap<String, IbvMemoryRegion>,

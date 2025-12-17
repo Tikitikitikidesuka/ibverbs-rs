@@ -15,9 +15,9 @@ unsafe impl Send for IbvMemoryRegion {}
 impl Drop for IbvMemoryRegion {
     fn drop(&mut self) {
         let mr = self.mr;
-        let debug_text = format!("{:?}", self);
         let errno = unsafe { ibv_dereg_mr(self.mr) };
         if errno != 0 {
+            let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
                 "({debug_text}) -> Failed to deregister memory region with `ibv_dereg_mr({mr:p})`: {e}"
@@ -49,14 +49,8 @@ impl IbvMemoryRegion {
         length: usize,
         access_flags: ibv_access_flags,
     ) -> io::Result<IbvMemoryRegion> {
-        let mr = unsafe {
-            ibv_reg_mr(
-                pd.pd,
-                address as *mut c_void,
-                length,
-                access_flags.0 as i32,
-            )
-        };
+        let mr =
+            unsafe { ibv_reg_mr(pd.pd, address as *mut c_void, length, access_flags.0 as i32) };
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {

@@ -98,9 +98,9 @@ unsafe impl Send for IbvProtectionDomainInner {}
 impl Drop for IbvProtectionDomainInner {
     fn drop(&mut self) {
         let pd = self.pd;
-        let debug_text = format!("{:?}", self);
         let errno = unsafe { ibv_dealloc_pd(self.pd) };
         if errno != 0 {
+            let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
                 "({debug_text}) -> Failed to release completion queue with `ibv_destroy_cq({pd:p})`: {e}"

@@ -67,8 +67,8 @@ unsafe impl Send for IbvContextInner {}
 impl Drop for IbvContextInner {
     fn drop(&mut self) {
         let ctx = self.ctx;
-        let debug_text = format!("{:?}", self);
         if unsafe { ibv_close_device(self.ctx) } != 0 {
+            let debug_text = format!("{:?}", self);
             log::error!(
                 "({debug_text}) -> Failed to release device with `ibv_close_device({ctx:p})`"
             );

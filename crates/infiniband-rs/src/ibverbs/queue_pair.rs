@@ -15,9 +15,9 @@ unsafe impl Sync for IbvQueuePair {}
 impl Drop for IbvQueuePair {
     fn drop(&mut self) {
         let qp = self.qp;
-        let debug_text = format!("{:?}", self);
         let errno = unsafe { ibv_destroy_qp(self.qp) };
         if errno != 0 {
+            let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
                 "({debug_text}) -> Failed to release completion queue with `ibv_destroy_qp({qp:p})`: {e}"

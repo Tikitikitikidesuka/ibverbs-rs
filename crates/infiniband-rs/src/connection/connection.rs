@@ -1,24 +1,24 @@
-use crate::ibverbs::completion_queue::IbvCompletionQueue;
+use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
+use crate::connection::unsafe_member::UnsafeMember;
+use crate::connection::work_request::IbvWorkRequest;
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
-use crate::unsafe_member::UnsafeMember;
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
+use ibverbs_sys::ibv_sge;
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
-use std::rc::Rc;
-use std::time::{Duration, Instant};
+use thiserror::Error;
 
 pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
 #[derive(Debug)]
 pub struct IbvConnection {
-    pub(super) cq: IbvCompletionQueue,
+    pub(super) cq: IbvCachedCompletionQueue,
     pub(super) pd: IbvProtectionDomain,
     pub(super) qp: IbvQueuePair,
     pub(super) mrs: HashMap<String, IbvMemoryRegion>,
@@ -167,19 +167,34 @@ impl IbvConnection {
     // todo do we want to return the poll duration / number of local bytes written? -> Work completions with all the info
     // todo do these functions assert that the slice length maches exact? how would we do that?
     // todo what about immediate data? extra function or include?
-    pub fn send<'a, I>(&mut self, data: I) -> Result<()>
-    where
-        I: IntoIterator,
-        I::Item: Borrow<IbvConnSend<'a>>,
-    {
+    pub fn send<'a>(&mut self, sends: impl AsRef<[IbvConnSend<'a>]>) -> Result<()> {
         todo!()
     }
 
-    pub fn receive<'a, I>(&mut self, data: I) -> Result<()>
-    where
-        I: IntoIterator,
-        I::Item: BorrowMut<IbvConnReceive<'a>>,
-    {
+    pub fn send_with_imm_data<'a>(
+        &mut self,
+        sends: impl AsRef<[IbvConnSend<'a>]>,
+        imm_data: u32,
+    ) -> Result<()> {
+        todo!()
+    }
+
+    pub fn send_imm_data(&mut self, imm_data: u32) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive<'a>(&mut self, receives: impl AsMut<[IbvConnReceive<'a>]>) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive_with_imm_data<'a>(
+        &mut self,
+        receives: impl AsMut<[IbvConnReceive<'a>]>,
+    ) -> Result<()> {
+        todo!()
+    }
+
+    pub fn receive_imm_data<'a>(&mut self) -> Result<()> {
         todo!()
     }
 
@@ -187,17 +202,19 @@ impl IbvConnection {
 
     /// # Safety
     /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
-    pub unsafe fn send_unpolled<'a, I>(&mut self, data: I) -> Result<WorkRequest<'a>>
-    where
-        I: IntoIterator,
-        I::Item: Borrow<IbvConnSend<'a>>,
-    {
+    pub unsafe fn send_unpolled<'a>(
+        &mut self,
+        sends: impl AsRef<[IbvConnSend<'a>]>,
+    ) -> Result<IbvWorkRequest<'a>> {
         todo!()
     }
 
     /// # Safety
     /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
-    pub unsafe fn receive_unpolled<'a, I>(&mut self, data: I) -> Result<WorkRequest<'a>>
+    pub unsafe fn receive_unpolled<'a, I>(
+        &mut self,
+        receives: impl AsMut<[IbvConnReceive<'a>]>,
+    ) -> Result<IbvWorkRequest<'a>>
     where
         I: IntoIterator,
         I::Item: BorrowMut<IbvConnReceive<'a>>,
@@ -330,75 +347,10 @@ impl IbvConnection {
 //     }
 // }
 
-pub struct CachedCompletionQueue;
-
 // pub struct ScopedWorkRequest<'scope, 'env: 'scope> {
 //     inner: WorkRequest<'env>,
 //     env: PhantomData<&'scope mut &'scope ()>,
 // }
-
-#[derive(Clone)]
-pub struct WorkRequest<'env> {
-    wr_id: u64,
-    cq: Rc<RefCell<CachedCompletionQueue>>,
-    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
-    _data_lifetime: UnsafeMember<PhantomData<&'env [u8]>>,
-}
-
-pub struct WorkCompletion;
-
-impl WorkCompletion {
-    pub fn immediate_data(&self) -> Option<u32> {
-        todo!()
-    }
-}
-
-type WorkRequestStatus = Option<WorkCompletionResult>;
-type WorkCompletionResult = Result<WorkCompletion>;
-
-impl WorkRequest<'_> {
-    // Returns None if the work request is not yet complete.
-    // Otherwise returns the completion status of the work request.
-    // The completion status can be Ok(WorkCompletion) or Err(io::Error).
-    pub fn poll(&mut self) -> WorkRequestStatus {
-        // TODO: Poll completion queue and manage cache
-        Some(Ok(WorkCompletion))
-    }
-
-    // Polls the work request until it is complete or the timeout is reached.
-    // Timeout is represented as None ouptut.
-    pub fn spin_poll(&mut self, timeout: Duration) -> Option<WorkCompletionResult> {
-        const ELAPSED_CHECK_ITERS: usize = 1024;
-        self.spin_poll_batched::<ELAPSED_CHECK_ITERS>(timeout)
-    }
-
-    // Polls the work request until it is complete or the timeout is reached.
-    // Timeout is represented as None ouptut.
-    // To avoid getting time every iteration,
-    // only check timeout every ELAPSED_CHECK_ITERS iterations.
-    // For performance, this should be a power of 2 (for the modulus operation).
-    pub fn spin_poll_batched<const TIMEOUT_CHECK_ITERS: usize>(
-        &mut self,
-        timeout: Duration,
-    ) -> Option<WorkCompletionResult> {
-        let start_time = Instant::now();
-
-        let mut poll_iter = 0;
-        loop {
-            if let Some(wc_result) = self.poll() {
-                return Some(wc_result);
-            }
-
-            if poll_iter % TIMEOUT_CHECK_ITERS == 0 {
-                if start_time.elapsed() > timeout {
-                    return None;
-                }
-            }
-
-            poll_iter += 1;
-        }
-    }
-}
 
 // Safety: memory of an mr not allowed to move
 // Can only be mutated locally by user or receive
@@ -409,35 +361,54 @@ pub struct IbvConnMr {
     length: usize,
 }
 
+#[derive(Debug, Error)]
+pub enum IbvConnMrSliceError {
+    #[error("maximum length of mr slice exceeded")]
+    SliceTooBig,
+    #[error("slice is not within the bounds of the mr")]
+    SliceNotWithinBounds,
+}
+
 impl IbvConnMr {
-    pub fn prepare_send<'a>(&self, data: &'a [u8]) -> Option<IbvConnSend<'a>> {
-        self.data_is_contained(data.as_ptr(), data.len())
-            .then_some(IbvConnSend {
+    pub fn prepare_send<'a>(&self, data: &'a [u8]) -> Result<IbvConnSend<'a>, IbvConnMrSliceError> {
+        let data_length = data
+            .len()
+            .try_into()
+            .map_err(|error| IbvConnMrSliceError::SliceTooBig)?;
+        if !self.data_is_contained(data.as_ptr(), data.len()) {
+            return Err(IbvConnMrSliceError::SliceNotWithinBounds);
+        }
+
+        Ok(IbvConnSend {
+            sge: ibv_sge {
+                addr: data.as_ptr() as u64,
+                length: data_length,
                 lkey: self.lkey,
-                data,
-                imm_data: None,
-            })
+            },
+            _data_lifetime: unsafe { UnsafeMember::new(Default::default()) },
+        })
     }
 
-    pub fn prepare_send_with_imm<'a>(
+    pub fn prepare_receive<'a>(
         &self,
-        data: &'a [u8],
-        imm_data: u32,
-    ) -> Option<IbvConnSend<'a>> {
-        self.data_is_contained(data.as_ptr(), data.len())
-            .then_some(IbvConnSend {
-                lkey: self.lkey,
-                data,
-                imm_data: Some(imm_data),
-            })
-    }
+        data: &'a mut [u8],
+    ) -> Result<IbvConnReceive<'a>, IbvConnMrSliceError> {
+        let data_length = data
+            .len()
+            .try_into()
+            .map_err(|error| IbvConnMrSliceError::SliceTooBig)?;
+        if !self.data_is_contained(data.as_ptr(), data.len()) {
+            return Err(IbvConnMrSliceError::SliceNotWithinBounds);
+        }
 
-    pub fn prepare_receive<'a>(&self, data: &'a mut [u8]) -> Option<IbvConnReceive<'a>> {
-        self.data_is_contained(data.as_ptr(), data.len())
-            .then_some(IbvConnReceive {
+        Ok(IbvConnReceive {
+            sge: ibv_sge {
+                addr: data.as_ptr() as u64,
+                length: data_length,
                 lkey: self.lkey,
-                data,
-            })
+            },
+            _data_lifetime: unsafe { UnsafeMember::new(Default::default()) },
+        })
     }
 
     fn data_is_contained(&self, data_address: *const u8, data_length: usize) -> bool {
@@ -450,15 +421,18 @@ impl IbvConnMr {
 }
 
 #[derive(Copy, Clone)]
+#[repr(transparent)]
 pub struct IbvConnSend<'a> {
-    lkey: u32,
-    data: &'a [u8],
-    imm_data: Option<u32>,
+    sge: ibv_sge,
+    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the send.
+    _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
 }
 
+#[repr(transparent)]
 pub struct IbvConnReceive<'a> {
-    lkey: u32,
-    data: &'a mut [u8],
+    sge: ibv_sge,
+    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the receive.
+    _data_lifetime: UnsafeMember<PhantomData<&'a mut [u8]>>,
 }
 
 #[derive(Debug, Copy, Clone)]
