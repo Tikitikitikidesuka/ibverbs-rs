@@ -2,7 +2,6 @@ use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
 use crate::connection::work_completion::IbvWorkCompletion;
 use crate::connection::work_error::IbvWorkError;
-use ibverbs_sys::ibv_dereg_mr;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -31,7 +30,7 @@ impl<'a> IbvWorkRequest<'a> {
 
 impl<'a> Drop for IbvWorkRequest<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.spin_poll() {
+        if let Err(e) = self.consume() {
             let debug_text = format!("{:?}", self);
             log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
         }
@@ -47,8 +46,8 @@ impl<'a> Debug for IbvWorkRequest<'a> {
     }
 }
 
-type IbvWorkRequestStatus = Option<IbvWorkRequestResult>;
-type IbvWorkRequestResult = Result<IbvWorkCompletion, IbvWorkError>;
+pub type IbvWorkResult = Result<IbvWorkCompletion, IbvWorkError>;
+pub type IbvWorkRequestStatus = Option<IbvWorkResult>;
 
 impl IbvWorkRequest<'_> {
     /// Returns `io::Error` if an error occurs while polling.
@@ -64,16 +63,16 @@ impl IbvWorkRequest<'_> {
         }
 
         // Check cache in case some other `IbvWorkRequest` polled the cq
-        if let Some(status) = self.poll_cache() {
+        if let Some(status) = self.consume_cache() {
             self.status = Some(status);
             return Ok(Some(status));
         }
 
         // Otherwise, poll completion queue ourselves
-        let polled_num = self.cq.borrow_mut().poll()?;
+        let polled_num = self.cq.borrow_mut().update()?;
         if polled_num > 0 {
             // Check cache again if we polled at least one wr
-            if let Some(status) = self.poll_cache() {
+            if let Some(status) = self.consume_cache() {
                 self.status = Some(status);
                 return Ok(Some(status));
             }
@@ -83,17 +82,16 @@ impl IbvWorkRequest<'_> {
     }
 
     /// Polls the work request in a busy loop until it is complete.
-    pub fn spin_poll(&mut self) -> io::Result<IbvWorkRequestStatus> {
+    pub fn consume(&mut self) -> io::Result<IbvWorkResult> {
         loop {
-            println!("poll wr: {self:?}");
             let status = self.poll()?;
             if let Some(wc) = status {
-                return Ok(Some(wc));
+                return Ok(wc);
             }
         }
     }
 
-    fn poll_cache(&mut self) -> IbvWorkRequestStatus {
+    fn consume_cache(&mut self) -> IbvWorkRequestStatus {
         let mut cq = self.cq.borrow_mut();
         if let Some(wc) = cq.consume(self.wr_id) {
             if let Some((error_code, vendor_code)) = wc.error() {

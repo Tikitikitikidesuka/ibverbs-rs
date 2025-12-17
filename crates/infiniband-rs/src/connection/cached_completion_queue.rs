@@ -24,7 +24,7 @@ impl IbvCachedCompletionQueue {
 
     /// Polls work completions into the cache.
     /// Returns the number of new work completions polled.
-    pub fn poll(&mut self) -> io::Result<usize> {
+    pub fn update(&mut self) -> io::Result<usize> {
         // Poll the cq for new work completions
         let wc_slice = self.cq.poll(self.poll_buf.as_mut_slice())?;
 
@@ -34,6 +34,11 @@ impl IbvCachedCompletionQueue {
         }
 
         Ok(wc_slice.len())
+    }
+
+    /// Returns Some if cached, None if not.
+    pub fn poll(&mut self, wr_id: u64) -> Option<ibv_wc> {
+        self.cache.get(wr_id).copied()
     }
 
     /// Consume a cached work completion.

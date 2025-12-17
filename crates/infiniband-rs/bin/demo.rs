@@ -27,29 +27,38 @@ fn main() {
 
     //println!("{conn:?}");
 
-    let (send_mem, recv_mem) = memory.split_at_mut(4);
-    let mut recv_wr = unsafe {
-        conn.receive_unpolled(&[mr.prepare_receive(recv_mem).unwrap()])
-            .unwrap()
-    };
-    let mut send_wr = unsafe {
-        conn.send_unpolled(&[mr.prepare_send(send_mem).unwrap()])
-            .unwrap()
-    };
+    {
+        let (send_mem, recv_mem) = memory.split_at_mut(4);
+        let mut recv_wr = unsafe {
+            conn.receive_unpolled(&[mr.prepare_receive(recv_mem).unwrap()])
+                .unwrap()
+        };
+        let mut send_wr = unsafe {
+            conn.send_unpolled(&[mr.prepare_send(send_mem).unwrap()])
+                .unwrap()
+        };
 
-    println!("Receive wr: {recv_wr:?}");
-    println!("Send wr: {send_wr:?}");
+        println!("Receive wr: {recv_wr:?}");
+        println!("Send wr: {send_wr:?}");
 
-    let recv_result = recv_wr.spin_poll().unwrap().unwrap();
-    match recv_result {
-        Ok(wc) => println!("Receive success: {wc:?}"),
-        Err(we) => println!("Receive error: {we}"),
-    };
-    let send_result = send_wr.spin_poll().unwrap().unwrap();
-    match send_result {
-        Ok(wc) => println!("Send success: {wc:?}"),
-        Err(we) => println!("Send error: {we}"),
-    };
+        let recv_result = recv_wr.consume().unwrap();
+        match recv_result {
+            Ok(wc) => println!("Receive success: {wc:?}"),
+            Err(we) => println!("Receive error: {we}"),
+        };
+        let send_result = send_wr.consume().unwrap();
+        match send_result {
+            Ok(wc) => println!("Send success: {wc:?}"),
+            Err(we) => println!("Send error: {we}"),
+        };
+    }
+
+    {
+        let (send_mem, recv_mem) = memory.split_at_mut(4);
+        conn.send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
+        conn.receive(&[mr.prepare_receive(recv_mem).unwrap()])
+            .unwrap();
+    }
 
     /*
     conn.send(&[
