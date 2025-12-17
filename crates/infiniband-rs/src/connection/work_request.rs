@@ -4,11 +4,11 @@ use crate::connection::work_completion::IbvWorkCompletion;
 use crate::connection::work_error::IbvWorkError;
 use ibverbs_sys::ibv_dereg_mr;
 use std::cell::RefCell;
+use std::fmt::{Debug, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-#[derive(Debug)]
 pub struct IbvWorkRequest<'a> {
     wr_id: u64,
     cq: Rc<RefCell<IbvCachedCompletionQueue>>,
@@ -18,12 +18,32 @@ pub struct IbvWorkRequest<'a> {
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
 }
 
+impl<'a> IbvWorkRequest<'a> {
+    pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<IbvCachedCompletionQueue>>) -> Self {
+        Self {
+            wr_id,
+            cq,
+            status: None,
+            _data_lifetime: unsafe { UnsafeMember::new(PhantomData::<&'a [u8]>) },
+        }
+    }
+}
+
 impl<'a> Drop for IbvWorkRequest<'a> {
     fn drop(&mut self) {
         if let Err(e) = self.spin_poll() {
             let debug_text = format!("{:?}", self);
             log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
         }
+    }
+}
+
+impl<'a> Debug for IbvWorkRequest<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IbvWorkRequest")
+            .field("wr_id", &self.wr_id)
+            .field("status", &self.status)
+            .finish()
     }
 }
 
@@ -38,31 +58,25 @@ impl IbvWorkRequest<'_> {
     /// The work request status can be `Ok(WorkCompletion)` or `Err(io::Error)`
     /// if an error occurred during the work request's operation was run.
     pub fn poll(&mut self) -> io::Result<IbvWorkRequestStatus> {
-        // Check if previously polled
+        // Check if previously completed
         if let Some(result) = self.status {
             return Ok(Some(result));
         }
 
-        // Otherwise, poll completion queue
-        let mut cq = self.cq.borrow_mut();
-        let num_polled = cq.poll()?;
-        // Return if nothing polled
-        if num_polled == 0 {
-            return Ok(None);
+        // Check cache in case some other `IbvWorkRequest` polled the cq
+        if let Some(status) = self.poll_cache() {
+            self.status = Some(status);
+            return Ok(Some(status));
         }
 
-        // Check if poll contained the wr
-        if let Some(wc) = cq.consume(self.wr_id) {
-            // Return work error if work failed
-            if let Some((error_code, vendor_code)) = wc.error() {
-                return Ok(Some(Err(IbvWorkError::new(error_code, vendor_code))));
+        // Otherwise, poll completion queue ourselves
+        let polled_num = self.cq.borrow_mut().poll()?;
+        if polled_num > 0 {
+            // Check cache again if we polled at least one wr
+            if let Some(status) = self.poll_cache() {
+                self.status = Some(status);
+                return Ok(Some(status));
             }
-
-            // Store success for future polls
-            // TODO: Fill in work completion
-            self.status = Some(Ok(IbvWorkCompletion));
-            // Return success
-            return Ok(self.status);
         }
 
         Ok(None)
@@ -71,10 +85,28 @@ impl IbvWorkRequest<'_> {
     /// Polls the work request in a busy loop until it is complete.
     pub fn spin_poll(&mut self) -> io::Result<IbvWorkRequestStatus> {
         loop {
+            println!("poll wr: {self:?}");
             let status = self.poll()?;
             if let Some(wc) = status {
                 return Ok(Some(wc));
             }
+        }
+    }
+
+    fn poll_cache(&mut self) -> IbvWorkRequestStatus {
+        let mut cq = self.cq.borrow_mut();
+        if let Some(wc) = cq.consume(self.wr_id) {
+            if let Some((error_code, vendor_code)) = wc.error() {
+                // Return work error if work failed
+                Some(Err(IbvWorkError::new(error_code, vendor_code)))
+            } else {
+                // Return work completion if work succeeded
+                // TODO: Fill in work completion
+                Some(Ok(IbvWorkCompletion))
+            }
+        } else {
+            // Work not completed yet
+            None
         }
     }
 }

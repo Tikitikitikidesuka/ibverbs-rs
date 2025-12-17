@@ -1,28 +1,48 @@
 use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
 use crate::connection::work_request::IbvWorkRequest;
+use crate::ibverbs::completion_queue::IbvCompletionQueue;
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
 use ibverbs_sys::ibv_sge;
 use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
+use std::rc::Rc;
 use thiserror::Error;
 
 pub type Result<T = (), E = io::Error> = std::result::Result<T, E>;
 
 #[derive(Debug)]
 pub struct IbvConnection {
-    pub(super) cq: IbvCachedCompletionQueue,
-    pub(super) pd: IbvProtectionDomain,
-    pub(super) qp: IbvQueuePair,
-    pub(super) mrs: HashMap<String, IbvMemoryRegion>,
+    cq: Rc<RefCell<IbvCachedCompletionQueue>>,
+    pd: IbvProtectionDomain,
+    qp: IbvQueuePair,
+    mrs: HashMap<String, IbvMemoryRegion>,
+    next_wr_id: u64,
     //remote_mrs: HashMap<String, RemoteMr>,
+}
+
+impl IbvConnection {
+    pub(super) fn new(
+        cq: IbvCachedCompletionQueue,
+        pd: IbvProtectionDomain,
+        qp: IbvQueuePair,
+    ) -> Self {
+        Self {
+            cq: Rc::new(RefCell::new(cq)),
+            pd,
+            qp,
+            mrs: HashMap::new(),
+            next_wr_id: 0,
+        }
+    }
 }
 
 impl IbvConnection {
@@ -167,34 +187,36 @@ impl IbvConnection {
     // todo do we want to return the poll duration / number of local bytes written? -> Work completions with all the info
     // todo do these functions assert that the slice length maches exact? how would we do that?
     // todo what about immediate data? extra function or include?
-    pub fn send<'a>(&mut self, sends: impl AsRef<[IbvConnSend<'a>]>) -> Result<()> {
+    pub fn send<'a>(&self, sends: impl AsRef<[IbvConnSend<'a>]>) -> Result<()> {
         todo!()
     }
 
     pub fn send_with_imm_data<'a>(
-        &mut self,
+        &self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
         imm_data: u32,
     ) -> Result<()> {
         todo!()
     }
 
-    pub fn send_imm_data(&mut self, imm_data: u32) -> Result<()> {
+    /// Fastest zero sized message for notifications
+    pub fn send_imm_data(&self, imm_data: u32) -> Result<()> {
         todo!()
     }
 
-    pub fn receive<'a>(&mut self, receives: impl AsMut<[IbvConnReceive<'a>]>) -> Result<()> {
+    pub fn receive<'a>(&self, receives: impl AsMut<[IbvConnReceive<'a>]>) -> Result<()> {
         todo!()
     }
 
     pub fn receive_with_imm_data<'a>(
-        &mut self,
+        &self,
         receives: impl AsMut<[IbvConnReceive<'a>]>,
     ) -> Result<()> {
         todo!()
     }
 
-    pub fn receive_imm_data<'a>(&mut self) -> Result<()> {
+    /// Fastest zero sized message for notifications
+    pub fn receive_imm_data<'a>(&self) -> Result<()> {
         todo!()
     }
 
@@ -206,20 +228,22 @@ impl IbvConnection {
         &mut self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
     ) -> Result<IbvWorkRequest<'a>> {
-        todo!()
+        let wr_id = self.get_and_advance_wr_id();
+        let send_sges = sends.as_ref().as_sge_slice();
+        unsafe { self.qp.post_send(send_sges, wr_id)? };
+        Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
 
     /// # Safety
     /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
-    pub unsafe fn receive_unpolled<'a, I>(
+    pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        receives: impl AsMut<[IbvConnReceive<'a>]>,
-    ) -> Result<IbvWorkRequest<'a>>
-    where
-        I: IntoIterator,
-        I::Item: BorrowMut<IbvConnReceive<'a>>,
-    {
-        todo!()
+        receives: impl AsRef<[IbvConnReceive<'a>]>,
+    ) -> Result<IbvWorkRequest<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        let receive_sges = receives.as_ref().as_sge_slice();
+        unsafe { self.qp.post_receive(receive_sges, wr_id)? };
+        Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
 
     /// # Safety
@@ -231,7 +255,7 @@ impl IbvConnection {
         &mut self,
         data: &'a [u8],
         remote_slice: RemoteMrSlice,
-    ) -> Result<WorkRequest<'a>> {
+    ) -> Result<IbvWorkRequest<'a>> {
         todo!()
     }
 
@@ -244,8 +268,14 @@ impl IbvConnection {
         &mut self,
         remote_slice: RemoteMrSlice,
         data: &'a mut [u8],
-    ) -> Result<WorkRequest<'a>> {
+    ) -> Result<IbvWorkRequest<'a>> {
         todo!()
+    }
+
+    fn get_and_advance_wr_id(&mut self) -> u64 {
+        let wr_id = self.next_wr_id;
+        self.next_wr_id += 1;
+        wr_id
     }
 }
 
@@ -420,7 +450,7 @@ impl IbvConnMr {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
 pub struct IbvConnSend<'a> {
     sge: ibv_sge,
@@ -428,11 +458,30 @@ pub struct IbvConnSend<'a> {
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
 }
 
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct IbvConnReceive<'a> {
     sge: ibv_sge,
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the receive.
     _data_lifetime: UnsafeMember<PhantomData<&'a mut [u8]>>,
+}
+
+pub trait AsSgeSlice {
+    fn as_sge_slice(&self) -> &[ibv_sge];
+}
+
+impl<'a> AsSgeSlice for [IbvConnSend<'a>] {
+    fn as_sge_slice(&self) -> &[ibv_sge] {
+        // Safe because `IbvConnSend<'a>` is `#[repr(transparent)]` to `ibv_sge`
+        unsafe { std::slice::from_raw_parts(self.as_ptr() as *const ibv_sge, self.len()) }
+    }
+}
+
+impl<'a> AsSgeSlice for [IbvConnReceive<'a>] {
+    fn as_sge_slice(&self) -> &[ibv_sge] {
+        // Safe because `IbvConnSend<'a>` is `#[repr(transparent)]` to `ibv_sge`
+        unsafe { std::slice::from_raw_parts(self.as_ptr() as *const ibv_sge, self.len()) }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

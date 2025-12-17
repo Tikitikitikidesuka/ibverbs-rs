@@ -25,8 +25,33 @@ fn main() {
         .register_mr("asdf", memory.as_mut_ptr(), memory.len())
         .unwrap();
 
-    println!("{conn:?}");
+    //println!("{conn:?}");
 
+    let (send_mem, recv_mem) = memory.split_at_mut(4);
+    let mut recv_wr = unsafe {
+        conn.receive_unpolled(&[mr.prepare_receive(recv_mem).unwrap()])
+            .unwrap()
+    };
+    let mut send_wr = unsafe {
+        conn.send_unpolled(&[mr.prepare_send(send_mem).unwrap()])
+            .unwrap()
+    };
+
+    println!("Receive wr: {recv_wr:?}");
+    println!("Send wr: {send_wr:?}");
+
+    let recv_result = recv_wr.spin_poll().unwrap().unwrap();
+    match recv_result {
+        Ok(wc) => println!("Receive success: {wc:?}"),
+        Err(we) => println!("Receive error: {we}"),
+    };
+    let send_result = send_wr.spin_poll().unwrap().unwrap();
+    match send_result {
+        Ok(wc) => println!("Send success: {wc:?}"),
+        Err(we) => println!("Send error: {we}"),
+    };
+
+    /*
     conn.send(&[
         mr.prepare_send(&memory[0..4]).unwrap(),
         mr.prepare_send(&memory[4..8]).unwrap(),
@@ -66,4 +91,5 @@ fn main() {
         mr.prepare_receive(mem_3).unwrap(),
     ])
     .unwrap();
+    */
 }
