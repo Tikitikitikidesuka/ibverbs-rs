@@ -70,7 +70,7 @@ impl Drop for IbvContextInner {
         if unsafe { ibv_close_device(self.ctx) } != 0 {
             let debug_text = format!("{:?}", self);
             log::error!(
-                "({debug_text}) -> Failed to release device with `ibv_close_device({ctx:p})`"
+                "({debug_text}) -> Failed to close device with `ibv_close_device({ctx:p})`"
             );
         }
     }

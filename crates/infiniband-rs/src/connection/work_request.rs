@@ -7,7 +7,9 @@ use std::fmt::{Debug, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use thiserror::Error;
 
+#[must_use = "IbvWorkRequest must be dropped to ensure completion"]
 pub struct IbvWorkRequest<'a> {
     wr_id: u64,
     cq: Rc<RefCell<IbvCachedCompletionQueue>>,
@@ -30,9 +32,12 @@ impl<'a> IbvWorkRequest<'a> {
 
 impl<'a> Drop for IbvWorkRequest<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.consume() {
-            let debug_text = format!("{:?}", self);
-            log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
+        if !self.already_polled_to_completion() {
+            log::warn!("IbvWorkRequest not manually polled to completion");
+            if let Err(e) = self.spin_poll() {
+                let debug_text = format!("{:?}", self);
+                log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
+            }
         }
     }
 }
@@ -62,17 +67,19 @@ impl IbvWorkRequest<'_> {
             return Ok(Some(result));
         }
 
+        let mut self_cq = self.cq.borrow_mut();
+
         // Check cache in case some other `IbvWorkRequest` polled the cq
-        if let Some(status) = self.consume_cache() {
+        if let Some(status) = Self::consume_cache(self.wr_id, &mut self_cq) {
             self.status = Some(status);
             return Ok(Some(status));
         }
 
         // Otherwise, poll completion queue ourselves
-        let polled_num = self.cq.borrow_mut().update()?;
+        let polled_num = self_cq.update()?;
         if polled_num > 0 {
             // Check cache again if we polled at least one wr
-            if let Some(status) = self.consume_cache() {
+            if let Some(status) = Self::consume_cache(self.wr_id, &mut self_cq) {
                 self.status = Some(status);
                 return Ok(Some(status));
             }
@@ -82,7 +89,10 @@ impl IbvWorkRequest<'_> {
     }
 
     /// Polls the work request in a busy loop until it is complete.
-    pub fn consume(&mut self) -> io::Result<IbvWorkResult> {
+    /// It consumes the work completion from the cache. This method
+    /// must be used to guarantee a work completion is finished and
+    /// to free space on the completion queue.
+    pub fn spin_poll(&mut self) -> io::Result<IbvWorkResult> {
         loop {
             let status = self.poll()?;
             if let Some(wc) = status {
@@ -91,9 +101,12 @@ impl IbvWorkRequest<'_> {
         }
     }
 
-    fn consume_cache(&mut self) -> IbvWorkRequestStatus {
-        let mut cq = self.cq.borrow_mut();
-        if let Some(wc) = cq.consume(self.wr_id) {
+    pub(super) fn already_polled_to_completion(&self) -> bool {
+        self.status.is_some()
+    }
+
+    fn consume_cache(wr_id: u64, cq: &mut IbvCachedCompletionQueue) -> IbvWorkRequestStatus {
+        if let Some(wc) = cq.consume(wr_id) {
             if let Some((error_code, vendor_code)) = wc.error() {
                 // Return work error if work failed
                 Some(Err(IbvWorkError::new(error_code, vendor_code)))

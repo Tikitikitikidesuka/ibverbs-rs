@@ -1,9 +1,13 @@
+use simple_logger::SimpleLogger;
 use infiniband_rs::connection::builder::IbvConnectionBuilder;
+use infiniband_rs::connection::connection::IbvConnSend;
 use infiniband_rs::devices::ibv_device_list;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
+    SimpleLogger::new().init().unwrap();
+
     let devices = ibv_device_list().unwrap();
     println!("{devices:?}");
 
@@ -27,6 +31,19 @@ fn main() {
 
     //println!("{conn:?}");
 
+    let (send_mem, recv_mem) = memory.split_at_mut(4);
+    println!("before recv: {:?}", &recv_mem[0..4]);
+    send_mem.copy_from_slice(&[1, 2, 3, 4]);
+    let a = conn.scope(|s| {
+        let wr0 = s.post_receive(&[mr.prepare_receive(recv_mem).unwrap()])
+            .unwrap();
+        let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
+        std::mem::forget(wr0);
+        std::mem::forget(wr1);
+    });
+    println!("after recv: {:?}", &recv_mem[0..4]);
+
+    /*
     {
         let (send_mem, recv_mem) = memory.split_at_mut(4);
         let mut recv_wr = unsafe {
@@ -41,12 +58,12 @@ fn main() {
         println!("Receive wr: {recv_wr:?}");
         println!("Send wr: {send_wr:?}");
 
-        let recv_result = recv_wr.consume().unwrap();
+        let recv_result = recv_wr.spin_poll().unwrap();
         match recv_result {
             Ok(wc) => println!("Receive success: {wc:?}"),
             Err(we) => println!("Receive error: {we}"),
         };
-        let send_result = send_wr.consume().unwrap();
+        let send_result = send_wr.spin_poll().unwrap();
         match send_result {
             Ok(wc) => println!("Send success: {wc:?}"),
             Err(we) => println!("Send error: {we}"),
@@ -59,6 +76,7 @@ fn main() {
         conn.receive(&[mr.prepare_receive(recv_mem).unwrap()])
             .unwrap();
     }
+    */
 
     /*
     conn.send(&[

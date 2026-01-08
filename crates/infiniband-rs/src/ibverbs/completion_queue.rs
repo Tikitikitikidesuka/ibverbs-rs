@@ -133,12 +133,13 @@ impl Drop for IbvCompletionQueueInner {
             );
         }
 
+        let cc = self.cc;
         let errno = unsafe { ibv_destroy_comp_channel(self.cc) };
         if errno != 0 {
             let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
-                "({debug_text}) -> Failed to release completion channel with `ibv_destroy_cq({cq:p})`: {e}"
+                "({debug_text}) -> Failed to release completion channel with `ibv_destroy_comp_channel({cc:p})`: {e}"
             );
         }
     }

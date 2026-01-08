@@ -20,7 +20,7 @@ impl Drop for IbvQueuePair {
             let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
-                "({debug_text}) -> Failed to release completion queue with `ibv_destroy_qp({qp:p})`: {e}"
+                "({debug_text}) -> Failed to destroy queue pair with `ibv_destroy_qp({qp:p})`: {e}"
             );
         }
     }

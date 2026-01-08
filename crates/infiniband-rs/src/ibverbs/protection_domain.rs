@@ -103,7 +103,7 @@ impl Drop for IbvProtectionDomainInner {
             let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
-                "({debug_text}) -> Failed to release completion queue with `ibv_destroy_cq({pd:p})`: {e}"
+                "({debug_text}) -> Failed to deallocate protection domain with `ibv_dealloc_pd({pd:p})`: {e}"
             );
         }
     }

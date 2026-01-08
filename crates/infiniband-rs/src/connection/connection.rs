@@ -2,7 +2,7 @@ use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
 use crate::connection::work_completion::IbvWorkCompletion;
 use crate::connection::work_error::IbvWorkError;
-use crate::connection::work_request::IbvWorkRequest;
+use crate::connection::work_request::{IbvWorkRequest, IbvWorkRequestStatus, IbvWorkResult};
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
@@ -18,13 +18,15 @@ use std::rc::Rc;
 use thiserror::Error;
 
 #[derive(Debug)]
+// Order of attributes matters.
+// Deallocation must happen in the order specified.
 pub struct IbvConnection {
-    cq: Rc<RefCell<IbvCachedCompletionQueue>>,
-    pd: IbvProtectionDomain,
     qp: IbvQueuePair,
     mrs: HashMap<String, IbvMemoryRegion>,
-    next_wr_id: u64,
     //remote_mrs: HashMap<String, RemoteMr>,
+    cq: Rc<RefCell<IbvCachedCompletionQueue>>,
+    pd: IbvProtectionDomain,
+    next_wr_id: u64,
 }
 
 impl IbvConnection {
@@ -181,12 +183,60 @@ impl IbvConnection {
     /// for scoped treads. In this way, the created work requests have a well defined lifetime —that of
     /// the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
     /// If they have not been polled at the end of the scope, they will be polled automatically.
-    // pub fn scope<'env, F, R>(&mut self, f: F) -> Result<R>
-    // where
-    //     F: for<'scope> FnOnce(&'scope mut IbConnectionScope<'scope, 'env>) -> Result<R>,
-    // {
-    //     todo!()
-    // }
+    ///
+    /// # Lifetimes
+    ///
+    /// Scoped rdma involves two lifetimes: `'scope` and `'env`.
+    ///
+    /// The `'scope` lifetime represents the lifetime of the scope itself.
+    /// That is: the time during which new rdma operations may be issued,
+    /// and also the time during which they might still be running.
+    /// Once this lifetime ends, all operations are polled to completion.
+    /// This lifetime starts within the `scope` function, before `f` (the argument to `scope`) starts.
+    /// It ends after `f` returns and all scoped rdma operations have been completed, but before `scope` returns.
+    ///
+    /// The `'env` lifetime represents the lifetime of whatever is borrowed by the scoped threads.
+    /// This lifetime must outlast the call to `scope`, and thus cannot be smaller than `'scope`.
+    /// It can be as small as the call to `scope`, meaning that anything that outlives this call,
+    /// such as local variables defined right before the scope, can be borrowed by the scope.
+    ///
+    /// The `'env: 'scope` bound is part of the definition of the `IbvConnectionScope` type.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    ///
+    /// let (send_mem, recv_mem) = mem.split_at_mut(4);
+    /// send_mem.copy_from_slice(&[1, 2, 3, 4]);
+    /// conn.scope(|s| {
+    ///     let wr0 = s.post_receive(&[mr.prepare_receive(recv_mem).unwrap()])
+    ///     .unwrap();
+    ///     let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
+    ///     std::mem::forget(wr0);
+    ///     std::mem::forget(wr1);
+    /// });
+    /// ```
+    pub fn scope<'env, F, R>(&'env mut self, f: F) -> R
+    where
+        F: for<'scope> FnOnce(&mut IbvConnectionScope<'scope, 'env>) -> R,
+    {
+        let mut scope = IbvConnectionScope {
+            inner: self,
+            wrs: vec![],
+            scope: PhantomData,
+            env: PhantomData,
+        };
+
+        let result = f(&mut scope);
+
+        scope.cleanup();
+
+        result
+    }
 
     // todo do those actually need mutable access? -> Yes for non atomic wr id counter
 
@@ -197,7 +247,7 @@ impl IbvConnection {
         &mut self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
     ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.send_unpolled(sends)? }.consume()??)
+        Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()??)
     }
 
     pub fn send_with_imm_data<'a>(
@@ -205,20 +255,60 @@ impl IbvConnection {
         sends: impl AsRef<[IbvConnSend<'a>]>,
         imm_data: u32,
     ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.consume()??)
+        Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.spin_poll()??)
     }
 
     pub fn receive<'a>(
         &mut self,
         receives: impl AsRef<[IbvConnReceive<'a>]>,
     ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.receive_unpolled(receives)? }.consume()??)
+        Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()??)
     }
 
     // unsafe functions
 
     /// # Safety
-    /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
+    /// The caller must ensure that the returned `IbvWorkRequest` is
+    /// **successfully polled to completion by its drop implementation**
+    /// before the end of `'a`.
+    ///
+    /// In particular, the work request must not be leaked (e.g. via
+    /// `mem::forget`), as this would end the borrow without dropping
+    /// while the hardware may still access the memory.
+    ///
+    /// ## Protection example
+    ///
+    /// ```compile_fail
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_send(&mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.send_unpolled(&[receive]) }.unwrap();
+    ///
+    /// // This mutation of mem will not compile while the borrow is alive in the wr,
+    /// // preventing partially modified memory from being sent.
+    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    /// ```
+    ///
+    /// ## Safety violation example
+    ///
+    /// ```no_run
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    ///
+    /// // The work request can be leaked without running its drop.
+    /// // The borrow ends but the NIC may still DMA into the memory.
+    /// std::mem::forget(wr);
+    ///
+    /// // This mutation of mem might occur while the send is partially complete.
+    /// // This violates Rust's aliasing rules and constitutes UB.
+    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    /// ```
     pub unsafe fn send_unpolled<'a>(
         &mut self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
@@ -229,7 +319,48 @@ impl IbvConnection {
     }
 
     /// # Safety
-    /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
+    ///
+    /// The caller must ensure that the returned `IbvWorkRequest` is
+    /// **successfully polled to completion by its drop implementation**
+    /// before the end of `'a`.
+    ///
+    /// In particular, the work request must not be leaked (e.g. via
+    /// `mem::forget`), as this would end the borrow without dropping
+    /// while the hardware may still access the memory.
+    ///
+    /// ## Protection example
+    ///
+    /// ```compile_fail
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_send(&mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.send_with_imm_data_unpolled(&[receive], 33) }.unwrap();
+    ///
+    /// // This mutation of mem will not compile while the borrow is alive in the wr,
+    /// // preventing partially modified memory from being sent.
+    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    /// ```
+    ///
+    /// ## Safety violation example
+    ///
+    /// ```no_run
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.send_with_imm_data_unpolled(&[receive], 33) }.unwrap();
+    ///
+    /// // The work request can be leaked without running its drop.
+    /// // The borrow ends but the NIC may still DMA into the memory.
+    /// std::mem::forget(wr);
+    ///
+    /// // This mutation of mem might occur while the send is partially complete.
+    /// // This violates Rust's aliasing rules and constitutes UB.
+    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    /// ```
     pub unsafe fn send_with_imm_data_unpolled<'a>(
         &mut self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
@@ -244,7 +375,46 @@ impl IbvConnection {
     }
 
     /// # Safety
-    /// The caller must ensure that the work request is successfully polled to completion before the end of `'a`.
+    /// The caller must ensure that the returned `IbvWorkRequest` is
+    /// **successfully polled to completion by its drop implementation**
+    /// before the end of `'a`.
+    ///
+    /// In particular, the work request must not be leaked (e.g. via
+    /// `mem::forget`), as this would end the borrow without dropping
+    /// while the hardware may still access the memory.
+    ///
+    /// ## Protection example
+    ///
+    /// ```compile_fail
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    ///
+    /// // This read of mem will not compile while the borrow is alive in the wr.
+    /// println!("{:?}", &mem[0..4]);
+    /// ```
+    ///
+    /// ## Safety violation example
+    ///
+    /// ```no_run
+    /// # use infiniband_rs::connection::connection::IbvConnection;
+    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// let mut mem = [0u8; 1024];
+    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    ///
+    /// // The work request can be leaked without running its drop.
+    /// // The borrow ends but the NIC may still DMA into the memory.
+    /// std::mem::forget(wr);
+    ///
+    /// // This read of mem might occur while the receive is partially complete.
+    /// // This violates Rust's aliasing rules and constitutes UB.
+    /// println!("{:?}", &mem[0..4]);
+    /// ```
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
         receives: impl AsRef<[IbvConnReceive<'a>]>,
@@ -290,66 +460,81 @@ impl IbvConnection {
     }
 }
 
-/*
 pub struct IbvConnectionScope<'scope, 'env: 'scope> {
-    inner: &'scope mut IbvConnection,
+    inner: &'env mut IbvConnection,
     wrs: Vec<Rc<RefCell<IbvWorkRequest<'scope>>>>,
     // for invariance of lifetimes, see `std::thread::scope`
     scope: PhantomData<&'scope mut &'scope ()>,
     env: PhantomData<&'env mut &'env ()>,
 }
 
-pub struct IbvScopedWorkRequest<'scope, 'env: 'scope> {
-    inner: IbvWorkRequest<'env>,
+pub struct IbvScopedWorkRequest<'scope> {
+    inner: Rc<RefCell<IbvWorkRequest<'scope>>>,
     env: PhantomData<&'scope mut &'scope ()>,
 }
 
-impl<'scope, 'env> From<IbvWorkRequest<'env>> for IbvScopedWorkRequest<'scope, 'env> {
-    fn from(value: IbvWorkRequest<'env>) -> Self {
-        IbvScopedWorkRequest {
-            inner: value,
-            env: PhantomData,
-        }
+impl<'scope> IbvScopedWorkRequest<'scope> {
+    pub fn poll(&self) -> io::Result<IbvWorkRequestStatus> {
+        self.inner.borrow_mut().poll()
+    }
+
+    pub fn spin_poll(&self) -> io::Result<IbvWorkResult> {
+        self.inner.borrow_mut().spin_poll()
     }
 }
 
 impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
+    fn cleanup(&self) {
+        self.wrs.iter().for_each(|wr| {
+            let mut wr = wr.borrow_mut();
+            if !wr.already_polled_to_completion() {
+                log::warn!("IbvScopedWorkRequest not manually polled to completion");
+                match wr.spin_poll() {
+                    Ok(Err(op_error)) => log::error!(
+                        "IbvScopedWorkRequest operation error detected on \
+                             the scope's clean up: {op_error}"
+                    ),
+                    Err(io_error) => log::error!(
+                        "Unable to poll IbvScopedWorkRequest to completion in \
+                             the scope's clean up: {io_error}"
+                    ),
+                    Ok(Ok(v)) => {}
+                }
+            }
+        });
+    }
+
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping sends can be done concurrently
     pub fn post_send(
-        &'scope mut self,
-        slice: &'env [u8],
-    ) -> io::Result<IbvScopedWorkRequest<'scope, 'env>> {
-        // TODO: Post to infiniband hardware
-
-        let wr = Rc::new(RefCell::new(unsafe {
-            IbvWorkRequest::new(self.inner.get_and_advance_wr_id(), self.inner.cq.clone())
-        }));
-
+        &mut self,
+        sends: impl AsRef<[IbvConnSend<'env>]>,
+    ) -> io::Result<IbvScopedWorkRequest<'scope>> {
+        let wr = Rc::new(RefCell::new(unsafe { self.inner.send_unpolled(sends)? }));
         self.wrs.push(wr.clone());
-
-        Ok(wr.into())
+        Ok(IbvScopedWorkRequest {
+            inner: wr,
+            env: Default::default(),
+        })
     }
 
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping receives can be done concurrently
     pub fn post_receive(
-        &'scope mut self,
-        slice: &'env mut [u8],
-    ) -> Result<IbvScopedWorkRequest<'scope, 'env>> {
-        // TODO: Post to infiniband hardware
-
-        let wr = WorkRequest {
-            wr_id: 0, // Whatever id it is
-            cq: self.cq.clone(),
-            _data_lifetime: PhantomData,
-        };
-
+        &mut self,
+        receives: impl AsRef<[IbvConnReceive<'env>]>,
+    ) -> io::Result<IbvScopedWorkRequest<'scope>> {
+        let wr = Rc::new(RefCell::new(unsafe {
+            self.inner.receive_unpolled(receives)?
+        }));
         self.wrs.push(wr.clone());
-
-        Ok(wr.into())
+        Ok(IbvScopedWorkRequest {
+            inner: wr,
+            env: Default::default(),
+        })
     }
 
+    /*
     // Safety: The data at the remote memory region might be modified while the read is done.
     // It is the user's responsibility to ensure it is stable while the read is in progress.
     pub unsafe fn post_read(
@@ -389,8 +574,8 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
 
         Ok(wr.into())
     }
+    */
 }
- */
 
 // Safety: memory of an mr not allowed to move
 // Can only be mutated locally by user or receive
@@ -414,7 +599,7 @@ impl IbvConnMr {
         let data_length = data
             .len()
             .try_into()
-            .map_err(|error| IbvConnMrSliceError::SliceTooBig)?;
+            .map_err(|_| IbvConnMrSliceError::SliceTooBig)?;
         if !self.data_is_contained(data.as_ptr(), data.len()) {
             return Err(IbvConnMrSliceError::SliceNotWithinBounds);
         }
