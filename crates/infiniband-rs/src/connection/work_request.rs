@@ -13,7 +13,7 @@ use thiserror::Error;
 pub struct IbvWorkRequest<'a> {
     wr_id: u64,
     cq: Rc<RefCell<IbvCachedCompletionQueue>>,
-    status: IbvWorkRequestStatus,
+    status: Option<Result<IbvWorkCompletion, IbvWorkError>>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
@@ -51,8 +51,19 @@ impl<'a> Debug for IbvWorkRequest<'a> {
     }
 }
 
-pub type IbvWorkResult = Result<IbvWorkCompletion, IbvWorkError>;
+#[derive(Debug, Error)]
+pub enum IbvWorkPollError {
+    #[error("Polling error: {0}")]
+    PollError(#[from] io::Error),
+    #[error("Polled work error: {0}")]
+    WorkError(#[from] IbvWorkError),
+}
+
+pub type IbvWorkSpinPollResult = Result<IbvWorkCompletion, IbvWorkPollError>;
+pub type IbvWorkPollResult = Option<Result<IbvWorkCompletion, IbvWorkPollError>>;
+
 pub type IbvWorkRequestStatus = Option<IbvWorkResult>;
+pub type IbvWorkResult = Result<IbvWorkCompletion, IbvWorkError>;
 
 impl IbvWorkRequest<'_> {
     /// Returns `io::Error` if an error occurs while polling.
@@ -61,10 +72,10 @@ impl IbvWorkRequest<'_> {
     /// `IbvWorkRequestStatus` with the status of the work request.
     /// The work request status can be `Ok(WorkCompletion)` or `Err(io::Error)`
     /// if an error occurred during the work request's operation was run.
-    pub fn poll(&mut self) -> io::Result<IbvWorkRequestStatus> {
+    pub fn poll(&mut self) -> IbvWorkPollResult {
         // Check if previously completed
-        if let Some(result) = self.status {
-            return Ok(Some(result));
+        if self.status.is_some() {
+            return self.status.map(|res| res.map_err(Into::into));
         }
 
         let mut self_cq = self.cq.borrow_mut();
@@ -72,31 +83,35 @@ impl IbvWorkRequest<'_> {
         // Check cache in case some other `IbvWorkRequest` polled the cq
         if let Some(status) = Self::consume_cache(self.wr_id, &mut self_cq) {
             self.status = Some(status);
-            return Ok(Some(status));
+            return self.status.map(|res| res.map_err(Into::into));
         }
 
         // Otherwise, poll completion queue ourselves
-        let polled_num = self_cq.update()?;
+        let polled_num = match self_cq.update() {
+            Err(e) => return Some(Err(e.into())),
+            Ok(n) => n,
+        };
         if polled_num > 0 {
             // Check cache again if we polled at least one wr
             if let Some(status) = Self::consume_cache(self.wr_id, &mut self_cq) {
                 self.status = Some(status);
-                return Ok(Some(status));
+                return Some(status.map_err(Into::into));
             }
         }
 
-        Ok(None)
+        None
     }
 
     /// Polls the work request in a busy loop until it is complete.
     /// It consumes the work completion from the cache. This method
     /// must be used to guarantee a work completion is finished and
     /// to free space on the completion queue.
-    pub fn spin_poll(&mut self) -> io::Result<IbvWorkResult> {
+    pub fn spin_poll(&mut self) -> IbvWorkSpinPollResult {
         loop {
-            let status = self.poll()?;
-            if let Some(wc) = status {
-                return Ok(wc);
+            match self.poll() {
+                None => continue, // not ready yet, spin
+                Some(Ok(wc)) => return Ok(wc), // completed successfully
+                Some(Err(e)) => return Err(e), // work poll error
             }
         }
     }
