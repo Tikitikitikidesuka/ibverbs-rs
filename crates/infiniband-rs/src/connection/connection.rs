@@ -409,7 +409,7 @@ impl IbvConnection {
     }
 
     /// # Safety
-    /// This method is unsafe because ...
+    /// This method is unsafe because ... (same reason as send) memory being written must respect &[] aliasing
     /// todo, do we need to make it unsafe if it does unsafe things on the *other* side?
     ///
     /// Furthermore, he caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
@@ -422,7 +422,7 @@ impl IbvConnection {
     }
 
     /// # Safety
-    /// This method is unsafe because ...
+    /// This method is unsafe because ... (same reason as receive) memory being read into must respect &mut[] aliasing
     /// todo
     ///
     /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.

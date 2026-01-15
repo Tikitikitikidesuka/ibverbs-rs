@@ -4,6 +4,20 @@ use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
 
+pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
+    let name = name.as_ref();
+    let devices = ibv_device_list()?;
+    let device = devices.iter()
+        .find(|d| d.name() == Some(name))
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("InfiniBand device '{name}' not found"),
+            )
+        })?;
+    device.open()
+}
+
 pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
     let mut n = 0i32;
     let devices = unsafe { ibv_get_device_list(&mut n as *mut _) };

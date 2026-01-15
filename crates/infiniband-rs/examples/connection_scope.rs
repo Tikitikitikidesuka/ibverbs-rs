@@ -1,23 +1,13 @@
 use infiniband_rs::connection::builder::IbvConnectionBuilder;
-use infiniband_rs::devices::ibv_device_list;
 use simple_logger::SimpleLogger;
+use infiniband_rs::devices::ibv_device_open;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
     SimpleLogger::new().init().unwrap();
 
-    let devices = ibv_device_list().unwrap();
-    println!("{devices:?}");
-
-    let device = devices
-        .iter()
-        .find(|device| device.name() == Some(DEVICE))
-        .unwrap();
-
-    println!("{device:?}");
-
-    let ctx = device.open().unwrap();
+    let ctx = ibv_device_open(DEVICE).unwrap();
 
     let prep_conn = IbvConnectionBuilder::new(&ctx).build().unwrap();
     let endpoint = prep_conn.endpoint();
