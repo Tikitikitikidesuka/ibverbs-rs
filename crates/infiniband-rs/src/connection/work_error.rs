@@ -39,7 +39,7 @@ impl fmt::Display for IbvWorkError {
 
         write!(
             f,
-            "ibverbs work error: {} [{:?}] \
+            "{} [{:?}] \
              (raw_status={}, vendor_code={}, hint={})",
             code,
             code.class(),

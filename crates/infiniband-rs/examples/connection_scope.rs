@@ -1,5 +1,4 @@
 use infiniband_rs::connection::builder::IbvConnectionBuilder;
-use infiniband_rs::connection::connection::IbvConnPolledWrError;
 use infiniband_rs::devices::ibv_device_list;
 use simple_logger::SimpleLogger;
 
@@ -41,8 +40,8 @@ fn main() {
             .post_receive(&[mr.prepare_receive(recv_mem).unwrap()])
             .unwrap();
         let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
-        wr0.spin_poll().unwrap().unwrap();
-        wr1.spin_poll().unwrap().unwrap();
+        wr0.spin_poll().unwrap();
+        wr1.spin_poll().unwrap();
     });
     println!("after recv: {:?}", &recv_mem[0..4]);
 
@@ -68,16 +67,29 @@ fn main() {
     recv_mem.copy_from_slice(&[0, 0, 0, 0]);
     println!("before recv: {:?}", &recv_mem[0..4]);
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
-    let result: Result<(), IbvConnPolledWrError> = conn.scope(|s| {
+    let result = conn.scope(|s| {
         let wr0 = s
             .post_receive(&[mr.prepare_receive(recv_mem).unwrap()])
             .unwrap();
         let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
         // Since you can forget to poll and the work request will be polled
         // at the end of the scope, you may just return the errors with ?.
-        wr0.spin_poll()??;
-        wr1.spin_poll()??;
-        Ok(())
+        wr0.spin_poll()?;
+        wr1.spin_poll()
+    });
+    println!("Result: {:?}", result);
+    println!("after recv: {:?}", &recv_mem[0..4]);
+
+    // Panicking with automatic polling and work failure
+    println!("Running scoped connection, polling and returning poll errors...");
+    let (send_mem, rest) = mem.split_at_mut(4);
+    let (recv_mem, _rest) = rest.split_at_mut(4);
+    recv_mem.copy_from_slice(&[0, 0, 0, 0]);
+    println!("before recv: {:?}", &recv_mem[0..4]);
+    send_mem.copy_from_slice(&[1, 2, 3, 4]);
+    let result = conn.scope(|s| {
+        let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
+        panic!("I panicked!!!!");
     });
     println!("Result: {:?}", result);
     println!("after recv: {:?}", &recv_mem[0..4]);

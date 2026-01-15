@@ -1,9 +1,7 @@
 use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
-use crate::connection::connection_scope::IbvConnectionScope;
+use crate::connection::connection_scope::{IbvConnectionScope, IbvConnectionScopeError};
 use crate::connection::unsafe_member::UnsafeMember;
-use crate::connection::work_completion::IbvWorkCompletion;
-use crate::connection::work_error::IbvWorkError;
-use crate::connection::work_request::{IbvWorkRequest, IbvWorkRequestStatus, IbvWorkResult};
+use crate::connection::work_request::{IbvWorkRequest, IbvWorkSpinPollResult};
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
@@ -15,6 +13,7 @@ use std::io;
 use std::marker::PhantomData;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
+use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -44,14 +43,6 @@ impl IbvConnection {
             next_wr_id: 0,
         }
     }
-}
-
-#[derive(Debug, Error)]
-pub enum IbvConnPolledWrError {
-    #[error("io error: {0}")]
-    IoError(#[from] io::Error),
-    #[error("operation error: {0}")]
-    OpError(#[from] IbvWorkError),
 }
 
 impl IbvConnection {
@@ -221,35 +212,44 @@ impl IbvConnection {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub fn scope<'env, F, R>(&'env mut self, f: F) -> R
+    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, IbvConnectionScopeError>
     where
         F: for<'scope> FnOnce(&mut IbvConnectionScope<'scope, 'env>) -> R,
     {
         let mut scope = IbvConnectionScope::new(self);
-        let result = f(&mut scope);
-        result
+        // The user's closure may panic after issuing work requests.
+        // The panic has to be caught to ensure clean up for exception safety.
+        let user_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
+        let clean_up_result = scope.clean_up();
+        match user_result {
+            Ok(r) => clean_up_result.map(|_| r),
+            Err(panic) => {
+                log::error!("IbvConnectionScope closure panic!");
+                if let Err(scope_error) = clean_up_result {
+                    log::warn!("{scope_error}")
+                };
+                resume_unwind(panic)
+            }
+        }
     }
 
-    pub fn send<'a>(
-        &mut self,
-        sends: impl AsRef<[IbvConnSend<'a>]>,
-    ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()??)
+    pub fn send<'a>(&mut self, sends: impl AsRef<[IbvConnSend<'a>]>) -> IbvWorkSpinPollResult {
+        Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()?)
     }
 
     pub fn send_with_imm_data<'a>(
         &mut self,
         sends: impl AsRef<[IbvConnSend<'a>]>,
         imm_data: u32,
-    ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.spin_poll()??)
+    ) -> IbvWorkSpinPollResult {
+        Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.spin_poll()?)
     }
 
     pub fn receive<'a>(
         &mut self,
         receives: impl AsRef<[IbvConnReceive<'a>]>,
-    ) -> Result<IbvWorkCompletion, IbvConnPolledWrError> {
-        Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()??)
+    ) -> IbvWorkSpinPollResult {
+        Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()?)
     }
 
     // unsafe functions

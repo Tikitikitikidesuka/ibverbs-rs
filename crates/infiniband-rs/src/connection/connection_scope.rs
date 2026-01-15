@@ -1,9 +1,16 @@
 use crate::connection::connection::{IbvConnReceive, IbvConnSend, IbvConnection};
-use crate::connection::work_request::{IbvWorkRequest, IbvWorkRequestStatus, IbvWorkResult};
+use crate::connection::work_error::IbvWorkError;
+use crate::connection::work_request::{
+    IbvWorkPollError, IbvWorkPollResult, IbvWorkRequest, IbvWorkRequestStatus, IbvWorkResult,
+    IbvWorkSpinPollResult,
+};
+use nix::libc::write;
 use std::cell::RefCell;
+use std::fmt::{Display, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use thiserror::Error;
 
 pub struct IbvConnectionScope<'scope, 'env: 'scope> {
     inner: &'env mut IbvConnection,
@@ -13,25 +20,74 @@ pub struct IbvConnectionScope<'scope, 'env: 'scope> {
     env: PhantomData<&'env mut &'env ()>,
 }
 
-impl<'scope, 'env> Drop for IbvConnectionScope<'scope, 'env> {
-    fn drop(&mut self) {
-        self.wrs.iter().for_each(|wr| {
+/// Error of a Connection Scope caught during clean up.
+/// - PollError means there was an error polling the completion queue.
+///   This means the completion queue and queue pair of the connection have
+///   transitioned to the error state and therefore all of the work requests
+///   were flushed uncompleted and with an error.
+/// - WorkError means at least one work request failed during its execution.
+///   This only specifies how many work requests failed. For more details do
+///   not rely on automatic polling of the scoped connection.
+#[derive(Debug, Error)]
+pub enum IbvConnectionScopeError {
+    PollError(#[from] io::Error),
+    WorkError(Vec<IbvWorkError>),
+}
+
+impl Display for IbvConnectionScopeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IbvConnectionScopeError::PollError(io_error) => {
+                write!(
+                    f,
+                    "IbvConnectionScope poll error during clean-up: {io_error}"
+                )
+            }
+            IbvConnectionScopeError::WorkError(work_errors) => {
+                // Header line with count
+                writeln!(
+                    f,
+                    "IbvConnectionScope {} work errors during clean-up:",
+                    work_errors.len()
+                )?;
+
+                // Each work error on its own line with a bullet
+                for err in work_errors {
+                    writeln!(f, "- {}", err)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
+    // Important to notice. *Clean up does not fail*. The returned result represents the outcome
+    // of the polled work requests during clean up. If it errors, it means some of the work
+    // requests failed.
+    pub(super) fn clean_up(self) -> Result<(), IbvConnectionScopeError> {
+        let mut work_errors = Vec::new();
+        for wr in &self.wrs {
             let mut wr = wr.borrow_mut();
             if !wr.already_polled_to_completion() {
-                log::warn!("IbvScopedWorkRequest not manually polled to completion");
-                match wr.spin_poll() {
-                    Ok(Err(op_error)) => log::error!(
-                        "IbvScopedWorkRequest operation error detected on \
-                             the scope's clean up: {op_error}"
-                    ),
-                    Err(io_error) => log::error!(
-                        "Unable to poll IbvScopedWorkRequest to completion in \
-                             the scope's clean up: {io_error}"
-                    ),
-                    Ok(Ok(_wc)) => {}
+                // Take care of errors to report them
+                if let Err(error) = wr.spin_poll() {
+                    match error {
+                        IbvWorkPollError::PollError(poll_error) => {
+                            return Err(IbvConnectionScopeError::PollError(poll_error));
+                        }
+                        IbvWorkPollError::WorkError(work_error) => work_errors.push(work_error),
+                    }
                 }
             }
-        });
+        }
+
+        if work_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(IbvConnectionScopeError::WorkError(work_errors))
+        }
     }
 }
 
@@ -126,11 +182,11 @@ pub struct IbvScopedWorkRequest<'scope> {
 }
 
 impl<'scope> IbvScopedWorkRequest<'scope> {
-    pub fn poll(&self) -> io::Result<IbvWorkRequestStatus> {
+    pub fn poll(&self) -> IbvWorkPollResult {
         self.inner.borrow_mut().poll()
     }
 
-    pub fn spin_poll(&self) -> io::Result<IbvWorkResult> {
+    pub fn spin_poll(&self) -> IbvWorkSpinPollResult {
         self.inner.borrow_mut().spin_poll()
     }
 }
