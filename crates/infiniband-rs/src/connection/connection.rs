@@ -223,13 +223,7 @@ impl IbvConnection {
         let clean_up_result = scope.clean_up();
         match user_result {
             Ok(r) => clean_up_result.map(|_| r),
-            Err(panic) => {
-                log::error!("IbvConnectionScope closure panic!");
-                if let Err(scope_error) = clean_up_result {
-                    log::warn!("{scope_error}")
-                };
-                resume_unwind(panic)
-            }
+            Err(panic) => resume_unwind(panic),
         }
     }
 
