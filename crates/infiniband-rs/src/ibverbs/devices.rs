@@ -3,11 +3,14 @@ use crate::ibverbs::global_unique_id::Guid;
 use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
+use std::marker::PhantomData;
+use std::ptr::NonNull;
 
 pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
     let name = name.as_ref();
     let devices = ibv_device_list()?;
-    let device = devices.iter()
+    let device = devices
+        .iter()
         .find(|d| d.name() == Some(name))
         .ok_or_else(|| {
             io::Error::new(
@@ -19,22 +22,23 @@ pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
 }
 
 pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
-    let mut n = 0i32;
-    let devices = unsafe { ibv_get_device_list(&mut n as *mut _) };
+    let mut num_devices = 0i32;
+    let devices_ptr = unsafe { ibv_get_device_list(&mut num_devices as *mut _) };
 
-    if devices.is_null() {
+    if devices_ptr.is_null() {
         return Err(io::Error::last_os_error());
     }
 
-    let devices = unsafe {
-        use std::slice;
-        slice::from_raw_parts_mut(devices, n as usize)
-    };
-
-    Ok(IbvDeviceList(devices))
+    Ok(IbvDeviceList {
+        devices_ptr,
+        num_devices: num_devices as usize,
+    })
 }
 
-pub struct IbvDeviceList(&'static mut [*mut ibv_device]);
+pub struct IbvDeviceList {
+    devices_ptr: *mut *mut ibv_device,
+    num_devices: usize,
+}
 
 unsafe impl Sync for IbvDeviceList {}
 unsafe impl Send for IbvDeviceList {}
@@ -44,7 +48,7 @@ unsafe impl Send for IbvDeviceList {}
 // `DeviceList` gets `std::mem::forget` applied to it.
 impl Drop for IbvDeviceList {
     fn drop(&mut self) {
-        unsafe { ibv_free_device_list(self.0.as_mut_ptr()) };
+        unsafe { ibv_free_device_list(self.devices_ptr) };
     }
 }
 
@@ -56,17 +60,24 @@ impl IbvDeviceList {
 
     /// Returns the number of devices.
     pub fn len(&self) -> usize {
-        self.0.len()
+        self.num_devices as usize
     }
 
     /// Returns `true` if there are any devices.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.num_devices == 0
     }
 
     /// Returns the device at the given `index`, or `None` if out of bounds.
     pub fn get(&self, index: usize) -> Option<IbvDevice<'_>> {
-        self.0.get(index).map(|d| IbvDevice(d))
+        if index >= self.num_devices {
+            return None;
+        }
+
+        Some(IbvDevice {
+            device_ptr: unsafe { *self.devices_ptr.add(index) },
+            _dev_list: PhantomData,
+        })
     }
 }
 
@@ -87,11 +98,11 @@ pub struct IbDeviceListIter<'iter> {
 impl<'iter> Iterator for IbDeviceListIter<'iter> {
     type Item = IbvDevice<'iter>;
     fn next(&mut self) -> Option<Self::Item> {
-        let e = self.list.0.get(self.i);
-        if e.is_some() {
+        let opt_device = self.list.get(self.i);
+        if opt_device.is_some() {
             self.i += 1;
         }
-        e.map(|e| IbvDevice(e))
+        opt_device
     }
 }
 
@@ -101,12 +112,21 @@ impl std::fmt::Debug for IbvDeviceList {
     }
 }
 
-pub struct IbvDevice<'devlist>(pub(super) &'devlist *mut ibv_device);
+pub struct IbvDevice<'devlist> {
+    device_ptr: *mut ibv_device,
+    _dev_list: PhantomData<&'devlist IbvDeviceList>,
+}
 
 unsafe impl<'devlist> Sync for IbvDevice<'devlist> {}
 unsafe impl<'devlist> Send for IbvDevice<'devlist> {}
 
-impl<'devlist> IbvDevice<'devlist> {
+impl IbvDevice<'_> {
+    pub(super) unsafe fn new(device_ptr: *mut ibv_device) -> Self {
+        Self { device_ptr, _dev_list: PhantomData }
+    }
+}
+
+impl IbvDevice<'_> {
     /// Opens an RMDA device and creates a context for further use.
     ///
     /// This context will later be used to query its resources or for creating resources.
@@ -122,12 +142,12 @@ impl<'devlist> IbvDevice<'devlist> {
     ///  - `EMFILE`: Too many files are opened by this process (from `ibv_query_gid`).
     ///  - Other: the device is not in `ACTIVE` or `ARMED` state.
     pub fn open(&self) -> io::Result<IbvContext> {
-        IbvContext::with_device(*self.0)
+        IbvContext::with_device(self.device_ptr)
     }
 
     /// Returns a `&str` of the name, which is associated with this RDMA device.
-    pub fn name(&self) -> Option<&'devlist str> {
-        let name_ptr = unsafe { ibv_get_device_name(*self.0) };
+    pub fn name(&self) -> Option<&str> {
+        let name_ptr = unsafe { ibv_get_device_name(self.device_ptr) };
         if name_ptr.is_null() {
             None
         } else {
@@ -140,7 +160,7 @@ impl<'devlist> IbvDevice<'devlist> {
     /// # Errors
     ///  - `EMFILE`: Too many files are opened by this process.
     pub fn guid(&self) -> io::Result<Guid> {
-        let guid_int = unsafe { ibv_get_device_guid(*self.0) };
+        let guid_int = unsafe { ibv_get_device_guid(self.device_ptr) };
         let guid: Guid = guid_int.into();
         if guid.is_reserved() {
             Err(io::Error::last_os_error())

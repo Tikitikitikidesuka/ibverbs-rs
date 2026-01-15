@@ -79,7 +79,7 @@ impl Drop for IbvContextInner {
 impl std::fmt::Debug for IbvContextInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvContext")
-            .field("device", &IbvDevice(&(unsafe { &*self.ctx }).device))
+            .field("device", &unsafe { IbvDevice::new((&*self.ctx).device) })
             .finish()
     }
 }
