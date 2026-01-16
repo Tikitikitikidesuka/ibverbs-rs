@@ -4,7 +4,6 @@ use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
 use std::marker::PhantomData;
-use std::ptr::NonNull;
 
 pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
     let name = name.as_ref();
@@ -15,7 +14,7 @@ pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("InfiniBand device '{name}' not found"),
+                format!("ibverbs device '{name}' not found"),
             )
         })?;
     device.open()
@@ -112,13 +111,13 @@ impl std::fmt::Debug for IbvDeviceList {
     }
 }
 
-pub struct IbvDevice<'devlist> {
+pub struct IbvDevice<'a> {
     device_ptr: *mut ibv_device,
-    _dev_list: PhantomData<&'devlist IbvDeviceList>,
+    _dev_list: PhantomData<&'a IbvDeviceList>,
 }
 
-unsafe impl<'devlist> Sync for IbvDevice<'devlist> {}
-unsafe impl<'devlist> Send for IbvDevice<'devlist> {}
+unsafe impl<'a> Sync for IbvDevice<'a> {}
+unsafe impl<'a> Send for IbvDevice<'a> {}
 
 impl IbvDevice<'_> {
     pub(super) unsafe fn new(device_ptr: *mut ibv_device) -> Self {
