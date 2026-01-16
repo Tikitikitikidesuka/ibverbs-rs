@@ -77,6 +77,7 @@ impl IbvCompletionQueue {
             };
             Err(err)
         } else {
+            log::debug!("IbvCompletionQueue created");
             Ok(IbvCompletionQueue {
                 inner: Arc::new(IbvCompletionQueueInner {
                     context,
@@ -123,6 +124,8 @@ unsafe impl Sync for IbvCompletionQueueInner {}
 
 impl Drop for IbvCompletionQueueInner {
     fn drop(&mut self) {
+        log::debug!("IbvCompletionQueue destroyed");
+
         let cq = self.cq;
         let errno = unsafe { ibv_destroy_cq(self.cq) };
         if errno != 0 {

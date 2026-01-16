@@ -90,6 +90,7 @@ impl IbvRcQueuePairBuilder {
         if qp.is_null() {
             Err(io::Error::last_os_error())
         } else {
+            log::debug!("IbvQueuePair created");
             Ok(IbvPreparedQueuePair {
                 qp: IbvQueuePair {
                     pd: self.pd.clone(),

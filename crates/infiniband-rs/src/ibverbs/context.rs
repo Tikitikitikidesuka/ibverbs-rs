@@ -53,6 +53,7 @@ impl IbvContext {
         // Check that the port is active/armed.
         context.inner.query_port()?;
 
+        log::debug!("IbvContext opened");
         Ok(context)
     }
 }
@@ -66,6 +67,7 @@ unsafe impl Send for IbvContextInner {}
 
 impl Drop for IbvContextInner {
     fn drop(&mut self) {
+        log::debug!("IbvContext closed");
         let ctx = self.ctx;
         if unsafe { ibv_close_device(self.ctx) } != 0 {
             let debug_text = format!("{:?}", self);

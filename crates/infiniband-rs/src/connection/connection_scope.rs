@@ -1,16 +1,15 @@
-use crate::connection::connection::{IbvConnReceive, IbvConnSend, IbvConnection};
+use crate::connection::connection::IbvConnection;
 use crate::connection::work_error::IbvWorkError;
 use crate::connection::work_request::{
-    IbvWorkPollError, IbvWorkPollResult, IbvWorkRequest, IbvWorkRequestStatus, IbvWorkResult,
-    IbvWorkSpinPollResult,
+    IbvWorkPollError, IbvWorkPollResult, IbvWorkRequest, IbvWorkSpinPollResult,
 };
-use nix::libc::write;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
+use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
 
 pub struct IbvConnectionScope<'scope, 'env: 'scope> {
     inner: &'env mut IbvConnection,
@@ -107,7 +106,7 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
     // so no overlapping operations can be done concurrently
     pub fn post_send(
         &mut self,
-        sends: impl AsRef<[IbvConnSend<'env>]>,
+        sends: impl AsRef<[IbvScatterElement<'env>]>,
     ) -> io::Result<IbvScopedWorkRequest<'scope>> {
         let wr = Rc::new(RefCell::new(unsafe { self.inner.send_unpolled(sends)? }));
         self.wrs.push(wr.clone());
@@ -121,7 +120,7 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
     // so no overlapping operations can be done concurrently
     pub fn post_receive(
         &mut self,
-        receives: impl AsRef<[IbvConnReceive<'env>]>,
+        receives: impl AsRef<[IbvGatherElement<'env>]>,
     ) -> io::Result<IbvScopedWorkRequest<'scope>> {
         let wr = Rc::new(RefCell::new(unsafe {
             self.inner.receive_unpolled(receives)?

@@ -3,6 +3,7 @@ use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{io, ptr};
+use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
 
 pub struct IbvQueuePair {
     pub(super) pd: Arc<IbvProtectionDomainInner>,
@@ -14,6 +15,7 @@ unsafe impl Sync for IbvQueuePair {}
 
 impl Drop for IbvQueuePair {
     fn drop(&mut self) {
+        log::debug!("IbvQueuePair destroyed");
         let qp = self.qp;
         let errno = unsafe { ibv_destroy_qp(self.qp) };
         if errno != 0 {
@@ -41,7 +43,7 @@ impl Debug for IbvQueuePair {
 }
 
 impl IbvQueuePair {
-    pub unsafe fn post_send(&mut self, local: &[ibv_sge], wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_send(&mut self, local: &[IbvScatterElement], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -60,7 +62,7 @@ impl IbvQueuePair {
 
     pub unsafe fn post_send_with_imm(
         &mut self,
-        local: &[ibv_sge],
+        local: &[IbvScatterElement],
         imm_data: u32,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -81,7 +83,7 @@ impl IbvQueuePair {
     }
 
     #[inline(always)]
-    pub unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {
+    unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {
         let mut bad_wr: *mut ibv_send_wr = ptr::null::<ibv_send_wr>() as *mut _;
         let ctx = unsafe { *self.qp }.context;
         let ops = &mut unsafe { *ctx }.ops;
@@ -95,7 +97,7 @@ impl IbvQueuePair {
         }
     }
 
-    pub unsafe fn post_receive(&mut self, local: &[ibv_sge], wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_receive(&mut self, local: &[IbvGatherElement], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

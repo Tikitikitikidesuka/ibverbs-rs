@@ -28,6 +28,7 @@ pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
         return Err(io::Error::last_os_error());
     }
 
+    log::debug!("IbvDeviceList created");
     Ok(IbvDeviceList {
         devices_ptr,
         num_devices: num_devices as usize,
@@ -47,6 +48,7 @@ unsafe impl Send for IbvDeviceList {}
 // `DeviceList` gets `std::mem::forget` applied to it.
 impl Drop for IbvDeviceList {
     fn drop(&mut self) {
+        log::debug!("IbvDeviceList dropped");
         unsafe { ibv_free_device_list(self.devices_ptr) };
     }
 }

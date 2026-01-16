@@ -17,6 +17,7 @@ impl IbvProtectionDomain {
         if pd.is_null() {
             Err(io::Error::other(io::Error::last_os_error()))
         } else {
+            log::debug!("IbvProtectionDomain allocated");
             Ok(IbvProtectionDomain {
                 inner: Arc::new(IbvProtectionDomainInner { context, pd }),
             })
@@ -97,6 +98,7 @@ unsafe impl Send for IbvProtectionDomainInner {}
 
 impl Drop for IbvProtectionDomainInner {
     fn drop(&mut self) {
+        log::debug!("IbvProtectionDomain deallocated");
         let pd = self.pd;
         let errno = unsafe { ibv_dealloc_pd(self.pd) };
         if errno != 0 {

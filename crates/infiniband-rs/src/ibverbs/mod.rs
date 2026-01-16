@@ -8,3 +8,5 @@ pub mod protection_domain;
 pub mod queue_pair;
 pub mod queue_pair_builder;
 pub mod queue_pair_endpoint;
+pub mod scatter_gather_element;
+mod unsafe_member;

@@ -1,21 +1,19 @@
 use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::connection_scope::{IbvConnectionScope, IbvConnectionScopeError};
-use crate::connection::unsafe_member::UnsafeMember;
 use crate::connection::work_request::{IbvWorkRequest, IbvWorkSpinPollResult};
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
+use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
 use ibverbs_sys::ibv_sge;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
-use std::marker::PhantomData;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::RangeBounds;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
-use thiserror::Error;
 
 #[derive(Debug)]
 // Order of attributes matters.
@@ -50,7 +48,7 @@ impl IbvConnection {
         &mut self,
         name: impl Into<String>,
         memory: &mut [u8],
-    ) -> io::Result<IbvConnMr> {
+    ) -> io::Result<IbvMemoryRegion> {
         let name = name.into();
         if self.mrs.contains_key(&name) {
             return Err(io::Error::new(
@@ -72,15 +70,7 @@ impl IbvConnection {
             )?
         };
 
-        let out_mr = IbvConnMr {
-            lkey: mr.lkey(),
-            address: mr.address(),
-            length: mr.length(),
-        };
-
-        self.mrs.insert(name, mr);
-
-        Ok(out_mr)
+        Ok(mr)
     }
 
     pub fn register_dmabuf_mr(
@@ -90,7 +80,7 @@ impl IbvConnection {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<IbvConnMr> {
+    ) -> io::Result<IbvMemoryRegion> {
         let name = name.into();
         if self.mrs.contains_key(&name) {
             return Err(io::Error::new(
@@ -114,23 +104,7 @@ impl IbvConnection {
             )?
         };
 
-        let out_mr = IbvConnMr {
-            lkey: mr.lkey(),
-            address: mr.address(),
-            length: mr.length(),
-        };
-
-        self.mrs.insert(name, mr);
-
-        Ok(out_mr)
-    }
-
-    pub fn get_mr(&self, name: impl AsRef<str>) -> Option<IbvConnMr> {
-        self.mrs.get(name.as_ref()).map(|mr| IbvConnMr {
-            lkey: mr.lkey(),
-            address: mr.address(),
-            length: mr.length(),
-        })
+        Ok(mr)
     }
 
     // Safety: When sharing an mr, it is exposed to be mutated remotely
@@ -159,6 +133,9 @@ impl IbvConnection {
                 format!("memory region \"{name}\" not registered"),
             ))
         } else {
+            /// TODO: NO ESTÁS DESREGISTRANDO...
+            /// TODO: MIRA UN MODELO RAII PARA LA MEMORIA Y TRAZA LA VIDA DE LOS ELEMENTOS QUE
+            /// TODO: EXPONE LA CONEXIÓN (PD, CQ, QP, ETC)
             Ok(())
         }
     }
@@ -226,13 +203,16 @@ impl IbvConnection {
         }
     }
 
-    pub fn send<'a>(&mut self, sends: impl AsRef<[IbvConnSend<'a>]>) -> IbvWorkSpinPollResult {
+    pub fn send<'a>(
+        &mut self,
+        sends: impl AsRef<[IbvScatterElement<'a>]>,
+    ) -> IbvWorkSpinPollResult {
         Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()?)
     }
 
     pub fn send_with_imm_data<'a>(
         &mut self,
-        sends: impl AsRef<[IbvConnSend<'a>]>,
+        sends: impl AsRef<[IbvScatterElement<'a>]>,
         imm_data: u32,
     ) -> IbvWorkSpinPollResult {
         Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.spin_poll()?)
@@ -240,7 +220,7 @@ impl IbvConnection {
 
     pub fn receive<'a>(
         &mut self,
-        receives: impl AsRef<[IbvConnReceive<'a>]>,
+        receives: impl AsRef<[IbvGatherElement<'a>]>,
     ) -> IbvWorkSpinPollResult {
         Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()?)
     }
@@ -291,10 +271,10 @@ impl IbvConnection {
     /// ```
     pub unsafe fn send_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[IbvConnSend<'a>]>,
+        sends: impl AsRef<[IbvScatterElement<'a>]>,
     ) -> io::Result<IbvWorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe { self.qp.post_send(sends.as_ref().as_sge_slice(), wr_id)? };
+        unsafe { self.qp.post_send(sends.as_ref(), wr_id)? };
         Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
 
@@ -343,13 +323,13 @@ impl IbvConnection {
     /// ```
     pub unsafe fn send_with_imm_data_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[IbvConnSend<'a>]>,
+        sends: impl AsRef<[IbvScatterElement<'a>]>,
         imm_data: u32,
     ) -> io::Result<IbvWorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe {
             self.qp
-                .post_send_with_imm(sends.as_ref().as_sge_slice(), imm_data, wr_id)?
+                .post_send_with_imm(sends.as_ref(), imm_data, wr_id)?
         };
         Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
@@ -397,13 +377,10 @@ impl IbvConnection {
     /// ```
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        receives: impl AsRef<[IbvConnReceive<'a>]>,
+        receives: impl AsRef<[IbvGatherElement<'a>]>,
     ) -> io::Result<IbvWorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe {
-            self.qp
-                .post_receive(receives.as_ref().as_sge_slice(), wr_id)?
-        };
+        unsafe { self.qp.post_receive(receives.as_ref(), wr_id)? };
         Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
 
@@ -437,108 +414,6 @@ impl IbvConnection {
         let wr_id = self.next_wr_id;
         self.next_wr_id += 1;
         wr_id
-    }
-}
-
-// Safety: memory of an mr not allowed to move
-// Can only be mutated locally by user or receive
-#[derive(Debug, Copy, Clone)]
-pub struct IbvConnMr {
-    lkey: u32,
-    address: *const u8,
-    length: usize,
-}
-
-#[derive(Debug, Error)]
-pub enum IbvConnMrSliceError {
-    #[error("maximum length of mr slice exceeded")]
-    SliceTooBig,
-    #[error("slice is not within the bounds of the mr")]
-    SliceNotWithinBounds,
-}
-
-impl IbvConnMr {
-    pub fn prepare_send<'a>(&self, data: &'a [u8]) -> Result<IbvConnSend<'a>, IbvConnMrSliceError> {
-        let data_length = data
-            .len()
-            .try_into()
-            .map_err(|_| IbvConnMrSliceError::SliceTooBig)?;
-        if !self.data_is_contained(data.as_ptr(), data.len()) {
-            return Err(IbvConnMrSliceError::SliceNotWithinBounds);
-        }
-
-        Ok(IbvConnSend {
-            sge: ibv_sge {
-                addr: data.as_ptr() as u64,
-                length: data_length,
-                lkey: self.lkey,
-            },
-            _data_lifetime: unsafe { UnsafeMember::new(Default::default()) },
-        })
-    }
-
-    pub fn prepare_receive<'a>(
-        &self,
-        data: &'a mut [u8],
-    ) -> Result<IbvConnReceive<'a>, IbvConnMrSliceError> {
-        let data_length = data
-            .len()
-            .try_into()
-            .map_err(|error| IbvConnMrSliceError::SliceTooBig)?;
-        if !self.data_is_contained(data.as_ptr(), data.len()) {
-            return Err(IbvConnMrSliceError::SliceNotWithinBounds);
-        }
-
-        Ok(IbvConnReceive {
-            sge: ibv_sge {
-                addr: data.as_ptr() as u64,
-                length: data_length,
-                lkey: self.lkey,
-            },
-            _data_lifetime: unsafe { UnsafeMember::new(Default::default()) },
-        })
-    }
-
-    fn data_is_contained(&self, data_address: *const u8, data_length: usize) -> bool {
-        let mr_start = self.address as usize;
-        let mr_end = mr_start + self.length;
-        let data_start = data_address as usize;
-        let data_end = data_start + data_length;
-        data_start >= mr_start && data_end <= mr_end
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(transparent)]
-pub struct IbvConnSend<'a> {
-    sge: ibv_sge,
-    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the send.
-    _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
-}
-
-#[derive(Debug)]
-#[repr(transparent)]
-pub struct IbvConnReceive<'a> {
-    sge: ibv_sge,
-    /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the receive.
-    _data_lifetime: UnsafeMember<PhantomData<&'a mut [u8]>>,
-}
-
-pub trait AsSgeSlice {
-    fn as_sge_slice(&self) -> &[ibv_sge];
-}
-
-impl<'a> AsSgeSlice for [IbvConnSend<'a>] {
-    fn as_sge_slice(&self) -> &[ibv_sge] {
-        // Safe because `IbvConnSend<'a>` is `#[repr(transparent)]` to `ibv_sge`
-        unsafe { std::slice::from_raw_parts(self.as_ptr() as *const ibv_sge, self.len()) }
-    }
-}
-
-impl<'a> AsSgeSlice for [IbvConnReceive<'a>] {
-    fn as_sge_slice(&self) -> &[ibv_sge] {
-        // Safe because `IbvConnSend<'a>` is `#[repr(transparent)]` to `ibv_sge`
-        unsafe { std::slice::from_raw_parts(self.as_ptr() as *const ibv_sge, self.len()) }
     }
 }
 

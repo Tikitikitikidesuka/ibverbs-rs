@@ -1,4 +1,7 @@
 use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::scatter_gather_element::{
+    IbvGatherElement, IbvScatterElement, IbvScatterGatherElementError,
+};
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
@@ -14,6 +17,7 @@ unsafe impl Send for IbvMemoryRegion {}
 
 impl Drop for IbvMemoryRegion {
     fn drop(&mut self) {
+        log::debug!("IbvMemoryRegion deregistered");
         let mr = self.mr;
         let errno = unsafe { ibv_dereg_mr(self.mr) };
         if errno != 0 {
@@ -54,6 +58,7 @@ impl IbvMemoryRegion {
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {
+            log::debug!("IbvMemoryRegion registered");
             Ok(IbvMemoryRegion { pd, mr })
         }
     }
@@ -81,6 +86,7 @@ impl IbvMemoryRegion {
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {
+            log::debug!("IbvMemoryRegion registered");
             Ok(IbvMemoryRegion { pd, mr })
         }
     }
@@ -99,5 +105,29 @@ impl IbvMemoryRegion {
 
     pub fn length(&self) -> usize {
         unsafe { (*self.mr).length }
+    }
+}
+
+impl IbvMemoryRegion {
+    pub fn prepare_scatter_element<'a>(
+        &self,
+        data: &'a [u8],
+    ) -> Result<IbvScatterElement<'a>, IbvScatterGatherElementError> {
+        IbvScatterElement::<'a>::new(self, data)
+    }
+
+    pub fn prepare_gather_element<'a>(
+        &self,
+        data: &'a mut [u8],
+    ) -> Result<IbvGatherElement<'a>, IbvScatterGatherElementError> {
+        IbvGatherElement::<'a>::new(self, data)
+    }
+
+    pub fn encloses(&self, slice: &[u8]) -> bool {
+        let mr_start = self.address() as usize;
+        let mr_end = mr_start + self.length();
+        let data_start = slice.as_ptr() as usize;
+        let data_end = data_start + slice.len();
+        data_start >= mr_start && data_end <= mr_end
     }
 }
