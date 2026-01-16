@@ -49,8 +49,7 @@ impl IbvConnection {
     pub fn register_mr(
         &mut self,
         name: impl Into<String>,
-        address: *mut u8,
-        length: usize,
+        memory: &mut [u8],
     ) -> io::Result<IbvConnMr> {
         let name = name.into();
         if self.mrs.contains_key(&name) {
@@ -62,8 +61,8 @@ impl IbvConnection {
 
         let mr = unsafe {
             self.pd.register_mr_with_permissions(
-                address,
-                length,
+                memory.as_mut_ptr(),
+                memory.len(),
                 // TODO: Start with only local_write and add remote_read and remote_write when shared
                 AccessFlags::new()
                     .with_local_write()
