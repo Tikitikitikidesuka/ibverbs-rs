@@ -5,8 +5,8 @@ use std::io;
 use std::sync::Arc;
 
 pub struct IbvMemoryRegion {
-    pub(super) pd: Arc<IbvProtectionDomainInner>,
-    pub(super) mr: *mut ibv_mr,
+    pd: Arc<IbvProtectionDomainInner>,
+    mr: *mut ibv_mr,
 }
 
 unsafe impl Sync for IbvMemoryRegion {}

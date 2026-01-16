@@ -11,7 +11,7 @@ pub(super) const IB_PORT: u8 = 1;
 
 #[derive(Debug)]
 pub struct IbvContext {
-    pub(super) inner: Arc<IbvContextInner>,
+    inner: Arc<IbvContextInner>,
 }
 
 impl IbvContext {
