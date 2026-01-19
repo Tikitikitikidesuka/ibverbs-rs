@@ -7,10 +7,7 @@ use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
 use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::io;
-use std::ops::Bound::{Excluded, Included};
-use std::ops::RangeBounds;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 
@@ -19,10 +16,10 @@ use std::rc::Rc;
 // Deallocation must happen in the order specified.
 pub struct IbvConnection {
     qp: IbvQueuePair,
-    mrs: HashMap<String, IbvMemoryRegion>,
     //remote_mrs: HashMap<String, RemoteMr>,
     cq: Rc<RefCell<IbvCachedCompletionQueue>>,
     pd: IbvProtectionDomain,
+    //meta_mr: Option<IbvConnectionMetaMemoryRegion>,
     next_wr_id: u64,
 }
 
@@ -36,26 +33,14 @@ impl IbvConnection {
             cq: Rc::new(RefCell::new(cq)),
             pd,
             qp,
-            mrs: HashMap::new(),
+            //meta_mr: None,
             next_wr_id: 0,
         }
     }
 }
 
 impl IbvConnection {
-    pub fn register_mr(
-        &mut self,
-        name: impl Into<String>,
-        memory: &mut [u8],
-    ) -> io::Result<IbvMemoryRegion> {
-        let name = name.into();
-        if self.mrs.contains_key(&name) {
-            return Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                format!("memory region \"{name}\" already registered"),
-            ));
-        }
-
+    pub fn register_mr(&mut self, memory: &mut [u8]) -> io::Result<IbvMemoryRegion> {
         let mr = unsafe {
             self.pd.register_mr_with_permissions(
                 memory.as_mut_ptr(),
@@ -74,20 +59,11 @@ impl IbvConnection {
 
     pub fn register_dmabuf_mr(
         &mut self,
-        name: impl Into<String>,
         fd: i32,
         offset: u64,
         length: usize,
         iova: u64,
     ) -> io::Result<IbvMemoryRegion> {
-        let name = name.into();
-        if self.mrs.contains_key(&name) {
-            return Err(io::Error::new(
-                io::ErrorKind::AddrInUse,
-                format!("memory region \"{name}\" already registered"),
-            ));
-        }
-
         let mr = unsafe {
             self.pd.register_dmabuf(
                 fd,
@@ -106,11 +82,16 @@ impl IbvConnection {
         Ok(mr)
     }
 
+    /*
     // Safety: When sharing an mr, it is exposed to be mutated remotely
     // by the peer at any point. It is the user's responsibility to ensure
     // a protocol to comply with Rust's memory safety guarantees.
     pub unsafe fn share_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
-        //self.inner.share_mr(mr)
+        /*
+        if let Some(meta_mr) = self.meta_mr {
+            self.send(meta_mr)
+        }
+        */
         todo!()
     }
 
@@ -123,21 +104,7 @@ impl IbvConnection {
         //self.inner.remote_mr(name)
         todo!()
     }
-
-    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> io::Result<()> {
-        let name = name.as_ref();
-        if let None = self.mrs.remove(name) {
-            Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("memory region \"{name}\" not registered"),
-            ))
-        } else {
-            /// TODO: NO ESTÁS DESREGISTRANDO...
-            /// TODO: MIRA UN MODELO RAII PARA LA MEMORIA Y TRAZA LA VIDA DE LOS ELEMENTOS QUE
-            /// TODO: EXPONE LA CONEXIÓN (PD, CQ, QP, ETC)
-            Ok(())
-        }
-    }
+    */
 
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
     ///
@@ -223,8 +190,6 @@ impl IbvConnection {
     ) -> IbvWorkSpinPollResult {
         Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()?)
     }
-
-    // unsafe functions
 
     /// # Safety
     /// The caller must ensure that the returned `IbvWorkRequest` is
@@ -383,6 +348,7 @@ impl IbvConnection {
         Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
     }
 
+    /*
     /// # Safety
     /// This method is unsafe because ... (same reason as send) memory being written must respect &[] aliasing
     /// todo, do we need to make it unsafe if it does unsafe things on the *other* side?
@@ -408,6 +374,7 @@ impl IbvConnection {
     ) -> io::Result<IbvWorkRequest<'a>> {
         todo!()
     }
+    */
 
     fn get_and_advance_wr_id(&mut self) -> u64 {
         let wr_id = self.next_wr_id;
@@ -416,9 +383,11 @@ impl IbvConnection {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+/*
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct RemoteMr {
-    endpoint: (),
+    endpoint: u32,
 }
 
 // todo why take a reference if `RemoteMr' is `Copy`?
@@ -446,3 +415,4 @@ impl RemoteMr {
         }
     }
 }
+*/

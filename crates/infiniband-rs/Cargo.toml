@@ -13,9 +13,6 @@ num_enum = "0.7.5"
 simple_logger = "5.1.0"
 nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] }
 thiserror.workspace = true
-serde.workspace = true
-bincode.workspace = true
-tokio = {version= "1.48", features = ["net",  "io-util", "time", "rt"]}
 
 [[bin]]
 path = "bin/demo.rs"
