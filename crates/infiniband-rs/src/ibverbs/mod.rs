@@ -9,4 +9,8 @@ pub mod queue_pair;
 pub mod queue_pair_builder;
 pub mod queue_pair_endpoint;
 pub mod scatter_gather_element;
+pub mod work_completion;
+pub mod work_error;
+pub mod work_success;
+
 mod unsafe_member;

@@ -1,15 +1,15 @@
 use crate::connection::connection::IbvConnection;
-use crate::connection::work_error::IbvWorkError;
 use crate::connection::work_request::{
     IbvWorkPollError, IbvWorkPollResult, IbvWorkRequest, IbvWorkSpinPollResult,
 };
+use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
+use crate::ibverbs::work_error::IbvWorkError;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
-use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
 
 pub struct IbvConnectionScope<'scope, 'env: 'scope> {
     inner: &'env mut IbvConnection,

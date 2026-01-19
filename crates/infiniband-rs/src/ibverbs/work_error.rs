@@ -10,6 +10,7 @@ pub struct IbvWorkError {
 }
 
 impl IbvWorkError {
+    /// The raw status cannot be IBV_WC_SUCCESS.
     pub(super) fn new(raw_status: ibv_wc_status::Type, vendor_code: u32) -> Self {
         Self {
             raw_status,

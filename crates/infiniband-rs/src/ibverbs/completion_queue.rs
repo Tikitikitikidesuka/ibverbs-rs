@@ -1,4 +1,7 @@
 use crate::ibverbs::context::IbvContextInner;
+use crate::ibverbs::work_completion::IbvWorkCompletion;
+use crate::ibverbs::work_error::IbvWorkError;
+use crate::ibverbs::work_success::IbvWorkSuccess;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::os::fd::BorrowedFd;
@@ -89,26 +92,61 @@ impl IbvCompletionQueue {
         }
     }
 
-    pub fn poll<'c>(&self, completions: &'c mut [ibv_wc]) -> io::Result<&'c mut [ibv_wc]> {
+    pub fn poll<'poll_buff>(
+        &self,
+        completions: &'poll_buff mut [IbvCompletionQueuePollSlot],
+    ) -> io::Result<IbvCompletionQueuePolledCompletions<'poll_buff>> {
         let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
         let ops = &mut unsafe { &mut *ctx }.ops;
         let n = unsafe {
             ops.poll_cq.as_mut().unwrap()(
                 self.inner.cq,
                 completions.len() as i32,
-                completions.as_mut_ptr(),
+                completions.as_mut_ptr() as *mut ibv_wc,
             )
         };
 
         if n < 0 {
             Err(io::Error::other("ibv_poll_cq failed"))
         } else {
-            Ok(&mut completions[0..n as usize])
+            Ok(IbvCompletionQueuePolledCompletions {
+                wcs: &mut completions[0..n as usize],
+            })
         }
     }
 
     pub fn min_capacity(&self) -> u32 {
         self.inner.min_capacity
+    }
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+#[repr(transparent)]
+pub struct IbvCompletionQueuePollSlot {
+    wc: ibv_wc,
+}
+
+pub struct IbvCompletionQueuePolledCompletions<'a> {
+    wcs: &'a mut [IbvCompletionQueuePollSlot],
+}
+
+impl IbvCompletionQueuePolledCompletions<'_> {
+    pub fn len(&self) -> usize {
+        self.wcs.len()
+    }
+}
+
+impl<'a> IntoIterator for IbvCompletionQueuePolledCompletions<'a> {
+    type Item = IbvWorkCompletion;
+    type IntoIter = std::iter::Map<
+        std::slice::Iter<'a, IbvCompletionQueuePollSlot>,
+        fn(&IbvCompletionQueuePollSlot) -> IbvWorkCompletion,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.wcs
+            .iter()
+            .map(|wc_slot| IbvWorkCompletion::new(wc_slot.wc))
     }
 }
 

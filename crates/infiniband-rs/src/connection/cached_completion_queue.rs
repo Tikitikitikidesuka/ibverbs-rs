@@ -1,13 +1,13 @@
-use crate::ibverbs::completion_queue::IbvCompletionQueue;
-use ibverbs_sys::*;
+use crate::ibverbs::completion_queue::{IbvCompletionQueue, IbvCompletionQueuePollSlot};
+use crate::ibverbs::work_completion::IbvWorkCompletion;
 use intmap::IntMap;
 use std::io;
 
 #[derive(Debug)]
 pub struct IbvCachedCompletionQueue {
     cq: IbvCompletionQueue,
-    cache: IntMap<u64, ibv_wc>,
-    poll_buf: Vec<ibv_wc>,
+    cache: IntMap<u64, IbvWorkCompletion>,
+    poll_buf: Vec<IbvCompletionQueuePollSlot>,
 }
 
 impl IbvCachedCompletionQueue {
@@ -18,7 +18,7 @@ impl IbvCachedCompletionQueue {
         Self {
             cq,
             cache: IntMap::new(),
-            poll_buf: vec![ibv_wc::default(); poll_buf_length],
+            poll_buf: vec![IbvCompletionQueuePollSlot::default(); poll_buf_length],
         }
     }
 
@@ -26,25 +26,26 @@ impl IbvCachedCompletionQueue {
     /// Returns the number of new work completions polled.
     pub fn update(&mut self) -> io::Result<usize> {
         // Poll the cq for new work completions
-        let wc_slice = self.cq.poll(self.poll_buf.as_mut_slice())?;
+        let polled_wcs = self.cq.poll(self.poll_buf.as_mut_slice())?;
+        let polled_num = polled_wcs.len();
 
         // Fill cache with polled work completions
-        for wc in wc_slice.iter() {
-            self.cache.insert(wc.wr_id(), *wc);
+        for wc in polled_wcs {
+            self.cache.insert(wc.wr_id(), wc);
         }
 
-        Ok(wc_slice.len())
+        Ok(polled_num)
     }
 
     /// Returns Some if cached, None if not.
-    pub fn poll(&mut self, wr_id: u64) -> Option<ibv_wc> {
+    pub fn poll(&mut self, wr_id: u64) -> Option<IbvWorkCompletion> {
         self.cache.get(wr_id).copied()
     }
 
     /// Consume a cached work completion.
     /// Returns Some if cached, None if not.
     /// Removes the work completion from the cache.
-    pub fn consume(&mut self, wr_id: u64) -> Option<ibv_wc> {
+    pub fn consume(&mut self, wr_id: u64) -> Option<IbvWorkCompletion> {
         self.cache.remove(wr_id)
     }
 }

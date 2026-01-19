@@ -28,13 +28,12 @@ fn main() {
     let ge = mr.prepare_gather_element(recv_mem).unwrap();
     let se = mr.prepare_scatter_element(send_mem).unwrap();
 
+    // Important that scope borrows conn mutably
     conn.scope(|s| {
-        let wr0 = s
-            .post_receive(&[ge])
-            .unwrap();
-        let wr1 = s.post_send(&[se]).unwrap();
-        wr0.spin_poll().unwrap();
-        wr1.spin_poll().unwrap();
+        let mut new_mem = vec![0u8; 1024];
+        let mr = conn.register_mr("asdf", new_mem.as_mut_slice()).unwrap();
+        drop(new_mem);
+        s.post_send([mr.prepare_scatter_element()])
     });
     drop(conn);
     println!("after recv: {:?}", &recv_mem[0..4]);

@@ -1,7 +1,8 @@
 use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
-use crate::connection::work_completion::IbvWorkCompletion;
-use crate::connection::work_error::IbvWorkError;
+use crate::ibverbs::work_completion::IbvWorkResult;
+use crate::ibverbs::work_error::IbvWorkError;
+use crate::ibverbs::work_success::IbvWorkSuccess;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -13,7 +14,7 @@ use thiserror::Error;
 pub struct IbvWorkRequest<'a> {
     wr_id: u64,
     cq: Rc<RefCell<IbvCachedCompletionQueue>>,
-    status: Option<Result<IbvWorkCompletion, IbvWorkError>>,
+    status: Option<Result<IbvWorkSuccess, IbvWorkError>>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
@@ -59,13 +60,16 @@ pub enum IbvWorkPollError {
     WorkError(#[from] IbvWorkError),
 }
 
-pub type IbvWorkSpinPollResult = Result<IbvWorkCompletion, IbvWorkPollError>;
-pub type IbvWorkPollResult = Option<Result<IbvWorkCompletion, IbvWorkPollError>>;
+pub type IbvWorkSpinPollResult = Result<IbvWorkSuccess, IbvWorkPollError>;
+pub type IbvWorkPollResult = Option<Result<IbvWorkSuccess, IbvWorkPollError>>;
 
 pub type IbvWorkRequestStatus = Option<IbvWorkResult>;
-pub type IbvWorkResult = Result<IbvWorkCompletion, IbvWorkError>;
 
 impl IbvWorkRequest<'_> {
+    pub fn wr_id(&self) -> u64 {
+        self.wr_id
+    }
+
     /// Returns `io::Error` if an error occurs while polling.
     /// If no error occurs, `Ok` contains:
     /// `None` if the work request is not yet complete.
@@ -109,7 +113,7 @@ impl IbvWorkRequest<'_> {
     pub fn spin_poll(&mut self) -> IbvWorkSpinPollResult {
         loop {
             match self.poll() {
-                None => continue, // not ready yet, spin
+                None => continue,              // not ready yet, spin
                 Some(Ok(wc)) => return Ok(wc), // completed successfully
                 Some(Err(e)) => return Err(e), // work poll error
             }
@@ -121,18 +125,6 @@ impl IbvWorkRequest<'_> {
     }
 
     fn consume_cache(wr_id: u64, cq: &mut IbvCachedCompletionQueue) -> IbvWorkRequestStatus {
-        if let Some(wc) = cq.consume(wr_id) {
-            if let Some((error_code, vendor_code)) = wc.error() {
-                // Return work error if work failed
-                Some(Err(IbvWorkError::new(error_code, vendor_code)))
-            } else {
-                // Return work completion if work succeeded
-                // TODO: Fill in work completion
-                Some(Ok(IbvWorkCompletion))
-            }
-        } else {
-            // Work not completed yet
-            None
-        }
+        cq.consume(wr_id).map(|w| w.result())
     }
 }

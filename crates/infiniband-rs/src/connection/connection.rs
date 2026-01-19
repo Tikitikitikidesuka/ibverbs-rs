@@ -6,7 +6,6 @@ use crate::ibverbs::protection_domain::IbvProtectionDomain;
 use crate::ibverbs::queue_pair::IbvQueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
 use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
-use ibverbs_sys::ibv_sge;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io;
