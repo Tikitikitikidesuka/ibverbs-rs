@@ -1,5 +1,3 @@
-use ibverbs_sys::ibv_wc;
-
 #[derive(Copy, Clone, Debug)]
 pub struct IbvWorkSuccess {
     imm_data: Option<u32>,

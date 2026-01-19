@@ -1,5 +1,4 @@
 use crate::ibverbs::memory_region::IbvMemoryRegion;
-use crate::ibverbs::unsafe_member::UnsafeMember;
 use ibverbs_sys::ibv_sge;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -34,7 +33,7 @@ use thiserror::Error;
 pub struct IbvScatterElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data
-    _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
+    _data_lifetime: PhantomData<&'a [u8]>,
 }
 
 #[derive(Debug)]
@@ -42,7 +41,7 @@ pub struct IbvScatterElement<'a> {
 pub struct IbvGatherElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data
-    _data_lifetime: UnsafeMember<PhantomData<&'a mut [u8]>>,
+    _data_lifetime: PhantomData<&'a mut [u8]>,
 }
 
 #[derive(Debug, Error)]
@@ -72,7 +71,7 @@ impl<'a> IbvScatterElement<'a> {
                 length: data_length,
                 lkey: mr.lkey(),
             },
-            _data_lifetime: unsafe { UnsafeMember::new(PhantomData::<&'a [u8]>) },
+            _data_lifetime: PhantomData::<&'a [u8]>,
         })
     }
 }
@@ -96,7 +95,7 @@ impl<'a> IbvGatherElement<'a> {
                 length: data_length,
                 lkey: mr.lkey(),
             },
-            _data_lifetime: unsafe { UnsafeMember::new(PhantomData::<&'a mut [u8]>) },
+            _data_lifetime: PhantomData::<&'a mut [u8]>,
         })
     }
 }
