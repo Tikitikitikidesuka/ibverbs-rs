@@ -1,23 +1,18 @@
-use crate::network::host::IbvNetworkRank;
+use crate::network::node::Rank;
 use thiserror::Error;
 
-pub mod host;
+mod host_memory_region;
 pub mod network_config;
-pub mod prepared_network;
+pub mod node;
+pub mod prepared_host;
 pub mod tcp_exchanger;
 
 #[derive(Error, Debug)]
-pub enum IbvNetworkHostError {
+pub enum NodeError {
     #[error("Expected rank {expected} got {rank}")]
-    RankMismatch {
-        rank: IbvNetworkRank,
-        expected: IbvNetworkRank,
-    },
+    RankMismatch { rank: Rank, expected: Rank },
     #[error("Rank {rank} is not part of the network (0..num_peers)")]
-    RankNotInNetwork {
-        rank: IbvNetworkRank,
-        num_peers: IbvNetworkRank,
-    },
+    RankNotInNetwork { rank: Rank, num_peers: Rank },
     #[error("Communication with self is not allowed.")]
     SelfConnection,
 

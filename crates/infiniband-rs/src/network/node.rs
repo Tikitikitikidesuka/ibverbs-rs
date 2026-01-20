@@ -2,47 +2,45 @@ use crate::connection::builder::IbvConnectionBuilder;
 use crate::connection::connection::IbvConnection;
 use crate::connection::work_request::IbvWorkSpinPollResult;
 use crate::devices::ibv_device_open;
-use crate::network::IbvNetworkHostError;
-use crate::network::network_config::IbvNetworkConfig;
-use crate::network::prepared_network::IbvPreparedNetworkHost;
+use crate::network::NodeError;
+use crate::network::network_config::NetworkConfig;
+use crate::network::prepared_host::PreparedNode;
 use bon::bon;
 use std::marker::PhantomData;
+use crate::network::host_memory_region::NodeMemoryRegion;
 
-pub type IbvNetworkRank = usize;
+pub type Rank = usize;
 
-pub struct IbvNetworkHost {
+pub struct Node {
     connections: Vec<IbvConnection>,
-    rank: IbvNetworkRank,
+    rank: Rank,
 }
 
-impl IbvNetworkHost {
-    pub(super) fn new(rank: IbvNetworkRank, connections: Vec<IbvConnection>) -> Self {
+impl Node {
+    pub(super) fn new(rank: Rank, connections: Vec<IbvConnection>) -> Self {
         Self { rank, connections }
     }
 }
 
-pub struct IbvNetworkMemoryRegion<'a> {
+
+pub struct NodeScatterElement<'a> {
     foo: PhantomData<&'a [u8]>,
 }
 
-pub struct IbvNetworkScatterElement<'a> {
-    foo: PhantomData<&'a [u8]>,
-}
-
-pub struct IbvNetworkGatherElement<'a> {
+pub struct NodeGatherElement<'a> {
     foo: PhantomData<&'a [u8]>,
 }
 
 #[bon]
-impl IbvNetworkHost {
+impl Node {
     #[builder]
     pub fn builder(
-        rank: IbvNetworkRank,
-        config: &IbvNetworkConfig,
-    ) -> Result<IbvPreparedNetworkHost, IbvNetworkHostError> {
+        rank: Rank,
+        config: &NetworkConfig,
+    ) -> Result<PreparedNode, NodeError> {
         let self_host = config
             .get(rank)
-            .ok_or(IbvNetworkHostError::RankNotInNetwork {
+            .ok_or(NodeError::RankNotInNetwork {
                 rank,
                 num_peers: config.len(),
             })?;
@@ -54,19 +52,19 @@ impl IbvNetworkHost {
                 IbvConnectionBuilder::new(&ctx).build()
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(IbvPreparedNetworkHost::new(rank, connections))
+        Ok(PreparedNode::new(rank, connections))
     }
 
     pub fn network_size(&self) -> usize {
         self.connections.len()
     }
 
-    pub fn rank(&self) -> IbvNetworkRank {
+    pub fn rank(&self) -> Rank {
         self.rank
     }
 
     /// TODO: on error, some memory regions may be registered
-    pub fn register_mr(&mut self, region: &mut [u8]) -> Result<IbvNetworkMemoryRegion, ()> {
+    pub fn register_mr(&mut self, region: &mut [u8]) -> Result<NodeMemoryRegion, ()> {
         todo!()
     }
 
@@ -77,22 +75,22 @@ impl IbvNetworkHost {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> Result<IbvNetworkMemoryRegion, ()> {
+    ) -> Result<NodeMemoryRegion, ()> {
         todo!()
     }
 
     pub fn send<'a>(
         &mut self,
-        peer: IbvNetworkRank,
-        sends: impl AsRef<[IbvNetworkScatterElement<'a>]>,
+        peer: Rank,
+        sends: impl AsRef<[NodeScatterElement<'a>]>,
     ) -> IbvWorkSpinPollResult {
         todo!()
     }
 
-    pub fn send_with_imm_data<'a>(
+    pub fn send_with_immediate<'a>(
         &mut self,
-        peer: IbvNetworkRank,
-        sends: impl AsRef<[IbvNetworkScatterElement<'a>]>,
+        peer: Rank,
+        sends: impl AsRef<[NodeScatterElement<'a>]>,
         immediate: u32,
     ) -> IbvWorkSpinPollResult {
         todo!()
@@ -100,8 +98,8 @@ impl IbvNetworkHost {
 
     pub fn receive<'a>(
         &mut self,
-        peer: IbvNetworkRank,
-        receives: impl AsRef<[IbvNetworkGatherElement<'a>]>,
+        peer: Rank,
+        receives: impl AsRef<[NodeGatherElement<'a>]>,
     ) -> IbvWorkSpinPollResult {
         todo!()
     }

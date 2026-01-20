@@ -1,33 +1,60 @@
-use infiniband_rs::network::host::{IbvNetworkHost, IbvNetworkRank};
-use infiniband_rs::network::network_config::IbvUncheckedNetworkConfig;
-use infiniband_rs::network::tcp_exchanger::{TcpExchangeConfig, TcpExchanger};
-use std::{env, fs};
-
-const CONFIG_FILE: &str = "network.json";
-const RANK: IbvNetworkRank = 3;
+use infiniband_rs::network::node::{Node, Rank};
+use infiniband_rs::network::network_config::UncheckedNetworkConfig;
+use infiniband_rs::network::prepared_host::NodeGatherEndpoint;
+use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
+use log::warn;
+use std::{env, fs, process};
 
 fn main() {
-    let cwd = env::current_dir().unwrap();
-    let path = cwd.join("network.json");
-    let json_network = fs::read_to_string(&path).unwrap();
-    let network_config = serde_json::from_str::<IbvUncheckedNetworkConfig>(&json_network)
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() != 3 {
+        eprintln!("Usage: {} <network.json> <rank>", args[0]);
+        process::exit(1);
+    }
+
+    let network_path = &args[1];
+    let rank: Rank = args[2].parse().unwrap();
+
+    let json_network = fs::read_to_string(network_path).unwrap();
+
+    let network_config = serde_json::from_str::<UncheckedNetworkConfig>(&json_network)
         .unwrap()
         .check()
         .unwrap();
 
-    let host = IbvNetworkHost::builder()
-        .rank(RANK)
+    let prepared_host = Node::builder()
+        .rank(rank)
         .config(&network_config)
         .build()
         .unwrap();
-    let endpoint = host.endpoint();
 
-    let remote_endpoints = TcpExchanger::await_exchange_all(
-        RANK,
+    let endpoint = prepared_host.endpoint();
+
+    let scattered_remote_endpoints = Exchanger::await_exchange_all(
+        rank,
         &network_config,
         &endpoint,
-        &TcpExchangeConfig::default(),
-    ).unwrap();
+        &ExchangeConfig::default(),
+    )
+    .unwrap();
 
-    println!("{remote_endpoints:?}")
+    let remote_endpoints =
+        NodeGatherEndpoint::gather(rank, scattered_remote_endpoints).unwrap();
+
+    let mut host = prepared_host.handshake(remote_endpoints).unwrap();
+
+    if host.rank() == 0 || host.rank() == 1 {
+        let mut mem = [0u8; 512];
+        let mr = host.register_mr(&mut mem).unwrap();
+        let se0 = mr.prepare_scatter_element(&mem).unwrap();
+        host.send(2, se0).unwrap();
+    } else {
+        let mut mem = [0u8; 1024];
+        let mr = host.register_mr(&mut mem).unwrap();
+        let ge0 = mr.prepare_gather_element(&mut mem[0..512]).unwrap();
+        host.receive(0, &[ge0]).unwrap();
+        let ge1 = mr.prepare_gather_element(&mut mem[512..1024]).unwrap();
+        host.receive(1, &[ge1]).unwrap();
+    }
 }

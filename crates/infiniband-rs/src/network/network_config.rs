@@ -1,58 +1,59 @@
+use crate::network::node::Rank;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, Range};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IbvHostConfig {
+pub struct NodeConfig {
     pub hostname: String,
     pub port: u16,
     pub ibdev: String,
-    pub rankid: usize,
+    pub rankid: Rank,
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub comment: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct IbvUncheckedNetworkConfig {
-    hosts: Vec<IbvHostConfig>,
+pub struct UncheckedNetworkConfig {
+    hosts: Vec<NodeConfig>,
 }
 
-impl IbvUncheckedNetworkConfig {
-    pub fn add_host(&mut self, host: IbvHostConfig) -> &mut Self {
+impl UncheckedNetworkConfig {
+    pub fn add_host(&mut self, host: NodeConfig) -> &mut Self {
         self.hosts.push(host);
         self
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct IbvNetworkConfig {
-    hosts: Vec<IbvHostConfig>,
+pub struct NetworkConfig {
+    hosts: Vec<NodeConfig>,
 }
 
 #[derive(Debug, Copy, Clone, Error)]
-pub enum IbvNetworkNodeBuildError {
+pub enum NetworkConfigCheckError {
     #[error("Empty network")]
     EmptyNetwork,
     #[error("First rank id is not zero")]
-    FirstRankIdNotZero,
-    #[error("Rank ids are non sequential, {gap_rankid} is missing")]
-    NonSequentialRankIds { gap_rankid: usize },
-    #[error("Rank id {dup_rankid} appears multiple times")]
-    DuplicatedRankId { dup_rankid: usize },
+    FirstRankNotZero,
+    #[error("Ranks are non sequential, {gap_rank} is missing")]
+    NonSequentialRanks { gap_rank: Rank },
+    #[error("Rank {dup_rank} appears multiple times")]
+    DuplicatedRank { dup_rank: Rank },
 }
 
-impl IbvUncheckedNetworkConfig {
-    pub fn check(mut self) -> Result<IbvNetworkConfig, IbvNetworkNodeBuildError> {
+impl UncheckedNetworkConfig {
+    pub fn check(mut self) -> Result<NetworkConfig, NetworkConfigCheckError> {
         self.hosts.sort_by_key(|n| n.rankid);
 
         // Network cannot be empty
         if self.hosts.is_empty() {
-            return Err(IbvNetworkNodeBuildError::EmptyNetwork);
+            return Err(NetworkConfigCheckError::EmptyNetwork);
         }
 
         // Rank ids must start at 0
         if self.hosts.first().map(|h| h.rankid) != Some(0) {
-            return Err(IbvNetworkNodeBuildError::FirstRankIdNotZero);
+            return Err(NetworkConfigCheckError::FirstRankNotZero);
         }
 
         for i in 1..self.hosts.len() {
@@ -60,39 +61,39 @@ impl IbvUncheckedNetworkConfig {
 
             // Rank ids must be unique
             if node_config.rankid == self.hosts[i - 1].rankid {
-                return Err(IbvNetworkNodeBuildError::DuplicatedRankId {
-                    dup_rankid: node_config.rankid,
+                return Err(NetworkConfigCheckError::DuplicatedRank {
+                    dup_rank: node_config.rankid,
                 });
             }
 
             // Rank ids must be sequential
             if node_config.rankid != i {
-                return Err(IbvNetworkNodeBuildError::NonSequentialRankIds { gap_rankid: i });
+                return Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: i });
             }
         }
 
-        Ok(IbvNetworkConfig { hosts: self.hosts })
+        Ok(NetworkConfig { hosts: self.hosts })
     }
 }
 
-impl Deref for IbvNetworkConfig {
-    type Target = [IbvHostConfig];
+impl Deref for NetworkConfig {
+    type Target = [NodeConfig];
 
     fn deref(&self) -> &Self::Target {
         self.hosts.as_slice()
     }
 }
 
-impl<'a> IntoIterator for &'a IbvNetworkConfig {
-    type Item = &'a IbvHostConfig;
-    type IntoIter = std::slice::Iter<'a, IbvHostConfig>;
+impl<'a> IntoIterator for &'a NetworkConfig {
+    type Item = &'a NodeConfig;
+    type IntoIter = std::slice::Iter<'a, NodeConfig>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl IbvNetworkConfig {
+impl NetworkConfig {
     pub fn ranks(&self) -> Range<usize> {
         self.hosts.first().unwrap().rankid..self.hosts.last().unwrap().rankid
     }
@@ -104,16 +105,16 @@ mod tests {
 
     #[test]
     fn valid_network_config() {
-        let raw_config = IbvUncheckedNetworkConfig {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "tdeb02".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "tdeb02".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
@@ -131,23 +132,23 @@ mod tests {
 
     #[test]
     fn valid_network_config_out_of_order() {
-        let raw_config = IbvUncheckedNetworkConfig {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
@@ -169,17 +170,17 @@ mod tests {
 
     #[test]
     fn empty_node_config() {
-        let raw_config = IbvUncheckedNetworkConfig { hosts: vec![] };
+        let raw_config = UncheckedNetworkConfig { hosts: vec![] };
         assert!(matches!(
             raw_config.check(),
-            Err(IbvNetworkNodeBuildError::EmptyNetwork)
+            Err(NetworkConfigCheckError::EmptyNetwork)
         ));
     }
 
     #[test]
     fn single_node_config() {
-        let raw_config = IbvUncheckedNetworkConfig {
-            hosts: vec![IbvHostConfig {
+        let raw_config = UncheckedNetworkConfig {
+            hosts: vec![NodeConfig {
                 hostname: "single".to_string(),
                 port: 8080,
                 ibdev: "mlx5_1".to_string(),
@@ -194,17 +195,17 @@ mod tests {
     }
 
     #[test]
-    fn missing_rank_id_zero() {
-        let raw_config = IbvUncheckedNetworkConfig {
+    fn missing_rank_zero() {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
@@ -216,22 +217,22 @@ mod tests {
 
         assert!(matches!(
             raw_config.check(),
-            Err(IbvNetworkNodeBuildError::FirstRankIdNotZero)
+            Err(NetworkConfigCheckError::FirstRankNotZero)
         ));
     }
 
     #[test]
-    fn non_sequential_rank_ids() {
-        let raw_config = IbvUncheckedNetworkConfig {
+    fn non_sequential_ranks() {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
@@ -243,31 +244,31 @@ mod tests {
 
         assert!(matches!(
             raw_config.check(),
-            Err(IbvNetworkNodeBuildError::NonSequentialRankIds { gap_rankid: 1 })
+            Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: 1 })
         ));
     }
 
     #[test]
-    fn non_sequential_rank_ids_before_duplicate() {
+    fn non_sequential_ranks_before_duplicate() {
         // Gap at rankid 1, duplicate at rankid 3
         // Gap should be detected first since 1 < 3
-        let raw_config = IbvUncheckedNetworkConfig {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 3, // Gap: missing rankid 1 and 2
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
@@ -279,38 +280,38 @@ mod tests {
 
         assert!(matches!(
             raw_config.check(),
-            Err(IbvNetworkNodeBuildError::NonSequentialRankIds { gap_rankid: 1 })
+            Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: 1 })
         ));
     }
 
     #[test]
-    fn duplicate_rank_ids_before_non_sequential() {
+    fn duplicate_ranks_before_non_sequential() {
         // Duplicate at rankid 1, gap at rankid 3 (missing 2)
         // Duplicate should be detected first since 1 < 3
-        let raw_config = IbvUncheckedNetworkConfig {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node1".to_string(),
                     port: 10000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node2".to_string(),
                     port: 10001,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node3".to_string(),
                     port: 10002,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 1, // Duplicate rankid 1
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "node4".to_string(),
                     port: 10003,
                     ibdev: "mlx5_0".to_string(),
@@ -322,22 +323,22 @@ mod tests {
 
         assert!(matches!(
             raw_config.check(),
-            Err(IbvNetworkNodeBuildError::DuplicatedRankId { dup_rankid: 1 })
+            Err(NetworkConfigCheckError::DuplicatedRank { dup_rank: 1 })
         ));
     }
 
     #[test]
     fn deref_access() {
-        let raw_config = IbvUncheckedNetworkConfig {
+        let raw_config = UncheckedNetworkConfig {
             hosts: vec![
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "test1".to_string(),
                     port: 9000,
                     ibdev: "mlx5_0".to_string(),
                     rankid: 0,
                     comment: String::new(),
                 },
-                IbvHostConfig {
+                NodeConfig {
                     hostname: "test2".to_string(),
                     port: 9001,
                     ibdev: "mlx5_0".to_string(),
