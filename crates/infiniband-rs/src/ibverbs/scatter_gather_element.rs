@@ -62,6 +62,9 @@ impl<'a> IbvScatterElement<'a> {
             .try_into()
             .map_err(|_| IbvScatterGatherElementError::SliceTooBig)?;
         if !mr.encloses(data) {
+            // todo: verify if this check is necessary
+            // todo: hardware may take care of it by issuing a protection error
+            // todo: if not within the registered memory boundaries
             return Err(IbvScatterGatherElementError::SliceNotWithinBounds);
         }
 
@@ -86,6 +89,9 @@ impl<'a> IbvGatherElement<'a> {
             .try_into()
             .map_err(|_| IbvScatterGatherElementError::SliceTooBig)?;
         if !mr.encloses(data) {
+            // todo: verify if this check is necessary
+            // todo: hardware may take care of it by issuing a protection error
+            // todo: if not within the registered memory boundaries
             return Err(IbvScatterGatherElementError::SliceNotWithinBounds);
         }
 
