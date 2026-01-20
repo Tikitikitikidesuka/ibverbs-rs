@@ -2,9 +2,9 @@ use crate::connection::builder::IbvConnectionBuilder;
 use crate::connection::connection::IbvConnection;
 use crate::connection::work_request::IbvWorkSpinPollResult;
 use crate::devices::ibv_device_open;
-use crate::network::IbvNetworkNodeError;
+use crate::network::IbvNetworkHostError;
 use crate::network::network_config::IbvNetworkConfig;
-use crate::network::prepared_network::IbvPreparedNetwork;
+use crate::network::prepared_network::IbvPreparedNetworkHost;
 use bon::bon;
 use std::marker::PhantomData;
 
@@ -13,6 +13,12 @@ pub type IbvNetworkRank = usize;
 pub struct IbvNetworkHost {
     connections: Vec<IbvConnection>,
     rank: IbvNetworkRank,
+}
+
+impl IbvNetworkHost {
+    pub(super) fn new(rank: IbvNetworkRank, connections: Vec<IbvConnection>) -> Self {
+        Self { rank, connections }
+    }
 }
 
 pub struct IbvNetworkMemoryRegion<'a> {
@@ -33,10 +39,10 @@ impl IbvNetworkHost {
     pub fn builder(
         rank: IbvNetworkRank,
         config: &IbvNetworkConfig,
-    ) -> Result<IbvPreparedNetwork, IbvNetworkNodeError> {
+    ) -> Result<IbvPreparedNetworkHost, IbvNetworkHostError> {
         let self_host = config
             .get(rank)
-            .ok_or(IbvNetworkNodeError::RankNotInNetwork {
+            .ok_or(IbvNetworkHostError::RankNotInNetwork {
                 rank,
                 num_peers: config.len(),
             })?;
@@ -48,7 +54,7 @@ impl IbvNetworkHost {
                 IbvConnectionBuilder::new(&ctx).build()
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(IbvPreparedNetwork::new(rank, connections))
+        Ok(IbvPreparedNetworkHost::new(rank, connections))
     }
 
     pub fn network_size(&self) -> usize {
