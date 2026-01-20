@@ -1,23 +1,23 @@
-use crate::network::network_config::{NetworkConfig, NodeConfig};
+use crate::network::host::IbvNetworkRank;
+use crate::network::network_config::{IbvHostConfig, IbvNetworkConfig};
 use TcpNetworkConfigExchangeError::*;
-use bincode::{Decode, Encode, decode_from_slice, encode_to_vec};
+use bincode::serde::{decode_from_slice, encode_to_vec};
 use log::{debug, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{Read, Write};
 use std::ops::Range;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
 #[derive(Debug, Error)]
 pub enum TcpNetworkConfigExchangeError {
-    #[error("Rank id {rank_id} not in network")]
-    InvalidRankId { rank_id: usize },
+    #[error("Rank {rank} not in network")]
+    InvalidRank { rank: usize },
     #[error("Error decoding data ({0})")]
     DecodeError(#[from] bincode::error::DecodeError),
     #[error("Error encoding data ({0})")]
@@ -44,16 +44,16 @@ impl Default for TcpExchangeConfig {
 
 pub struct TcpExchanger {}
 
-#[derive(Debug, bincode::Decode, bincode::Encode)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ExchangeMessage<T> {
-    rank_id: usize,
+    rank: IbvNetworkRank,
     data: T,
 }
 
 impl TcpExchanger {
-    pub fn await_exchange_all<T: Encode + Decode<()> + Clone>(
-        rank_id: usize,
-        network: &NetworkConfig,
+    pub fn await_exchange_all<T: Serialize + DeserializeOwned + Clone>(
+        rank: IbvNetworkRank,
+        network: &IbvNetworkConfig,
         data: &T,
         config: &TcpExchangeConfig,
     ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
@@ -63,7 +63,7 @@ impl TcpExchanger {
             .block_on(async move {
                 timeout(
                     config.exchange_timeout,
-                    Self::exchange_all(rank_id, network, data, config),
+                    Self::exchange_all(rank, network, data, config),
                 )
                 .await
                 .unwrap_or(Err(Timeout))
@@ -71,7 +71,7 @@ impl TcpExchanger {
     }
 
     // todo no longer needed?
-    pub fn await_exchange_pair<T: Encode + Decode<()> + Clone + Debug>(
+    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone + Debug>(
         primary: bool,
         addr: (&str, u16),
         data: &T,
@@ -125,32 +125,30 @@ impl TcpExchanger {
             })
     }
 
-    async fn exchange_all<T: Encode + Decode<()> + Clone>(
-        rank_id: usize,
-        network: &NetworkConfig,
+    async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(
+        rank: IbvNetworkRank,
+        network: &IbvNetworkConfig,
         data: &T,
         config: &TcpExchangeConfig,
     ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
-        let self_node = network.get(rank_id).ok_or(InvalidRankId { rank_id })?;
-        let lower_rank_ids = network.rank_ids().start..self_node.rankid;
-        let greater_rank_ids = (self_node.rankid + 1)..(network.rank_ids().end + 1);
+        let self_node = network.get(rank).ok_or(InvalidRank { rank })?;
+        let lower_ranks = network.ranks().start..self_node.rankid;
+        let greater_ranks = (self_node.rankid + 1)..(network.ranks().end + 1);
 
         debug!(
-            "Exchanging from {}:\n\tlower nodes -> {lower_rank_ids:?}\n\thigher nodes -> {greater_rank_ids:?}",
+            "Exchanging from {}:\n\tlower nodes -> {lower_ranks:?}\n\thigher nodes -> {greater_ranks:?}",
             self_node.rankid,
         );
 
         // Exchange server to lower nodes
         debug!("Serving exchange...");
-        let lower_nodes_data =
-            Self::exchange_all_serve(data, self_node, lower_rank_ids, &network, &config).await?;
+        let lower_nodes_data = Self::exchange_all_serve(data, self_node, lower_ranks).await?;
         debug!("Done serving");
 
         // Exchange connect to greater nodes
         debug!("Connecting exchange...");
         let greater_nodes_data =
-            Self::exchange_all_connect(data, self_node, greater_rank_ids, &network, &config)
-                .await?;
+            Self::exchange_all_connect(data, self_node, greater_ranks, &network, &config).await?;
         debug!("Done connecting");
 
         Ok(lower_nodes_data
@@ -160,22 +158,20 @@ impl TcpExchanger {
             .collect())
     }
 
-    async fn exchange_all_serve<T: Encode + Decode<()>>(
+    async fn exchange_all_serve<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_node: &NodeConfig,
-        remote_rank_ids: Range<usize>,
-        network: &NetworkConfig,
-        config: &TcpExchangeConfig,
+        self_node: &IbvHostConfig,
+        remote_ranks: Range<IbvNetworkRank>,
     ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
         let server = TcpListener::bind((self_node.hostname.as_str(), self_node.port)).await?;
         let mut received = HashMap::new();
 
-        while received.len() < remote_rank_ids.len() {
+        while received.len() < remote_ranks.len() {
             let (mut stream, _) = server.accept().await?;
             Self::exchange_serve(
                 data,
                 self_node.rankid,
-                remote_rank_ids.clone(),
+                remote_ranks.clone(),
                 &mut stream,
                 &mut received,
             )
@@ -183,24 +179,24 @@ impl TcpExchanger {
         }
 
         // Iterating on a map directly is O(capacity) so iterate with indices instead
-        Ok(remote_rank_ids
-            .map(|rank_id| received.remove(&rank_id).unwrap())
+        Ok(remote_ranks
+            .map(|rank| received.remove(&rank).unwrap())
             .collect())
     }
 
-    async fn exchange_all_connect<T: Encode + Decode<()>>(
+    async fn exchange_all_connect<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_node: &NodeConfig,
-        remote_rank_ids: Range<usize>,
-        network: &NetworkConfig,
+        self_node: &IbvHostConfig,
+        remote_ranks: Range<IbvNetworkRank>,
+        network: &IbvNetworkConfig,
         config: &TcpExchangeConfig,
     ) -> Result<Vec<T>, TcpNetworkConfigExchangeError> {
         let mut received = HashMap::new();
 
-        for remote_rank_id in remote_rank_ids.clone() {
-            let remote_node = network.get(remote_rank_id).ok_or(InvalidRankId {
-                rank_id: remote_rank_id,
-            })?;
+        for remote_rank in remote_ranks.clone() {
+            let remote_node = network
+                .get(remote_rank)
+                .ok_or(InvalidRank { rank: remote_rank })?;
 
             let mut stream;
             loop {
@@ -216,7 +212,7 @@ impl TcpExchanger {
             Self::exchange_connect(
                 data,
                 self_node.rankid,
-                remote_rank_ids.clone(),
+                remote_ranks.clone(),
                 &mut stream,
                 &mut received,
             )
@@ -224,71 +220,68 @@ impl TcpExchanger {
         }
 
         // Iterating on a map directly is O(capacity) so iterate with indices instead
-        Ok(remote_rank_ids
-            .map(|rank_id| received.remove(&rank_id).unwrap())
+        Ok(remote_ranks
+            .map(|rank| received.remove(&rank).unwrap())
             .collect())
     }
 
-    async fn exchange_serve<T: Encode + Decode<()>>(
+    async fn exchange_serve<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_rank_id: usize,
-        remote_rank_ids: Range<usize>,
+        self_rank: IbvNetworkRank,
+        remote_ranks: Range<IbvNetworkRank>,
         stream: &mut TcpStream,
-        received: &mut HashMap<usize, T>,
+        received: &mut HashMap<IbvNetworkRank, T>,
     ) -> Result<(), TcpNetworkConfigExchangeError> {
         // Send self data
-        Self::write_stream(self_rank_id, data, stream).await?;
+        Self::write_stream(self_rank, data, stream).await?;
 
         // Read incoming data
         let incoming_data = Self::read_stream::<T>(stream).await?;
-        Self::insert_if_valid(incoming_data, received, remote_rank_ids.clone());
+        Self::insert_if_valid(incoming_data, received, remote_ranks.clone());
 
         Ok(())
     }
 
-    async fn exchange_connect<T: Encode + Decode<()>>(
+    async fn exchange_connect<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_rank_id: usize,
-        remote_rank_ids: Range<usize>,
+        self_rank: IbvNetworkRank,
+        remote_ranks: Range<IbvNetworkRank>,
         stream: &mut TcpStream,
         received: &mut HashMap<usize, T>,
     ) -> Result<(), TcpNetworkConfigExchangeError> {
         // Read incoming data
         let incoming_data = Self::read_stream::<T>(stream).await?;
-        Self::insert_if_valid(incoming_data, received, remote_rank_ids.clone());
+        Self::insert_if_valid(incoming_data, received, remote_ranks.clone());
 
         // Send self data
-        Self::write_stream(self_rank_id, data, stream).await?;
+        Self::write_stream(self_rank, data, stream).await?;
 
         Ok(())
     }
 
-    fn insert_if_valid<T: Encode + Decode<()>>(
+    fn insert_if_valid<T: Serialize + DeserializeOwned>(
         incoming_data: ExchangeMessage<T>,
-        received: &mut HashMap<usize, T>,
-        valid_range: Range<usize>,
+        received: &mut HashMap<IbvNetworkRank, T>,
+        valid_range: Range<IbvNetworkRank>,
     ) -> bool {
-        // Validate rank id is in range
-        if valid_range.contains(&incoming_data.rank_id) {
+        // Validate rank is in range
+        if valid_range.contains(&incoming_data.rank) {
             // Insert incoming data to map
-            let out = received.insert(incoming_data.rank_id, incoming_data.data);
+            let out = received.insert(incoming_data.rank, incoming_data.data);
             if out.is_some() {
                 // Warn if config already received for the specified rank id
-                warn!("Duplicate exchange from {}", incoming_data.rank_id,);
+                warn!("Duplicate exchange from {}", incoming_data.rank,);
             }
             debug!("Exchange progress -> {}", received.len());
             true
         } else {
-            // Warn if exchange from invalid rank id received
-            warn!(
-                "Invalid rank id incoming exchange {}",
-                incoming_data.rank_id
-            );
+            // Warn if exchange from invalid rank received
+            warn!("Invalid rank incoming exchange {}", incoming_data.rank);
             false
         }
     }
 
-    async fn read_stream<T: Decode<()>>(
+    async fn read_stream<T: DeserializeOwned>(
         stream: &mut (impl AsyncReadExt + Unpin),
     ) -> Result<ExchangeMessage<T>, TcpNetworkConfigExchangeError> {
         let mut size_buf = [0u8; size_of::<u32>()];
@@ -300,12 +293,12 @@ impl TcpExchanger {
         Ok(decode_from_slice(msg_buf.as_slice(), Self::bincode_config())?.0)
     }
 
-    async fn write_stream<T: Encode>(
-        rank_id: usize,
+    async fn write_stream<T: Serialize>(
+        rank: IbvNetworkRank,
         data: &T,
         stream: &mut (impl AsyncWriteExt + Unpin),
     ) -> Result<(), TcpNetworkConfigExchangeError> {
-        let encoded = encode_to_vec(ExchangeMessage { rank_id, data }, Self::bincode_config())?;
+        let encoded = encode_to_vec(ExchangeMessage { rank, data }, Self::bincode_config())?;
         stream
             .write_all((encoded.len() as u32).to_be_bytes().as_ref())
             .await?;

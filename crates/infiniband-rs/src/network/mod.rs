@@ -1,23 +1,27 @@
+use crate::network::host::IbvNetworkRank;
 use thiserror::Error;
 
 pub mod network_config;
-pub mod node;
+pub mod host;
+mod prepared_network;
 pub mod tcp_exchanger;
 
 #[derive(Error, Debug)]
-pub enum NetworkNodeError {
+pub enum IbvNetworkNodeError {
     #[error("Communication with self is not allowed.")]
     SelfConnection,
-    #[error("Peer {specified} does not exist, peer must be in {:?} and not equal to the own rank", 0..*num_peers)]
-    PeerOutOfBounds { specified: usize, num_peers: usize },
-
+    #[error("Rank {rank} is not part of the network. It must be in {:?}\
+     and not equal to the own rank", 0..*num_peers)]
+    RankNotInNetwork {
+        rank: IbvNetworkRank,
+        num_peers: IbvNetworkRank,
+    },
     #[error("Infiniband error occurred: {0}")]
     IoError(#[from] std::io::Error),
-
-    #[error("Some errors occured during a network multi-node operation: {0:?}")]
-    MultiOperationError(Vec<NetworkNodeError>),
-    #[error("Barrier counter missmatch.")]
+    /*
+    #[error("Some errors occurred during a network multi-node operation: {0:?}")]
+    MultiOperationError(Vec<IbvNetworkNodeError>),
+    #[error("Barrier counter mismatch.")]
     BarrierMismatch,
+    */
 }
-
-pub type Result<T = ()> = std::result::Result<T, NetworkNodeError>;

@@ -23,7 +23,7 @@ shared-memory-buffer.path = "crates/shared-memory-buffer"
 
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive"] }
-bincode = "2.0"
+bincode = { version = "2.0.1", features = ["serde"] }
 typed-builder = "0.23"
 strum = { version = "0.27", features = ["derive"] }
 tracing = "0.1.41"

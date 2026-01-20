@@ -1,29 +1,25 @@
+use crate::connection::connection::IbvConnection;
+use crate::ibverbs::work_success::IbvWorkSuccess;
+use crate::network::IbvNetworkNodeError;
 use std::time::Duration;
 
-use nix::poll::PollTimeout;
+pub type IbvRank = usize;
 
-use crate::{
-    connection::{self, IbvConnection, RemoteMrSlice, WorkCompletion, WorkRequest},
-    network::{NetworkNodeError, Result},
-};
-
-pub type Rank = usize;
-
-pub struct NetworkNode {
+pub struct IbvNetworkNode {
     // vec of connections to all nodes of the network
     // including self
     pub(crate) connections: Vec<IbvConnection>,
-    rank: Rank,
+    rank: IbvRank,
     poll_timeout: Duration,
     barrier_counter: u32,
 }
 
-impl NetworkNode {
+impl IbvNetworkNode {
     pub fn network_size(&self) -> usize {
         self.connections.len()
     }
 
-    pub fn rank(&self) -> Rank {
+    pub fn rank(&self) -> IbvRank {
         self.rank
     }
 
@@ -35,7 +31,7 @@ impl NetworkNode {
         self.connections_to_other()
             .map(|conn| {
                 conn.register_mr(name.clone(), region)
-                    .map_err(NetworkNodeError::from)
+                    .map_err(IbvNetworkNodeError::from)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -55,7 +51,7 @@ impl NetworkNode {
         self.connections_to_other()
             .map(|conn| {
                 conn.register_dmabuf_mr(name.clone(), fd, offset, length, iova)
-                    .map_err(NetworkNodeError::from)
+                    .map_err(IbvNetworkNodeError::from)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -84,38 +80,32 @@ impl NetworkNode {
     //     todo!()
     // }
 
-    /// on error, some memory regions may still be registered
-    pub fn deregister_mr(&mut self, name: impl AsRef<str>) -> Result {
-        self.connections_to_other()
-            .map(|conn| conn.deregister_mr(&name).map_err(NetworkNodeError::from))
-            .collect::<Result<Vec<_>>>()?;
-
-        Ok(())
-    }
-
     // send / receive
 
-    pub fn send(&mut self, peer: Rank, data: &[u8]) -> Result {
+    pub fn send(
+        &mut self,
+        peer: IbvRank,
+        data: &[u8],
+    ) -> Result<IbvWorkSuccess, IbvNetworkNodeError> {
         self.get_connection(peer)?.send(data).map_err(Into::into)
     }
 
-    pub fn send_immediate(&mut self, peer: Rank, immediate: u32) -> Result {
-        self.get_connection(peer)?
-            .send_immediate(immediate)
-            .map_err(Into::into)
-    }
-
-    pub fn send_with_immediate(&mut self, peer: Rank, data: &[u8], immediate: u32) -> Result {
+    pub fn send_with_imm_data(
+        &mut self,
+        peer: IbvRank,
+        data: &[u8],
+        immediate: u32,
+    ) -> Result<IbvWorkSuccess, IbvNetworkNodeError> {
         self.get_connection(peer)?
             .send_with_immediate(data, immediate)
             .map_err(Into::into)
     }
 
-    pub fn receive(&mut self, peer: Rank, data: &mut [u8]) -> Result<Option<u32>> {
+    pub fn receive(&mut self, peer: IbvRank, data: &mut [u8]) -> Result<Option<u32>> {
         self.get_connection(peer)?.receive(data).map_err(Into::into)
     }
 
-    pub fn receive_immediate(&mut self, peer: Rank) -> Result<u32> {
+    pub fn receive_immediate(&mut self, peer: IbvRank) -> Result<u32> {
         self.get_connection(peer)?
             .receive_immediate()
             .map_err(Into::into)
@@ -128,7 +118,7 @@ impl NetworkNode {
     /// Furthermore, he caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
     pub unsafe fn remote_write<'a>(
         &mut self,
-        peer: Rank,
+        peer: IbvRank,
         data: &'a [u8],
         remote_slice: RemoteMrSlice,
     ) -> Result<WorkRequest<'a>> {
@@ -143,7 +133,7 @@ impl NetworkNode {
     /// Furthermore, the caller must ensure that the work request is sucessfully polled to completion before the end of `'a`.
     pub unsafe fn remote_read<'a>(
         &mut self,
-        peer: Rank,
+        peer: IbvRank,
         remote_slice: RemoteMrSlice,
         data: &'a mut [u8],
     ) -> Result<WorkRequest<'a>> {
@@ -158,13 +148,14 @@ impl NetworkNode {
     // todo also extra here for immediate data?
     pub fn scatter<'a>(
         &mut self,
-        data: impl Iterator<Item = (Rank, &'a [u8], Option<u32>)>,
+        data: impl Iterator<Item = (IbvRank, &'a [u8], Option<u32>)>,
     ) -> Result {
         let requests = data
             .map(|(peer, data, immediate)| {
                 let connection = self.get_connection(peer)?;
                 // SAFETY: we always poll all the work requests to completion before returning.
-                unsafe { connection.send_unpolled(data, immediate) }.map_err(NetworkNodeError::from)
+                unsafe { connection.send_unpolled(data, immediate) }
+                    .map_err(IbvNetworkNodeError::from)
             })
             .collect::<Vec<_>>();
 
@@ -182,7 +173,7 @@ impl NetworkNode {
         if results.is_empty() {
             Ok(())
         } else {
-            Err(NetworkNodeError::MultiOperationError(results))
+            Err(IbvNetworkNodeError::MultiOperationError(results))
         }
     }
 
@@ -193,13 +184,13 @@ impl NetworkNode {
     // todo is there a better way to associate immediate data with the input iterator position it originated from?
     pub fn gather<'a>(
         &mut self,
-        data: impl Iterator<Item = (Rank, &'a mut [u8])>,
+        data: impl Iterator<Item = (IbvRank, &'a mut [u8])>,
     ) -> Result<Vec<Option<u32>>> {
         let requests = data
             .map(|(peer, data)| {
                 let connection = self.get_connection(peer)?;
                 // SAFETY: we always poll all the work requests to completion before returning.
-                unsafe { connection.receive_unpolled(data) }.map_err(NetworkNodeError::from)
+                unsafe { connection.receive_unpolled(data) }.map_err(IbvNetworkNodeError::from)
             })
             .collect::<Vec<_>>();
 
@@ -221,7 +212,7 @@ impl NetworkNode {
         if results.is_empty() {
             Ok(immediates)
         } else {
-            Err(NetworkNodeError::MultiOperationError(results))
+            Err(IbvNetworkNodeError::MultiOperationError(results))
         }
     }
 
@@ -229,8 +220,8 @@ impl NetworkNode {
     // todo split into two functions
     pub fn centralized_barrier(
         &mut self,
-        master: Rank,
-        peers: impl Iterator<Item = Rank> + Clone,
+        master: IbvRank,
+        peers: impl Iterator<Item = IbvRank> + Clone,
         timeout: Duration,
     ) -> Result {
         let barrier_counter = self.barrier_counter;
@@ -243,7 +234,7 @@ impl NetworkNode {
                 .iter()
                 .all(|b| *b == Some(barrier_counter))
             {
-                return Err(NetworkNodeError::BarrierMismatch);
+                return Err(IbvNetworkNodeError::BarrierMismatch);
             }
 
             self.scatter(peers.map(|rank| (rank, &[] as &[u8], Some(barrier_counter))))
@@ -253,7 +244,7 @@ impl NetworkNode {
             let immediate = self.receive_immediate(master)?;
 
             if immediate != barrier_counter {
-                return Err(NetworkNodeError::BarrierMismatch);
+                return Err(IbvNetworkNodeError::BarrierMismatch);
             }
 
             Ok(())
@@ -263,14 +254,14 @@ impl NetworkNode {
     pub(crate) fn get_connection(&mut self, peer: usize) -> Result<&mut IbvConnection> {
         // todo allow self connection?
         if peer == self.rank {
-            return Err(NetworkNodeError::SelfConnection);
+            return Err(IbvNetworkNodeError::SelfConnection);
         }
         let num_peers = self.connections.len();
 
         let connection =
             self.connections
                 .get_mut(peer)
-                .ok_or(NetworkNodeError::PeerOutOfBounds {
+                .ok_or(IbvNetworkNodeError::PeerOutOfBounds {
                     specified: peer,
                     num_peers,
                 })?;

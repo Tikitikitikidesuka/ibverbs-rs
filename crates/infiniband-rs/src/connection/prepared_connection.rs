@@ -1,6 +1,5 @@
 use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
 use crate::connection::connection::IbvConnection;
-use crate::ibverbs::completion_queue::IbvCompletionQueue;
 use crate::ibverbs::memory_region::IbvMemoryRegion;
 use crate::ibverbs::prepared_queue_pair::IbvPreparedQueuePair;
 use crate::ibverbs::protection_domain::IbvProtectionDomain;
@@ -10,10 +9,19 @@ use std::io;
 
 #[derive(Debug)]
 pub struct IbvPreparedConnection {
-    pub(super) cq: IbvCachedCompletionQueue,
-    pub(super) pd: IbvProtectionDomain,
-    pub(super) qp: IbvPreparedQueuePair,
-    pub(super) mrs: HashMap<String, IbvMemoryRegion>,
+    cq: IbvCachedCompletionQueue,
+    pd: IbvProtectionDomain,
+    qp: IbvPreparedQueuePair,
+}
+
+impl IbvPreparedConnection {
+    pub(super) fn new(
+        cq: IbvCachedCompletionQueue,
+        pd: IbvProtectionDomain,
+        qp: IbvPreparedQueuePair,
+    ) -> Self {
+        Self { cq, pd, qp }
+    }
 }
 
 impl IbvPreparedConnection {

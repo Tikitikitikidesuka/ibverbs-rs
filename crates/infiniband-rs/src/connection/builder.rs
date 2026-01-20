@@ -20,7 +20,7 @@ impl<'c> IbvConnectionBuilder<'c> {
     const DEFAULT_MAX_WRS: u32 = 32;
     const DEFAULT_MAX_SGES: u32 = 32;
 
-    pub fn new(context: &'c IbvContext) -> IbvConnectionBuilder {
+    pub fn new(context: &'c IbvContext) -> Self {
         Self {
             context,
             min_cq_buf_size: Self::DEFAULT_MIN_CQ_BUF_SIZE,
@@ -48,12 +48,11 @@ impl<'c> IbvConnectionBuilder<'c> {
             .with_max_recv_sges(self.max_send_sges)
             .build()?;
 
-        Ok(IbvPreparedConnection {
-            cq: IbvCachedCompletionQueue::wrap_cq(cq),
+        Ok(IbvPreparedConnection::new(
+            IbvCachedCompletionQueue::wrap_cq(cq),
             pd,
             qp,
-            mrs: HashMap::new(),
-        })
+        ))
     }
 
     pub fn with_min_cq_buf_size(&mut self, min_cq_buf_size: u32) -> &mut Self {

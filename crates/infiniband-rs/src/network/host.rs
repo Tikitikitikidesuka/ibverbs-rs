@@ -1,0 +1,239 @@
+use crate::connection::builder::IbvConnectionBuilder;
+use crate::connection::connection::IbvConnection;
+use crate::connection::work_request::IbvWorkSpinPollResult;
+use crate::devices::ibv_device_open;
+use crate::network::IbvNetworkNodeError;
+use crate::network::network_config::IbvNetworkConfig;
+use crate::network::prepared_network::IbvPreparedNetwork;
+use bon::bon;
+use std::marker::PhantomData;
+
+pub type IbvNetworkRank = usize;
+
+pub struct IbvNetworkHost {
+    connections: Vec<IbvConnection>,
+    rank: IbvNetworkRank,
+}
+
+pub struct IbvNetworkMemoryRegion<'a> {
+    foo: PhantomData<&'a [u8]>,
+}
+
+pub struct IbvNetworkScatterElement<'a> {
+    foo: PhantomData<&'a [u8]>,
+}
+
+pub struct IbvNetworkGatherElement<'a> {
+    foo: PhantomData<&'a [u8]>,
+}
+
+#[bon]
+impl IbvNetworkHost {
+    #[builder]
+    pub fn builder(
+        rank: IbvNetworkRank,
+        config: &IbvNetworkConfig,
+    ) -> Result<IbvPreparedNetwork, IbvNetworkNodeError> {
+        let self_host = config
+            .get(rank)
+            .ok_or(IbvNetworkNodeError::RankNotInNetwork {
+                rank,
+                num_peers: config.len(),
+            })?;
+        let ctx = ibv_device_open(&self_host.ibdev)?;
+        let connections = config
+            .iter()
+            .map(|_host| {
+                // todo: allow configuring connection
+                IbvConnectionBuilder::new(&ctx).build()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(IbvPreparedNetwork::new(rank, connections))
+    }
+
+    pub fn network_size(&self) -> usize {
+        self.connections.len()
+    }
+
+    pub fn rank(&self) -> IbvNetworkRank {
+        self.rank
+    }
+
+    /// TODO: on error, some memory regions may be registered
+    pub fn register_mr(&mut self, region: &mut [u8]) -> Result<IbvNetworkMemoryRegion, ()> {
+        todo!()
+    }
+
+    /// TODO: on error, some memory regions may be registered
+    pub fn register_dmabuf_mr(
+        &mut self,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> Result<IbvNetworkMemoryRegion, ()> {
+        todo!()
+    }
+
+    pub fn send<'a>(
+        &mut self,
+        peer: IbvNetworkRank,
+        sends: impl AsRef<[IbvNetworkScatterElement<'a>]>,
+    ) -> IbvWorkSpinPollResult {
+        todo!()
+    }
+
+    pub fn send_with_imm_data<'a>(
+        &mut self,
+        peer: IbvNetworkRank,
+        sends: impl AsRef<[IbvNetworkScatterElement<'a>]>,
+        immediate: u32,
+    ) -> IbvWorkSpinPollResult {
+        todo!()
+    }
+
+    pub fn receive<'a>(
+        &mut self,
+        peer: IbvNetworkRank,
+        receives: impl AsRef<[IbvNetworkGatherElement<'a>]>,
+    ) -> IbvWorkSpinPollResult {
+        todo!()
+    }
+
+    /*
+    // network operations
+
+    /// Sends messages to multiple peers in paralell (hardware).
+    /// `data`: Iterator over tuples of peer rank, data slice, and optional immediate data.
+    // todo also extra here for immediate data?
+    pub fn scatter<'a>(
+        &mut self,
+        data: impl Iterator<Item = (IbvRank, &'a [u8], Option<u32>)>,
+    ) -> Result {
+        let requests = data
+            .map(|(peer, data, immediate)| {
+                let connection = self.get_connection(peer)?;
+                // SAFETY: we always poll all the work requests to completion before returning.
+                unsafe { connection.send_unpolled(data, immediate) }
+                    .map_err(IbvNetworkNodeError::from)
+            })
+            .collect::<Vec<_>>();
+
+        // we need to poll all of them to completion, even if an error occurs.
+        let results: Vec<_> = requests
+            .into_iter()
+            .map(|request| {
+                Ok(request?
+                    .spin_poll(self.poll_timeout)
+                    .expect("poll timed out")) // we cannot return an error here, as the slice is still used.
+            })
+            .flat_map(Result::err)
+            .collect();
+
+        if results.is_empty() {
+            Ok(())
+        } else {
+            Err(IbvNetworkNodeError::MultiOperationError(results))
+        }
+    }
+
+    /// Receives messages from multiple peers in parallel (hardware).
+    ///
+    /// Returns the immediate data received from each peer.
+    // todo do we want to avoid always having the return vec allocated?
+    // todo is there a better way to associate immediate data with the input iterator position it originated from?
+    pub fn gather<'a>(
+        &mut self,
+        data: impl Iterator<Item = (IbvRank, &'a mut [u8])>,
+    ) -> Result<Vec<Option<u32>>> {
+        let requests = data
+            .map(|(peer, data)| {
+                let connection = self.get_connection(peer)?;
+                // SAFETY: we always poll all the work requests to completion before returning.
+                unsafe { connection.receive_unpolled(data) }.map_err(IbvNetworkNodeError::from)
+            })
+            .collect::<Vec<_>>();
+
+        // we need to poll all of them to completion, even if an error occurs.
+        let mut immediates = Vec::with_capacity(requests.len());
+
+        let results: Vec<_> = requests
+            .into_iter()
+            .map(|request| {
+                let completion = request?
+                    .spin_poll(self.poll_timeout)
+                    .expect("poll timed out")?; // we cannot return an error here, as the slice is still used.
+                immediates.push(completion.immediate_data());
+                Ok(())
+            })
+            .flat_map(Result::err)
+            .collect();
+
+        if results.is_empty() {
+            Ok(immediates)
+        } else {
+            Err(IbvNetworkNodeError::MultiOperationError(results))
+        }
+    }
+
+    /// Peers shall not include master.
+    // todo split into two functions
+    pub fn centralized_barrier(
+        &mut self,
+        master: IbvRank,
+        peers: impl Iterator<Item = IbvRank> + Clone,
+        timeout: Duration,
+    ) -> Result {
+        let barrier_counter = self.barrier_counter;
+        self.barrier_counter += 1;
+
+        // todo timeout?
+        if self.rank == master {
+            if !self
+                .gather(peers.clone().map(|r| (r, &mut [] as &mut [u8])))?
+                .iter()
+                .all(|b| *b == Some(barrier_counter))
+            {
+                return Err(IbvNetworkNodeError::BarrierMismatch);
+            }
+
+            self.scatter(peers.map(|rank| (rank, &[] as &[u8], Some(barrier_counter))))
+        } else {
+            self.send_immediate(master, barrier_counter)?;
+
+            let immediate = self.receive_immediate(master)?;
+
+            if immediate != barrier_counter {
+                return Err(IbvNetworkNodeError::BarrierMismatch);
+            }
+
+            Ok(())
+        }
+    }
+
+    pub(crate) fn get_connection(&mut self, peer: usize) -> Result<&mut IbvConnection> {
+        // todo allow self connection?
+        if peer == self.rank {
+            return Err(IbvNetworkNodeError::SelfConnection);
+        }
+        let num_peers = self.connections.len();
+
+        let connection =
+            self.connections
+                .get_mut(peer)
+                .ok_or(IbvNetworkNodeError::PeerOutOfBounds {
+                    specified: peer,
+                    num_peers,
+                })?;
+
+        Ok(connection)
+    }
+
+    fn connections_to_other(&mut self) -> impl Iterator<Item = &mut IbvConnection> {
+        self.connections
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(i, c)| (i != self.rank).then_some(c))
+    }
+    */
+}
