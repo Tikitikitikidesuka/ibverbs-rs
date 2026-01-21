@@ -88,7 +88,7 @@ impl<'a> ScatterElement<'a> {
 impl<'a> GatherElement<'a> {
     pub(super) fn new(
         mr: &'a MemoryRegion,
-        data: &'a [u8],
+        data: &'a mut [u8],
     ) -> Result<Self, ScatterGatherElementError> {
         let data_length = data
             .len()
