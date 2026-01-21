@@ -16,7 +16,7 @@ fn main() {
 
     let mut mem = vec![0u8; 1024];
     let mr = conn
-        .register_mr("asdf", &mut mem)
+        .register_mr(&mut mem)
         .unwrap();
 
     let (send_mem, rest) = mem.split_at_mut(4);
@@ -31,7 +31,7 @@ fn main() {
     // Important that scope borrows conn mutably
     conn.scope(|s| {
         let mut new_mem = vec![0u8; 1024];
-        let mr = conn.register_mr("asdf", new_mem.as_mut_slice()).unwrap();
+        let mr = conn.register_mr(new_mem.as_mut_slice()).unwrap();
         drop(new_mem);
         s.post_send([mr.prepare_scatter_element()])
     });

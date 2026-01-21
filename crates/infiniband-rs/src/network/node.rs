@@ -3,11 +3,13 @@ use crate::connection::connection::Connection;
 use crate::connection::work_request::WorkSpinPollResult;
 use crate::devices::open_device;
 use crate::network::NodeError;
+use crate::network::memory_region::NodeMemoryRegion;
 use crate::network::network_config::NetworkConfig;
 use crate::network::prepared_host::PreparedNode;
+use crate::network::scatter_gather_element::NodeScatterElement;
 use bon::bon;
+use std::io;
 use std::marker::PhantomData;
-use crate::network::host_memory_region::NodeMemoryRegion;
 
 pub type Rank = usize;
 
@@ -22,28 +24,14 @@ impl Node {
     }
 }
 
-
-pub struct NodeScatterElement<'a> {
-    foo: PhantomData<&'a [u8]>,
-}
-
-pub struct NodeGatherElement<'a> {
-    foo: PhantomData<&'a [u8]>,
-}
-
 #[bon]
 impl Node {
     #[builder]
-    pub fn builder(
-        rank: Rank,
-        config: &NetworkConfig,
-    ) -> Result<PreparedNode, NodeError> {
-        let self_host = config
-            .get(rank)
-            .ok_or(NodeError::RankNotInNetwork {
-                rank,
-                num_peers: config.len(),
-            })?;
+    pub fn builder(rank: Rank, config: &NetworkConfig) -> Result<PreparedNode, NodeError> {
+        let self_host = config.get(rank).ok_or(NodeError::RankNotInNetwork {
+            rank,
+            num_peers: config.len(),
+        })?;
         let ctx = open_device(&self_host.ibdev)?;
         let connections = config
             .iter()
@@ -64,8 +52,13 @@ impl Node {
     }
 
     /// TODO: on error, some memory regions may be registered
-    pub fn register_mr(&mut self, region: &mut [u8]) -> Result<NodeMemoryRegion, ()> {
-        todo!()
+    pub fn register_mr(&mut self, region: &mut [u8]) -> io::Result<NodeMemoryRegion> {
+        let connection_mrs = self
+            .connections
+            .iter_mut()
+            .map(|conn| conn.register_mr(region))
+            .collect::<Result<_, _>>()?;
+        Ok(NodeMemoryRegion::new(connection_mrs))
     }
 
     /// TODO: on error, some memory regions may be registered
@@ -84,7 +77,15 @@ impl Node {
         peer: Rank,
         sends: impl AsRef<[NodeScatterElement<'a>]>,
     ) -> WorkSpinPollResult {
-        todo!()
+        // todo: deal with error of peer not in range
+        // todo: avoid allocating somehow?
+        let conn_sends: Vec<_> = sends
+            .as_ref()
+            .iter()
+            .map(|se| se.bind(peer))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        self.connections.get_mut(peer).unwrap().send(&conn_sends)
     }
 
     pub fn send_with_immediate<'a>(
@@ -93,9 +94,21 @@ impl Node {
         sends: impl AsRef<[NodeScatterElement<'a>]>,
         immediate: u32,
     ) -> WorkSpinPollResult {
-        todo!()
+        // todo: deal with error of peer not in range
+        // todo: avoid allocating somehow?
+        let conn_sends: Vec<_> = sends
+            .as_ref()
+            .iter()
+            .map(|se| se.bind(peer))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        self.connections
+            .get_mut(peer)
+            .unwrap()
+            .send_with_immediate(&conn_sends, immediate)
     }
 
+    /*
     pub fn receive<'a>(
         &mut self,
         peer: Rank,
@@ -103,6 +116,7 @@ impl Node {
     ) -> WorkSpinPollResult {
         todo!()
     }
+    */
 
     /*
     // network operations

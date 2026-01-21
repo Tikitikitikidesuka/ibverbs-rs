@@ -1,11 +1,12 @@
 use crate::network::node::Rank;
 use thiserror::Error;
 
-mod host_memory_region;
+mod memory_region;
 pub mod network_config;
 pub mod node;
 pub mod prepared_host;
 pub mod tcp_exchanger;
+pub mod scatter_gather_element;
 
 #[derive(Error, Debug)]
 pub enum NodeError {

@@ -11,6 +11,5 @@ fn main() {
     let mut conn = conn.handshake(endpoint).unwrap();
 
     let mut mem = [0u8; 1024];
-    let mr = conn.register_mr("mem", &mut mem).unwrap();
-
+    let mr = conn.register_mr(&mut mem).unwrap();
 }

@@ -1,7 +1,7 @@
-use log::LevelFilter::Debug;
 use infiniband_rs::connection::builder::ConnectionBuilder;
-use simple_logger::SimpleLogger;
 use infiniband_rs::devices::open_device;
+use log::LevelFilter::Debug;
+use simple_logger::SimpleLogger;
 
 const DEVICE: &str = "mlx5_0";
 
@@ -15,9 +15,7 @@ fn main() {
     let mut conn = prep_conn.handshake(endpoint).unwrap();
 
     let mut mem = vec![0u8; 1024];
-    let mr = conn
-        .register_mr("asdf", &mut mem)
-        .unwrap();
+    let mr = conn.register_mr(&mut mem).unwrap();
 
     // Polling to completion
     println!("Running scoped connection and polling...");
@@ -30,7 +28,9 @@ fn main() {
         let wr0 = s
             .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
-        let wr1 = s.post_send(&[mr.prepare_scatter_element(send_mem).unwrap()]).unwrap();
+        let wr1 = s
+            .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
+            .unwrap();
         wr0.spin_poll().unwrap();
         wr1.spin_poll().unwrap();
     });
@@ -47,7 +47,9 @@ fn main() {
         let wr0 = s
             .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
-        let wr1 = s.post_send(&[mr.prepare_scatter_element(send_mem).unwrap()]).unwrap();
+        let wr1 = s
+            .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
+            .unwrap();
     });
     println!("after recv: {:?}", &recv_mem[0..4]);
 
@@ -62,7 +64,9 @@ fn main() {
         let wr0 = s
             .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
-        let wr1 = s.post_send(&[mr.prepare_scatter_element(send_mem).unwrap()]).unwrap();
+        let wr1 = s
+            .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
+            .unwrap();
         // Since you can forget to poll and the work request will be polled
         // at the end of the scope, you may just return the errors with ?.
         wr0.spin_poll()?;
@@ -79,7 +83,9 @@ fn main() {
     println!("before recv: {:?}", &recv_mem[0..4]);
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
     let result = conn.scope(|s| {
-        let wr1 = s.post_send(&[mr.prepare_scatter_element(send_mem).unwrap()]).unwrap();
+        let wr1 = s
+            .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
+            .unwrap();
         panic!("I panicked!!!!");
     });
     println!("Result: {:?}", result);

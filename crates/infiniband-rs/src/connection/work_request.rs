@@ -1,6 +1,6 @@
 use crate::connection::cached_completion_queue::CachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
-use crate::ibverbs::work_completion::IbvWorkResult;
+use crate::ibverbs::work_completion::WorkResult;
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
@@ -63,7 +63,7 @@ pub enum WorkPollError {
 pub type WorkSpinPollResult = Result<WorkSuccess, WorkPollError>;
 pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
 
-pub type IbvWorkRequestStatus = Option<IbvWorkResult>;
+pub type WorkRequestStatus = Option<WorkResult>;
 
 impl WorkRequest<'_> {
     pub fn wr_id(&self) -> u64 {
@@ -124,7 +124,7 @@ impl WorkRequest<'_> {
         self.status.is_some()
     }
 
-    fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> IbvWorkRequestStatus {
+    fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> WorkRequestStatus {
         cq.consume(wr_id).map(|w| w.result())
     }
 }
