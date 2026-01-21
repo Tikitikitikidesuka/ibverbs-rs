@@ -2,14 +2,14 @@ use crate::connection::builder::ConnectionBuilder;
 use crate::connection::connection::Connection;
 use crate::connection::work_request::WorkSpinPollResult;
 use crate::devices::open_device;
+use crate::ibverbs::scatter_gather_element::GatherElement;
 use crate::network::NodeError;
 use crate::network::memory_region::NodeMemoryRegion;
 use crate::network::network_config::NetworkConfig;
-use crate::network::prepared_host::PreparedNode;
-use crate::network::scatter_gather_element::NodeScatterElement;
+use crate::network::prepared_node::PreparedNode;
+use crate::network::scatter_gather_element::{NodeGatherElement, NodeScatterElement};
 use bon::bon;
 use std::io;
-use std::marker::PhantomData;
 
 pub type Rank = usize;
 
@@ -75,7 +75,7 @@ impl Node {
     pub fn send<'a>(
         &mut self,
         peer: Rank,
-        sends: impl AsRef<[NodeScatterElement<'a>]>,
+        sends: &impl AsRef<[NodeScatterElement<'a>]>,
     ) -> WorkSpinPollResult {
         // todo: deal with error of peer not in range
         // todo: avoid allocating somehow?
@@ -91,7 +91,7 @@ impl Node {
     pub fn send_with_immediate<'a>(
         &mut self,
         peer: Rank,
-        sends: impl AsRef<[NodeScatterElement<'a>]>,
+        sends: &impl AsRef<[NodeScatterElement<'a>]>,
         immediate: u32,
     ) -> WorkSpinPollResult {
         // todo: deal with error of peer not in range
@@ -108,15 +108,23 @@ impl Node {
             .send_with_immediate(&conn_sends, immediate)
     }
 
-    /*
     pub fn receive<'a>(
         &mut self,
         peer: Rank,
-        receives: impl AsRef<[NodeGatherElement<'a>]>,
+        receives: &'a mut [NodeGatherElement<'a>],
     ) -> WorkSpinPollResult {
-        todo!()
+        let mut conn_receives: Vec<GatherElement<'a>> = receives
+            .iter_mut()
+            .map(|mut ge| ge.bind(peer))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        self.connections
+            .get_mut(peer)
+            .unwrap()
+            .receive(&mut conn_receives)
     }
-    */
+
+    pub unsafe fn send_unpolled<'a>(&mut self, sends: impl AsRef<[NodeScatterElement<'a>]>) {}
 
     /*
     // network operations

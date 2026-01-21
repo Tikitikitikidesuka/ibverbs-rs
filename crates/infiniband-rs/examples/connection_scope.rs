@@ -26,7 +26,7 @@ fn main() {
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
     conn.scope(|s| {
         let wr0 = s
-            .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
+            .post_receive(&mut [mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
         let wr1 = s
             .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
@@ -45,7 +45,7 @@ fn main() {
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
     conn.scope(|s| {
         let wr0 = s
-            .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
+            .post_receive(&mut [mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
         let wr1 = s
             .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])
@@ -62,7 +62,7 @@ fn main() {
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
     let result = conn.scope(|s| {
         let wr0 = s
-            .post_receive(&[mr.prepare_gather_element(recv_mem).unwrap()])
+            .post_receive(&mut [mr.prepare_gather_element(recv_mem).unwrap()])
             .unwrap();
         let wr1 = s
             .post_send(&[mr.prepare_scatter_element(send_mem).unwrap()])

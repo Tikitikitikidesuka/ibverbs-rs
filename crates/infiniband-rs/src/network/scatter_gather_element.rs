@@ -1,4 +1,6 @@
-use crate::ibverbs::scatter_gather_element::{ScatterElement, ScatterGatherElementError};
+use crate::ibverbs::scatter_gather_element::{
+    GatherElement, ScatterElement, ScatterGatherElementError,
+};
 use crate::network::memory_region::NodeMemoryRegion;
 use crate::network::node::Rank;
 
@@ -7,21 +9,11 @@ use crate::network::node::Rank;
 /// this through.
 /// This allows reusability of a single NodeScatterElement over different connections
 /// of the node by not tying it to a specific one.
+#[derive(Debug, Copy, Clone)]
 pub struct NodeScatterElement<'a> {
     mr: &'a NodeMemoryRegion,
     data: &'a [u8],
 }
-
-/*
-/// A node gather element is not tied to a connection's memory region yet
-/// since the rdma operation methods choose which connection to receive
-/// this from.
-/// This allows reusability of a single NodeGatherElement over different connections
-/// of the node by not tying it to a specific one.
-pub struct NodeGatherElement<'a> {
-    data: &'a mut [u8],
-}
-*/
 
 impl<'a> NodeScatterElement<'a> {
     pub(super) fn new(mr: &'a NodeMemoryRegion, data: &'a [u8]) -> Self {
@@ -29,7 +21,7 @@ impl<'a> NodeScatterElement<'a> {
     }
 
     pub(super) fn bind(
-        &self,
+        &'a self,
         rank: Rank,
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         // todo: treat error rank not in range
@@ -38,5 +30,33 @@ impl<'a> NodeScatterElement<'a> {
             .get(rank)
             .unwrap()
             .prepare_scatter_element(self.data)
+    }
+}
+
+/// A node gather element is not tied to a connection's memory region yet
+/// since the rdma operation methods choose which connection to receive
+/// this from.
+/// This allows reusability of a single NodeGatherElement over different connections
+/// of the node by not tying it to a specific one.
+#[derive(Debug)]
+pub struct NodeGatherElement<'a> {
+    mr: &'a NodeMemoryRegion,
+    data: &'a mut [u8],
+}
+
+impl<'a> NodeGatherElement<'a> {
+    pub(super) fn new(mr: &'a NodeMemoryRegion, data: &'a mut [u8]) -> Self {
+        Self { mr, data }
+    }
+
+    pub(super) fn bind(
+        &'a mut self,
+        rank: Rank,
+    ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
+        self.mr
+            .connection_mrs
+            .get(rank)
+            .unwrap()
+            .prepare_gather_element(self.data)
     }
 }

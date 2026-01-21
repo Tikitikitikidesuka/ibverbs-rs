@@ -25,16 +25,18 @@ fn main() {
     send_mem.copy_from_slice(&[1, 2, 3, 4]);
     println!("Running scoped connection and polling...");
     println!("before recv: {:?}", &recv_mem[0..4]);
-    let ge = mr.prepare_gather_element(recv_mem).unwrap();
+    let ge0 = mr.prepare_gather_element(recv_mem).unwrap();
+    let ge1 = mr.prepare_gather_element(send_mem).unwrap();
     let se = mr.prepare_scatter_element(send_mem).unwrap();
 
-    // Important that scope borrows conn mutably
-    conn.scope(|s| {
-        let mut new_mem = vec![0u8; 1024];
-        let mr = conn.register_mr(new_mem.as_mut_slice()).unwrap();
-        drop(new_mem);
-        s.post_send([mr.prepare_scatter_element()])
-    });
-    drop(conn);
+    let mut wr0 = unsafe { conn.send_unpolled(&mut [se]).unwrap() };
+    let mut wr1 = unsafe { conn.send_unpolled(&mut [se]).unwrap() };
+    let mut wr0 = unsafe { conn.receive_unpolled(&mut [ge0]).unwrap() };
+    let mut wr1 = unsafe { conn.receive_unpolled(&mut [ge0]).unwrap() };
+    drop(mr);
+    wr0.spin_poll().unwrap();
+    wr1.spin_poll().unwrap();
+
+
     println!("after recv: {:?}", &recv_mem[0..4]);
 }
