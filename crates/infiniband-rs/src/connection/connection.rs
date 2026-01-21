@@ -24,11 +24,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub(super) fn new(
-        cq: CachedCompletionQueue,
-        pd: ProtectionDomain,
-        qp: QueuePair,
-    ) -> Self {
+    pub(super) fn new(cq: CachedCompletionQueue, pd: ProtectionDomain, qp: QueuePair) -> Self {
         Self {
             cq: Rc::new(RefCell::new(cq)),
             pd,
@@ -169,10 +165,7 @@ impl Connection {
         }
     }
 
-    pub fn send<'a>(
-        &mut self,
-        sends: impl AsRef<[ScatterElement<'a>]>,
-    ) -> WorkSpinPollResult {
+    pub fn send<'a>(&mut self, sends: impl AsRef<[ScatterElement<'a>]>) -> WorkSpinPollResult {
         Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()?)
     }
 
@@ -184,10 +177,7 @@ impl Connection {
         Ok(unsafe { self.send_with_immediate_unpolled(sends, imm_data)? }.spin_poll()?)
     }
 
-    pub fn receive<'a>(
-        &mut self,
-        receives: impl AsRef<[GatherElement<'a>]>,
-    ) -> WorkSpinPollResult {
+    pub fn receive<'a>(&mut self, receives: impl AsMut<[GatherElement<'a>]>) -> WorkSpinPollResult {
         Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()?)
     }
 
@@ -341,10 +331,10 @@ impl Connection {
     /// ```
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        receives: impl AsRef<[GatherElement<'a>]>,
+        mut receives: impl AsMut<[GatherElement<'a>]>,
     ) -> io::Result<WorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe { self.qp.post_receive(receives.as_ref(), wr_id)? };
+        unsafe { self.qp.post_receive(receives.as_mut(), wr_id)? };
         Ok(unsafe { WorkRequest::new(wr_id, self.cq.clone()) })
     }
 

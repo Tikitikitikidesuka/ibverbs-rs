@@ -120,7 +120,7 @@ impl<'scope, 'env> ConnectionScope<'scope, 'env> {
     // so no overlapping operations can be done concurrently
     pub fn post_receive(
         &mut self,
-        receives: impl AsRef<[GatherElement<'env>]>,
+        receives: impl AsMut<[GatherElement<'env>]>,
     ) -> io::Result<ScopedWorkRequest<'scope>> {
         let wr = Rc::new(RefCell::new(unsafe {
             self.inner.receive_unpolled(receives)?
