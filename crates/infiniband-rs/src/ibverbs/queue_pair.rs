@@ -43,7 +43,10 @@ impl Debug for QueuePair {
 }
 
 impl QueuePair {
-    pub unsafe fn post_send(&mut self, local: &[ScatterElement], wr_id: u64) -> io::Result<()> {
+    /// # Safety
+    /// The buffers pointed to by GatherElement must remain valid until the work request issued
+    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
+    pub unsafe fn post_send<'a>(&mut self, local: &[ScatterElement<'a>], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -60,9 +63,12 @@ impl QueuePair {
         unsafe { self.post_send_wr(&mut wr) }
     }
 
-    pub unsafe fn post_send_with_immediate(
+    /// # Safety
+    /// The buffers pointed to by GatherElement must remain valid until the work request issued
+    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
+    pub unsafe fn post_send_with_immediate<'a>(
         &mut self,
-        local: &[ScatterElement],
+        local: &[ScatterElement<'a>],
         imm_data: u32,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -97,12 +103,15 @@ impl QueuePair {
         }
     }
 
-    pub unsafe fn post_receive(&mut self, local: &[GatherElement], wr_id: u64) -> io::Result<()> {
+    /// # Safety
+    /// The buffers pointed to by GatherElement must remain valid until the work request issued
+    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
+    pub unsafe fn post_receive<'a>(&mut self, local: &mut [GatherElement<'a>], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32,
+            sg_list: local.as_mut_ptr() as *mut ibv_sge,
+            num_sge: local.len() as i32, // todo: fix possible error on overflow
         };
 
         let mut bad_wr: *mut ibv_recv_wr = ptr::null::<ibv_recv_wr>() as *mut _;
