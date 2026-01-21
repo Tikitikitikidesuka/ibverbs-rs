@@ -1,25 +1,25 @@
-use crate::ibverbs::completion_queue::IbvCompletionQueue;
-use crate::ibverbs::context::IbvContextInner;
-use crate::ibverbs::memory_region::IbvMemoryRegion;
-use crate::ibverbs::queue_pair_builder::IbvRcQueuePairBuilder;
+use crate::ibverbs::completion_queue::CompletionQueue;
+use crate::ibverbs::context::ContextInner;
+use crate::ibverbs::memory_region::MemoryRegion;
+use crate::ibverbs::queue_pair_builder::QueuePairBuilder;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct IbvProtectionDomain {
-    inner: Arc<IbvProtectionDomainInner>,
+pub struct ProtectionDomain {
+    inner: Arc<ProtectionDomainInner>,
 }
 
-impl IbvProtectionDomain {
-    pub(super) fn allocate(context: Arc<IbvContextInner>) -> io::Result<Self> {
+impl ProtectionDomain {
+    pub(super) fn allocate(context: Arc<ContextInner>) -> io::Result<Self> {
         let pd = unsafe { ibv_alloc_pd(context.ctx) };
         if pd.is_null() {
             Err(io::Error::other(io::Error::last_os_error()))
         } else {
             log::debug!("IbvProtectionDomain allocated");
-            Ok(IbvProtectionDomain {
-                inner: Arc::new(IbvProtectionDomainInner { context, pd }),
+            Ok(ProtectionDomain {
+                inner: Arc::new(ProtectionDomainInner { context, pd }),
             })
         }
     }
@@ -34,9 +34,9 @@ impl IbvProtectionDomain {
         address: *mut u8,
         length: usize,
         access_flags: ibv_access_flags,
-    ) -> io::Result<IbvMemoryRegion> {
+    ) -> io::Result<MemoryRegion> {
         unsafe {
-            IbvMemoryRegion::register_with_permissions(
+            MemoryRegion::register_with_permissions(
                 self.inner.clone(),
                 address,
                 length,
@@ -62,9 +62,9 @@ impl IbvProtectionDomain {
         len: usize,
         iova: u64,
         access_flags: ibv_access_flags,
-    ) -> io::Result<IbvMemoryRegion> {
+    ) -> io::Result<MemoryRegion> {
         unsafe {
-            IbvMemoryRegion::register_dmabuf(
+            MemoryRegion::register_dmabuf(
                 self.inner.clone(),
                 fd,
                 offset,
@@ -77,10 +77,10 @@ impl IbvProtectionDomain {
 
     pub fn create_qp(
         &self,
-        send_cq: &IbvCompletionQueue,
-        receive_cq: &IbvCompletionQueue,
-    ) -> IbvRcQueuePairBuilder {
-        IbvRcQueuePairBuilder::new(
+        send_cq: &CompletionQueue,
+        receive_cq: &CompletionQueue,
+    ) -> QueuePairBuilder {
+        QueuePairBuilder::new(
             self.inner.clone(),
             send_cq.inner.clone(),
             receive_cq.inner.clone(),
@@ -88,15 +88,15 @@ impl IbvProtectionDomain {
     }
 }
 
-pub(super) struct IbvProtectionDomainInner {
-    pub(super) context: Arc<IbvContextInner>,
+pub(super) struct ProtectionDomainInner {
+    pub(super) context: Arc<ContextInner>,
     pub(super) pd: *mut ibv_pd,
 }
 
-unsafe impl Sync for IbvProtectionDomainInner {}
-unsafe impl Send for IbvProtectionDomainInner {}
+unsafe impl Sync for ProtectionDomainInner {}
+unsafe impl Send for ProtectionDomainInner {}
 
-impl Drop for IbvProtectionDomainInner {
+impl Drop for ProtectionDomainInner {
     fn drop(&mut self) {
         log::debug!("IbvProtectionDomain deallocated");
         let pd = self.pd;
@@ -111,7 +111,7 @@ impl Drop for IbvProtectionDomainInner {
     }
 }
 
-impl std::fmt::Debug for IbvProtectionDomainInner {
+impl std::fmt::Debug for ProtectionDomainInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvProtectionDomainInner")
             .field("handle", &(unsafe { *self.pd }).handle)

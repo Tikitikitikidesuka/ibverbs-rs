@@ -1,7 +1,7 @@
-use crate::connection::builder::IbvConnectionBuilder;
-use crate::connection::connection::IbvConnection;
-use crate::connection::work_request::IbvWorkSpinPollResult;
-use crate::devices::ibv_device_open;
+use crate::connection::builder::ConnectionBuilder;
+use crate::connection::connection::Connection;
+use crate::connection::work_request::WorkSpinPollResult;
+use crate::devices::open_device;
 use crate::network::NodeError;
 use crate::network::network_config::NetworkConfig;
 use crate::network::prepared_host::PreparedNode;
@@ -12,12 +12,12 @@ use crate::network::host_memory_region::NodeMemoryRegion;
 pub type Rank = usize;
 
 pub struct Node {
-    connections: Vec<IbvConnection>,
+    connections: Vec<Connection>,
     rank: Rank,
 }
 
 impl Node {
-    pub(super) fn new(rank: Rank, connections: Vec<IbvConnection>) -> Self {
+    pub(super) fn new(rank: Rank, connections: Vec<Connection>) -> Self {
         Self { rank, connections }
     }
 }
@@ -44,12 +44,12 @@ impl Node {
                 rank,
                 num_peers: config.len(),
             })?;
-        let ctx = ibv_device_open(&self_host.ibdev)?;
+        let ctx = open_device(&self_host.ibdev)?;
         let connections = config
             .iter()
             .map(|_host| {
                 // todo: allow configuring connection
-                IbvConnectionBuilder::new(&ctx).build()
+                ConnectionBuilder::new(&ctx).build()
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(PreparedNode::new(rank, connections))
@@ -83,7 +83,7 @@ impl Node {
         &mut self,
         peer: Rank,
         sends: impl AsRef<[NodeScatterElement<'a>]>,
-    ) -> IbvWorkSpinPollResult {
+    ) -> WorkSpinPollResult {
         todo!()
     }
 
@@ -92,7 +92,7 @@ impl Node {
         peer: Rank,
         sends: impl AsRef<[NodeScatterElement<'a>]>,
         immediate: u32,
-    ) -> IbvWorkSpinPollResult {
+    ) -> WorkSpinPollResult {
         todo!()
     }
 
@@ -100,7 +100,7 @@ impl Node {
         &mut self,
         peer: Rank,
         receives: impl AsRef<[NodeGatherElement<'a>]>,
-    ) -> IbvWorkSpinPollResult {
+    ) -> WorkSpinPollResult {
         todo!()
     }
 

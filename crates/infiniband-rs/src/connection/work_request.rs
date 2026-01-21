@@ -1,8 +1,8 @@
-use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
+use crate::connection::cached_completion_queue::CachedCompletionQueue;
 use crate::connection::unsafe_member::UnsafeMember;
 use crate::ibverbs::work_completion::IbvWorkResult;
-use crate::ibverbs::work_error::IbvWorkError;
-use crate::ibverbs::work_success::IbvWorkSuccess;
+use crate::ibverbs::work_error::WorkError;
+use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::io;
@@ -11,17 +11,17 @@ use std::rc::Rc;
 use thiserror::Error;
 
 #[must_use = "IbvWorkRequest must be dropped to ensure completion"]
-pub struct IbvWorkRequest<'a> {
+pub struct WorkRequest<'a> {
     wr_id: u64,
-    cq: Rc<RefCell<IbvCachedCompletionQueue>>,
-    status: Option<Result<IbvWorkSuccess, IbvWorkError>>,
+    cq: Rc<RefCell<CachedCompletionQueue>>,
+    status: Option<Result<WorkSuccess, WorkError>>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
 }
 
-impl<'a> IbvWorkRequest<'a> {
-    pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<IbvCachedCompletionQueue>>) -> Self {
+impl<'a> WorkRequest<'a> {
+    pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<CachedCompletionQueue>>) -> Self {
         Self {
             wr_id,
             cq,
@@ -31,7 +31,7 @@ impl<'a> IbvWorkRequest<'a> {
     }
 }
 
-impl<'a> Drop for IbvWorkRequest<'a> {
+impl<'a> Drop for WorkRequest<'a> {
     fn drop(&mut self) {
         if !self.already_polled_to_completion() {
             log::warn!("IbvWorkRequest not manually polled to completion");
@@ -43,7 +43,7 @@ impl<'a> Drop for IbvWorkRequest<'a> {
     }
 }
 
-impl<'a> Debug for IbvWorkRequest<'a> {
+impl<'a> Debug for WorkRequest<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvWorkRequest")
             .field("wr_id", &self.wr_id)
@@ -53,19 +53,19 @@ impl<'a> Debug for IbvWorkRequest<'a> {
 }
 
 #[derive(Debug, Error)]
-pub enum IbvWorkPollError {
+pub enum WorkPollError {
     #[error("Polling error: {0}")]
     PollError(#[from] io::Error),
     #[error("Polled work error: {0}")]
-    WorkError(#[from] IbvWorkError),
+    WorkError(#[from] WorkError),
 }
 
-pub type IbvWorkSpinPollResult = Result<IbvWorkSuccess, IbvWorkPollError>;
-pub type IbvWorkPollResult = Option<Result<IbvWorkSuccess, IbvWorkPollError>>;
+pub type WorkSpinPollResult = Result<WorkSuccess, WorkPollError>;
+pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
 
 pub type IbvWorkRequestStatus = Option<IbvWorkResult>;
 
-impl IbvWorkRequest<'_> {
+impl WorkRequest<'_> {
     pub fn wr_id(&self) -> u64 {
         self.wr_id
     }
@@ -76,7 +76,7 @@ impl IbvWorkRequest<'_> {
     /// `IbvWorkRequestStatus` with the status of the work request.
     /// The work request status can be `Ok(WorkCompletion)` or `Err(io::Error)`
     /// if an error occurred during the work request's operation was run.
-    pub fn poll(&mut self) -> IbvWorkPollResult {
+    pub fn poll(&mut self) -> WorkPollResult {
         // Check if previously completed
         if self.status.is_some() {
             return self.status.map(|res| res.map_err(Into::into));
@@ -110,7 +110,7 @@ impl IbvWorkRequest<'_> {
     /// It consumes the work completion from the cache. This method
     /// must be used to guarantee a work completion is finished and
     /// to free space on the completion queue.
-    pub fn spin_poll(&mut self) -> IbvWorkSpinPollResult {
+    pub fn spin_poll(&mut self) -> WorkSpinPollResult {
         loop {
             match self.poll() {
                 None => continue,              // not ready yet, spin
@@ -124,7 +124,7 @@ impl IbvWorkRequest<'_> {
         self.status.is_some()
     }
 
-    fn consume_cache(wr_id: u64, cq: &mut IbvCachedCompletionQueue) -> IbvWorkRequestStatus {
+    fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> IbvWorkRequestStatus {
         cq.consume(wr_id).map(|w| w.result())
     }
 }

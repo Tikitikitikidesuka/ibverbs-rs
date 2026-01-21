@@ -1,12 +1,12 @@
-use infiniband_rs::connection::builder::IbvConnectionBuilder;
-use infiniband_rs::connection::connection::IbvConnection;
-use infiniband_rs::devices::ibv_device_open;
+use infiniband_rs::connection::builder::ConnectionBuilder;
+use infiniband_rs::connection::connection::Connection;
+use infiniband_rs::devices::open_device;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
-    let ctx = ibv_device_open(DEVICE).unwrap();
-    let conn = IbvConnectionBuilder::new(&ctx).build().unwrap();
+    let ctx = open_device(DEVICE).unwrap();
+    let conn = ConnectionBuilder::new(&ctx).build().unwrap();
     let endpoint = conn.endpoint();
     let mut conn = conn.handshake(endpoint).unwrap();
 

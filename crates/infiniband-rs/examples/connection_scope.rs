@@ -1,16 +1,16 @@
 use log::LevelFilter::Debug;
-use infiniband_rs::connection::builder::IbvConnectionBuilder;
+use infiniband_rs::connection::builder::ConnectionBuilder;
 use simple_logger::SimpleLogger;
-use infiniband_rs::devices::ibv_device_open;
+use infiniband_rs::devices::open_device;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
-    let ctx = ibv_device_open(DEVICE).unwrap();
+    let ctx = open_device(DEVICE).unwrap();
 
-    let prep_conn = IbvConnectionBuilder::new(&ctx).build().unwrap();
+    let prep_conn = ConnectionBuilder::new(&ctx).build().unwrap();
     let endpoint = prep_conn.endpoint();
     let mut conn = prep_conn.handshake(endpoint).unwrap();
 

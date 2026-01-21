@@ -1,13 +1,12 @@
-use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
-use crate::connection::prepared_connection::IbvPreparedConnection;
-use crate::context::IbvContext;
+use crate::connection::cached_completion_queue::CachedCompletionQueue;
+use crate::connection::prepared_connection::PreparedConnection;
+use crate::context::Context;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
-use std::collections::HashMap;
 use std::io;
 
 #[derive(Debug)]
-pub struct IbvConnectionBuilder<'c> {
-    context: &'c IbvContext,
+pub struct ConnectionBuilder<'c> {
+    context: &'c Context,
     min_cq_buf_size: u32,
     max_send_wrs: u32,
     max_recv_wrs: u32,
@@ -15,12 +14,12 @@ pub struct IbvConnectionBuilder<'c> {
     max_recv_sges: u32,
 }
 
-impl<'c> IbvConnectionBuilder<'c> {
+impl<'c> ConnectionBuilder<'c> {
     const DEFAULT_MIN_CQ_BUF_SIZE: u32 = 32;
     const DEFAULT_MAX_WRS: u32 = 32;
     const DEFAULT_MAX_SGES: u32 = 32;
 
-    pub fn new(context: &'c IbvContext) -> Self {
+    pub fn new(context: &'c Context) -> Self {
         Self {
             context,
             min_cq_buf_size: Self::DEFAULT_MIN_CQ_BUF_SIZE,
@@ -31,7 +30,7 @@ impl<'c> IbvConnectionBuilder<'c> {
         }
     }
 
-    pub fn build(&self) -> io::Result<IbvPreparedConnection> {
+    pub fn build(&self) -> io::Result<PreparedConnection> {
         let cq = self.context.create_cq(self.min_cq_buf_size, 0)?;
         let pd = self.context.allocate_pd()?;
         let qp = pd
@@ -48,8 +47,8 @@ impl<'c> IbvConnectionBuilder<'c> {
             .with_max_recv_sges(self.max_send_sges)
             .build()?;
 
-        Ok(IbvPreparedConnection::new(
-            IbvCachedCompletionQueue::wrap_cq(cq),
+        Ok(PreparedConnection::new(
+            CachedCompletionQueue::wrap_cq(cq),
             pd,
             qp,
         ))

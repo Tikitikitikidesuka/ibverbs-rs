@@ -1,21 +1,21 @@
-use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::scatter_gather_element::{
-    IbvGatherElement, IbvScatterElement, IbvScatterGatherElementError,
+    GatherElement, ScatterElement, ScatterGatherElementError,
 };
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
 use std::sync::Arc;
 
-pub struct IbvMemoryRegion {
-    pd: Arc<IbvProtectionDomainInner>,
+pub struct MemoryRegion {
+    pd: Arc<ProtectionDomainInner>,
     mr: *mut ibv_mr,
 }
 
-unsafe impl Sync for IbvMemoryRegion {}
-unsafe impl Send for IbvMemoryRegion {}
+unsafe impl Sync for MemoryRegion {}
+unsafe impl Send for MemoryRegion {}
 
-impl Drop for IbvMemoryRegion {
+impl Drop for MemoryRegion {
     fn drop(&mut self) {
         log::debug!("IbvMemoryRegion deregistered");
         let mr = self.mr;
@@ -30,7 +30,7 @@ impl Drop for IbvMemoryRegion {
     }
 }
 
-impl std::fmt::Debug for IbvMemoryRegion {
+impl std::fmt::Debug for MemoryRegion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvMemoryRegion")
             .field("address", &(unsafe { (*self.mr).addr }))
@@ -43,23 +43,23 @@ impl std::fmt::Debug for IbvMemoryRegion {
     }
 }
 
-impl IbvMemoryRegion {
+impl MemoryRegion {
     /// # Safety
     /// The user is responsible for ensuring the memory registered
     /// is not deallocated for as long as it is registered.
     pub(super) unsafe fn register_with_permissions(
-        pd: Arc<IbvProtectionDomainInner>,
+        pd: Arc<ProtectionDomainInner>,
         address: *mut u8,
         length: usize,
         access_flags: ibv_access_flags,
-    ) -> io::Result<IbvMemoryRegion> {
+    ) -> io::Result<MemoryRegion> {
         let mr =
             unsafe { ibv_reg_mr(pd.pd, address as *mut c_void, length, access_flags.0 as i32) };
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {
             log::debug!("IbvMemoryRegion registered");
-            Ok(IbvMemoryRegion { pd, mr })
+            Ok(MemoryRegion { pd, mr })
         }
     }
 
@@ -74,20 +74,20 @@ impl IbvMemoryRegion {
     /// # Safety
     /// The DMA-BUF and its mapped memory must not be deallocated while they remain registered.
     pub(super) unsafe fn register_dmabuf(
-        pd: Arc<IbvProtectionDomainInner>,
+        pd: Arc<ProtectionDomainInner>,
         fd: i32,
         offset: u64,
         len: usize,
         iova: u64,
         access_flags: ibv_access_flags,
-    ) -> io::Result<IbvMemoryRegion> {
+    ) -> io::Result<MemoryRegion> {
         let mr = unsafe { ibv_reg_dmabuf_mr(pd.pd, offset, len, iova, fd, access_flags.0 as i32) };
 
         if mr.is_null() {
             Err(io::Error::last_os_error())
         } else {
             log::debug!("IbvMemoryRegion registered");
-            Ok(IbvMemoryRegion { pd, mr })
+            Ok(MemoryRegion { pd, mr })
         }
     }
 
@@ -108,19 +108,19 @@ impl IbvMemoryRegion {
     }
 }
 
-impl IbvMemoryRegion {
+impl MemoryRegion {
     pub fn prepare_scatter_element<'a>(
         &self,
         data: &'a [u8],
-    ) -> Result<IbvScatterElement<'a>, IbvScatterGatherElementError> {
-        IbvScatterElement::<'a>::new(self, data)
+    ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
+        ScatterElement::<'a>::new(self, data)
     }
 
     pub fn prepare_gather_element<'a>(
         &self,
         data: &'a mut [u8],
-    ) -> Result<IbvGatherElement<'a>, IbvScatterGatherElementError> {
-        IbvGatherElement::<'a>::new(self, data)
+    ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
+        GatherElement::<'a>::new(self, data)
     }
 
     pub fn encloses(&self, slice: &[u8]) -> bool {

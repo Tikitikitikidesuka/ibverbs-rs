@@ -1,6 +1,6 @@
 use crate::ibverbs::context::IB_PORT;
-use crate::ibverbs::queue_pair::IbvQueuePair;
-use crate::ibverbs::queue_pair_endpoint::IbvQueuePairEndpoint;
+use crate::ibverbs::queue_pair::QueuePair;
+use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use ibverbs_sys::*;
 use std::io;
 
@@ -13,8 +13,8 @@ use std::io;
 /// `QueuePairEndpoint` of the remote end (by using `PreparedQueuePair::endpoint`), and then call
 /// `PreparedQueuePair::handshake` on both sides with the other side's `QueuePairEndpoint`:
 #[derive(Debug)]
-pub struct IbvPreparedQueuePair {
-    pub(super) qp: IbvQueuePair,
+pub struct PreparedQueuePair {
+    pub(super) qp: QueuePair,
     pub(super) lid: u16,
 
     /// Maximum simultaneous issued send work requests.
@@ -37,13 +37,13 @@ pub struct IbvPreparedQueuePair {
     pub(super) ack_timeout: u8,
 }
 
-impl IbvPreparedQueuePair {
+impl PreparedQueuePair {
     /// Get the network endpoint for this `QueuePair`.
     ///
     /// This endpoint will need to be communicated to the `QueuePair` on the remote end.
-    pub fn endpoint(&self) -> IbvQueuePairEndpoint {
+    pub fn endpoint(&self) -> QueuePairEndpoint {
         let num = unsafe { &*self.qp.qp }.qp_num;
-        IbvQueuePairEndpoint { num, lid: self.lid }
+        QueuePairEndpoint { num, lid: self.lid }
     }
 
     /// Set up the `QueuePair` such that it is ready to exchange packets with a remote `QueuePair`.
@@ -55,7 +55,7 @@ impl IbvPreparedQueuePair {
     ///
     ///  - `EINVAL`: Invalid value provided in `attr` or in `attr_mask`.
     ///  - `ENOMEM`: Not enough resources to complete this operation.
-    pub fn handshake(self, remote: IbvQueuePairEndpoint) -> io::Result<IbvQueuePair> {
+    pub fn handshake(self, remote: QueuePairEndpoint) -> io::Result<QueuePair> {
         // Initialize queue pair
         let mut attr = ibv_qp_attr {
             qp_state: ibv_qp_state::IBV_QPS_INIT,

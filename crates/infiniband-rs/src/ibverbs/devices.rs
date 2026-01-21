@@ -1,13 +1,13 @@
-use crate::ibverbs::context::IbvContext;
+use crate::ibverbs::context::Context;
 use crate::ibverbs::global_unique_id::Guid;
 use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
 use std::marker::PhantomData;
 
-pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
+pub fn open_device(name: impl AsRef<str>) -> io::Result<Context> {
     let name = name.as_ref();
-    let devices = ibv_device_list()?;
+    let devices = list_devices()?;
     let device = devices
         .iter()
         .find(|d| d.name() == Some(name))
@@ -20,7 +20,7 @@ pub fn ibv_device_open(name: impl AsRef<str>) -> io::Result<IbvContext> {
     device.open()
 }
 
-pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
+pub fn list_devices() -> io::Result<DeviceList> {
     let mut num_devices = 0i32;
     let devices_ptr = unsafe { ibv_get_device_list(&mut num_devices as *mut _) };
 
@@ -29,34 +29,34 @@ pub fn ibv_device_list() -> io::Result<IbvDeviceList> {
     }
 
     log::debug!("IbvDeviceList created");
-    Ok(IbvDeviceList {
+    Ok(DeviceList {
         devices_ptr,
         num_devices: num_devices as usize,
     })
 }
 
-pub struct IbvDeviceList {
+pub struct DeviceList {
     devices_ptr: *mut *mut ibv_device,
     num_devices: usize,
 }
 
-unsafe impl Sync for IbvDeviceList {}
-unsafe impl Send for IbvDeviceList {}
+unsafe impl Sync for DeviceList {}
+unsafe impl Send for DeviceList {}
 
 // Leaking is not considered unsafe in Rust.
 // The device list array can be leaked if the
 // `DeviceList` gets `std::mem::forget` applied to it.
-impl Drop for IbvDeviceList {
+impl Drop for DeviceList {
     fn drop(&mut self) {
         log::debug!("IbvDeviceList dropped");
         unsafe { ibv_free_device_list(self.devices_ptr) };
     }
 }
 
-impl IbvDeviceList {
+impl DeviceList {
     /// Returns an iterator over all found devices.
-    pub fn iter(&self) -> IbDeviceListIter<'_> {
-        IbDeviceListIter { list: self, i: 0 }
+    pub fn iter(&self) -> DeviceListIter<'_> {
+        DeviceListIter { list: self, i: 0 }
     }
 
     /// Returns the number of devices.
@@ -70,34 +70,34 @@ impl IbvDeviceList {
     }
 
     /// Returns the device at the given `index`, or `None` if out of bounds.
-    pub fn get(&self, index: usize) -> Option<IbvDevice<'_>> {
+    pub fn get(&self, index: usize) -> Option<Device<'_>> {
         if index >= self.num_devices {
             return None;
         }
 
-        Some(IbvDevice {
+        Some(Device {
             device_ptr: unsafe { *self.devices_ptr.add(index) },
             _dev_list: PhantomData,
         })
     }
 }
 
-impl<'a> IntoIterator for &'a IbvDeviceList {
-    type Item = <IbDeviceListIter<'a> as Iterator>::Item;
-    type IntoIter = IbDeviceListIter<'a>;
+impl<'a> IntoIterator for &'a DeviceList {
+    type Item = <DeviceListIter<'a> as Iterator>::Item;
+    type IntoIter = DeviceListIter<'a>;
     fn into_iter(self) -> Self::IntoIter {
-        IbDeviceListIter { list: self, i: 0 }
+        DeviceListIter { list: self, i: 0 }
     }
 }
 
 /// Iterator over a `DeviceList`.
-pub struct IbDeviceListIter<'iter> {
-    list: &'iter IbvDeviceList,
+pub struct DeviceListIter<'iter> {
+    list: &'iter DeviceList,
     i: usize,
 }
 
-impl<'iter> Iterator for IbDeviceListIter<'iter> {
-    type Item = IbvDevice<'iter>;
+impl<'iter> Iterator for DeviceListIter<'iter> {
+    type Item = Device<'iter>;
     fn next(&mut self) -> Option<Self::Item> {
         let opt_device = self.list.get(self.i);
         if opt_device.is_some() {
@@ -107,27 +107,27 @@ impl<'iter> Iterator for IbDeviceListIter<'iter> {
     }
 }
 
-impl std::fmt::Debug for IbvDeviceList {
+impl std::fmt::Debug for DeviceList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
 }
 
-pub struct IbvDevice<'a> {
+pub struct Device<'a> {
     device_ptr: *mut ibv_device,
-    _dev_list: PhantomData<&'a IbvDeviceList>,
+    _dev_list: PhantomData<&'a DeviceList>,
 }
 
-unsafe impl<'a> Sync for IbvDevice<'a> {}
-unsafe impl<'a> Send for IbvDevice<'a> {}
+unsafe impl<'a> Sync for Device<'a> {}
+unsafe impl<'a> Send for Device<'a> {}
 
-impl IbvDevice<'_> {
+impl Device<'_> {
     pub(super) unsafe fn new(device_ptr: *mut ibv_device) -> Self {
         Self { device_ptr, _dev_list: PhantomData }
     }
 }
 
-impl IbvDevice<'_> {
+impl Device<'_> {
     /// Opens an RMDA device and creates a context for further use.
     ///
     /// This context will later be used to query its resources or for creating resources.
@@ -142,8 +142,8 @@ impl IbvDevice<'_> {
     ///  - `ENOMEM`: Out of memory (from `ibv_query_port_attr`).
     ///  - `EMFILE`: Too many files are opened by this process (from `ibv_query_gid`).
     ///  - Other: the device is not in `ACTIVE` or `ARMED` state.
-    pub fn open(&self) -> io::Result<IbvContext> {
-        IbvContext::with_device(self.device_ptr)
+    pub fn open(&self) -> io::Result<Context> {
+        Context::with_device(self.device_ptr)
     }
 
     /// Returns a `&str` of the name, which is associated with this RDMA device.
@@ -171,7 +171,7 @@ impl IbvDevice<'_> {
     }
 }
 
-impl std::fmt::Debug for IbvDevice<'_> {
+impl std::fmt::Debug for Device<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format name
         let name_str = self.name().unwrap_or("<unknown>");

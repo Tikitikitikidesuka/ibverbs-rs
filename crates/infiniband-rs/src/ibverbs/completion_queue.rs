@@ -1,7 +1,5 @@
-use crate::ibverbs::context::IbvContextInner;
-use crate::ibverbs::work_completion::IbvWorkCompletion;
-use crate::ibverbs::work_error::IbvWorkError;
-use crate::ibverbs::work_success::IbvWorkSuccess;
+use crate::ibverbs::context::ContextInner;
+use crate::ibverbs::work_completion::WorkCompletion;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::os::fd::BorrowedFd;
@@ -9,11 +7,11 @@ use std::sync::Arc;
 use std::{io, ptr};
 
 #[derive(Debug)]
-pub struct IbvCompletionQueue {
-    pub(super) inner: Arc<IbvCompletionQueueInner>,
+pub struct CompletionQueue {
+    pub(super) inner: Arc<CompletionQueueInner>,
 }
 
-impl IbvCompletionQueue {
+impl CompletionQueue {
     /// Create a completion queue (CQ).
     ///
     /// `min_cq_entries` defines the minimum size of the CQ. The actual created size can be equal
@@ -24,7 +22,7 @@ impl IbvCompletionQueue {
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     pub(super) fn create(
-        context: Arc<IbvContextInner>,
+        context: Arc<ContextInner>,
         min_capacity: u32,
         id: isize,
     ) -> io::Result<Self> {
@@ -81,8 +79,8 @@ impl IbvCompletionQueue {
             Err(err)
         } else {
             log::debug!("IbvCompletionQueue created");
-            Ok(IbvCompletionQueue {
-                inner: Arc::new(IbvCompletionQueueInner {
+            Ok(CompletionQueue {
+                inner: Arc::new(CompletionQueueInner {
                     context,
                     cc,
                     cq,
@@ -94,8 +92,8 @@ impl IbvCompletionQueue {
 
     pub fn poll<'poll_buff>(
         &self,
-        completions: &'poll_buff mut [IbvCompletionQueuePollSlot],
-    ) -> io::Result<IbvCompletionQueuePolledCompletions<'poll_buff>> {
+        completions: &'poll_buff mut [PollSlot],
+    ) -> io::Result<PolledCompletions<'poll_buff>> {
         let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
         let ops = &mut unsafe { &mut *ctx }.ops;
         let n = unsafe {
@@ -109,7 +107,7 @@ impl IbvCompletionQueue {
         if n < 0 {
             Err(io::Error::other("ibv_poll_cq failed"))
         } else {
-            Ok(IbvCompletionQueuePolledCompletions {
+            Ok(PolledCompletions {
                 wcs: &mut completions[0..n as usize],
             })
         }
@@ -122,45 +120,42 @@ impl IbvCompletionQueue {
 
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(transparent)]
-pub struct IbvCompletionQueuePollSlot {
+pub struct PollSlot {
     wc: ibv_wc,
 }
 
-pub struct IbvCompletionQueuePolledCompletions<'a> {
-    wcs: &'a mut [IbvCompletionQueuePollSlot],
+pub struct PolledCompletions<'a> {
+    wcs: &'a mut [PollSlot],
 }
 
-impl IbvCompletionQueuePolledCompletions<'_> {
+impl PolledCompletions<'_> {
     pub fn len(&self) -> usize {
         self.wcs.len()
     }
 }
 
-impl<'a> IntoIterator for IbvCompletionQueuePolledCompletions<'a> {
-    type Item = IbvWorkCompletion;
-    type IntoIter = std::iter::Map<
-        std::slice::Iter<'a, IbvCompletionQueuePollSlot>,
-        fn(&IbvCompletionQueuePollSlot) -> IbvWorkCompletion,
-    >;
+impl<'a> IntoIterator for PolledCompletions<'a> {
+    type Item = WorkCompletion;
+    type IntoIter = std::iter::Map<std::slice::Iter<'a, PollSlot>, fn(&PollSlot) -> WorkCompletion>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.wcs
             .iter()
-            .map(|wc_slot| IbvWorkCompletion::new(wc_slot.wc))
+            .map(|wc_slot| WorkCompletion::new(wc_slot.wc))
     }
 }
 
-pub(super) struct IbvCompletionQueueInner {
-    pub(super) context: Arc<IbvContextInner>,
+pub(super) struct CompletionQueueInner {
+    pub(super) context: Arc<ContextInner>,
     pub(super) cq: *mut ibv_cq,
     pub(super) cc: *mut ibv_comp_channel,
     pub(super) min_capacity: u32,
 }
 
-unsafe impl Send for IbvCompletionQueueInner {}
-unsafe impl Sync for IbvCompletionQueueInner {}
+unsafe impl Send for CompletionQueueInner {}
+unsafe impl Sync for CompletionQueueInner {}
 
-impl Drop for IbvCompletionQueueInner {
+impl Drop for CompletionQueueInner {
     fn drop(&mut self) {
         log::debug!("IbvCompletionQueue destroyed");
 
@@ -186,7 +181,7 @@ impl Drop for IbvCompletionQueueInner {
     }
 }
 
-impl std::fmt::Debug for IbvCompletionQueueInner {
+impl std::fmt::Debug for CompletionQueueInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvCompletionQueueInner")
             .field("handle", &(unsafe { *self.cq }).handle)

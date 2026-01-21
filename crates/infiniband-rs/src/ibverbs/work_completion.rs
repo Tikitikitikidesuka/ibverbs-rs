@@ -1,29 +1,29 @@
-use crate::ibverbs::work_error::IbvWorkError;
-use crate::ibverbs::work_success::IbvWorkSuccess;
+use crate::ibverbs::work_error::WorkError;
+use crate::ibverbs::work_success::WorkSuccess;
 use ibverbs_sys::ibv_wc;
 
-pub type IbvWorkResult = Result<IbvWorkSuccess, IbvWorkError>;
+pub type IbvWorkResult = Result<WorkSuccess, WorkError>;
 
 #[derive(Copy, Clone, Debug)]
-pub struct IbvWorkCompletion {
+pub struct WorkCompletion {
     wr_id: u64,
     result: IbvWorkResult,
 }
 
-impl IbvWorkCompletion {
+impl WorkCompletion {
     pub(super) fn new(wc: ibv_wc) -> Self {
         Self {
             wr_id: wc.wr_id(),
             result: if let Some((error_code, vendor_code)) = wc.error() {
-                Err(IbvWorkError::new(error_code, vendor_code))
+                Err(WorkError::new(error_code, vendor_code))
             } else {
-                Ok(IbvWorkSuccess::new(wc.imm_data(), wc.len()))
+                Ok(WorkSuccess::new(wc.imm_data(), wc.len()))
             },
         }
     }
 }
 
-impl IbvWorkCompletion {
+impl WorkCompletion {
     pub fn wr_id(&self) -> u64 {
         self.wr_id
     }
@@ -35,7 +35,7 @@ impl IbvWorkCompletion {
     }
     */
 
-    pub fn result(&self) -> Result<IbvWorkSuccess, IbvWorkError> {
+    pub fn result(&self) -> Result<WorkSuccess, WorkError> {
         self.result
     }
 }

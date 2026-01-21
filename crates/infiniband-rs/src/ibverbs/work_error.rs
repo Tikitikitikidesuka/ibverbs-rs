@@ -4,12 +4,12 @@ use std::fmt;
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Error)]
-pub struct IbvWorkError {
+pub struct WorkError {
     raw_status: u32,
     vendor_code: u32,
 }
 
-impl IbvWorkError {
+impl WorkError {
     /// The raw status cannot be IBV_WC_SUCCESS.
     pub(super) fn new(raw_status: ibv_wc_status::Type, vendor_code: u32) -> Self {
         Self {
@@ -34,7 +34,7 @@ impl IbvWorkError {
     }
 }
 
-impl fmt::Display for IbvWorkError {
+impl fmt::Display for WorkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let code = self.code();
 
@@ -53,7 +53,7 @@ impl fmt::Display for IbvWorkError {
 
 /// Broad classification of where the failure occurred.
 #[derive(Debug, Copy, Clone)]
-pub enum IbvErrorClass {
+pub enum WorkErrorClass {
     /// Bug or invalid usage in local application code.
     LocalProgrammingError,
 
@@ -158,8 +158,8 @@ pub enum IbvWorkErrorCode {
 
 impl IbvWorkErrorCode {
     /// Classify the failure domain.
-    pub fn class(self) -> IbvErrorClass {
-        use IbvErrorClass::*;
+    pub fn class(self) -> WorkErrorClass {
+        use WorkErrorClass::*;
         use IbvWorkErrorCode::*;
 
         match self {

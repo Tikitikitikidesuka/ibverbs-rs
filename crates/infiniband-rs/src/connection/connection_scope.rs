@@ -1,9 +1,9 @@
-use crate::connection::connection::IbvConnection;
+use crate::connection::connection::Connection;
 use crate::connection::work_request::{
-    IbvWorkPollError, IbvWorkPollResult, IbvWorkRequest, IbvWorkSpinPollResult,
+    WorkPollError, WorkPollResult, WorkRequest, WorkSpinPollResult,
 };
-use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
-use crate::ibverbs::work_error::IbvWorkError;
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_error::WorkError;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -11,9 +11,9 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
 
-pub struct IbvConnectionScope<'scope, 'env: 'scope> {
-    inner: &'env mut IbvConnection,
-    wrs: Vec<Rc<RefCell<IbvWorkRequest<'scope>>>>,
+pub struct ConnectionScope<'scope, 'env: 'scope> {
+    inner: &'env mut Connection,
+    wrs: Vec<Rc<RefCell<WorkRequest<'scope>>>>,
     // for invariance of lifetimes, see `std::thread::scope`
     scope: PhantomData<&'scope mut &'scope ()>,
     env: PhantomData<&'env mut &'env ()>,
@@ -28,21 +28,21 @@ pub struct IbvConnectionScope<'scope, 'env: 'scope> {
 ///   This only specifies how many work requests failed. For more details do
 ///   not rely on automatic polling of the scoped connection.
 #[derive(Debug, Error)]
-pub enum IbvConnectionScopeError {
+pub enum ConnectionScopeError {
     PollError(#[from] io::Error),
-    WorkError(Vec<IbvWorkError>),
+    WorkError(Vec<WorkError>),
 }
 
-impl Display for IbvConnectionScopeError {
+impl Display for ConnectionScopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IbvConnectionScopeError::PollError(io_error) => {
+            ConnectionScopeError::PollError(io_error) => {
                 write!(
                     f,
                     "IbvConnectionScope poll error during clean-up: {io_error}"
                 )
             }
-            IbvConnectionScopeError::WorkError(work_errors) => {
+            ConnectionScopeError::WorkError(work_errors) => {
                 // Header line with count
                 writeln!(
                     f,
@@ -61,11 +61,11 @@ impl Display for IbvConnectionScopeError {
     }
 }
 
-impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
+impl<'scope, 'env> ConnectionScope<'scope, 'env> {
     // Important to notice. *Clean up does not fail*. The returned result represents the outcome
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
-    pub(super) fn clean_up(self) -> Result<(), IbvConnectionScopeError> {
+    pub(super) fn clean_up(self) -> Result<(), ConnectionScopeError> {
         let mut work_errors = Vec::new();
         for wr in &self.wrs {
             let mut wr = wr.borrow_mut();
@@ -73,10 +73,10 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
                 // Take care of errors to report them
                 if let Err(error) = wr.spin_poll() {
                     match error {
-                        IbvWorkPollError::PollError(poll_error) => {
-                            return Err(IbvConnectionScopeError::PollError(poll_error));
+                        WorkPollError::PollError(poll_error) => {
+                            return Err(ConnectionScopeError::PollError(poll_error));
                         }
-                        IbvWorkPollError::WorkError(work_error) => work_errors.push(work_error),
+                        WorkPollError::WorkError(work_error) => work_errors.push(work_error),
                     }
                 }
             }
@@ -85,14 +85,14 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
         if work_errors.is_empty() {
             Ok(())
         } else {
-            Err(IbvConnectionScopeError::WorkError(work_errors))
+            Err(ConnectionScopeError::WorkError(work_errors))
         }
     }
 }
 
-impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
-    pub(super) fn new(connection: &'env mut IbvConnection) -> Self {
-        IbvConnectionScope {
+impl<'scope, 'env> ConnectionScope<'scope, 'env> {
+    pub(super) fn new(connection: &'env mut Connection) -> Self {
+        ConnectionScope {
             inner: connection,
             wrs: vec![],
             scope: PhantomData,
@@ -101,16 +101,16 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
     }
 }
 
-impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
+impl<'scope, 'env> ConnectionScope<'scope, 'env> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
     pub fn post_send(
         &mut self,
-        sends: impl AsRef<[IbvScatterElement<'env>]>,
-    ) -> io::Result<IbvScopedWorkRequest<'scope>> {
+        sends: impl AsRef<[ScatterElement<'env>]>,
+    ) -> io::Result<ScopedWorkRequest<'scope>> {
         let wr = Rc::new(RefCell::new(unsafe { self.inner.send_unpolled(sends)? }));
         self.wrs.push(wr.clone());
-        Ok(IbvScopedWorkRequest {
+        Ok(ScopedWorkRequest {
             inner: wr,
             env: Default::default(),
         })
@@ -120,13 +120,13 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
     // so no overlapping operations can be done concurrently
     pub fn post_receive(
         &mut self,
-        receives: impl AsRef<[IbvGatherElement<'env>]>,
-    ) -> io::Result<IbvScopedWorkRequest<'scope>> {
+        receives: impl AsRef<[GatherElement<'env>]>,
+    ) -> io::Result<ScopedWorkRequest<'scope>> {
         let wr = Rc::new(RefCell::new(unsafe {
             self.inner.receive_unpolled(receives)?
         }));
         self.wrs.push(wr.clone());
-        Ok(IbvScopedWorkRequest {
+        Ok(ScopedWorkRequest {
             inner: wr,
             env: Default::default(),
         })
@@ -175,17 +175,17 @@ impl<'scope, 'env> IbvConnectionScope<'scope, 'env> {
     */
 }
 
-pub struct IbvScopedWorkRequest<'scope> {
-    inner: Rc<RefCell<IbvWorkRequest<'scope>>>,
+pub struct ScopedWorkRequest<'scope> {
+    inner: Rc<RefCell<WorkRequest<'scope>>>,
     env: PhantomData<&'scope mut &'scope ()>,
 }
 
-impl<'scope> IbvScopedWorkRequest<'scope> {
-    pub fn poll(&self) -> IbvWorkPollResult {
+impl<'scope> ScopedWorkRequest<'scope> {
+    pub fn poll(&self) -> WorkPollResult {
         self.inner.borrow_mut().poll()
     }
 
-    pub fn spin_poll(&self) -> IbvWorkSpinPollResult {
+    pub fn spin_poll(&self) -> WorkSpinPollResult {
         self.inner.borrow_mut().spin_poll()
     }
 }

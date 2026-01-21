@@ -1,10 +1,10 @@
 #[derive(Copy, Clone, Debug)]
-pub struct IbvWorkSuccess {
+pub struct WorkSuccess {
     imm_data: Option<u32>,
     gathered_length: usize,
 }
 
-impl IbvWorkSuccess {
+impl WorkSuccess {
     pub(super) fn new(imm_data: Option<u32>, gathered_length: usize) -> Self {
         Self {
             imm_data,
@@ -13,7 +13,7 @@ impl IbvWorkSuccess {
     }
 }
 
-impl IbvWorkSuccess {
+impl WorkSuccess {
     pub fn immediate_data(&self) -> Option<u32> {
         self.imm_data
     }

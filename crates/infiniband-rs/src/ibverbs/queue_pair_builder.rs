@@ -1,17 +1,17 @@
-use crate::ibverbs::completion_queue::IbvCompletionQueueInner;
-use crate::ibverbs::prepared_queue_pair::IbvPreparedQueuePair;
-use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
-use crate::ibverbs::queue_pair::IbvQueuePair;
+use crate::ibverbs::completion_queue::CompletionQueueInner;
+use crate::ibverbs::prepared_queue_pair::PreparedQueuePair;
+use crate::ibverbs::protection_domain::ProtectionDomainInner;
+use crate::ibverbs::queue_pair::QueuePair;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::sync::Arc;
 use std::time::Duration;
 use std::{io, ptr};
 
-pub struct IbvRcQueuePairBuilder {
-    pd: Arc<IbvProtectionDomainInner>,
-    send_cq: Arc<IbvCompletionQueueInner>,
-    recv_cq: Arc<IbvCompletionQueueInner>,
+pub struct QueuePairBuilder {
+    pd: Arc<ProtectionDomainInner>,
+    send_cq: Arc<CompletionQueueInner>,
+    recv_cq: Arc<CompletionQueueInner>,
 
     /// Maximum simultaneous issued send work requests.
     max_send_wr: u32,
@@ -33,7 +33,7 @@ pub struct IbvRcQueuePairBuilder {
     ack_timeout: u8,
 }
 
-impl IbvRcQueuePairBuilder {
+impl QueuePairBuilder {
     const DEFAULT_MAX_WR: u32 = 16;
     const DEFAULT_MAX_SGE: u32 = 16;
     const DEFAULT_MAX_RNR_RETRIES: u8 = 6;
@@ -43,9 +43,9 @@ impl IbvRcQueuePairBuilder {
     const DEFAULT_ACCESS_FLAGS: ibv_access_flags = ibv_access_flags::IBV_ACCESS_LOCAL_WRITE;
 
     pub fn new(
-        pd: Arc<IbvProtectionDomainInner>,
-        send_cq: Arc<IbvCompletionQueueInner>,
-        recv_cq: Arc<IbvCompletionQueueInner>,
+        pd: Arc<ProtectionDomainInner>,
+        send_cq: Arc<CompletionQueueInner>,
+        recv_cq: Arc<CompletionQueueInner>,
     ) -> Self {
         Self {
             pd,
@@ -69,7 +69,7 @@ impl IbvRcQueuePairBuilder {
     ///  - `ENOMEM`: Not enough resources to complete this operation.
     ///  - `ENOSYS`: QP with this Transport Service Type isn't supported by this RDMA device.
     ///  - `EPERM`: Not enough permissions to create a QP with this Transport Service Type.
-    pub fn build(&self) -> io::Result<IbvPreparedQueuePair> {
+    pub fn build(&self) -> io::Result<PreparedQueuePair> {
         let mut attr = ibv_qp_init_attr {
             qp_context: ptr::null::<c_void>() as *mut _,
             send_cq: self.send_cq.cq as *const _ as *mut _,
@@ -91,8 +91,8 @@ impl IbvRcQueuePairBuilder {
             Err(io::Error::last_os_error())
         } else {
             log::debug!("IbvQueuePair created");
-            Ok(IbvPreparedQueuePair {
-                qp: IbvQueuePair {
+            Ok(PreparedQueuePair {
+                qp: QueuePair {
                     pd: self.pd.clone(),
                     qp,
                 },

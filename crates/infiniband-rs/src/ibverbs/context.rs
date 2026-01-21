@@ -1,6 +1,6 @@
-use crate::ibverbs::completion_queue::IbvCompletionQueue;
-use crate::ibverbs::devices::IbvDevice;
-use crate::ibverbs::protection_domain::IbvProtectionDomain;
+use crate::ibverbs::completion_queue::CompletionQueue;
+use crate::ibverbs::devices::Device;
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
@@ -10,11 +10,11 @@ use std::sync::Arc;
 pub(super) const IB_PORT: u8 = 1;
 
 #[derive(Debug)]
-pub struct IbvContext {
-    inner: Arc<IbvContextInner>,
+pub struct Context {
+    inner: Arc<ContextInner>,
 }
 
-impl IbvContext {
+impl Context {
     /// Create a completion queue (CQ).
     ///
     /// `min_cq_entries` defines the minimum size of the CQ. The actual created size can be equal
@@ -25,18 +25,18 @@ impl IbvContext {
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     // TODO: This should not be public... This library will expose a connection as an atomic unit
-    pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<IbvCompletionQueue> {
-        IbvCompletionQueue::create(self.inner.clone(), min_cq_entries, id)
+    pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<CompletionQueue> {
+        CompletionQueue::create(self.inner.clone(), min_cq_entries, id)
     }
 
     /// Allocate a protection domain (PDs) for the device's context.
     // TODO: This should not be public... This library will expose a connection as an atomic unit
-    pub fn allocate_pd(&self) -> io::Result<IbvProtectionDomain> {
-        IbvProtectionDomain::allocate(self.inner.clone())
+    pub fn allocate_pd(&self) -> io::Result<ProtectionDomain> {
+        ProtectionDomain::allocate(self.inner.clone())
     }
 }
 
-impl IbvContext {
+impl Context {
     /// Opens a context for the given device, and queries its port and gid.
     pub(super) fn with_device(dev: *mut ibv_device) -> io::Result<Self> {
         assert!(!dev.is_null());
@@ -47,7 +47,7 @@ impl IbvContext {
         }
 
         let context = Self {
-            inner: Arc::new(IbvContextInner { ctx: ibv_ctx }),
+            inner: Arc::new(ContextInner { ctx: ibv_ctx }),
         };
 
         // Check that the port is active/armed.
@@ -58,14 +58,14 @@ impl IbvContext {
     }
 }
 
-pub(super) struct IbvContextInner {
+pub(super) struct ContextInner {
     pub(super) ctx: *mut ibv_context,
 }
 
-unsafe impl Sync for IbvContextInner {}
-unsafe impl Send for IbvContextInner {}
+unsafe impl Sync for ContextInner {}
+unsafe impl Send for ContextInner {}
 
-impl Drop for IbvContextInner {
+impl Drop for ContextInner {
     fn drop(&mut self) {
         log::debug!("IbvContext closed");
         let ctx = self.ctx;
@@ -78,15 +78,15 @@ impl Drop for IbvContextInner {
     }
 }
 
-impl std::fmt::Debug for IbvContextInner {
+impl std::fmt::Debug for ContextInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvContext")
-            .field("device", &unsafe { IbvDevice::new((&*self.ctx).device) })
+            .field("device", &unsafe { Device::new((&*self.ctx).device) })
             .finish()
     }
 }
 
-impl IbvContextInner {
+impl ContextInner {
     /// Checks the port is ACTIVE or ARMED
     pub(super) fn query_port(&self) -> io::Result<ibv_port_attr> {
         let mut port_attr = ibv_port_attr::default();

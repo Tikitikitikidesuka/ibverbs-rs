@@ -1,5 +1,5 @@
-use crate::connection::prepared_connection::IbvPreparedConnection;
-use crate::ibverbs::queue_pair_endpoint::IbvQueuePairEndpoint;
+use crate::connection::prepared_connection::PreparedConnection;
+use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use crate::network::NodeError;
 use crate::network::node::{Node, Rank};
 use serde::{Deserialize, Serialize};
@@ -7,11 +7,11 @@ use thiserror::Error;
 
 pub struct PreparedNode {
     rank: Rank,
-    connections: Vec<IbvPreparedConnection>,
+    connections: Vec<PreparedConnection>,
 }
 
 impl PreparedNode {
-    pub(super) fn new(rank: Rank, connections: Vec<IbvPreparedConnection>) -> Self {
+    pub(super) fn new(rank: Rank, connections: Vec<PreparedConnection>) -> Self {
         Self { rank, connections }
     }
 }
@@ -19,13 +19,13 @@ impl PreparedNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeScatterEndpoint {
     rank: Rank,
-    remote_endpoints: Vec<IbvQueuePairEndpoint>,
+    remote_endpoints: Vec<QueuePairEndpoint>,
 }
 
 #[derive(Debug, Clone)]
 pub struct NodeGatherEndpoint {
     rank: Rank,
-    remote_endpoints: Vec<IbvQueuePairEndpoint>,
+    remote_endpoints: Vec<QueuePairEndpoint>,
 }
 
 #[derive(Debug, Error)]

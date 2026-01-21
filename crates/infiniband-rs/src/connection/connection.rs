@@ -1,11 +1,11 @@
-use crate::connection::cached_completion_queue::IbvCachedCompletionQueue;
-use crate::connection::connection_scope::{IbvConnectionScope, IbvConnectionScopeError};
-use crate::connection::work_request::{IbvWorkRequest, IbvWorkSpinPollResult};
-use crate::ibverbs::memory_region::IbvMemoryRegion;
-use crate::ibverbs::protection_domain::IbvProtectionDomain;
-use crate::ibverbs::queue_pair::IbvQueuePair;
+use crate::connection::cached_completion_queue::CachedCompletionQueue;
+use crate::connection::connection_scope::{ConnectionScope, ConnectionScopeError};
+use crate::connection::work_request::{WorkRequest, WorkSpinPollResult};
+use crate::ibverbs::memory_region::MemoryRegion;
+use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
-use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use std::cell::RefCell;
 use std::io;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
@@ -14,20 +14,20 @@ use std::rc::Rc;
 #[derive(Debug)]
 // Order of attributes matters.
 // Deallocation must happen in the order specified.
-pub struct IbvConnection {
-    qp: IbvQueuePair,
+pub struct Connection {
+    qp: QueuePair,
     //remote_mrs: HashMap<String, RemoteMr>,
-    cq: Rc<RefCell<IbvCachedCompletionQueue>>,
-    pd: IbvProtectionDomain,
+    cq: Rc<RefCell<CachedCompletionQueue>>,
+    pd: ProtectionDomain,
     //meta_mr: Option<IbvConnectionMetaMemoryRegion>,
     next_wr_id: u64,
 }
 
-impl IbvConnection {
+impl Connection {
     pub(super) fn new(
-        cq: IbvCachedCompletionQueue,
-        pd: IbvProtectionDomain,
-        qp: IbvQueuePair,
+        cq: CachedCompletionQueue,
+        pd: ProtectionDomain,
+        qp: QueuePair,
     ) -> Self {
         Self {
             cq: Rc::new(RefCell::new(cq)),
@@ -39,8 +39,8 @@ impl IbvConnection {
     }
 }
 
-impl IbvConnection {
-    pub fn register_mr(&mut self, memory: &mut [u8]) -> io::Result<IbvMemoryRegion> {
+impl Connection {
+    pub fn register_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.pd.register_mr_with_permissions(
                 memory.as_mut_ptr(),
@@ -63,7 +63,7 @@ impl IbvConnection {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<IbvMemoryRegion> {
+    ) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.pd.register_dmabuf(
                 fd,
@@ -139,8 +139,8 @@ impl IbvConnection {
     /// # Examples
     ///
     /// ```no_run
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// # use infiniband_rs::connection::connection::Connection;
+    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     /// let mut mem = [0u8; 1024];
     /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
     ///
@@ -154,11 +154,11 @@ impl IbvConnection {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, IbvConnectionScopeError>
+    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, ConnectionScopeError>
     where
-        F: for<'scope> FnOnce(&mut IbvConnectionScope<'scope, 'env>) -> R,
+        F: for<'scope> FnOnce(&mut ConnectionScope<'scope, 'env>) -> R,
     {
-        let mut scope = IbvConnectionScope::new(self);
+        let mut scope = ConnectionScope::new(self);
         // The user's closure may panic after issuing work requests.
         // The panic has to be caught to ensure clean up for exception safety.
         let user_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
@@ -171,23 +171,23 @@ impl IbvConnection {
 
     pub fn send<'a>(
         &mut self,
-        sends: impl AsRef<[IbvScatterElement<'a>]>,
-    ) -> IbvWorkSpinPollResult {
+        sends: impl AsRef<[ScatterElement<'a>]>,
+    ) -> WorkSpinPollResult {
         Ok(unsafe { self.send_unpolled(sends)? }.spin_poll()?)
     }
 
-    pub fn send_with_imm_data<'a>(
+    pub fn send_with_immediate<'a>(
         &mut self,
-        sends: impl AsRef<[IbvScatterElement<'a>]>,
+        sends: impl AsRef<[ScatterElement<'a>]>,
         imm_data: u32,
-    ) -> IbvWorkSpinPollResult {
-        Ok(unsafe { self.send_with_imm_data_unpolled(sends, imm_data)? }.spin_poll()?)
+    ) -> WorkSpinPollResult {
+        Ok(unsafe { self.send_with_immediate_unpolled(sends, imm_data)? }.spin_poll()?)
     }
 
     pub fn receive<'a>(
         &mut self,
-        receives: impl AsRef<[IbvGatherElement<'a>]>,
-    ) -> IbvWorkSpinPollResult {
+        receives: impl AsRef<[GatherElement<'a>]>,
+    ) -> WorkSpinPollResult {
         Ok(unsafe { self.receive_unpolled(receives)? }.spin_poll()?)
     }
 
@@ -218,8 +218,8 @@ impl IbvConnection {
     /// ## Safety violation example
     ///
     /// ```no_run
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// # use infiniband_rs::connection::connection::Connection;
+    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     /// let mut mem = [0u8; 1024];
     /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
     /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
@@ -235,11 +235,11 @@ impl IbvConnection {
     /// ```
     pub unsafe fn send_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[IbvScatterElement<'a>]>,
-    ) -> io::Result<IbvWorkRequest<'a>> {
+        sends: impl AsRef<[ScatterElement<'a>]>,
+    ) -> io::Result<WorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_send(sends.as_ref(), wr_id)? };
-        Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { WorkRequest::new(wr_id, self.cq.clone()) })
     }
 
     /// # Safety
@@ -270,12 +270,12 @@ impl IbvConnection {
     /// ## Safety violation example
     ///
     /// ```no_run
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// # use infiniband_rs::connection::connection::Connection;
+    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     /// let mut mem = [0u8; 1024];
     /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
     /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.send_with_imm_data_unpolled(&[receive], 33) }.unwrap();
+    /// let wr = unsafe { conn.send_with_immediate_unpolled(&[receive], 33) }.unwrap();
     ///
     /// // The work request can be leaked without running its drop.
     /// // The borrow ends but the NIC may still DMA into the memory.
@@ -285,17 +285,17 @@ impl IbvConnection {
     /// // This violates Rust's aliasing rules and constitutes UB.
     /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
     /// ```
-    pub unsafe fn send_with_imm_data_unpolled<'a>(
+    pub unsafe fn send_with_immediate_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[IbvScatterElement<'a>]>,
+        sends: impl AsRef<[ScatterElement<'a>]>,
         imm_data: u32,
-    ) -> io::Result<IbvWorkRequest<'a>> {
+    ) -> io::Result<WorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe {
             self.qp
-                .post_send_with_imm(sends.as_ref(), imm_data, wr_id)?
+                .post_send_with_immediate(sends.as_ref(), imm_data, wr_id)?
         };
-        Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { WorkRequest::new(wr_id, self.cq.clone()) })
     }
 
     /// # Safety
@@ -324,8 +324,8 @@ impl IbvConnection {
     /// ## Safety violation example
     ///
     /// ```no_run
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    /// # use infiniband_rs::connection::connection::Connection;
+    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     /// let mut mem = [0u8; 1024];
     /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
     /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
@@ -341,11 +341,11 @@ impl IbvConnection {
     /// ```
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        receives: impl AsRef<[IbvGatherElement<'a>]>,
-    ) -> io::Result<IbvWorkRequest<'a>> {
+        receives: impl AsRef<[GatherElement<'a>]>,
+    ) -> io::Result<WorkRequest<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(receives.as_ref(), wr_id)? };
-        Ok(unsafe { IbvWorkRequest::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { WorkRequest::new(wr_id, self.cq.clone()) })
     }
 
     /*

@@ -1,19 +1,19 @@
-use crate::ibverbs::protection_domain::IbvProtectionDomainInner;
+use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{io, ptr};
-use crate::ibverbs::scatter_gather_element::{IbvGatherElement, IbvScatterElement};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 
-pub struct IbvQueuePair {
-    pub(super) pd: Arc<IbvProtectionDomainInner>,
+pub struct QueuePair {
+    pub(super) pd: Arc<ProtectionDomainInner>,
     pub(super) qp: *mut ibv_qp,
 }
 
-unsafe impl Send for IbvQueuePair {}
-unsafe impl Sync for IbvQueuePair {}
+unsafe impl Send for QueuePair {}
+unsafe impl Sync for QueuePair {}
 
-impl Drop for IbvQueuePair {
+impl Drop for QueuePair {
     fn drop(&mut self) {
         log::debug!("IbvQueuePair destroyed");
         let qp = self.qp;
@@ -28,7 +28,7 @@ impl Drop for IbvQueuePair {
     }
 }
 
-impl Debug for IbvQueuePair {
+impl Debug for QueuePair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.debug_struct("IbvQueuePair")
             .field("handle", &unsafe { (*self.qp).handle })
@@ -42,8 +42,8 @@ impl Debug for IbvQueuePair {
     }
 }
 
-impl IbvQueuePair {
-    pub unsafe fn post_send(&mut self, local: &[IbvScatterElement], wr_id: u64) -> io::Result<()> {
+impl QueuePair {
+    pub unsafe fn post_send(&mut self, local: &[ScatterElement], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -60,9 +60,9 @@ impl IbvQueuePair {
         unsafe { self.post_send_wr(&mut wr) }
     }
 
-    pub unsafe fn post_send_with_imm(
+    pub unsafe fn post_send_with_immediate(
         &mut self,
-        local: &[IbvScatterElement],
+        local: &[ScatterElement],
         imm_data: u32,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -97,7 +97,7 @@ impl IbvQueuePair {
         }
     }
 
-    pub unsafe fn post_receive(&mut self, local: &[IbvGatherElement], wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_receive(&mut self, local: &[GatherElement], wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

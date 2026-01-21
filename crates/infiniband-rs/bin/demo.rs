@@ -1,14 +1,14 @@
 use simple_logger::SimpleLogger;
-use infiniband_rs::connection::builder::IbvConnectionBuilder;
+use infiniband_rs::connection::builder::ConnectionBuilder;
 use infiniband_rs::connection::connection::IbvConnSend;
-use infiniband_rs::devices::ibv_device_list;
+use infiniband_rs::devices::list_devices;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
     SimpleLogger::new().init().unwrap();
 
-    let devices = ibv_device_list().unwrap();
+    let devices = list_devices().unwrap();
     println!("{devices:?}");
 
     let device = devices
@@ -20,7 +20,7 @@ fn main() {
 
     let ctx = device.open().unwrap();
 
-    let prep_conn = IbvConnectionBuilder::new(&ctx).build().unwrap();
+    let prep_conn = ConnectionBuilder::new(&ctx).build().unwrap();
     let endpoint = prep_conn.endpoint();
     let mut conn = prep_conn.handshake(endpoint).unwrap();
 

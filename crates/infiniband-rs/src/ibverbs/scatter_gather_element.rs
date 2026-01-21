@@ -1,4 +1,4 @@
-use crate::ibverbs::memory_region::IbvMemoryRegion;
+use crate::ibverbs::memory_region::MemoryRegion;
 use ibverbs_sys::ibv_sge;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -30,7 +30,7 @@ use thiserror::Error;
 /// slice of memory.
 #[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
-pub struct IbvScatterElement<'a> {
+pub struct ScatterElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data
     _data_lifetime: PhantomData<&'a [u8]>,
@@ -38,34 +38,34 @@ pub struct IbvScatterElement<'a> {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct IbvGatherElement<'a> {
+pub struct GatherElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data
     _data_lifetime: PhantomData<&'a mut [u8]>,
 }
 
 #[derive(Debug, Error)]
-pub enum IbvScatterGatherElementError {
+pub enum ScatterGatherElementError {
     #[error("maximum length of mr slice exceeded")]
     SliceTooBig,
     #[error("slice is not within the bounds of the mr")]
     SliceNotWithinBounds,
 }
 
-impl<'a> IbvScatterElement<'a> {
+impl<'a> ScatterElement<'a> {
     pub(super) fn new(
-        mr: &IbvMemoryRegion,
+        mr: &MemoryRegion,
         data: &'a [u8],
-    ) -> Result<Self, IbvScatterGatherElementError> {
+    ) -> Result<Self, ScatterGatherElementError> {
         let data_length = data
             .len()
             .try_into()
-            .map_err(|_| IbvScatterGatherElementError::SliceTooBig)?;
+            .map_err(|_| ScatterGatherElementError::SliceTooBig)?;
         if !mr.encloses(data) {
             // todo: verify if this check is necessary
             // todo: hardware may take care of it by issuing a protection error
             // todo: if not within the registered memory boundaries
-            return Err(IbvScatterGatherElementError::SliceNotWithinBounds);
+            return Err(ScatterGatherElementError::SliceNotWithinBounds);
         }
 
         Ok(Self {
@@ -79,20 +79,20 @@ impl<'a> IbvScatterElement<'a> {
     }
 }
 
-impl<'a> IbvGatherElement<'a> {
+impl<'a> GatherElement<'a> {
     pub(super) fn new(
-        mr: &IbvMemoryRegion,
+        mr: &MemoryRegion,
         data: &'a [u8],
-    ) -> Result<Self, IbvScatterGatherElementError> {
+    ) -> Result<Self, ScatterGatherElementError> {
         let data_length = data
             .len()
             .try_into()
-            .map_err(|_| IbvScatterGatherElementError::SliceTooBig)?;
+            .map_err(|_| ScatterGatherElementError::SliceTooBig)?;
         if !mr.encloses(data) {
             // todo: verify if this check is necessary
             // todo: hardware may take care of it by issuing a protection error
             // todo: if not within the registered memory boundaries
-            return Err(IbvScatterGatherElementError::SliceNotWithinBounds);
+            return Err(ScatterGatherElementError::SliceNotWithinBounds);
         }
 
         Ok(Self {

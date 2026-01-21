@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Internally, this contains the `QueuePair`'s `qp_num`, as well as the context's `lid` and `gid`.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct IbvQueuePairEndpoint {
+pub struct QueuePairEndpoint {
     /// the `QueuePair`'s `qp_num`
     pub num: u32,
     /// the context's `lid`
