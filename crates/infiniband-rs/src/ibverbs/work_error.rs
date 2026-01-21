@@ -29,8 +29,8 @@ impl WorkError {
     }
 
     /// Canonical ibverbs error code derived from `raw_status`.
-    pub fn code(&self) -> IbvWorkErrorCode {
-        IbvWorkErrorCode::from(self.raw_status)
+    pub fn code(&self) -> WorkErrorCode {
+        WorkErrorCode::from(self.raw_status)
     }
 }
 
@@ -81,7 +81,7 @@ pub enum WorkErrorClass {
 /// Numeric values match `enum ibv_wc_status`.
 #[derive(Debug, Copy, Clone, Error, FromPrimitive)]
 #[repr(u32)]
-pub enum IbvWorkErrorCode {
+pub enum WorkErrorCode {
     #[error("local length error")]
     LocalLengthError = 1,
 
@@ -156,11 +156,11 @@ pub enum IbvWorkErrorCode {
     UnknownError,
 }
 
-impl IbvWorkErrorCode {
+impl WorkErrorCode {
     /// Classify the failure domain.
     pub fn class(self) -> WorkErrorClass {
         use WorkErrorClass::*;
-        use IbvWorkErrorCode::*;
+        use WorkErrorCode::*;
 
         match self {
             LocalLengthError
@@ -196,7 +196,7 @@ impl IbvWorkErrorCode {
 
     /// Practical debugging hint.
     pub fn hint(self) -> &'static str {
-        use IbvWorkErrorCode::*;
+        use WorkErrorCode::*;
 
         match self {
             LocalLengthError => "SGE length exceeds MR bounds or WR length is invalid",

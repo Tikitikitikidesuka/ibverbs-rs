@@ -1,4 +1,7 @@
+use crate::connection::work_request::WorkRequestStatus;
 use crate::ibverbs::memory_region::MemoryRegion;
+use crate::ibverbs::work_completion::WorkResult;
+use crate::ibverbs::work_error::WorkErrorCode;
 use ibverbs_sys::ibv_sge;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -32,7 +35,8 @@ use thiserror::Error;
 #[repr(transparent)]
 pub struct ScatterElement<'a> {
     sge: ibv_sge,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced data
+    // SAFETY INVARIANT: SGE cannot outlive the referenced data or the memory region
+    _mr_lifetime: PhantomData<&'a MemoryRegion>,
     _data_lifetime: PhantomData<&'a [u8]>,
 }
 
@@ -40,7 +44,8 @@ pub struct ScatterElement<'a> {
 #[repr(transparent)]
 pub struct GatherElement<'a> {
     sge: ibv_sge,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced data
+    // SAFETY INVARIANT: SGE cannot outlive the referenced data or the memory region
+    _mr_lifetime: PhantomData<&'a MemoryRegion>,
     _data_lifetime: PhantomData<&'a mut [u8]>,
 }
 
@@ -54,7 +59,7 @@ pub enum ScatterGatherElementError {
 
 impl<'a> ScatterElement<'a> {
     pub(super) fn new(
-        mr: &MemoryRegion,
+        mr: &'a MemoryRegion,
         data: &'a [u8],
     ) -> Result<Self, ScatterGatherElementError> {
         let data_length = data
@@ -74,6 +79,7 @@ impl<'a> ScatterElement<'a> {
                 length: data_length,
                 lkey: mr.lkey(),
             },
+            _mr_lifetime: PhantomData::<&'a MemoryRegion>,
             _data_lifetime: PhantomData::<&'a [u8]>,
         })
     }
@@ -81,7 +87,7 @@ impl<'a> ScatterElement<'a> {
 
 impl<'a> GatherElement<'a> {
     pub(super) fn new(
-        mr: &MemoryRegion,
+        mr: &'a MemoryRegion,
         data: &'a [u8],
     ) -> Result<Self, ScatterGatherElementError> {
         let data_length = data
@@ -101,6 +107,7 @@ impl<'a> GatherElement<'a> {
                 length: data_length,
                 lkey: mr.lkey(),
             },
+            _mr_lifetime: PhantomData::<&'a MemoryRegion>,
             _data_lifetime: PhantomData::<&'a mut [u8]>,
         })
     }

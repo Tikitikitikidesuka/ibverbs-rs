@@ -110,14 +110,14 @@ impl MemoryRegion {
 
 impl MemoryRegion {
     pub fn prepare_scatter_element<'a>(
-        &self,
+        &'a self,
         data: &'a [u8],
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         ScatterElement::<'a>::new(self, data)
     }
 
     pub fn prepare_gather_element<'a>(
-        &self,
+        &'a self,
         data: &'a mut [u8],
     ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
         GatherElement::<'a>::new(self, data)

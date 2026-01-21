@@ -2,12 +2,12 @@ use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
 use ibverbs_sys::ibv_wc;
 
-pub type IbvWorkResult = Result<WorkSuccess, WorkError>;
+pub type WorkResult = Result<WorkSuccess, WorkError>;
 
 #[derive(Copy, Clone, Debug)]
 pub struct WorkCompletion {
     wr_id: u64,
-    result: IbvWorkResult,
+    result: WorkResult,
 }
 
 impl WorkCompletion {
