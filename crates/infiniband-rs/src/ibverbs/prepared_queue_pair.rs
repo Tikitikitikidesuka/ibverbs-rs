@@ -74,7 +74,7 @@ impl PreparedQueuePair {
         }
 
         // Transition to ready to receive
-        let path_mtu = self.qp.pd.context.query_port()?.active_mtu;
+        let path_mtu = self.qp.pd.context.inner.query_port()?.active_mtu;
         let mut attr = ibv_qp_attr {
             qp_state: ibv_qp_state::IBV_QPS_RTR,
             path_mtu,

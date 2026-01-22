@@ -96,7 +96,7 @@ impl QueuePairBuilder {
                     pd: self.pd.clone(),
                     qp,
                 },
-                lid: self.pd.context.query_port()?.lid,
+                lid: self.pd.context.inner.query_port()?.lid,
 
                 max_send_wr: self.max_send_wr,
                 max_send_sge: self.max_send_sge,

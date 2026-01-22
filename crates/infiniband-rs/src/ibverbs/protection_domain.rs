@@ -1,19 +1,19 @@
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::context::ContextInner;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair_builder::QueuePairBuilder;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
+use crate::ibverbs::context::Context;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProtectionDomain {
     inner: Arc<ProtectionDomainInner>,
 }
 
 impl ProtectionDomain {
-    pub(super) fn allocate(context: Arc<ContextInner>) -> io::Result<Self> {
-        let pd = unsafe { ibv_alloc_pd(context.ctx) };
+    pub(super) fn allocate(context: Context) -> io::Result<Self> {
+        let pd = unsafe { ibv_alloc_pd(context.inner.ctx) };
         if pd.is_null() {
             Err(io::Error::other(io::Error::last_os_error()))
         } else {
@@ -22,6 +22,10 @@ impl ProtectionDomain {
                 inner: Arc::new(ProtectionDomainInner { context, pd }),
             })
         }
+    }
+
+    pub fn context(&self) -> &Context {
+        &self.inner.context
     }
 
     /// Registers memory with the given access flags.
@@ -64,14 +68,7 @@ impl ProtectionDomain {
         access_flags: ibv_access_flags,
     ) -> io::Result<MemoryRegion> {
         unsafe {
-            MemoryRegion::register_dmabuf(
-                self.inner.clone(),
-                fd,
-                offset,
-                len,
-                iova,
-                access_flags,
-            )
+            MemoryRegion::register_dmabuf(self.inner.clone(), fd, offset, len, iova, access_flags)
         }
     }
 
@@ -89,7 +86,7 @@ impl ProtectionDomain {
 }
 
 pub(super) struct ProtectionDomainInner {
-    pub(super) context: Arc<ContextInner>,
+    pub(super) context: Context,
     pub(super) pd: *mut ibv_pd,
 }
 

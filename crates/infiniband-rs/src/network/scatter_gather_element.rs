@@ -20,10 +20,7 @@ impl<'a> NodeScatterElement<'a> {
         Self { mr, data }
     }
 
-    pub(super) fn bind(
-        &'a self,
-        rank: Rank,
-    ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
+    pub(super) fn bind(&self, rank: Rank) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         // todo: treat error rank not in range
         self.mr
             .connection_mrs
@@ -50,9 +47,9 @@ impl<'a> NodeGatherElement<'a> {
     }
 
     pub(super) fn bind(
-        &mut self,
+        &'_ mut self,
         rank: Rank,
-    ) -> Result<GatherElement, ScatterGatherElementError> {
+    ) -> Result<GatherElement<'_>, ScatterGatherElementError> {
         self.mr
             .connection_mrs
             .get(rank)

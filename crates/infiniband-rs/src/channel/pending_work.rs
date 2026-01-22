@@ -1,5 +1,3 @@
-use crate::connection::cached_completion_queue::CachedCompletionQueue;
-use crate::connection::unsafe_member::UnsafeMember;
 use crate::ibverbs::work_completion::WorkResult;
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
@@ -9,9 +7,11 @@ use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
+use crate::channel::cached_completion_queue::CachedCompletionQueue;
+use crate::channel::unsafe_member::UnsafeMember;
 
-#[must_use = "IbvWorkRequest must be dropped to ensure completion"]
-pub struct WorkRequest<'a> {
+#[must_use = "PendingWork must be dropped to ensure completion"]
+pub struct PendingWork<'a> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
     status: Option<Result<WorkSuccess, WorkError>>,
@@ -20,7 +20,7 @@ pub struct WorkRequest<'a> {
     _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
 }
 
-impl<'a> WorkRequest<'a> {
+impl<'a> PendingWork<'a> {
     pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<CachedCompletionQueue>>) -> Self {
         Self {
             wr_id,
@@ -31,7 +31,7 @@ impl<'a> WorkRequest<'a> {
     }
 }
 
-impl<'a> Drop for WorkRequest<'a> {
+impl<'a> Drop for PendingWork<'a> {
     fn drop(&mut self) {
         if !self.already_polled_to_completion() {
             log::warn!("IbvWorkRequest not manually polled to completion");
@@ -43,7 +43,7 @@ impl<'a> Drop for WorkRequest<'a> {
     }
 }
 
-impl<'a> Debug for WorkRequest<'a> {
+impl<'a> Debug for PendingWork<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvWorkRequest")
             .field("wr_id", &self.wr_id)
@@ -65,7 +65,7 @@ pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
 
 pub type WorkRequestStatus = Option<WorkResult>;
 
-impl WorkRequest<'_> {
+impl PendingWork<'_> {
     pub fn wr_id(&self) -> u64 {
         self.wr_id
     }

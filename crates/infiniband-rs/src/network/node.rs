@@ -1,6 +1,6 @@
 use crate::connection::builder::ConnectionBuilder;
 use crate::connection::connection::Connection;
-use crate::connection::work_request::WorkSpinPollResult;
+use crate::connection::work_request::{WorkHandle, WorkSpinPollResult};
 use crate::devices::open_device;
 use crate::ibverbs::scatter_gather_element::GatherElement;
 use crate::network::NodeError;
@@ -113,6 +113,8 @@ impl Node {
         peer: Rank,
         mut receives: impl AsMut<[NodeGatherElement<'a>]>,
     ) -> WorkSpinPollResult {
+        // todo: deal with error of peer not in range
+        // todo: avoid allocating somehow?
         let mut conn_receives: Vec<_> = receives
             .as_mut()
             .iter_mut()
@@ -125,7 +127,45 @@ impl Node {
             .receive(&mut conn_receives)
     }
 
-    pub unsafe fn send_unpolled<'a>(&mut self, sends: impl AsRef<[NodeScatterElement<'a>]>) {}
+    pub unsafe fn send_unpolled<'a>(
+        &mut self,
+        peer: Rank,
+        sends: &[NodeScatterElement<'a>],
+    ) -> io::Result<WorkHandle<'a>> {
+        // todo: deal with error of peer not in range
+        // todo: avoid allocating somehow?
+        let conn_sends: Vec<_> = sends
+            .as_ref()
+            .iter()
+            .map(|se| se.bind(peer))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        unsafe {
+            self.connections
+                .get_mut(peer)
+                .unwrap()
+                .send_unpolled(conn_sends)
+        }
+    }
+
+    pub unsafe fn receive_unpolled<'a>(
+        &mut self,
+        peer: Rank,
+        mut receives: impl AsMut<[NodeGatherElement<'a>]> + 'a,
+    ) -> io::Result<WorkHandle<'a>> {
+        let conn_receives: Vec<_> = receives
+            .as_mut()
+            .iter_mut()
+            .map(|ge| ge.bind(peer))
+            .collect::<Result<_, _>>()
+            .unwrap();
+        unsafe {
+            self.connections
+                .get_mut(peer)
+                .unwrap()
+                .receive_unpolled(conn_receives)
+        }
+    }
 
     /*
     // network operations

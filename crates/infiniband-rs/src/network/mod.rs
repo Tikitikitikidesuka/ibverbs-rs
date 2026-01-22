@@ -7,6 +7,7 @@ pub mod node;
 pub mod prepared_node;
 pub mod tcp_exchanger;
 pub mod scatter_gather_element;
+mod cooler_sge;
 
 #[derive(Error, Debug)]
 pub enum NodeError {

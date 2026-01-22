@@ -1,4 +1,4 @@
-use crate::ibverbs::context::ContextInner;
+use crate::ibverbs::context::Context;
 use crate::ibverbs::work_completion::WorkCompletion;
 use ibverbs_sys::*;
 use std::ffi::c_void;
@@ -21,11 +21,7 @@ impl CompletionQueue {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    pub(super) fn create(
-        context: Arc<ContextInner>,
-        min_capacity: u32,
-        id: isize,
-    ) -> io::Result<Self> {
+    pub(super) fn create(context: Context, min_capacity: u32, id: isize) -> io::Result<Self> {
         let min_cq_entries = min_capacity.try_into().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -36,7 +32,7 @@ impl CompletionQueue {
             )
         })?;
 
-        let cc = unsafe { ibv_create_comp_channel(context.ctx) };
+        let cc = unsafe { ibv_create_comp_channel(context.inner.ctx) };
         if cc.is_null() {
             return Err(io::Error::last_os_error());
         }
@@ -52,7 +48,7 @@ impl CompletionQueue {
 
         let cq = unsafe {
             ibv_create_cq(
-                context.ctx,
+                context.inner.ctx,
                 min_cq_entries,
                 ptr::null::<c_void>().offset(id) as *mut _,
                 cc,
@@ -146,7 +142,7 @@ impl<'a> IntoIterator for PolledCompletions<'a> {
 }
 
 pub(super) struct CompletionQueueInner {
-    pub(super) context: Arc<ContextInner>,
+    pub(super) context: Context,
     pub(super) cq: *mut ibv_cq,
     pub(super) cc: *mut ibv_comp_channel,
     pub(super) min_capacity: u32,

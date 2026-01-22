@@ -1,7 +1,4 @@
-use crate::connection::work_request::WorkRequestStatus;
 use crate::ibverbs::memory_region::MemoryRegion;
-use crate::ibverbs::work_completion::WorkResult;
-use crate::ibverbs::work_error::WorkErrorCode;
 use ibverbs_sys::ibv_sge;
 use std::marker::PhantomData;
 use thiserror::Error;

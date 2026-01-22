@@ -9,9 +9,9 @@ use std::sync::Arc;
 /// and the second port (port #2) is an Ethernet port.
 pub(super) const IB_PORT: u8 = 1;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Context {
-    inner: Arc<ContextInner>,
+    pub(super) inner: Arc<ContextInner>,
 }
 
 impl Context {
@@ -26,13 +26,13 @@ impl Context {
     ///  - `ENOMEM`: Not enough resources to create completion queue.
     // TODO: This should not be public... This library will expose a connection as an atomic unit
     pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<CompletionQueue> {
-        CompletionQueue::create(self.inner.clone(), min_cq_entries, id)
+        CompletionQueue::create(self.clone(), min_cq_entries, id)
     }
 
     /// Allocate a protection domain (PDs) for the device's context.
     // TODO: This should not be public... This library will expose a connection as an atomic unit
     pub fn allocate_pd(&self) -> io::Result<ProtectionDomain> {
-        ProtectionDomain::allocate(self.inner.clone())
+        ProtectionDomain::allocate(self.clone())
     }
 }
 
