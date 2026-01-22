@@ -50,9 +50,9 @@ impl<'a> NodeGatherElement<'a> {
     }
 
     pub(super) fn bind(
-        &'a mut self,
+        &mut self,
         rank: Rank,
-    ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
+    ) -> Result<GatherElement, ScatterGatherElementError> {
         self.mr
             .connection_mrs
             .get(rank)

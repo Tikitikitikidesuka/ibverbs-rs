@@ -75,7 +75,7 @@ impl Node {
     pub fn send<'a>(
         &mut self,
         peer: Rank,
-        sends: &impl AsRef<[NodeScatterElement<'a>]>,
+        sends: impl AsRef<[NodeScatterElement<'a>]>,
     ) -> WorkSpinPollResult {
         // todo: deal with error of peer not in range
         // todo: avoid allocating somehow?
@@ -91,7 +91,7 @@ impl Node {
     pub fn send_with_immediate<'a>(
         &mut self,
         peer: Rank,
-        sends: &impl AsRef<[NodeScatterElement<'a>]>,
+        sends: impl AsRef<[NodeScatterElement<'a>]>,
         immediate: u32,
     ) -> WorkSpinPollResult {
         // todo: deal with error of peer not in range
@@ -111,11 +111,12 @@ impl Node {
     pub fn receive<'a>(
         &mut self,
         peer: Rank,
-        receives: &'a mut [NodeGatherElement<'a>],
+        mut receives: impl AsMut<[NodeGatherElement<'a>]>,
     ) -> WorkSpinPollResult {
-        let mut conn_receives: Vec<GatherElement<'a>> = receives
+        let mut conn_receives: Vec<_> = receives
+            .as_mut()
             .iter_mut()
-            .map(|mut ge| ge.bind(peer))
+            .map(|ge| ge.bind(peer))
             .collect::<Result<_, _>>()
             .unwrap();
         self.connections
