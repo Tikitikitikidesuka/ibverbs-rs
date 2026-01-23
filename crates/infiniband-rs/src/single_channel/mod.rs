@@ -1,6 +1,8 @@
 pub mod builder;
-pub mod channel_ops;
 pub mod mr_ops;
+pub mod polled_ops;
+pub mod unpolled_ops;
+pub mod scoped;
 
 use crate::channel::Channel;
 use crate::ibverbs::protection_domain::ProtectionDomain;

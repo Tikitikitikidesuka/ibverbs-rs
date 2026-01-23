@@ -7,8 +7,9 @@ use std::rc::Rc;
 pub mod builder;
 pub mod pending_work;
 pub mod polled_ops;
-pub mod scoped;
+//pub mod scoped;
 pub mod unpolled_ops;
+pub mod polling_scope;
 
 mod cached_completion_queue;
 mod unsafe_member;

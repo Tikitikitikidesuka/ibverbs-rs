@@ -120,7 +120,9 @@ impl PendingWork<'_> {
         }
     }
 
-    pub(super) fn already_polled_to_completion(&self) -> bool {
+    /// Returns true if the work request has already been polled to completion.
+    /// It does not poll however, it must have been polled by some other method.
+    pub fn already_polled_to_completion(&self) -> bool {
         self.status.is_some()
     }
 

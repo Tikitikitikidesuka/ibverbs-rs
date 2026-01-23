@@ -12,7 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
 
-impl Channel {
+impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
     ///
     /// Scoping solves the problem of users being able to access memory regions scheduled for
@@ -61,11 +61,11 @@ impl Channel {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, ChannelScopeError>
+    pub(crate) fn run<'env, F, R>(inner: &'env mut C, f: F) -> Result<R, PollingScopeError>
     where
-        F: for<'scope> FnOnce(&mut ChannelScope<'scope, 'env>) -> R,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> R,
     {
-        let mut scope = ChannelScope::new(self);
+        let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.
         // The panic has to be caught to ensure clean up for exception safety.
         let user_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
@@ -77,8 +77,8 @@ impl Channel {
     }
 }
 
-pub struct ChannelScope<'scope, 'env: 'scope> {
-    inner: &'env mut Channel,
+pub struct PollingScope<'scope, 'env: 'scope, C> {
+    pub(crate) inner: &'env mut C,
     wrs: Vec<Rc<RefCell<PendingWork<'scope>>>>,
     // for invariance of lifetimes, see `std::thread::scope`
     scope: PhantomData<&'scope mut &'scope ()>,
@@ -94,21 +94,21 @@ pub struct ChannelScope<'scope, 'env: 'scope> {
 ///   This only specifies how many work requests failed. For more details do
 ///   not rely on automatic polling of the scoped connection.
 #[derive(Debug, Error)]
-pub enum ChannelScopeError {
+pub enum PollingScopeError {
     PollError(#[from] io::Error),
     WorkError(Vec<WorkError>),
 }
 
-impl Display for ChannelScopeError {
+impl Display for PollingScopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ChannelScopeError::PollError(io_error) => {
+            PollingScopeError::PollError(io_error) => {
                 write!(
                     f,
                     "IbvConnectionScope poll error during clean-up: {io_error}"
                 )
             }
-            ChannelScopeError::WorkError(work_errors) => {
+            PollingScopeError::WorkError(work_errors) => {
                 // Header line with count
                 writeln!(
                     f,
@@ -127,11 +127,20 @@ impl Display for ChannelScopeError {
     }
 }
 
-impl<'scope, 'env> ChannelScope<'scope, 'env> {
+impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
+    pub(super) fn new(inner: &'env mut C) -> Self {
+        PollingScope {
+            inner,
+            wrs: vec![],
+            scope: PhantomData,
+            env: PhantomData,
+        }
+    }
+
     // Important to notice. *Clean up does not fail*. The returned result represents the outcome
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
-    pub(super) fn clean_up(self) -> Result<(), ChannelScopeError> {
+    pub(super) fn clean_up(self) -> Result<(), PollingScopeError> {
         let mut work_errors = Vec::new();
         for wr in &self.wrs {
             let mut wr = wr.borrow_mut();
@@ -140,7 +149,7 @@ impl<'scope, 'env> ChannelScope<'scope, 'env> {
                 if let Err(error) = wr.spin_poll() {
                     match error {
                         WorkPollError::PollError(poll_error) => {
-                            return Err(ChannelScopeError::PollError(poll_error));
+                            return Err(PollingScopeError::PollError(poll_error));
                         }
                         WorkPollError::WorkError(work_error) => work_errors.push(work_error),
                     }
@@ -151,30 +160,24 @@ impl<'scope, 'env> ChannelScope<'scope, 'env> {
         if work_errors.is_empty() {
             Ok(())
         } else {
-            Err(ChannelScopeError::WorkError(work_errors))
+            Err(PollingScopeError::WorkError(work_errors))
         }
     }
 }
 
-impl<'scope, 'env> ChannelScope<'scope, 'env> {
-    pub(super) fn new(connection: &'env mut Channel) -> Self {
-        ChannelScope {
-            inner: connection,
-            wrs: vec![],
-            scope: PhantomData,
-            env: PhantomData,
-        }
-    }
-}
-
-impl<'scope, 'env> ChannelScope<'scope, 'env> {
+impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub fn post_send(
+    pub(crate) fn channel_post_send<F>(
         &mut self,
+        channel_selector: F,
         sends: impl AsRef<[ScatterElement<'env>]>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
-        let wr = Rc::new(RefCell::new(unsafe { self.inner.send_unpolled(sends)? }));
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(sends)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
@@ -184,13 +187,38 @@ impl<'scope, 'env> ChannelScope<'scope, 'env> {
 
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub fn post_receive(
+    pub(crate) fn channel_post_send_with_immediate<F>(
         &mut self,
-        receives: impl AsMut<[GatherElement<'env>]>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
+        channel_selector: F,
+        sends: impl AsRef<[ScatterElement<'env>]>,
+        imm_data: u32,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+    {
+        let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe {
-            self.inner.receive_unpolled(receives)?
+            channel.send_with_immediate_unpolled(sends, imm_data)?
         }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
+    // The slice cannot be used again until the work request is consumed,
+    // so no overlapping operations can be done concurrently
+    pub(crate) fn channel_post_receive<F>(
+        &mut self,
+        channel_selector: F,
+        receives: impl AsMut<[GatherElement<'env>]>,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(receives)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
