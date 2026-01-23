@@ -19,8 +19,11 @@ mod unsafe_member;
 /// for optimizing the dessign of the network node.
 /// If a network node is made with multiple connections, each with their own protection domain
 /// the same memory has to ber registered to each one and be kept track of for operations.
-/// By using channels, its allowed to register only once to the shared protection domain and then
+/// By using channels, it is allowed to register only once to the shared protection domain and then
 /// share the same MemoryRegion struct with all of them.
+///
+/// As of now, this is safe because the queue pair created does not allow for
+/// remote writing of the memory. Otherwise, the memory aliasing rules would not be guaranteed.
 pub struct RawChannel {
     qp: QueuePair,
     cq: Rc<RefCell<CachedCompletionQueue>>,
