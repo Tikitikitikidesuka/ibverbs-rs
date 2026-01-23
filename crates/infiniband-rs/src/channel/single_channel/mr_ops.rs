@@ -1,9 +1,9 @@
+use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
-use crate::multi_channel::MultiChannel;
 use std::io;
 
-impl MultiChannel {
+impl SingleChannel {
     pub fn register_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.pd.register_mr_with_permissions(

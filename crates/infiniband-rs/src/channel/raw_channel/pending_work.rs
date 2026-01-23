@@ -7,8 +7,8 @@ use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
-use crate::channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::unsafe_member::UnsafeMember;
+use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
+use crate::channel::raw_channel::unsafe_member::UnsafeMember;
 
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {

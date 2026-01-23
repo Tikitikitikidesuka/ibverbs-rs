@@ -1,5 +1,3 @@
-use crate::channel::Channel;
-use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::prepared_queue_pair::PreparedQueuePair;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
@@ -8,9 +6,11 @@ use bon::bon;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
+use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
+use crate::channel::raw_channel::RawChannel;
 
 #[bon]
-impl Channel {
+impl RawChannel {
     #[builder]
     pub fn builder(
         pd: ProtectionDomain,
@@ -54,9 +54,9 @@ impl PreparedChannel {
         self.qp.endpoint()
     }
 
-    pub fn handshake(self, endpoint: QueuePairEndpoint) -> io::Result<Channel> {
+    pub fn handshake(self, endpoint: QueuePairEndpoint) -> io::Result<RawChannel> {
         let qp = self.qp.handshake(endpoint)?;
-        Ok(Channel {
+        Ok(RawChannel {
             qp,
             cq: Rc::new(RefCell::new(self.cq)),
             pd: self.pd,

@@ -1,6 +1,6 @@
-use crate::channel::pending_work::{PendingWork, WorkSpinPollResult};
+use crate::channel::multi_channel::MultiChannel;
+use crate::channel::raw_channel::pending_work::PendingWork;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::multi_channel::MultiChannel;
 use std::io;
 
 impl MultiChannel {

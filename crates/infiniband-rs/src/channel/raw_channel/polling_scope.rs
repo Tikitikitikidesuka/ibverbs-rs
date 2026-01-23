@@ -1,7 +1,3 @@
-use crate::channel::Channel;
-use crate::channel::pending_work::{
-    PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
-};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
 use std::cell::RefCell;
@@ -11,6 +7,8 @@ use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
+use crate::channel::raw_channel::pending_work::{PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult};
+use crate::channel::raw_channel::RawChannel;
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -174,7 +172,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         sends: impl AsRef<[ScatterElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(sends)? }));
@@ -194,7 +192,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         imm_data: u32,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe {
@@ -215,7 +213,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         receives: impl AsMut<[GatherElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(receives)? }));

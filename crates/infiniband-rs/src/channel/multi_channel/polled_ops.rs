@@ -1,6 +1,6 @@
-use crate::channel::pending_work::WorkSpinPollResult;
+use crate::channel::multi_channel::MultiChannel;
+use crate::channel::raw_channel::pending_work::WorkSpinPollResult;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::multi_channel::MultiChannel;
 
 impl MultiChannel {
     pub fn send<'a>(

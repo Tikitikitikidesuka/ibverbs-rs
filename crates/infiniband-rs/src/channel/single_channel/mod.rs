@@ -4,7 +4,7 @@ pub mod polled_ops;
 pub mod unpolled_ops;
 pub mod scoped;
 
-use crate::channel::Channel;
+use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 
 /// This is a single channel with owned protection domain.
@@ -15,6 +15,6 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 /// When registering memory to a PD, if another peer has remote access to it, it could be
 /// freed while still registered and the remote could issue a write unto it. UD.
 pub struct SingleChannel {
-    channel: Channel,
+    channel: RawChannel,
     pd: ProtectionDomain,
 }

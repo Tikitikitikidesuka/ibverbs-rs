@@ -1,7 +1,7 @@
-use crate::channel::pending_work::PendingWork;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::single_channel::SingleChannel;
 use std::io;
+use crate::channel::raw_channel::pending_work::PendingWork;
+use crate::channel::single_channel::SingleChannel;
 
 impl SingleChannel {
     pub unsafe fn send_unpolled<'a>(

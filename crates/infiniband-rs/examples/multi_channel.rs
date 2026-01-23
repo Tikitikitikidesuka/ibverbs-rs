@@ -1,7 +1,8 @@
+use infiniband_rs::channel::multi_channel::MultiChannel;
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::multi_channel::MultiChannel;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
+use std::io;
 
 const DEVICE: &str = "mlx5_0";
 
@@ -19,7 +20,23 @@ fn main() {
     let endpoints = multi_channel.endpoints();
     let mut multi_channel = multi_channel.handshake(endpoints).unwrap();
 
-    multi_channel.scope(|c| {
-        c.post_send()
+    let mut mem = [0u8; 8];
+    let mr = multi_channel.register_mr(&mut mem).unwrap();
+    let (send_mem, recv_mem) = mem.split_at_mut(4);
+
+    println!("Recv mem before: {recv_mem:?}");
+
+    let result = multi_channel.scope(|s| {
+        send_mem.copy_from_slice(&[1u8; 4]);
+        s.post_send(1, &[mr.prepare_scatter_element(&send_mem[0..4]).unwrap()])?;
+        s.post_receive(
+            1,
+            &mut [mr.prepare_gather_element(&mut recv_mem[0..4]).unwrap()],
+        )?;
+        Ok::<(), io::Error>(())
     });
+
+    println!("Recv mem after: {recv_mem:?}");
+
+    println!("{result:?}");
 }

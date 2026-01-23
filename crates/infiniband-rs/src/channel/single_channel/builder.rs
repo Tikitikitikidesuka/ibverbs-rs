@@ -1,12 +1,12 @@
 use std::io;
 use bon::bon;
 use delegate::delegate;
-use crate::channel::builder::PreparedChannel;
-use crate::channel::Channel;
+use crate::channel::raw_channel::builder::PreparedChannel;
+use crate::channel::raw_channel::RawChannel;
+use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
-use crate::single_channel::SingleChannel;
 
 #[bon]
 impl SingleChannel {
@@ -20,7 +20,7 @@ impl SingleChannel {
         #[builder(default = 32)] max_recv_sges: u32,
     ) -> io::Result<PreparedSingleChannel> {
         let pd = context.allocate_pd()?;
-        let channel = Channel::builder()
+        let channel = RawChannel::builder()
             .pd(pd.clone())
             .min_cq_buf_size(min_cq_buf_size)
             .max_send_wrs(max_send_wrs)

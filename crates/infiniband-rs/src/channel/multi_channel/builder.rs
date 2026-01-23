@@ -1,9 +1,9 @@
-use crate::channel::Channel;
-use crate::channel::builder::PreparedChannel;
+use crate::channel::multi_channel::MultiChannel;
+use crate::channel::raw_channel::RawChannel;
+use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
-use crate::multi_channel::MultiChannel;
 use bon::bon;
 use std::io;
 
@@ -23,7 +23,7 @@ impl MultiChannel {
         let channels = (0..num_channels)
             .into_iter()
             .map(|_| {
-                Channel::builder()
+                RawChannel::builder()
                     .pd(pd.clone())
                     .min_cq_buf_size(min_cq_buf_size)
                     .max_send_wrs(max_send_wrs)
