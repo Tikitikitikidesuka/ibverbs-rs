@@ -13,6 +13,7 @@ pub mod unpolled_ops;
 
 mod cached_completion_queue;
 mod unsafe_member;
+mod scoped;
 
 /// A channel is like the old connection but takes a shared protection domain.
 /// This allows for creating a connection like the one that previously existed but

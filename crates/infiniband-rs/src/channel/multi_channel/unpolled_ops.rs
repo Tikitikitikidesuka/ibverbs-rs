@@ -9,7 +9,7 @@ impl MultiChannel {
         peer: usize,
         sends: impl AsRef<[ScatterElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
-        unsafe { self.channel(peer)?.send_unpolled(sends.as_ref()) }
+        unsafe { self.channel(peer)?.send_unpolled(sends) }
     }
 
     pub unsafe fn send_with_immediate_unpolled<'a>(
@@ -20,7 +20,7 @@ impl MultiChannel {
     ) -> io::Result<PendingWork<'a>> {
         unsafe {
             self.channel(peer)?
-                .send_with_immediate_unpolled(sends.as_ref(), imm_data)
+                .send_with_immediate_unpolled(sends, imm_data)
         }
     }
 
@@ -29,6 +29,6 @@ impl MultiChannel {
         peer: usize,
         mut receives: impl AsMut<[GatherElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
-        unsafe { self.channel(peer)?.receive_unpolled(receives.as_mut()) }
+        unsafe { self.channel(peer)?.receive_unpolled(receives) }
     }
 }

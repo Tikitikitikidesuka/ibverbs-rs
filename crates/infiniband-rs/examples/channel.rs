@@ -1,8 +1,7 @@
-use infiniband_rs::channel::Channel;
 use infiniband_rs::ibverbs::devices::open_device;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use infiniband_rs::single_channel::SingleChannel;
+use infiniband_rs::channel::single_channel::SingleChannel;
 
 const DEVICE: &str = "mlx5_0";
 

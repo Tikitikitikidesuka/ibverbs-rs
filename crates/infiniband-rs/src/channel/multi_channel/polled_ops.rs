@@ -4,7 +4,7 @@ use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 
 impl MultiChannel {
     pub fn send<'a>(
-        &mut self,
+        &'a mut self,
         peer: usize,
         sends: impl AsRef<[ScatterElement<'a>]>,
     ) -> WorkSpinPollResult {
@@ -12,7 +12,7 @@ impl MultiChannel {
     }
 
     pub fn send_with_immediate<'a>(
-        &mut self,
+        &'a mut self,
         peer: usize,
         sends: impl AsRef<[ScatterElement<'a>]>,
         imm_data: u32,
@@ -21,7 +21,7 @@ impl MultiChannel {
     }
 
     pub fn receive<'a>(
-        &mut self,
+        &'a mut self,
         peer: usize,
         receives: impl AsMut<[GatherElement<'a>]>,
     ) -> WorkSpinPollResult {

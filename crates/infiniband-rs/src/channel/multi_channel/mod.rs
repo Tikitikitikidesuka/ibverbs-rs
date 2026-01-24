@@ -3,6 +3,7 @@ pub mod mr_ops;
 mod polled_ops;
 mod scoped;
 pub mod unpolled_ops;
+mod scatter_gather_ops;
 
 use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;

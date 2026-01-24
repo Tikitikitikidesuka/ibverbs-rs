@@ -1,10 +1,11 @@
+use crate::channel::multi_channel::MultiChannel;
+use crate::channel::raw_channel::pending_work::MultiWorkPollError;
+use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use std::io;
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::raw_channel::polling_scope::{PollingScope, PollingScopeError, ScopedPendingWork};
 
 impl MultiChannel {
-    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, PollingScopeError>
+    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, MultiWorkPollError>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, MultiChannel>) -> R,
     {

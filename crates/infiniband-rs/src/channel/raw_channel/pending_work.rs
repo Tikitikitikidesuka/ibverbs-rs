@@ -1,3 +1,5 @@
+use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
+use crate::channel::raw_channel::unsafe_member::UnsafeMember;
 use crate::ibverbs::work_completion::WorkResult;
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
@@ -7,8 +9,6 @@ use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use thiserror::Error;
-use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::raw_channel::unsafe_member::UnsafeMember;
 
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {
@@ -61,7 +61,24 @@ pub enum WorkPollError {
 }
 
 pub type WorkSpinPollResult = Result<WorkSuccess, WorkPollError>;
+
+/// Error of a Connection Scope caught during clean up.
+/// - PollError means there was an error polling the completion queue.
+///   This means the completion queue and queue pair of the connection have
+///   transitioned to the error state and therefore all of the work requests
+///   were flushed uncompleted and with an error.
+/// - WorkError means at least one work request failed during its execution.
+///   This only specifies how many work requests failed. For more details do
+///   not rely on automatic polling of the scoped connection.
+// todo: naming and display coherence
+#[derive(Debug, Error)]
+pub enum MultiWorkPollError {
+    PollError(#[from] io::Error),
+    WorkError(Vec<WorkError>),
+}
+
 pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
+pub type MultiWorkSpinPollResult = Result<Vec<WorkSuccess>, MultiWorkPollError>;
 
 pub type WorkRequestStatus = Option<WorkResult>;
 

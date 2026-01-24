@@ -1,3 +1,5 @@
+use crate::channel::raw_channel::RawChannel;
+use crate::channel::raw_channel::pending_work::{MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
 use std::cell::RefCell;
@@ -7,8 +9,7 @@ use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
-use crate::channel::raw_channel::pending_work::{PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult};
-use crate::channel::raw_channel::RawChannel;
+use crate::ibverbs::work_success::WorkSuccess;
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -59,7 +60,7 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub(crate) fn run<'env, F, R>(inner: &'env mut C, f: F) -> Result<R, PollingScopeError>
+    pub(crate) fn run<'env, F, R>(inner: &'env mut C, f: F) -> Result<R, MultiWorkPollError>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> R,
     {
@@ -83,30 +84,22 @@ pub struct PollingScope<'scope, 'env: 'scope, C> {
     env: PhantomData<&'env mut &'env ()>,
 }
 
-/// Error of a Connection Scope caught during clean up.
-/// - PollError means there was an error polling the completion queue.
-///   This means the completion queue and queue pair of the connection have
-///   transitioned to the error state and therefore all of the work requests
-///   were flushed uncompleted and with an error.
-/// - WorkError means at least one work request failed during its execution.
-///   This only specifies how many work requests failed. For more details do
-///   not rely on automatic polling of the scoped connection.
-#[derive(Debug, Error)]
-pub enum PollingScopeError {
-    PollError(#[from] io::Error),
-    WorkError(Vec<WorkError>),
+impl From<Vec<WorkError>> for MultiWorkPollError {
+    fn from(errors: Vec<WorkError>) -> Self {
+        MultiWorkPollError::WorkError(errors)
+    }
 }
 
-impl Display for PollingScopeError {
+impl Display for MultiWorkPollError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            PollingScopeError::PollError(io_error) => {
+            MultiWorkPollError::PollError(io_error) => {
                 write!(
                     f,
                     "IbvConnectionScope poll error during clean-up: {io_error}"
                 )
             }
-            PollingScopeError::WorkError(work_errors) => {
+            MultiWorkPollError::WorkError(work_errors) => {
                 // Header line with count
                 writeln!(
                     f,
@@ -138,7 +131,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // Important to notice. *Clean up does not fail*. The returned result represents the outcome
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
-    pub(super) fn clean_up(self) -> Result<(), PollingScopeError> {
+    pub(super) fn clean_up(self) -> Result<(), MultiWorkPollError> {
         let mut work_errors = Vec::new();
         for wr in &self.wrs {
             let mut wr = wr.borrow_mut();
@@ -147,7 +140,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
                 if let Err(error) = wr.spin_poll() {
                     match error {
                         WorkPollError::PollError(poll_error) => {
-                            return Err(PollingScopeError::PollError(poll_error));
+                            return Err(MultiWorkPollError::PollError(poll_error));
                         }
                         WorkPollError::WorkError(work_error) => work_errors.push(work_error),
                     }
@@ -158,7 +151,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         if work_errors.is_empty() {
             Ok(())
         } else {
-            Err(PollingScopeError::WorkError(work_errors))
+            Err(MultiWorkPollError::WorkError(work_errors))
         }
     }
 }
