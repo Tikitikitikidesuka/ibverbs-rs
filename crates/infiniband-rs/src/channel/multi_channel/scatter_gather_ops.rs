@@ -6,13 +6,13 @@ use crate::ibverbs::work_success::WorkSuccess;
 use std::io;
 
 impl MultiChannel {
-    pub fn scatter<'a, I, WR>(&'a mut self, sends: I) -> MultiWorkSpinPollResult
+    pub fn scatter<'a, I, WR>(&'a mut self, scatter_sends: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
         WR: AsRef<[ScatterElement<'a>]>,
     {
         let res = self.scope(|s| {
-            let wrs = sends
+            let wrs = scatter_sends
                 .into_iter()
                 .map(|(peer, send)| s.post_send(peer, send))
                 .collect::<io::Result<Vec<ScopedPendingWork>>>()?;
@@ -27,13 +27,13 @@ impl MultiChannel {
         Ok(res.unwrap())
     }
 
-    pub fn gather<'a, I, WR>(&'a mut self, receives: I) -> MultiWorkSpinPollResult
+    pub fn gather<'a, I, WR>(&'a mut self, gather_receives: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
         WR: AsMut<[GatherElement<'a>]>,
     {
         let res = self.scope(|s| {
-            let wrs = receives
+            let wrs = gather_receives
                 .into_iter()
                 .map(|(peer, receive)| s.post_receive(peer, receive))
                 .collect::<io::Result<Vec<ScopedPendingWork>>>()?;

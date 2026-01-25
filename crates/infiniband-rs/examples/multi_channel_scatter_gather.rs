@@ -14,7 +14,7 @@ fn main() {
 
     let multi_channel = MultiChannel::builder()
         .context(&ctx)
-        .num_channels(3)
+        .num_channels(5)
         .build()
         .unwrap();
 
@@ -26,18 +26,23 @@ fn main() {
 
     let (send_mem, recv_mem) = mem.split_at_mut(5);
 
-    let scatter_sends = send_mem
-        .chunks(1)
-        .map(|chunk| vec![mr.prepare_scatter_element(chunk).unwrap()])
-        .enumerate();
-    let gather_receives = recv_mem
-        .chunks_mut(1)
-        .map(|chunk| vec![mr.prepare_gather_element(chunk).unwrap()])
-        .enumerate();
+    send_mem.copy_from_slice(&[1u8, 2u8, 3u8, 4u8, 5u8]);
 
     println!("Recv mem before: {recv_mem:?}");
 
-    let result = multi_channel.scatter(scatter_sends);
+    let result = multi_channel.scope(|s| {
+        let scatter_sends = send_mem
+            .chunks(1)
+            .map(|chunk| vec![mr.prepare_scatter_element(chunk).unwrap()])
+            .enumerate();
+        let gather_receives = recv_mem
+            .chunks_mut(1)
+            .map(|chunk| vec![mr.prepare_gather_element(chunk).unwrap()])
+            .enumerate();
+
+        s.post_scatter(scatter_sends).unwrap();
+        s.post_gather(gather_receives).unwrap();
+    });
 
     println!("Recv mem after: {recv_mem:?}");
 

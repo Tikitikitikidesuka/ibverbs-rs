@@ -38,4 +38,32 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_receive(|m| m.channel(peer), receives)
     }
+
+    pub fn post_scatter<I, WR>(
+        &mut self,
+        scatter_sends: I,
+    ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = (usize, WR)>,
+        WR: AsRef<[ScatterElement<'env>]>,
+    {
+        scatter_sends
+            .into_iter()
+            .map(|(peer, sends)| self.channel_post_send(|m| m.channel(peer), sends))
+            .collect()
+    }
+
+    pub fn post_gather<I, WR>(
+        &mut self,
+        gather_receives: I,
+    ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = (usize, WR)>,
+        WR: AsMut<[GatherElement<'env>]>,
+    {
+        gather_receives
+            .into_iter()
+            .map(|(peer, sends)| self.channel_post_receive(|m| m.channel(peer), sends))
+            .collect()
+    }
 }
