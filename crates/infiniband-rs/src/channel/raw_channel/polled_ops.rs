@@ -25,11 +25,29 @@ impl RawChannel {
         res.unwrap()
     }
 
+    pub fn send_immediate(&mut self, imm_data: u32) -> WorkSpinPollResult {
+        let res = self.scope(|s| s.post_send_immediate(imm_data)?.spin_poll());
+        debug_assert!(
+            res.is_ok(),
+            "unreachable scope error (single WR, manual poll)"
+        );
+        res.unwrap()
+    }
+
     pub fn receive<'a>(
         &'a mut self,
         receives: impl AsMut<[GatherElement<'a>]>,
     ) -> WorkSpinPollResult {
         let res = self.scope(|s| s.post_receive(receives)?.spin_poll());
+        debug_assert!(
+            res.is_ok(),
+            "unreachable scope error (single WR, manual poll)"
+        );
+        res.unwrap()
+    }
+
+    pub fn receive_immediate(&mut self) -> WorkSpinPollResult {
+        let res = self.scope(|s| s.post_receive_immediate()?.spin_poll());
         debug_assert!(
             res.is_ok(),
             "unreachable scope error (single WR, manual poll)"

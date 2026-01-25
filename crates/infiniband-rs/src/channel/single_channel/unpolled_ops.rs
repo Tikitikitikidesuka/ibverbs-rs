@@ -19,10 +19,18 @@ impl SingleChannel {
         unsafe { self.channel.send_with_immediate_unpolled(sends, imm_data) }
     }
 
+    pub fn send_immediate_unpolled<'a>(&mut self, imm_data: u32) -> io::Result<PendingWork<'a>> {
+        self.channel.send_immediate_unpolled(imm_data)
+    }
+
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
         receives: impl AsMut<[GatherElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
         unsafe { self.channel.receive_unpolled(receives) }
+    }
+
+    pub fn receive_immediate_unpolled<'a>(&mut self) -> io::Result<PendingWork<'a>> {
+        self.channel.receive_immediate_unpolled()
     }
 }

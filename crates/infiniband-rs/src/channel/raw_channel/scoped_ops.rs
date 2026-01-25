@@ -29,10 +29,18 @@ impl<'scope, 'env> PollingScope<'scope, 'env, RawChannel> {
         self.channel_post_send_with_immediate(|s| Ok(s), sends, imm_data)
     }
 
+    pub fn post_send_immediate(&mut self, imm_data: u32) -> io::Result<ScopedPendingWork<'scope>> {
+        self.channel_post_send_immediate(|s| Ok(s), imm_data)
+    }
+
     pub fn post_receive(
         &mut self,
         receives: impl AsMut<[GatherElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_receive(|s| Ok(s), receives)
+    }
+
+    pub fn post_receive_immediate(&mut self) -> io::Result<ScopedPendingWork<'scope>> {
+        self.channel_post_receive_immediate(|s| Ok(s))
     }
 }

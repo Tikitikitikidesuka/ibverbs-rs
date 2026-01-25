@@ -32,6 +32,19 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
             .collect()
     }
 
+    pub fn post_scatter_immediate<I>(
+        &mut self,
+        scatter_sends: I,
+    ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = (usize, u32)>,
+    {
+        scatter_sends
+            .into_iter()
+            .map(|(peer, imm_data)| self.post_send_with_immediate(peer, &[], imm_data))
+            .collect()
+    }
+
     pub fn post_gather<I, WR>(
         &mut self,
         gather_receives: I,
@@ -43,6 +56,19 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
         gather_receives
             .into_iter()
             .map(|(peer, sends)| self.post_receive(peer, sends))
+            .collect()
+    }
+
+    pub fn post_gather_immediate<I>(
+        &mut self,
+        peers: I,
+    ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = usize>,
+    {
+        peers
+            .into_iter()
+            .map(|peer| self.post_receive(peer, &mut []))
             .collect()
     }
 
@@ -74,6 +100,20 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
         peers
             .into_iter()
             .map(|peer| self.post_send_with_immediate(peer, sends.as_ref(), imm_data))
+            .collect::<io::Result<Vec<_>>>()
+    }
+
+    pub fn post_multicast_immediate<I>(
+        &mut self,
+        peers: I,
+        imm_data: u32,
+    ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = usize>,
+    {
+        peers
+            .into_iter()
+            .map(|peer| self.post_send_with_immediate(peer, &[], imm_data))
             .collect::<io::Result<Vec<_>>>()
     }
 }

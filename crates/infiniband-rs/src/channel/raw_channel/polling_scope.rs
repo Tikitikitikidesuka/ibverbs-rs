@@ -1,7 +1,10 @@
 use crate::channel::raw_channel::RawChannel;
-use crate::channel::raw_channel::pending_work::{MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult};
+use crate::channel::raw_channel::pending_work::{
+    MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
+};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
+use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -9,7 +12,6 @@ use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
-use crate::ibverbs::work_success::WorkSuccess;
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -198,6 +200,25 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         })
     }
 
+    pub(crate) fn channel_post_send_immediate<F>(
+        &mut self,
+        channel_selector: F,
+        imm_data: u32,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe {
+            channel.send_immediate_unpolled(imm_data)?
+        }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
     pub(crate) fn channel_post_receive<F>(
@@ -210,6 +231,24 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(receives)? }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
+    pub(crate) fn channel_post_receive_immediate<F>(
+        &mut self,
+        channel_selector: F,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe {
+            channel.receive_immediate_unpolled()?
+        }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,

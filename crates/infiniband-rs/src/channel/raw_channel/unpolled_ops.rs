@@ -111,6 +111,12 @@ impl RawChannel {
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
+    pub fn send_immediate_unpolled<'a>(&mut self, imm_data: u32) -> io::Result<PendingWork<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        self.qp.post_send_immediate(imm_data, wr_id)?;
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+    }
+
     /// # Safety
     /// The caller must ensure that the returned `IbvWorkRequest` is
     /// **successfully polled to completion by its drop implementation**
@@ -158,6 +164,12 @@ impl RawChannel {
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(receives.as_mut(), wr_id)? };
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+    }
+
+    pub fn receive_immediate_unpolled<'a>(&mut self) -> io::Result<PendingWork<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        self.qp.post_receive_immediate(wr_id)?;
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
