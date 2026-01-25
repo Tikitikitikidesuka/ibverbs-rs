@@ -2,7 +2,7 @@ pub mod builder;
 pub mod mr_ops;
 pub mod polled_ops;
 pub mod unpolled_ops;
-pub mod scoped;
+pub mod scoped_ops;
 
 use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;

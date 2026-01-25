@@ -1,9 +1,7 @@
 use infiniband_rs::channel::multi_channel::MultiChannel;
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::scatter_gather_element::ScatterElement;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use std::io;
 
 const DEVICE: &str = "mlx5_0";
 

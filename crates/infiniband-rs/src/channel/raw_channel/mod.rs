@@ -9,11 +9,11 @@ pub mod pending_work;
 pub mod polled_ops;
 //pub mod scoped;
 pub mod polling_scope;
+pub mod scoped_ops;
 pub mod unpolled_ops;
 
 mod cached_completion_queue;
 mod unsafe_member;
-mod scoped;
 
 /// A channel is like the old connection but takes a shared protection domain.
 /// This allows for creating a connection like the one that previously existed but
