@@ -1,59 +1,65 @@
-use crate::network::node::Rank;
+use bon::Builder;
 use serde::{Deserialize, Serialize};
-use std::ops::{Deref, Range};
+use std::ops::Deref;
 use thiserror::Error;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeConfig {
-    pub hostname: String,
-    pub port: u16,
-    pub ibdev: String,
-    pub rankid: Rank,
-    #[serde(skip_serializing_if = "String::is_empty", default)]
-    pub comment: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct UncheckedNetworkConfig {
-    hosts: Vec<NodeConfig>,
-}
-
-impl UncheckedNetworkConfig {
-    pub fn add_host(&mut self, host: NodeConfig) -> &mut Self {
-        self.hosts.push(host);
-        self
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
     hosts: Vec<NodeConfig>,
 }
 
+#[derive(Debug, Clone, Builder, Serialize, Deserialize)]
+#[builder(on(String, into))]
+pub struct NodeConfig {
+    pub hostname: String,
+    pub port: u16,
+    pub ibdev: String,
+    pub rankid: usize,
+    #[builder(default)]
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub comment: String,
+}
+
+impl NetworkConfig {
+    pub fn builder() -> RawNetworkConfig {
+        RawNetworkConfig { hosts: vec![] }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Error)]
-pub enum NetworkConfigCheckError {
+pub enum NetworkConfigError {
     #[error("Empty network")]
     EmptyNetwork,
     #[error("First rank id is not zero")]
     FirstRankNotZero,
     #[error("Ranks are non sequential, {gap_rank} is missing")]
-    NonSequentialRanks { gap_rank: Rank },
+    NonSequentialRanks { gap_rank: usize },
     #[error("Rank {dup_rank} appears multiple times")]
-    DuplicatedRank { dup_rank: Rank },
+    DuplicatedRank { dup_rank: usize },
 }
 
-impl UncheckedNetworkConfig {
-    pub fn check(mut self) -> Result<NetworkConfig, NetworkConfigCheckError> {
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RawNetworkConfig {
+    hosts: Vec<NodeConfig>,
+}
+
+impl RawNetworkConfig {
+    pub fn add_node(mut self, node: NodeConfig) -> Self {
+        self.hosts.push(node);
+        self
+    }
+
+    pub fn build(mut self) -> Result<NetworkConfig, NetworkConfigError> {
         self.hosts.sort_by_key(|n| n.rankid);
 
         // Network cannot be empty
         if self.hosts.is_empty() {
-            return Err(NetworkConfigCheckError::EmptyNetwork);
+            return Err(NetworkConfigError::EmptyNetwork);
         }
 
         // Rank ids must start at 0
         if self.hosts.first().map(|h| h.rankid) != Some(0) {
-            return Err(NetworkConfigCheckError::FirstRankNotZero);
+            return Err(NetworkConfigError::FirstRankNotZero);
         }
 
         for i in 1..self.hosts.len() {
@@ -61,14 +67,14 @@ impl UncheckedNetworkConfig {
 
             // Rank ids must be unique
             if node_config.rankid == self.hosts[i - 1].rankid {
-                return Err(NetworkConfigCheckError::DuplicatedRank {
+                return Err(NetworkConfigError::DuplicatedRank {
                     dup_rank: node_config.rankid,
                 });
             }
 
             // Rank ids must be sequential
             if node_config.rankid != i {
-                return Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: i });
+                return Err(NetworkConfigError::NonSequentialRanks { gap_rank: i });
             }
         }
 
@@ -94,8 +100,8 @@ impl<'a> IntoIterator for &'a NetworkConfig {
 }
 
 impl NetworkConfig {
-    pub fn ranks(&self) -> Range<usize> {
-        self.hosts.first().unwrap().rankid..self.hosts.last().unwrap().rankid
+    pub fn world_size(&self) -> usize {
+        self.hosts.len()
     }
 }
 
@@ -105,7 +111,7 @@ mod tests {
 
     #[test]
     fn valid_network_config() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "tdeb02".to_string(),
@@ -124,7 +130,7 @@ mod tests {
             ],
         };
 
-        let config = raw_config.check().unwrap();
+        let config = config_builder.build().unwrap();
         assert_eq!(config.len(), 2);
         assert_eq!(config[0].rankid, 0);
         assert_eq!(config[1].rankid, 1);
@@ -132,7 +138,7 @@ mod tests {
 
     #[test]
     fn valid_network_config_out_of_order() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "node2".to_string(),
@@ -158,7 +164,7 @@ mod tests {
             ],
         };
 
-        let config = raw_config.check().unwrap();
+        let config = config_builder.build().unwrap();
         // Should be sorted by rank ID
         assert_eq!(config[0].rankid, 0);
         assert_eq!(config[0].hostname, "node1");
@@ -170,16 +176,16 @@ mod tests {
 
     #[test]
     fn empty_node_config() {
-        let raw_config = UncheckedNetworkConfig { hosts: vec![] };
+        let config_builder = RawNetworkConfig { hosts: vec![] };
         assert!(matches!(
-            raw_config.check(),
-            Err(NetworkConfigCheckError::EmptyNetwork)
+            config_builder.build(),
+            Err(NetworkConfigError::EmptyNetwork)
         ));
     }
 
     #[test]
     fn single_node_config() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![NodeConfig {
                 hostname: "single".to_string(),
                 port: 8080,
@@ -189,14 +195,14 @@ mod tests {
             }],
         };
 
-        let config = raw_config.check().unwrap();
+        let config = config_builder.build().unwrap();
         assert_eq!(config.len(), 1);
         assert_eq!(config[0].rankid, 0);
     }
 
     #[test]
     fn missing_rank_zero() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "node1".to_string(),
@@ -216,14 +222,14 @@ mod tests {
         };
 
         assert!(matches!(
-            raw_config.check(),
-            Err(NetworkConfigCheckError::FirstRankNotZero)
+            config_builder.build(),
+            Err(NetworkConfigError::FirstRankNotZero)
         ));
     }
 
     #[test]
     fn non_sequential_ranks() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "node1".to_string(),
@@ -243,8 +249,8 @@ mod tests {
         };
 
         assert!(matches!(
-            raw_config.check(),
-            Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: 1 })
+            config_builder.build(),
+            Err(NetworkConfigError::NonSequentialRanks { gap_rank: 1 })
         ));
     }
 
@@ -252,7 +258,7 @@ mod tests {
     fn non_sequential_ranks_before_duplicate() {
         // Gap at rankid 1, duplicate at rankid 3
         // Gap should be detected first since 1 < 3
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "node1".to_string(),
@@ -279,8 +285,8 @@ mod tests {
         };
 
         assert!(matches!(
-            raw_config.check(),
-            Err(NetworkConfigCheckError::NonSequentialRanks { gap_rank: 1 })
+            config_builder.build(),
+            Err(NetworkConfigError::NonSequentialRanks { gap_rank: 1 })
         ));
     }
 
@@ -288,7 +294,7 @@ mod tests {
     fn duplicate_ranks_before_non_sequential() {
         // Duplicate at rankid 1, gap at rankid 3 (missing 2)
         // Duplicate should be detected first since 1 < 3
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "node1".to_string(),
@@ -322,14 +328,14 @@ mod tests {
         };
 
         assert!(matches!(
-            raw_config.check(),
-            Err(NetworkConfigCheckError::DuplicatedRank { dup_rank: 1 })
+            config_builder.build(),
+            Err(NetworkConfigError::DuplicatedRank { dup_rank: 1 })
         ));
     }
 
     #[test]
     fn deref_access() {
-        let raw_config = UncheckedNetworkConfig {
+        let config_builder = RawNetworkConfig {
             hosts: vec![
                 NodeConfig {
                     hostname: "test1".to_string(),
@@ -348,7 +354,7 @@ mod tests {
             ],
         };
 
-        let config = raw_config.check().unwrap();
+        let config = config_builder.build().unwrap();
 
         // Test Deref implementation - should work like a slice
         assert_eq!(config.len(), 2);

@@ -1,5 +1,4 @@
-use crate::network::node::Rank;
-use crate::network::network_config::{NodeConfig, NetworkConfig};
+use crate::network::config::{NetworkConfig, NodeConfig};
 use ExchangeError::*;
 use bincode::serde::{decode_from_slice, encode_to_vec};
 use log::{debug, warn};
@@ -46,13 +45,13 @@ pub struct Exchanger {}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ExchangeMessage<T> {
-    rank: Rank,
+    rank: usize,
     data: T,
 }
 
 impl Exchanger {
     pub fn await_exchange_all<T: Serialize + DeserializeOwned + Clone>(
-        rank: Rank,
+        rank: usize,
         network: &NetworkConfig,
         data: &T,
         config: &ExchangeConfig,
@@ -126,14 +125,14 @@ impl Exchanger {
     }
 
     async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(
-        rank: Rank,
+        rank: usize,
         network: &NetworkConfig,
         data: &T,
         config: &ExchangeConfig,
     ) -> Result<Vec<T>, ExchangeError> {
         let self_node = network.get(rank).ok_or(InvalidRank { rank })?;
-        let lower_ranks = network.ranks().start..self_node.rankid;
-        let greater_ranks = (self_node.rankid + 1)..(network.ranks().end + 1);
+        let lower_ranks = 0..self_node.rankid;
+        let greater_ranks = (self_node.rankid + 1)..(network.world_size());
 
         debug!(
             "Exchanging from {}:\n\tlower nodes -> {lower_ranks:?}\n\thigher nodes -> {greater_ranks:?}",
@@ -161,7 +160,7 @@ impl Exchanger {
     async fn exchange_all_serve<T: Serialize + DeserializeOwned>(
         data: &T,
         self_node: &NodeConfig,
-        remote_ranks: Range<Rank>,
+        remote_ranks: Range<usize>,
     ) -> Result<Vec<T>, ExchangeError> {
         let server = TcpListener::bind((self_node.hostname.as_str(), self_node.port)).await?;
         let mut received = HashMap::new();
@@ -187,7 +186,7 @@ impl Exchanger {
     async fn exchange_all_connect<T: Serialize + DeserializeOwned>(
         data: &T,
         self_node: &NodeConfig,
-        remote_ranks: Range<Rank>,
+        remote_ranks: Range<usize>,
         network: &NetworkConfig,
         config: &ExchangeConfig,
     ) -> Result<Vec<T>, ExchangeError> {
@@ -227,10 +226,10 @@ impl Exchanger {
 
     async fn exchange_serve<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_rank: Rank,
-        remote_ranks: Range<Rank>,
+        self_rank: usize,
+        remote_ranks: Range<usize>,
         stream: &mut TcpStream,
-        received: &mut HashMap<Rank, T>,
+        received: &mut HashMap<usize, T>,
     ) -> Result<(), ExchangeError> {
         // Send self data
         Self::write_stream(self_rank, data, stream).await?;
@@ -244,8 +243,8 @@ impl Exchanger {
 
     async fn exchange_connect<T: Serialize + DeserializeOwned>(
         data: &T,
-        self_rank: Rank,
-        remote_ranks: Range<Rank>,
+        self_rank: usize,
+        remote_ranks: Range<usize>,
         stream: &mut TcpStream,
         received: &mut HashMap<usize, T>,
     ) -> Result<(), ExchangeError> {
@@ -261,8 +260,8 @@ impl Exchanger {
 
     fn insert_if_valid<T: Serialize + DeserializeOwned>(
         incoming_data: ExchangeMessage<T>,
-        received: &mut HashMap<Rank, T>,
-        valid_range: Range<Rank>,
+        received: &mut HashMap<usize, T>,
+        valid_range: Range<usize>,
     ) -> bool {
         // Validate rank is in range
         if valid_range.contains(&incoming_data.rank) {
@@ -294,7 +293,7 @@ impl Exchanger {
     }
 
     async fn write_stream<T: Serialize>(
-        rank: Rank,
+        rank: usize,
         data: &T,
         stream: &mut (impl AsyncWriteExt + Unpin),
     ) -> Result<(), ExchangeError> {

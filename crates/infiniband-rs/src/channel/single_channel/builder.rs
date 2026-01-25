@@ -1,12 +1,11 @@
-use std::io;
-use bon::bon;
-use delegate::delegate;
-use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::raw_channel::RawChannel;
+use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
+use bon::bon;
+use std::io;
 
 #[bon]
 impl SingleChannel {
@@ -38,7 +37,9 @@ pub struct PreparedSingleChannel {
 }
 
 impl PreparedSingleChannel {
-    delegate! { to self.channel { pub fn endpoint(&self) -> QueuePairEndpoint; }}
+    pub fn endpoint(&self) -> QueuePairEndpoint {
+        self.channel.endpoint()
+    }
 
     pub fn handshake(self, endpoint: QueuePairEndpoint) -> io::Result<SingleChannel> {
         let channel = self.channel.handshake(endpoint)?;

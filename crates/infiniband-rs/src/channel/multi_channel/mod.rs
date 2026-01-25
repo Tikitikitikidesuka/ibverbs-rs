@@ -2,6 +2,7 @@ pub mod builder;
 pub mod mr_ops;
 pub mod single_ops;
 mod multi_ops;
+mod barrier;
 
 use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;

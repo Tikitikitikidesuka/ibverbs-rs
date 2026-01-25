@@ -1,4 +1,5 @@
 //pub mod connection;
 //pub mod network;
-pub mod ibverbs;
 pub mod channel;
+pub mod ibverbs;
+pub mod network;
