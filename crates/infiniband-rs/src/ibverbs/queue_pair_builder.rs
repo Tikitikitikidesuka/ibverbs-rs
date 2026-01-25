@@ -94,6 +94,8 @@ impl QueuePairBuilder {
             Ok(PreparedQueuePair {
                 qp: QueuePair {
                     pd: self.pd.clone(),
+                    send_cq: self.send_cq.clone(),
+                    recv_cq: self.recv_cq.clone(),
                     qp,
                 },
                 lid: self.pd.context.inner.query_port()?.lid,

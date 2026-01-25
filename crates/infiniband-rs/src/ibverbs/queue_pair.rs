@@ -3,10 +3,13 @@ use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{io, ptr};
+use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 
 pub struct QueuePair {
     pub(super) pd: Arc<ProtectionDomainInner>,
+    pub(super) send_cq: Arc<CompletionQueueInner>,
+    pub(super) recv_cq: Arc<CompletionQueueInner>,
     pub(super) qp: *mut ibv_qp,
 }
 
