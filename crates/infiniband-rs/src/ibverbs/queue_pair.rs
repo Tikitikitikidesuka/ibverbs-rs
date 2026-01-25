@@ -1,10 +1,10 @@
+use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{io, ptr};
-use crate::ibverbs::completion_queue::CompletionQueueInner;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 
 pub struct QueuePair {
     pub(super) pd: Arc<ProtectionDomainInner>,
@@ -49,7 +49,11 @@ impl QueuePair {
     /// # Safety
     /// The buffers pointed to by GatherElement must remain valid until the work request issued
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_send<'a>(&mut self, local: &[ScatterElement<'a>], wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_send<'a>(
+        &mut self,
+        local: &[ScatterElement<'a>],
+        wr_id: u64,
+    ) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -91,6 +95,10 @@ impl QueuePair {
         unsafe { self.post_send_wr(&mut wr) }
     }
 
+    pub fn post_send_immediate(&mut self, imm_data: u32, wr_id: u64) -> io::Result<()> {
+        unsafe { self.post_send_with_immediate(&[], imm_data, wr_id) }
+    }
+
     #[inline(always)]
     unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {
         let mut bad_wr: *mut ibv_send_wr = ptr::null::<ibv_send_wr>() as *mut _;
@@ -109,7 +117,11 @@ impl QueuePair {
     /// # Safety
     /// The buffers pointed to by GatherElement must remain valid until the work request issued
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_receive<'a>(&mut self, local: &mut [GatherElement<'a>], wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_receive<'a>(
+        &mut self,
+        local: &mut [GatherElement<'a>],
+        wr_id: u64,
+    ) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -128,5 +140,9 @@ impl QueuePair {
         } else {
             Ok(())
         }
+    }
+
+    pub fn post_receive_immediate(&mut self, wr_id: u64) -> io::Result<()> {
+        unsafe { self.post_receive(&mut [], wr_id) }
     }
 }

@@ -19,7 +19,7 @@ impl Node {
         #[builder(default = 32)] max_recv_wrs: u32,
         #[builder(default = 32)] max_send_sges: u32,
         #[builder(default = 32)] max_recv_sges: u32,
-    ) -> io::Result<PreparedNetworkNode> {
+    ) -> io::Result<PreparedNode> {
         let prepared_multi_channel = MultiChannel::builder()
             .context(context)
             .num_channels(world_size)
@@ -30,7 +30,7 @@ impl Node {
             .max_recv_sges(max_recv_sges)
             .build()?;
 
-        Ok(PreparedNetworkNode {
+        Ok(PreparedNode {
             rank,
             world_size,
             prepared_multi_channel,
@@ -38,7 +38,7 @@ impl Node {
     }
 }
 
-pub struct PreparedNetworkNode {
+pub struct PreparedNode {
     rank: usize,
     world_size: usize,
     prepared_multi_channel: PreparedMultiChannel,
@@ -52,7 +52,7 @@ pub struct LocalEndpoint {
 
 pub struct RemoteEndpoints(Box<[QueuePairEndpoint]>);
 
-impl PreparedNetworkNode {
+impl PreparedNode {
     pub fn endpoint(&self) -> LocalEndpoint {
         LocalEndpoint {
             rank: self.rank,

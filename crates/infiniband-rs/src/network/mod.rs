@@ -1,6 +1,7 @@
 pub mod builder;
 pub mod config;
 pub mod tcp_exchanger;
+mod barrier;
 
 use crate::channel::multi_channel::MultiChannel;
 use std::ops::{Deref, DerefMut};
