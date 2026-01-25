@@ -10,7 +10,6 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR)>,
-        I::IntoIter: ExactSizeIterator,
         WR: AsRef<[ScatterElement<'env>]>,
     {
         scatter_sends
@@ -25,7 +24,6 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR, u32)>,
-        I::IntoIter: ExactSizeIterator,
         WR: AsRef<[ScatterElement<'env>]>,
     {
         scatter_sends
@@ -40,7 +38,6 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR)>,
-        I::IntoIter: ExactSizeIterator,
         WR: AsMut<[GatherElement<'env>]>,
     {
         gather_receives
@@ -56,7 +53,6 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = usize>,
-        I::IntoIter: ExactSizeIterator,
         WR: AsRef<[ScatterElement<'env>]>,
     {
         peers
@@ -73,7 +69,6 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = usize>,
-        I::IntoIter: ExactSizeIterator,
         WR: AsRef<[ScatterElement<'env>]>,
     {
         peers
