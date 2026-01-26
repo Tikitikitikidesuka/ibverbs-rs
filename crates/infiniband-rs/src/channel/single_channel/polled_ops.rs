@@ -1,32 +1,20 @@
 use crate::channel::raw_channel::pending_work::WorkSpinPollResult;
 use crate::channel::single_channel::SingleChannel;
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 
 impl SingleChannel {
-    pub fn send<'a>(&'a mut self, sends: impl AsRef<[GatherElement<'a>]>) -> WorkSpinPollResult {
-        self.channel.send(sends)
-    }
-
-    pub fn send_with_immediate<'a>(
+    pub fn send<'a, E: AsRef<[GatherElement<'a>]>>(
         &'a mut self,
-        sends: impl AsRef<[GatherElement<'a>]>,
-        imm_data: u32,
+        wr: SendWorkRequest<'a, E>,
     ) -> WorkSpinPollResult {
-        self.channel.send_with_immediate(sends, imm_data)
+        self.channel.send(wr)
     }
 
-    pub fn send_immediate(&mut self, imm_data: u32) -> WorkSpinPollResult {
-        self.channel.send_immediate(imm_data)
-    }
-
-    pub fn receive<'a>(
+    pub fn receive<'a, E: AsMut<[ScatterElement<'a>]>>(
         &'a mut self,
-        receives: impl AsMut<[ScatterElement<'a>]>,
+        wr: ReceiveWorkRequest<'a, E>,
     ) -> WorkSpinPollResult {
-        self.channel.receive(receives)
-    }
-
-    pub fn receive_immediate(&mut self) -> WorkSpinPollResult {
-        self.channel.receive_immediate()
+        self.channel.receive(wr)
     }
 }

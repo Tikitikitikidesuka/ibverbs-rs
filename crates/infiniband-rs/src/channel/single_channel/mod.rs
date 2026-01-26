@@ -1,12 +1,12 @@
 pub mod builder;
-pub mod meta_mr;
+//pub mod meta_mr;
 pub mod mr_ops;
 pub mod polled_ops;
 pub mod scoped_ops;
 pub mod unpolled_ops;
 
 use crate::channel::raw_channel::RawChannel;
-use crate::channel::single_channel::meta_mr::MetaMr;
+//use crate::channel::single_channel::meta_mr::MetaMr;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 
 /// This is a single channel with owned protection domain.
@@ -18,6 +18,6 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 /// freed while still registered and the remote could issue a write unto it. UD.
 pub struct SingleChannel {
     channel: RawChannel,
-    meta_mr: MetaMr,
+    //meta_mr: MetaMr,
     pd: ProtectionDomain,
 }

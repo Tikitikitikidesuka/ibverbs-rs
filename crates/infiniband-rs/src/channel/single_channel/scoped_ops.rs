@@ -1,7 +1,8 @@
 use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
 use crate::channel::single_channel::SingleChannel;
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use std::io;
 
 impl SingleChannel {
@@ -14,33 +15,17 @@ impl SingleChannel {
 }
 
 impl<'scope, 'env> PollingScope<'scope, 'env, SingleChannel> {
-    pub fn post_send(
+    pub fn post_send<E: AsRef<[GatherElement<'env>]>>(
         &mut self,
-        sends: impl AsRef<[GatherElement<'env>]>,
+        wr: SendWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send(|s| Ok(&mut s.channel), sends)
+        self.channel_post_send(|s| Ok(&mut s.channel), wr)
     }
 
-    pub fn post_send_with_immediate(
+    pub fn post_receive<E: AsMut<[ScatterElement<'env>]>>(
         &mut self,
-        sends: impl AsRef<[GatherElement<'env>]>,
-        imm_data: u32,
+        wr: ReceiveWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send_with_immediate(|s| Ok(&mut s.channel), sends, imm_data)
-    }
-
-    pub fn post_with_immediate(&mut self, imm_data: u32) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send_immediate(|s| Ok(&mut s.channel), imm_data)
-    }
-
-    pub fn post_receive(
-        &mut self,
-        receives: impl AsMut<[ScatterElement<'env>]>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_receive(|s| Ok(&mut s.channel), receives)
-    }
-
-    pub fn post_receive_immediate(&mut self) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_receive_immediate(|s| Ok(&mut s.channel))
+        self.channel_post_receive(|s| Ok(&mut s.channel), wr)
     }
 }

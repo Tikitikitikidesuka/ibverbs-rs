@@ -13,6 +13,7 @@ impl SingleChannel {
         }
     }
 
+    /*
     pub fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.pd
@@ -27,8 +28,9 @@ impl SingleChannel {
     pub fn accept_remote_mr(&mut self) -> io::Result<RemoteMemoryRegion> {
         // todo: accept shard memory region
     }
+    */
 
-    pub fn register_dmabuf_mr(
+    pub fn register_local_dmabuf_mr(
         &mut self,
         fd: i32,
         offset: u64,

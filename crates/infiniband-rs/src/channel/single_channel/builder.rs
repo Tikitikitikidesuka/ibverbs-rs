@@ -20,7 +20,7 @@ impl SingleChannel {
     ) -> io::Result<PreparedSingleChannel> {
         let pd = context.allocate_pd()?;
         let channel = RawChannel::builder()
-            .pd(pd.clone())
+            .pd(&pd)
             .min_cq_buf_size(min_cq_buf_size)
             .max_send_wrs(max_send_wrs)
             .max_recv_wrs(max_recv_wrs)
