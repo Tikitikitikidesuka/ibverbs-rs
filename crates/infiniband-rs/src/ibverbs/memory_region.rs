@@ -1,6 +1,6 @@
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::scatter_gather_element::{
-    GatherElement, ScatterElement, ScatterGatherElementError,
+    ScatterElement, GatherElement, ScatterGatherElementError,
 };
 use ibverbs_sys::*;
 use std::ffi::c_void;
@@ -109,18 +109,18 @@ impl MemoryRegion {
 }
 
 impl MemoryRegion {
-    pub fn prepare_scatter_element<'a>(
-        &'a self,
-        data: &'a [u8],
-    ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
-        ScatterElement::<'a>::new(self, data)
-    }
-
     pub fn prepare_gather_element<'a>(
         &'a self,
-        data: &'a mut [u8],
+        data: &'a [u8],
     ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
         GatherElement::<'a>::new(self, data)
+    }
+
+    pub fn prepare_scatter_element<'a>(
+        &'a self,
+        data: &'a mut [u8],
+    ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
+        ScatterElement::<'a>::new(self, data)
     }
 
     pub fn encloses(&self, slice: &[u8]) -> bool {

@@ -1,19 +1,19 @@
 use crate::channel::raw_channel::pending_work::PendingWork;
 use crate::channel::single_channel::SingleChannel;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use std::io;
 
 impl SingleChannel {
     pub unsafe fn send_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[ScatterElement<'a>]>,
+        sends: impl AsRef<[GatherElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
         unsafe { self.channel.send_unpolled(sends) }
     }
 
     pub unsafe fn send_with_immediate_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[ScatterElement<'a>]>,
+        sends: impl AsRef<[GatherElement<'a>]>,
         imm_data: u32,
     ) -> io::Result<PendingWork<'a>> {
         unsafe { self.channel.send_with_immediate_unpolled(sends, imm_data) }
@@ -25,7 +25,7 @@ impl SingleChannel {
 
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        receives: impl AsMut<[GatherElement<'a>]>,
+        receives: impl AsMut<[ScatterElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
         unsafe { self.channel.receive_unpolled(receives) }
     }

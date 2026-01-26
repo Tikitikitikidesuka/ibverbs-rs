@@ -2,7 +2,7 @@ use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::{
     MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
 };
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
@@ -164,7 +164,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(crate) fn channel_post_send<F>(
         &mut self,
         channel_selector: F,
-        sends: impl AsRef<[ScatterElement<'env>]>,
+        sends: impl AsRef<[GatherElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
@@ -183,7 +183,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(crate) fn channel_post_send_with_immediate<F>(
         &mut self,
         channel_selector: F,
-        sends: impl AsRef<[ScatterElement<'env>]>,
+        sends: impl AsRef<[GatherElement<'env>]>,
         imm_data: u32,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
@@ -224,7 +224,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(crate) fn channel_post_receive<F>(
         &mut self,
         channel_selector: F,
-        receives: impl AsMut<[GatherElement<'env>]>,
+        receives: impl AsMut<[ScatterElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,

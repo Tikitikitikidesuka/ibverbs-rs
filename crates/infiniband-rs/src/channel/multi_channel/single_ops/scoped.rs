@@ -1,7 +1,7 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use std::io;
 
 impl MultiChannel {
@@ -17,7 +17,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     pub fn post_send(
         &mut self,
         peer: usize,
-        sends: impl AsRef<[ScatterElement<'env>]>,
+        sends: impl AsRef<[GatherElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_send(|m| m.channel(peer), sends)
     }
@@ -25,7 +25,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     pub fn post_send_with_immediate(
         &mut self,
         peer: usize,
-        sends: impl AsRef<[ScatterElement<'env>]>,
+        sends: impl AsRef<[GatherElement<'env>]>,
         imm_data: u32,
     ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_send_with_immediate(|m| m.channel(peer), sends, imm_data)
@@ -34,7 +34,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     pub fn post_receive(
         &mut self,
         peer: usize,
-        receives: impl AsMut<[GatherElement<'env>]>,
+        receives: impl AsMut<[ScatterElement<'env>]>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_receive(|m| m.channel(peer), receives)
     }

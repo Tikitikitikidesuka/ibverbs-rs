@@ -3,14 +3,14 @@ use ibverbs_sys::ibv_sge;
 use std::marker::PhantomData;
 use thiserror::Error;
 
-/// A **scatter element** for outgoing RDMA operations.
+/// A **gather element** for outgoing RDMA operations.
 ///
 /// In raw ibverbs, scatter and gather elements are represented by the same
 /// `ibv_sge` struct. Here, they are separated into `IbvScatterElement` and
 /// `IbvGatherElement` based on the mutability of the data they reference and the
 /// operation they represent.
 ///
-/// An `IbvScatterElement` references a slice of a registered memory region
+/// An `IbvGatherElement` references a slice of a registered memory region
 /// that the InfiniBand device **reads from** as part of an RDMA send or write
 /// operation. It is used in RDMA send and write work requests, which contain
 /// a list of scatter elements describing the slices of memory involved in
@@ -30,7 +30,7 @@ use thiserror::Error;
 /// slice of memory.
 #[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
-pub struct ScatterElement<'a> {
+pub struct GatherElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data or the memory region
     _mr_lifetime: PhantomData<&'a MemoryRegion>,
@@ -39,7 +39,7 @@ pub struct ScatterElement<'a> {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct GatherElement<'a> {
+pub struct ScatterElement<'a> {
     sge: ibv_sge,
     // SAFETY INVARIANT: SGE cannot outlive the referenced data or the memory region
     _mr_lifetime: PhantomData<&'a MemoryRegion>,
@@ -54,7 +54,7 @@ pub enum ScatterGatherElementError {
     SliceNotWithinBounds,
 }
 
-impl<'a> ScatterElement<'a> {
+impl<'a> GatherElement<'a> {
     pub(super) fn new(
         mr: &'a MemoryRegion,
         data: &'a [u8],
@@ -82,7 +82,7 @@ impl<'a> ScatterElement<'a> {
     }
 }
 
-impl<'a> GatherElement<'a> {
+impl<'a> ScatterElement<'a> {
     pub(super) fn new(
         mr: &'a MemoryRegion,
         data: &'a mut [u8],

@@ -1,6 +1,6 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use std::io;
 
 impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
@@ -10,7 +10,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsRef<[ScatterElement<'env>]>,
+        WR: AsRef<[GatherElement<'env>]>,
     {
         scatter_sends
             .into_iter()
@@ -24,7 +24,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR, u32)>,
-        WR: AsRef<[ScatterElement<'env>]>,
+        WR: AsRef<[GatherElement<'env>]>,
     {
         scatter_sends
             .into_iter()
@@ -51,7 +51,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsMut<[GatherElement<'env>]>,
+        WR: AsMut<[ScatterElement<'env>]>,
     {
         gather_receives
             .into_iter()
@@ -79,7 +79,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = usize>,
-        WR: AsRef<[ScatterElement<'env>]>,
+        WR: AsRef<[GatherElement<'env>]>,
     {
         peers
             .into_iter()
@@ -95,7 +95,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
     ) -> io::Result<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = usize>,
-        WR: AsRef<[ScatterElement<'env>]>,
+        WR: AsRef<[GatherElement<'env>]>,
     {
         peers
             .into_iter()

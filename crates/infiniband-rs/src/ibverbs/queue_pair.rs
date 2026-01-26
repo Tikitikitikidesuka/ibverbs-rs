@@ -1,7 +1,7 @@
 use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySlice};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -52,7 +52,7 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_send<'a>(
         &mut self,
-        local: &[ScatterElement<'a>],
+        local: &[GatherElement<'a>],
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_send_wr {
@@ -76,7 +76,7 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_send_with_immediate<'a>(
         &mut self,
-        local: &[ScatterElement<'a>],
+        local: &[GatherElement<'a>],
         imm_data: u32,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -107,7 +107,7 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_receive<'a>(
         &mut self,
-        local: &mut [GatherElement<'a>],
+        local: &mut [ScatterElement<'a>],
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
@@ -128,7 +128,7 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_write<'a>(
         &mut self,
-        local: &[ScatterElement<'a>],
+        local: &[GatherElement<'a>],
         remote: RemoteMemorySlice,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -155,7 +155,7 @@ impl QueuePair {
 
     pub unsafe fn post_write_with_immediate<'a>(
         &mut self,
-        local: &[ScatterElement<'a>],
+        local: &[GatherElement<'a>],
         remote: RemoteMemorySlice,
         imm_data: u32,
         wr_id: u64,
@@ -185,7 +185,7 @@ impl QueuePair {
 
     pub unsafe fn post_read<'a>(
         &mut self,
-        local: &mut [GatherElement<'a>],
+        local: &mut [ScatterElement<'a>],
         remote: RemoteMemorySlice,
         wr_id: u64,
     ) -> io::Result<()> {

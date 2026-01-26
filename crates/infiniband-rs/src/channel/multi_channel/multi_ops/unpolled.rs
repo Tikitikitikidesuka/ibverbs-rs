@@ -1,6 +1,6 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use std::io;
 
 impl MultiChannel {
@@ -11,7 +11,7 @@ impl MultiChannel {
     where
         I: IntoIterator<Item = (usize, WR)>,
         I::IntoIter: ExactSizeIterator,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         scatter_sends
             .into_iter()
@@ -26,7 +26,7 @@ impl MultiChannel {
     where
         I: IntoIterator<Item = (usize, WR)>,
         I::IntoIter: ExactSizeIterator,
-        WR: AsMut<[GatherElement<'a>]>,
+        WR: AsMut<[ScatterElement<'a>]>,
     {
         gather_receives
             .into_iter()
@@ -42,7 +42,7 @@ impl MultiChannel {
     where
         I: IntoIterator<Item = usize>,
         I::IntoIter: ExactSizeIterator,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         peers
             .into_iter()

@@ -1,6 +1,6 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use std::io;
 
 impl RawChannel {
@@ -48,7 +48,7 @@ impl RawChannel {
     /// ```
     pub unsafe fn send_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[ScatterElement<'a>]>,
+        sends: impl AsRef<[GatherElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_send(sends.as_ref(), wr_id)? };
@@ -100,7 +100,7 @@ impl RawChannel {
     /// ```
     pub unsafe fn send_with_immediate_unpolled<'a>(
         &mut self,
-        sends: impl AsRef<[ScatterElement<'a>]>,
+        sends: impl AsRef<[GatherElement<'a>]>,
         imm_data: u32,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
@@ -160,7 +160,7 @@ impl RawChannel {
     /// ```
     pub unsafe fn receive_unpolled<'a>(
         &mut self,
-        mut receives: impl AsMut<[GatherElement<'a>]>,
+        mut receives: impl AsMut<[ScatterElement<'a>]>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(receives.as_mut(), wr_id)? };

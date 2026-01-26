@@ -48,8 +48,9 @@ impl Node {
     }
 
     fn participant_centralized_barrier(&self, coordinator: usize) -> Result<(), BarrierError> {
+        todo!()
         // Notify coordinator
-        self.send_immediate(coordinator, Self::PARTICIPANT_READY);
+        //self.send_immediate(coordinator, Self::PARTICIPANT_READY);
         /// :( -> This only works if specific channel for this like Alberto did
         /// or back to the memory write read method from my previous implementation
 

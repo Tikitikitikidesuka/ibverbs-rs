@@ -1,3 +1,5 @@
+use crate::channel::raw_channel::RawChannel;
+use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::prepared_queue_pair::PreparedQueuePair;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
@@ -6,8 +8,6 @@ use bon::bon;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
-use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::raw_channel::RawChannel;
 
 #[bon]
 impl RawChannel {
@@ -25,9 +25,10 @@ impl RawChannel {
             .create_qp(&cq, &cq)
             .with_access_flags(
                 // TODO: Check necessary access after implementing RDMA write read
-                AccessFlags::new().with_local_write(),
-                //.with_remote_read()
-                //.with_remote_write(),
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write(),
             )
             .with_max_send_wrs(max_send_wrs)
             .with_max_recv_wrs(max_recv_wrs)

@@ -1,13 +1,13 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
 use crate::ibverbs::work_success::WorkSuccess;
 
 impl MultiChannel {
     pub fn scatter<'a, I, WR>(&'a mut self, scatter_sends: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_scatter(scatter_sends)?;
@@ -28,7 +28,7 @@ impl MultiChannel {
     ) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR, u32)>,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_scatter_with_immediate(scatter_sends)?;
@@ -63,7 +63,7 @@ impl MultiChannel {
     pub fn gather<'a, I, WR>(&'a mut self, gather_receives: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsMut<[GatherElement<'a>]>,
+        WR: AsMut<[ScatterElement<'a>]>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_gather(gather_receives)?;
@@ -98,7 +98,7 @@ impl MultiChannel {
     pub fn multicast<'a, I, WR>(&'a mut self, peers: I, sends: WR) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = usize>,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_multicast(sends, peers)?;
@@ -121,7 +121,7 @@ impl MultiChannel {
     ) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = usize>,
-        WR: AsRef<[ScatterElement<'a>]>,
+        WR: AsRef<[GatherElement<'a>]>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_multicast_with_immediate(peers, sends, imm_data)?;
