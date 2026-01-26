@@ -1,6 +1,6 @@
 use infiniband_rs::channel::raw_channel::RawChannel;
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 

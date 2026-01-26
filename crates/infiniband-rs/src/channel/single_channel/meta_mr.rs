@@ -15,8 +15,8 @@ pub struct MetaMrState {
 }
 
 impl MetaMr {
-    pub fn sync_sge(&self) {
-        self.mr.prepare_gather_element(self.memory.as)
+    pub fn sync_sge_wr(&self) {
+        self.mr.prepare_gather_element(self.memory)
     }
 }
 

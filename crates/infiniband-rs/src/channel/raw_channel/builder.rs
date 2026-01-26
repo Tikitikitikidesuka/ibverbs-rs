@@ -24,7 +24,6 @@ impl RawChannel {
         let qp = pd
             .create_qp(&cq, &cq)
             .with_access_flags(
-                // TODO: Check necessary access after implementing RDMA write read
                 AccessFlags::new()
                     .with_local_write()
                     .with_remote_read()
