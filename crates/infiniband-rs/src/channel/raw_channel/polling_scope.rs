@@ -2,17 +2,15 @@ use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::{
     MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
 };
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
-use crate::ibverbs::work_success::WorkSuccess;
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
-use thiserror::Error;
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -162,16 +160,16 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_send<F>(
+    pub(crate) fn channel_post_send<F, E: AsRef<[GatherElement<'env>]>>(
         &mut self,
         channel_selector: F,
-        sends: impl AsRef<[GatherElement<'env>]>,
+        wr: SendWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(sends)? }));
+        let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(wr)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
@@ -181,19 +179,16 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
 
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_send_with_immediate<F>(
+    pub(crate) fn channel_post_receive<F, E: AsMut<[ScatterElement<'env>]>>(
         &mut self,
         channel_selector: F,
-        sends: impl AsRef<[GatherElement<'env>]>,
-        imm_data: u32,
+        wr: ReceiveWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.send_with_immediate_unpolled(sends, imm_data)?
-        }));
+        let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(wr)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
@@ -201,96 +196,17 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         })
     }
 
-    pub(crate) fn channel_post_send_immediate<F>(
-        &mut self,
-        channel_selector: F,
-        imm_data: u32,
-    ) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.send_immediate_unpolled(imm_data)?
-        }));
-        self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
-    }
-
-    // The slice cannot be used again until the work request is consumed,
-    // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_receive<F>(
-        &mut self,
-        channel_selector: F,
-        receives: impl AsMut<[ScatterElement<'env>]>,
-    ) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(receives)? }));
-        self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
-    }
-
-    pub(crate) fn channel_post_receive_immediate<F>(
-        &mut self,
-        channel_selector: F,
-    ) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.receive_immediate_unpolled()?
-        }));
-        self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
-    }
-
+    /*
     pub(crate) fn channel_post_write<F>(
         &mut self,
         channel_selector: F,
-        gather_elements: impl AsRef<[GatherElement<'env>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'env>,
+        wr: &mut WriteWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.write_unpolled(gather_elements, remote_slice)?
-        }));
-        self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
-    }
-
-    pub(crate) fn channel_post_write_with_immediate<F>(
-        &mut self,
-        channel_selector: F,
-        gather_elements: impl AsRef<[GatherElement<'env>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'env>,
-        imm_data: u32,
-    ) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.write_with_immediate_unpolled(gather_elements, remote_slice, imm_data)?
-        }));
+        let wr = Rc::new(RefCell::new(unsafe { channel.write_unpolled(wr)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
@@ -301,22 +217,20 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(crate) fn channel_post_read<F>(
         &mut self,
         channel_selector: F,
-        scatter_elements: impl AsMut<[ScatterElement<'env>]>,
-        remote_slice: &RemoteMemorySlice<'env>,
+        wr: &mut ReadWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe {
-            channel.read_unpolled(scatter_elements, remote_slice)?
-        }));
+        let wr = Rc::new(RefCell::new(unsafe { channel.read_unpolled(wr)? }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
             inner: wr,
             env: Default::default(),
         })
     }
+    */
 }
 
 pub struct ScopedPendingWork<'scope> {

@@ -1,8 +1,8 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use std::io;
 
 impl RawChannel {
@@ -15,58 +15,33 @@ impl RawChannel {
 }
 
 impl<'scope, 'env> PollingScope<'scope, 'env, RawChannel> {
-    pub fn post_send(
+    pub fn post_send<E: AsRef<[GatherElement<'env>]>>(
         &mut self,
-        sends: impl AsRef<[GatherElement<'env>]>,
+        wr: SendWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send(|s| Ok(s), sends)
+        self.channel_post_send(|s| Ok(s), wr)
     }
 
-    pub fn post_send_with_immediate(
+    pub fn post_receive<E: AsMut<[ScatterElement<'env>]>>(
         &mut self,
-        sends: impl AsRef<[GatherElement<'env>]>,
-        imm_data: u32,
+        wr: ReceiveWorkRequest<'env, E>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send_with_immediate(|s| Ok(s), sends, imm_data)
+        self.channel_post_receive(|s| Ok(s), wr)
     }
 
-    pub fn post_send_immediate(&mut self, imm_data: u32) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_send_immediate(|s| Ok(s), imm_data)
-    }
-
-    pub fn post_receive(
-        &mut self,
-        receives: impl AsMut<[ScatterElement<'env>]>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_receive(|s| Ok(s), receives)
-    }
-
-    pub fn post_receive_immediate(&mut self) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_receive_immediate(|s| Ok(s))
-    }
-
+    /*
     pub fn post_write(
         &mut self,
-        gather_elements: impl AsRef<[GatherElement<'env>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'env>,
+        wr: &mut WriteWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_write(|s| Ok(s), gather_elements, remote_slice)
-    }
-
-    pub fn post_write_with_immediate(
-        &mut self,
-        gather_elements: impl AsRef<[GatherElement<'env>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'env>,
-        imm_data: u32,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_write_with_immediate(|s| Ok(s), gather_elements, remote_slice, imm_data)
+        self.channel_post_write(|s| Ok(s), wr)
     }
 
     pub fn post_read(
         &mut self,
-        scatter_elements: impl AsMut<[ScatterElement<'env>]>,
-        remote_slice: &RemoteMemorySlice<'env>,
+        wr: &mut ReadWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>> {
-        self.channel_post_read(|s| Ok(s), scatter_elements, remote_slice)
+        self.channel_post_read(|s| Ok(s), wr)
     }
+    */
 }

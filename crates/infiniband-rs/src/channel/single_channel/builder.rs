@@ -45,7 +45,6 @@ impl PreparedSingleChannel {
         let channel = self.channel.handshake(endpoint)?;
         Ok(SingleChannel {
             channel,
-            meta_channel: (),
             pd: self.pd,
         })
     }

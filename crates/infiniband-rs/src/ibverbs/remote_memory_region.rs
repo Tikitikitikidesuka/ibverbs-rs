@@ -10,6 +10,7 @@ pub struct RemoteMemoryRegion {
     mr: *mut ibv_mr,
 }
 
+
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMemorySlice<'a> {
     pub(super) addr: usize,

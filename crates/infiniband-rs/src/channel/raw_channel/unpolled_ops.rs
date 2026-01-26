@@ -1,7 +1,7 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use std::io;
 
 impl RawChannel {
@@ -47,74 +47,12 @@ impl RawChannel {
     /// // This violates Rust's aliasing rules and constitutes UB.
     /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
     /// ```
-    pub unsafe fn send_unpolled<'a>(
+    pub unsafe fn send_unpolled<'a, E: AsRef<[GatherElement<'a>]>>(
         &mut self,
-        sends: impl AsRef<[GatherElement<'a>]>,
+        wr: SendWorkRequest<'a, E>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe { self.qp.post_send(sends.as_ref(), wr_id)? };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
-    }
-
-    /// # Safety
-    ///
-    /// The caller must ensure that the returned `IbvWorkRequest` is
-    /// **successfully polled to completion by its drop implementation**
-    /// before the end of `'a`.
-    ///
-    /// In particular, the work request must not be leaked (e.g. via
-    /// `mem::forget`), as this would end the borrow without dropping
-    /// while the hardware may still access the memory.
-    ///
-    /// ## Protection example
-    ///
-    /// ```compile_fail
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_send(&mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.send_with_imm_data_unpolled(&[receive], 33) }.unwrap();
-    ///
-    /// // This mutation of mem will not compile while the borrow is alive in the wr,
-    /// // preventing partially modified memory from being sent.
-    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
-    /// ```
-    ///
-    /// ## Safety violation example
-    ///
-    /// ```no_run
-    /// # use infiniband_rs::connection::connection::Connection;
-    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.send_with_immediate_unpolled(&[receive], 33) }.unwrap();
-    ///
-    /// // The work request can be leaked without running its drop.
-    /// // The borrow ends but the NIC may still DMA into the memory.
-    /// std::mem::forget(wr);
-    ///
-    /// // This mutation of mem might occur while the send is partially complete.
-    /// // This violates Rust's aliasing rules and constitutes UB.
-    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
-    /// ```
-    pub unsafe fn send_with_immediate_unpolled<'a>(
-        &mut self,
-        sends: impl AsRef<[GatherElement<'a>]>,
-        imm_data: u32,
-    ) -> io::Result<PendingWork<'a>> {
-        let wr_id = self.get_and_advance_wr_id();
-        unsafe {
-            self.qp
-                .post_send_with_immediate(sends.as_ref(), imm_data, wr_id)?
-        };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
-    }
-
-    pub fn send_immediate_unpolled<'a>(&mut self, imm_data: u32) -> io::Result<PendingWork<'a>> {
-        let wr_id = self.get_and_advance_wr_id();
-        self.qp.post_send_immediate(imm_data, wr_id)?;
+        unsafe { self.qp.post_send(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
@@ -159,64 +97,35 @@ impl RawChannel {
     /// // This violates Rust's aliasing rules and constitutes UB.
     /// println!("{:?}", &mem[0..4]);
     /// ```
-    pub unsafe fn receive_unpolled<'a>(
+    pub unsafe fn receive_unpolled<'a, E: AsMut<[ScatterElement<'a>]>>(
         &mut self,
-        mut receives: impl AsMut<[ScatterElement<'a>]>,
+        wr: ReceiveWorkRequest<'a, E>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe { self.qp.post_receive(receives.as_mut(), wr_id)? };
+        unsafe { self.qp.post_receive(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
-    pub fn receive_immediate_unpolled<'a>(&mut self) -> io::Result<PendingWork<'a>> {
-        let wr_id = self.get_and_advance_wr_id();
-        self.qp.post_receive_immediate(wr_id)?;
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
-    }
-
+    /*
     pub fn write_unpolled<'a>(
         &mut self,
-        gather_elements: impl AsRef<[GatherElement<'a>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'a>,
+        wr: &mut WriteWorkRequest<'_, 'a>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe {
-            self.qp
-                .post_write(gather_elements.as_ref(), remote_slice, wr_id)?
-        };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
-    }
-
-    pub fn write_with_immediate_unpolled<'a>(
-        &mut self,
-        gather_elements: impl AsRef<[GatherElement<'a>]>,
-        remote_slice: &mut RemoteMemorySliceMut<'a>,
-        imm_data: u32,
-    ) -> io::Result<PendingWork<'a>> {
-        let wr_id = self.get_and_advance_wr_id();
-        unsafe {
-            self.qp.post_write_with_immediate(
-                gather_elements.as_ref(),
-                remote_slice,
-                imm_data,
-                wr_id,
-            )?
-        };
+        unsafe { self.qp.post_write(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
     pub unsafe fn read_unpolled<'a>(
         &mut self,
-        mut scatter_elements: impl AsMut<[ScatterElement<'a>]>,
-        remote_slice: &RemoteMemorySlice<'a>,
+        wr: &mut ReadWorkRequest<'_, 'a>,
     ) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
-        unsafe {
-            self.qp
-                .post_read(scatter_elements.as_mut(), remote_slice, wr_id)?
-        };
+        unsafe { self.qp.post_read(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
+
+     */
 
     fn get_and_advance_wr_id(&mut self) -> u64 {
         let wr_id = self.next_wr_id;

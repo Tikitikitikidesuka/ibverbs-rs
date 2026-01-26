@@ -1,6 +1,6 @@
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::scatter_gather_element::{
-    ScatterElement, GatherElement, ScatterGatherElementError,
+    GatherElement, ScatterElement, ScatterGatherElementError,
 };
 use ibverbs_sys::*;
 use std::ffi::c_void;
@@ -10,6 +10,13 @@ use std::sync::Arc;
 pub struct MemoryRegion {
     pd: Arc<ProtectionDomainInner>,
     mr: *mut ibv_mr,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct MemoryRegionEndpoint {
+    pub addr: usize,
+    pub length: usize,
+    pub rkey: u32,
 }
 
 unsafe impl Sync for MemoryRegion {}
@@ -77,11 +84,12 @@ impl MemoryRegion {
         pd: Arc<ProtectionDomainInner>,
         fd: i32,
         offset: u64,
-        len: usize,
+        length: usize,
         iova: u64,
         access_flags: ibv_access_flags,
     ) -> io::Result<MemoryRegion> {
-        let mr = unsafe { ibv_reg_dmabuf_mr(pd.pd, offset, len, iova, fd, access_flags.0 as i32) };
+        let mr =
+            unsafe { ibv_reg_dmabuf_mr(pd.pd, offset, length, iova, fd, access_flags.0 as i32) };
 
         if mr.is_null() {
             Err(io::Error::last_os_error())
@@ -105,6 +113,14 @@ impl MemoryRegion {
 
     pub fn length(&self) -> usize {
         unsafe { (*self.mr).length }
+    }
+
+    pub fn endpoint(&self) -> MemoryRegionEndpoint {
+        MemoryRegionEndpoint {
+            addr: self.address() as usize,
+            length: self.length(),
+            rkey: self.rkey(),
+        }
     }
 }
 

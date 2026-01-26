@@ -4,6 +4,7 @@ use crate::ibverbs::remote_memory_region::{
     RemoteMemoryRegion, RemoteMemorySlice, RemoteMemorySliceMut,
 };
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -52,21 +53,31 @@ impl QueuePair {
     /// # Safety
     /// The buffers pointed to by GatherElement must remain valid until the work request issued
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_send<'a>(
+    pub unsafe fn post_send<'a, E: AsRef<[GatherElement<'a>]>>(
         &mut self,
-        local: &[GatherElement<'a>],
+        wr: SendWorkRequest<'a, E>,
         wr_id: u64,
     ) -> io::Result<()> {
+        let (opcode, __bindgen_anon_1) = match wr.imm_data {
+            None => (ibv_wr_opcode::IBV_WR_SEND, Default::default()),
+            Some(imm_data) => (
+                ibv_wr_opcode::IBV_WR_SEND_WITH_IMM,
+                ibv_send_wr__bindgen_ty_1 {
+                    imm_data: imm_data.to_be(),
+                },
+            ),
+        };
+
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32, // todo: fix possible error on overflow
-            opcode: ibv_wr_opcode::IBV_WR_SEND,
+            sg_list: wr.gather_elements.as_ref().as_ptr() as *mut ibv_sge,
+            num_sge: wr.gather_elements.as_ref().len() as i32, // todo: fix possible error on overflow
+            opcode,
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: Default::default(),
             qp_type: Default::default(),
-            __bindgen_anon_1: Default::default(),
+            __bindgen_anon_1,
             __bindgen_anon_2: Default::default(),
         };
 
@@ -76,109 +87,54 @@ impl QueuePair {
     /// # Safety
     /// The buffers pointed to by GatherElement must remain valid until the work request issued
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_send_with_immediate<'a>(
+    pub unsafe fn post_receive<'a, E: AsMut<[ScatterElement<'a>]>>(
         &mut self,
-        local: &[GatherElement<'a>],
-        imm_data: u32,
-        wr_id: u64,
-    ) -> io::Result<()> {
-        let mut wr = ibv_send_wr {
-            wr_id,
-            next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32, // todo: fix possible error on overflow
-            opcode: ibv_wr_opcode::IBV_WR_SEND_WITH_IMM,
-            send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
-            wr: Default::default(),
-            qp_type: Default::default(),
-            __bindgen_anon_1: ibv_send_wr__bindgen_ty_1 {
-                imm_data: imm_data.to_be(),
-            },
-            __bindgen_anon_2: Default::default(),
-        };
-
-        unsafe { self.post_send_wr(&mut wr) }
-    }
-
-    pub fn post_send_immediate(&mut self, imm_data: u32, wr_id: u64) -> io::Result<()> {
-        unsafe { self.post_send_with_immediate(&[], imm_data, wr_id) }
-    }
-
-    /// # Safety
-    /// The buffers pointed to by GatherElement must remain valid until the work request issued
-    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_receive<'a>(
-        &mut self,
-        local: &mut [ScatterElement<'a>],
+        mut wr: ReceiveWorkRequest<'a, E>,
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_mut_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32, // todo: fix possible error on overflow
+            sg_list: wr.scatter_elements.as_mut().as_mut_ptr() as *mut ibv_sge,
+            num_sge: wr.scatter_elements.as_mut().len() as i32, // todo: fix possible error on overflow
         };
 
         unsafe { self.post_receive_wr(&mut wr) }
     }
 
-    pub fn post_receive_immediate(&mut self, wr_id: u64) -> io::Result<()> {
-        unsafe { self.post_receive(&mut [], wr_id) }
-    }
-
+    /*
     /// The buffers pointed to by ScatterElement must remain valid until the work request issued
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_write<'a>(
         &mut self,
-        local: &[GatherElement<'a>],
-        remote: &mut RemoteMemorySliceMut<'a>,
+        wr: &mut WriteWorkRequest<'_, 'a>,
         wr_id: u64,
     ) -> io::Result<()> {
-        let mut wr = ibv_send_wr {
-            wr_id,
-            next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32,
-            opcode: ibv_wr_opcode::IBV_WR_RDMA_WRITE,
-            send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
-            wr: ibv_send_wr__bindgen_ty_2 {
-                rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: remote.addr as u64,
-                    rkey: remote.rkey,
+        let (opcode, __bindgen_anon_1) = match wr.imm_data {
+            None => (ibv_wr_opcode::IBV_WR_RDMA_WRITE, Default::default()),
+            Some(imm_data) => (
+                ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM,
+                ibv_send_wr__bindgen_ty_1 {
+                    imm_data: imm_data.to_be(),
                 },
-            },
-            qp_type: Default::default(),
-            __bindgen_anon_1: Default::default(),
-            __bindgen_anon_2: Default::default(),
+            ),
         };
 
-        unsafe { self.post_send_wr(&mut wr) }
-    }
-
-    pub unsafe fn post_write_with_immediate<'a>(
-        &mut self,
-        local: &[GatherElement<'a>],
-        remote: &mut RemoteMemorySliceMut<'a>,
-        imm_data: u32,
-        wr_id: u64,
-    ) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32,
-            opcode: ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM,
+            sg_list: wr.gather_elements.as_ptr() as *mut ibv_sge,
+            num_sge: wr.gather_elements.len() as i32,
+            opcode,
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: remote.addr as u64,
-                    rkey: remote.rkey,
+                    remote_addr: wr.remote_slice.addr as u64,
+                    rkey: wr.remote_slice.rkey,
                 },
             },
             qp_type: Default::default(),
-            __bindgen_anon_1: ibv_send_wr__bindgen_ty_1 {
-                imm_data: imm_data.to_be(),
-            },
+            __bindgen_anon_1,
             __bindgen_anon_2: Default::default(),
         };
 
@@ -187,21 +143,20 @@ impl QueuePair {
 
     pub unsafe fn post_read<'a>(
         &mut self,
-        local: &mut [ScatterElement<'a>],
-        remote: &RemoteMemorySlice<'a>,
+        wr: &mut ReadWorkRequest<'_, 'a>,
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: local.as_ptr() as *mut ibv_sge,
-            num_sge: local.len() as i32,
+            sg_list: wr.scatter_elements.as_ptr() as *mut ibv_sge,
+            num_sge: wr.scatter_elements.len() as i32,
             opcode: ibv_wr_opcode::IBV_WR_RDMA_READ,
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: remote.addr as u64,
-                    rkey: remote.rkey,
+                    remote_addr: wr.remote_slice.addr as u64,
+                    rkey: wr.remote_slice.rkey,
                 },
             },
             qp_type: Default::default(),
@@ -211,6 +166,7 @@ impl QueuePair {
 
         unsafe { self.post_send_wr(&mut wr) }
     }
+    */
 
     #[inline(always)]
     unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {

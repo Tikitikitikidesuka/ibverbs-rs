@@ -5,31 +5,19 @@ use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use std::io;
 
 impl SingleChannel {
-    pub fn register_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd.register_mr_with_permissions(
-                memory.as_mut_ptr(),
-                memory.len(),
-                AccessFlags::new().with_local_write().into(),
-            )?
-        };
-
-        Ok(mr)
+    pub fn register_local_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
+        unsafe {
+            Ok(self
+                .pd
+                .register_local_mr(memory.as_mut_ptr(), memory.len())?)
+        }
     }
 
     pub fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         let mr = unsafe {
-            self.pd.register_mr_with_permissions(
-                memory.as_mut_ptr(),
-                memory.len(),
-                AccessFlags::new()
-                    .with_local_write()
-                    .with_remote_read()
-                    .with_remote_write()
-                    .into(),
-            )?
+            self.pd
+                .register_shared_mr(memory.as_mut_ptr(), memory.len())?
         };
-
 
         // todo: share over channel
 

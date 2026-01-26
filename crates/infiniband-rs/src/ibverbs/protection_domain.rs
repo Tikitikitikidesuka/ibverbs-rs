@@ -1,10 +1,10 @@
 use crate::ibverbs::completion_queue::CompletionQueue;
+use crate::ibverbs::context::Context;
 use crate::ibverbs::memory_region::MemoryRegion;
-use crate::ibverbs::queue_pair_builder::QueuePairBuilder;
+use crate::ibverbs::queue_pair_builder::{AccessFlags, QueuePairBuilder};
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
-use crate::ibverbs::context::Context;
 
 #[derive(Debug, Clone)]
 pub struct ProtectionDomain {
@@ -31,8 +31,8 @@ impl ProtectionDomain {
     /// Registers memory with the given access flags.
     ///
     /// # Safety
-    /// The user is responsible for ensuring the memory registered
-    /// is not deallocated for as long as it is registered.
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
     pub unsafe fn register_mr_with_permissions(
         &self,
         address: *mut u8,
@@ -49,6 +49,48 @@ impl ProtectionDomain {
         }
     }
 
+    /// # Safety
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
+    pub unsafe fn register_local_mr(
+        &mut self,
+        address: *mut u8,
+        length: usize,
+    ) -> io::Result<MemoryRegion> {
+        let mr = unsafe {
+            self.register_mr_with_permissions(
+                address,
+                length,
+                AccessFlags::new().with_local_write().into(),
+            )?
+        };
+
+        Ok(mr)
+    }
+
+    /// # Safety
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
+    pub unsafe fn register_shared_mr(
+        &mut self,
+        address: *mut u8,
+        length: usize,
+    ) -> io::Result<MemoryRegion> {
+        let mr = unsafe {
+            self.register_mr_with_permissions(
+                address,
+                length,
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write()
+                    .into(),
+            )?
+        };
+
+        Ok(mr)
+    }
+
     /// Registers a DMA-BUF with the given access flags.
     ///
     /// # Arguments
@@ -58,17 +100,71 @@ impl ProtectionDomain {
     ///   Note: `iova` must have the same page offset as `offset`
     ///
     /// # Safety
-    /// The DMA-BUF and its mapped memory must not be deallocated while they remain registered.
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
     pub unsafe fn register_dmabuf(
         &self,
         fd: i32,
         offset: u64,
-        len: usize,
+        length: usize,
         iova: u64,
         access_flags: ibv_access_flags,
     ) -> io::Result<MemoryRegion> {
         unsafe {
-            MemoryRegion::register_dmabuf(self.inner.clone(), fd, offset, len, iova, access_flags)
+            MemoryRegion::register_dmabuf(
+                self.inner.clone(),
+                fd,
+                offset,
+                length,
+                iova,
+                access_flags,
+            )
+        }
+    }
+
+    /// # Safety
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
+    pub unsafe fn register_local_dmabuf(
+        &self,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> io::Result<MemoryRegion> {
+        unsafe {
+            self.register_dmabuf(
+                fd,
+                offset,
+                length,
+                iova,
+                AccessFlags::new().with_local_write().into(),
+            )
+        }
+    }
+
+    /// # Safety
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
+    pub unsafe fn register_shared_dmabuf(
+        &self,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> io::Result<MemoryRegion> {
+        unsafe {
+            self.register_dmabuf(
+                fd,
+                offset,
+                length,
+                iova,
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write()
+                    .into(),
+            )
         }
     }
 

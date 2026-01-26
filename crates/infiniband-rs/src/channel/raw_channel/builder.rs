@@ -13,7 +13,7 @@ use std::rc::Rc;
 impl RawChannel {
     #[builder]
     pub fn builder(
-        pd: ProtectionDomain,
+        pd: &ProtectionDomain,
         #[builder(default = 32)] min_cq_buf_size: u32,
         #[builder(default = 32)] max_send_wrs: u32,
         #[builder(default = 32)] max_recv_wrs: u32,
@@ -38,7 +38,7 @@ impl RawChannel {
 
         Ok(PreparedChannel {
             cq: CachedCompletionQueue::wrap_cq(cq),
-            pd,
+            pd: pd.clone(),
             qp,
         })
     }
