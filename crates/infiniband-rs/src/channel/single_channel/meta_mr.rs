@@ -1,12 +1,23 @@
 use crate::ibverbs::memory_region::{MemoryRegion, MemoryRegionEndpoint};
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use bytemuck::{Pod, Zeroable};
+use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
+use crate::ibverbs::scatter_gather_element::GatherElement;
+use crate::ibverbs::work_request::WriteWorkRequest;
 use std::fmt::Debug;
+use std::mem::offset_of;
+use std::slice;
+use std::sync::atomic::{Ordering, fence};
+
+pub struct MetaMr {
+    memory: Box<MetaMrState>,
+    mr: MemoryRegion,
+    remote_mr: RemoteMemoryRegion,
+}
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+#[derive(Debug, Copy, Clone)]
 pub struct MetaMrState {
-    sync: u32,
+    in_sync_epoch: u32,
+    out_sync_epoch: u32,
     in_msg_ack: u32,
     out_msg_ack: u32,
     _pad: u32,
@@ -15,15 +26,30 @@ pub struct MetaMrState {
 }
 
 impl MetaMr {
-    pub fn sync_sge_wr(&self) {
-        self.mr.prepare_gather_element(self.memory)
+    pub fn increase_sync_epoch(&mut self) {
+        self.memory.out_sync_epoch += 1;
     }
-}
 
-pub struct MetaMr {
-    memory: Box<MetaMrState>,
-    mr: MemoryRegion,
-    remote_mr: RemoteMemoryRegion,
+    pub fn prepare_sync_epoch_wr(
+        &mut self,
+    ) -> WriteWorkRequest<Vec<GatherElement>, RemoteMemorySliceMut> {
+        // Ensure previous modifications are visible to NIC
+        fence(Ordering::Release);
+
+        // Write from out_sync
+        let out_sync_bytes: &[u8] = unsafe {
+            slice::from_raw_parts(&self.memory.out_sync_epoch as *const u32 as *const u8, 4)
+        };
+
+        // To in_sync
+        let offset = offset_of!(MetaMrState, in_sync_epoch);
+        let range = offset..offset + size_of::<u32>();
+
+        WriteWorkRequest::new(
+            vec![self.mr.prepare_gather_element(out_sync_bytes).unwrap()],
+            self.remote_mr.slice_mut(range).unwrap(),
+        )
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

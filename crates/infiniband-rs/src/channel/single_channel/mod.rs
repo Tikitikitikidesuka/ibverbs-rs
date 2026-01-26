@@ -1,5 +1,5 @@
 pub mod builder;
-//pub mod meta_mr;
+pub mod meta_mr;
 pub mod mr_ops;
 pub mod polled_ops;
 pub mod scoped_ops;
@@ -18,6 +18,6 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 /// freed while still registered and the remote could issue a write unto it. UD.
 pub struct SingleChannel {
     channel: RawChannel,
-    //meta_mr: MetaMr,
+    meta_mr: MetaMr,
     pd: ProtectionDomain,
 }
