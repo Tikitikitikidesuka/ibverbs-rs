@@ -5,6 +5,7 @@ use crate::channel::raw_channel::pending_work::{
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use std::borrow::{Borrow, BorrowMut};
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -135,7 +136,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(super) fn clean_up(self) -> Result<(), MultiWorkPollError> {
         let mut work_errors = Vec::new();
         for wr in &self.wrs {
-            let mut wr = wr.borrow_mut();
+            let mut wr = RefCell::borrow_mut(wr);
             if !wr.already_polled_to_completion() {
                 // Take care of errors to report them
                 if let Err(error) = wr.spin_poll() {
@@ -160,13 +161,15 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_send<F, E: AsRef<[GatherElement<'env>]>>(
+    pub(crate) fn channel_post_send<F, E, WR>(
         &mut self,
         channel_selector: F,
-        wr: SendWorkRequest<'env, E>,
+        wr: WR,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        E: AsRef<[GatherElement<'env>]>,
+        WR: Borrow<SendWorkRequest<'env, E>>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(wr)? }));
@@ -179,13 +182,15 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
 
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_receive<F, E: AsMut<[ScatterElement<'env>]>>(
+    pub(crate) fn channel_post_receive<F, E, WR>(
         &mut self,
         channel_selector: F,
-        wr: ReceiveWorkRequest<'env, E>,
+        wr: WR,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        E: AsMut<[ScatterElement<'env>]>,
+        WR: BorrowMut<ReceiveWorkRequest<'env, E>>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(wr)? }));
@@ -240,9 +245,9 @@ pub struct ScopedPendingWork<'scope> {
 
 impl<'scope> ScopedPendingWork<'scope> {
     pub fn poll(&self) -> WorkPollResult {
-        self.inner.borrow_mut().poll()
+        RefCell::borrow_mut(&self.inner).poll()
     }
     pub fn spin_poll(&self) -> WorkSpinPollResult {
-        self.inner.borrow_mut().spin_poll()
+        RefCell::borrow_mut(&self.inner).spin_poll()
     }
 }

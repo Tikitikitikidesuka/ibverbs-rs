@@ -1,16 +1,19 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use crate::ibverbs::work_success::WorkSuccess;
+use std::borrow::{Borrow, BorrowMut};
 
 impl MultiChannel {
-    pub fn scatter<'a, I, WR>(&'a mut self, scatter_sends: I) -> MultiWorkSpinPollResult
+    pub fn scatter<'a, I, E, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsRef<[GatherElement<'a>]>,
+        E: AsRef<[GatherElement<'a>]>,
+        WR: Borrow<SendWorkRequest<'a, E>>,
     {
         let res = self.scope(|s| {
-            let wrs = s.post_scatter(scatter_sends)?;
+            let wrs = s.post_scatter(wrs)?;
             wrs.into_iter()
                 .map(|wr| wr.spin_poll())
                 .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
@@ -22,51 +25,14 @@ impl MultiChannel {
         Ok(res.unwrap())
     }
 
-    pub fn scatter_with_immediate<'a, I, WR>(
-        &'a mut self,
-        scatter_sends: I,
-    ) -> MultiWorkSpinPollResult
-    where
-        I: IntoIterator<Item = (usize, WR, u32)>,
-        WR: AsRef<[GatherElement<'a>]>,
-    {
-        let res = self.scope(|s| {
-            let wrs = s.post_scatter_with_immediate(scatter_sends)?;
-            wrs.into_iter()
-                .map(|wr| wr.spin_poll())
-                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
-        })?;
-        debug_assert!(
-            res.is_ok(),
-            "unreachable scope error (all wrs manually polled)"
-        );
-        Ok(res.unwrap())
-    }
-
-    pub fn scatter_immediate<I>(&mut self, scatter_sends: I) -> MultiWorkSpinPollResult
-    where
-        I: IntoIterator<Item = (usize, u32)>,
-    {
-        let res = self.scope(|s| {
-            let wrs = s.post_scatter_immediate(scatter_sends)?;
-            wrs.into_iter()
-                .map(|wr| wr.spin_poll())
-                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
-        })?;
-        debug_assert!(
-            res.is_ok(),
-            "unreachable scope error (all wrs manually polled)"
-        );
-        Ok(res.unwrap())
-    }
-
-    pub fn gather<'a, I, WR>(&'a mut self, gather_receives: I) -> MultiWorkSpinPollResult
+    pub fn gather<'a, I, E, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = (usize, WR)>,
-        WR: AsMut<[ScatterElement<'a>]>,
+        E: AsMut<[ScatterElement<'a>]>,
+        WR: BorrowMut<ReceiveWorkRequest<'a, E>>,
     {
         let res = self.scope(|s| {
-            let wrs = s.post_gather(gather_receives)?;
+            let wrs = s.post_gather(wrs)?;
             wrs.into_iter()
                 .map(|wr| wr.spin_poll())
                 .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
@@ -78,70 +44,14 @@ impl MultiChannel {
         Ok(res.unwrap())
     }
 
-    pub fn gather_immediate<I>(&mut self, peers: I) -> MultiWorkSpinPollResult
+    pub fn multicast<'a, I, E, WR>(&'a mut self, peers: I, wr: WR) -> MultiWorkSpinPollResult
     where
         I: IntoIterator<Item = usize>,
+        E: AsRef<[GatherElement<'a>]>,
+        WR: Borrow<SendWorkRequest<'a, E>>,
     {
         let res = self.scope(|s| {
-            let wrs = s.post_gather_immediate(peers)?;
-            wrs.into_iter()
-                .map(|wr| wr.spin_poll())
-                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
-        })?;
-        debug_assert!(
-            res.is_ok(),
-            "unreachable scope error (all wrs manually polled)"
-        );
-        Ok(res.unwrap())
-    }
-
-    pub fn multicast<'a, I, WR>(&'a mut self, peers: I, sends: WR) -> MultiWorkSpinPollResult
-    where
-        I: IntoIterator<Item = usize>,
-        WR: AsRef<[GatherElement<'a>]>,
-    {
-        let res = self.scope(|s| {
-            let wrs = s.post_multicast(sends, peers)?;
-            wrs.into_iter()
-                .map(|wr| wr.spin_poll())
-                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
-        })?;
-        debug_assert!(
-            res.is_ok(),
-            "unreachable scope error (all wrs manually polled)"
-        );
-        Ok(res.unwrap())
-    }
-
-    pub fn multicast_with_immediate<'a, I, WR>(
-        &'a mut self,
-        peers: I,
-        sends: WR,
-        imm_data: u32,
-    ) -> MultiWorkSpinPollResult
-    where
-        I: IntoIterator<Item = usize>,
-        WR: AsRef<[GatherElement<'a>]>,
-    {
-        let res = self.scope(|s| {
-            let wrs = s.post_multicast_with_immediate(peers, sends, imm_data)?;
-            wrs.into_iter()
-                .map(|wr| wr.spin_poll())
-                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
-        })?;
-        debug_assert!(
-            res.is_ok(),
-            "unreachable scope error (all wrs manually polled)"
-        );
-        Ok(res.unwrap())
-    }
-
-    pub fn multicast_immediate<I>(&mut self, peers: I, imm_data: u32) -> MultiWorkSpinPollResult
-    where
-        I: IntoIterator<Item = usize>,
-    {
-        let res = self.scope(|s| {
-            let wrs = s.post_multicast_immediate(peers, imm_data)?;
+            let wrs = s.post_multicast(peers, wr)?;
             wrs.into_iter()
                 .map(|wr| wr.spin_poll())
                 .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()

@@ -1,5 +1,6 @@
 use infiniband_rs::channel::multi_channel::MultiChannel;
 use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::io;
@@ -28,10 +29,15 @@ fn main() {
 
     let result = multi_channel.scope(|s| {
         send_mem.copy_from_slice(&[1u8; 4]);
-        s.post_send(1, &[mr.prepare_scatter_element(&send_mem[0..4]).unwrap()])?;
+        s.post_send(
+            1,
+            SendWorkRequest::new(&[mr.prepare_gather_element(&send_mem[0..4]).unwrap()]),
+        )?;
         s.post_receive(
             1,
-            &mut [mr.prepare_gather_element(&mut recv_mem[0..4]).unwrap()],
+            ReceiveWorkRequest::new(&mut [mr
+                .prepare_scatter_element(&mut recv_mem[0..4])
+                .unwrap()]),
         )?;
         Ok::<(), io::Error>(())
     });

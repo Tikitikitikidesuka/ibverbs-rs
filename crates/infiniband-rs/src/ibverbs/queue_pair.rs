@@ -6,6 +6,7 @@ use crate::ibverbs::remote_memory_region::{
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use ibverbs_sys::*;
+use std::borrow::{Borrow, BorrowMut};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::{io, ptr};
@@ -55,9 +56,11 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_send<'a, E: AsRef<[GatherElement<'a>]>>(
         &mut self,
-        wr: SendWorkRequest<'a, E>,
+        wr: impl Borrow<SendWorkRequest<'a, E>>,
         wr_id: u64,
     ) -> io::Result<()> {
+        let wr = wr.borrow();
+
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_SEND, Default::default()),
             Some(imm_data) => (
@@ -89,9 +92,10 @@ impl QueuePair {
     /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
     pub unsafe fn post_receive<'a, E: AsMut<[ScatterElement<'a>]>>(
         &mut self,
-        mut wr: ReceiveWorkRequest<'a, E>,
+        mut wr: impl BorrowMut<ReceiveWorkRequest<'a, E>>,
         wr_id: u64,
     ) -> io::Result<()> {
+        let wr = wr.borrow_mut();
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

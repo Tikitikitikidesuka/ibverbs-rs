@@ -1,5 +1,6 @@
 use infiniband_rs::channel::multi_channel::MultiChannel;
 use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 
@@ -31,11 +32,11 @@ fn main() {
     let result = multi_channel.scope(|s| {
         let scatter_sends = send_mem
             .chunks(1)
-            .map(|chunk| vec![mr.prepare_scatter_element(chunk).unwrap()])
+            .map(|chunk| SendWorkRequest::new(vec![mr.prepare_gather_element(chunk).unwrap()]))
             .enumerate();
         let gather_receives = recv_mem
             .chunks_mut(1)
-            .map(|chunk| vec![mr.prepare_gather_element(chunk).unwrap()])
+            .map(|chunk| ReceiveWorkRequest::new(vec![mr.prepare_scatter_element(chunk).unwrap()]))
             .enumerate();
 
         s.post_scatter(scatter_sends).unwrap();
