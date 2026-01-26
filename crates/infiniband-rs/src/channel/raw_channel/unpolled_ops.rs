@@ -1,6 +1,7 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use std::io;
 
 impl RawChannel {
@@ -170,6 +171,50 @@ impl RawChannel {
     pub fn receive_immediate_unpolled<'a>(&mut self) -> io::Result<PendingWork<'a>> {
         let wr_id = self.get_and_advance_wr_id();
         self.qp.post_receive_immediate(wr_id)?;
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+    }
+
+    pub fn write_unpolled<'a>(
+        &mut self,
+        gather_elements: impl AsRef<[GatherElement<'a>]>,
+        remote_slice: &mut RemoteMemorySliceMut<'a>,
+    ) -> io::Result<PendingWork<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        unsafe {
+            self.qp
+                .post_write(gather_elements.as_ref(), remote_slice, wr_id)?
+        };
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+    }
+
+    pub fn write_with_immediate_unpolled<'a>(
+        &mut self,
+        gather_elements: impl AsRef<[GatherElement<'a>]>,
+        remote_slice: &mut RemoteMemorySliceMut<'a>,
+        imm_data: u32,
+    ) -> io::Result<PendingWork<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        unsafe {
+            self.qp.post_write_with_immediate(
+                gather_elements.as_ref(),
+                remote_slice,
+                imm_data,
+                wr_id,
+            )?
+        };
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+    }
+
+    pub unsafe fn read_unpolled<'a>(
+        &mut self,
+        mut scatter_elements: impl AsMut<[ScatterElement<'a>]>,
+        remote_slice: &RemoteMemorySlice<'a>,
+    ) -> io::Result<PendingWork<'a>> {
+        let wr_id = self.get_and_advance_wr_id();
+        unsafe {
+            self.qp
+                .post_read(scatter_elements.as_mut(), remote_slice, wr_id)?
+        };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 

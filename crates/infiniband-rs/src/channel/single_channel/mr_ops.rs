@@ -1,6 +1,7 @@
 use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
+use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use std::io;
 
 impl SingleChannel {
@@ -9,12 +10,7 @@ impl SingleChannel {
             self.pd.register_mr_with_permissions(
                 memory.as_mut_ptr(),
                 memory.len(),
-                // TODO: Start with only local_write and add remote_read and remote_write when shared
-                AccessFlags::new()
-                    .with_local_write()
-                    //.with_remote_read()
-                    //.with_remote_write()
-                    .into(),
+                AccessFlags::new().with_local_write().into(),
             )?
         };
 
@@ -26,21 +22,21 @@ impl SingleChannel {
             self.pd.register_mr_with_permissions(
                 memory.as_mut_ptr(),
                 memory.len(),
-                // TODO: Start with only local_write and add remote_read and remote_write when shared
                 AccessFlags::new()
                     .with_local_write()
-                    //.with_remote_read()
-                    //.with_remote_write()
+                    .with_remote_read()
+                    .with_remote_write()
                     .into(),
             )?
         };
+
 
         // todo: share over channel
 
         Ok(mr)
     }
 
-    pub fn accept_remote_mr(&mut self) -> io::Result<SharedMemoryRegion> {
+    pub fn accept_remote_mr(&mut self) -> io::Result<RemoteMemoryRegion> {
         // todo: accept shard memory region
     }
 

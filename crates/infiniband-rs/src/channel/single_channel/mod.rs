@@ -1,11 +1,13 @@
 pub mod builder;
 pub mod mr_ops;
 pub mod polled_ops;
-pub mod unpolled_ops;
 pub mod scoped_ops;
+pub mod unpolled_ops;
 
 use crate::channel::raw_channel::RawChannel;
+use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 
 /// This is a single channel with owned protection domain.
 /// This allows making safe memory region registration because it cannot be shared
@@ -16,5 +18,24 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 /// freed while still registered and the remote could issue a write unto it. UD.
 pub struct SingleChannel {
     channel: RawChannel,
+    meta_mr: MetaMr,
     pd: ProtectionDomain,
+}
+
+pub struct MetaMr {
+    memory: Box<[u8]>,
+    mr: MemoryRegion,
+    remote_mr: RemoteMemoryRegion,
+}
+
+pub struct MetaMrState {
+    sync: u32,
+    in_msg_ack: u32,
+    out_msg_ack: u32,
+    in_message: MetaMessage,
+    out_message: MetaMessage,
+}
+
+pub enum MetaMessage {
+    SharedMemoryRegion(RemoteMemoryRegion),
 }

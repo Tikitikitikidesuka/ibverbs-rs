@@ -1,7 +1,9 @@
 use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
-use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySlice};
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::remote_memory_region::{
+    RemoteMemoryRegion, RemoteMemorySlice, RemoteMemorySliceMut,
+};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use ibverbs_sys::*;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -129,7 +131,7 @@ impl QueuePair {
     pub unsafe fn post_write<'a>(
         &mut self,
         local: &[GatherElement<'a>],
-        remote: RemoteMemorySlice,
+        remote: &mut RemoteMemorySliceMut<'a>,
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_send_wr {
@@ -156,7 +158,7 @@ impl QueuePair {
     pub unsafe fn post_write_with_immediate<'a>(
         &mut self,
         local: &[GatherElement<'a>],
-        remote: RemoteMemorySlice,
+        remote: &mut RemoteMemorySliceMut<'a>,
         imm_data: u32,
         wr_id: u64,
     ) -> io::Result<()> {
@@ -186,7 +188,7 @@ impl QueuePair {
     pub unsafe fn post_read<'a>(
         &mut self,
         local: &mut [ScatterElement<'a>],
-        remote: RemoteMemorySlice,
+        remote: &RemoteMemorySlice<'a>,
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_send_wr {

@@ -2,7 +2,8 @@ use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::{
     MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
 };
-use crate::ibverbs::scatter_gather_element::{ScatterElement, GatherElement};
+use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
@@ -248,6 +249,67 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe {
             channel.receive_immediate_unpolled()?
+        }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
+    pub(crate) fn channel_post_write<F>(
+        &mut self,
+        channel_selector: F,
+        gather_elements: impl AsRef<[GatherElement<'env>]>,
+        remote_slice: &mut RemoteMemorySliceMut<'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe {
+            channel.write_unpolled(gather_elements, remote_slice)?
+        }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
+    pub(crate) fn channel_post_write_with_immediate<F>(
+        &mut self,
+        channel_selector: F,
+        gather_elements: impl AsRef<[GatherElement<'env>]>,
+        remote_slice: &mut RemoteMemorySliceMut<'env>,
+        imm_data: u32,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe {
+            channel.write_with_immediate_unpolled(gather_elements, remote_slice, imm_data)?
+        }));
+        self.wrs.push(wr.clone());
+        Ok(ScopedPendingWork {
+            inner: wr,
+            env: Default::default(),
+        })
+    }
+
+    pub(crate) fn channel_post_read<F>(
+        &mut self,
+        channel_selector: F,
+        scatter_elements: impl AsMut<[ScatterElement<'env>]>,
+        remote_slice: &RemoteMemorySlice<'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>>
+    where
+        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+    {
+        let channel = channel_selector(self.inner)?;
+        let wr = Rc::new(RefCell::new(unsafe {
+            channel.read_unpolled(scatter_elements, remote_slice)?
         }));
         self.wrs.push(wr.clone());
         Ok(ScopedPendingWork {
