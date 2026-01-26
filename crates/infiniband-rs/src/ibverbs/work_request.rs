@@ -1,4 +1,6 @@
+use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use std::borrow::{Borrow, BorrowMut};
 use std::marker::PhantomData;
 
 pub struct SendWorkRequest<'a, E>
@@ -18,18 +20,28 @@ where
     _data_lifetime: PhantomData<ScatterElement<'a>>,
 }
 
-/*
-pub struct WriteWorkRequest<'wr, 'data> {
-    pub(super) gather_elements: &'wr [GatherElement<'data>],
-    pub(super) remote_slice: &'wr mut RemoteMemorySliceMut<'data>,
+pub struct WriteWorkRequest<'a, E, R>
+where
+    E: AsRef<[GatherElement<'a>]>,
+    R: BorrowMut<RemoteMemorySliceMut<'a>>,
+{
+    pub(super) gather_elements: E,
+    pub(super) remote_slice: R,
     pub(super) imm_data: Option<u32>,
+    _gather_elements_lifetime: PhantomData<GatherElement<'a>>,
+    _remote_mr_lifetime: PhantomData<RemoteMemorySliceMut<'a>>,
 }
 
-pub struct ReadWorkRequest<'wr, 'data> {
-    pub(super) scatter_elements: &'wr mut [ScatterElement<'data>],
-    pub(super) remote_slice: &'wr RemoteMemorySlice<'data>,
+pub struct ReadWorkRequest<'a, E, R>
+where
+    E: AsMut<[ScatterElement<'a>]>,
+    R: Borrow<RemoteMemorySlice<'a>>,
+{
+    pub(super) scatter_elements: E,
+    pub(super) remote_slice: R,
+    _scatter_elements_lifetime: PhantomData<ScatterElement<'a>>,
+    _remote_mr_lifetime: PhantomData<RemoteMemorySlice<'a>>,
 }
-*/
 
 impl<'a, E> SendWorkRequest<'a, E>
 where
@@ -71,16 +83,18 @@ where
     }
 }
 
-/*
-impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
-    pub fn new(
-        gather_elements: &'wr [GatherElement<'data>],
-        remote_slice: &'wr mut RemoteMemorySliceMut<'data>,
-    ) -> Self {
+impl<'a, E, R> WriteWorkRequest<'a, E, R>
+where
+    E: AsRef<[GatherElement<'a>]>,
+    R: BorrowMut<RemoteMemorySliceMut<'a>>,
+{
+    pub fn new(gather_elements: E, remote_slice: R) -> Self {
         Self {
             gather_elements,
             remote_slice,
             imm_data: None,
+            _gather_elements_lifetime: PhantomData,
+            _remote_mr_lifetime: PhantomData,
         }
     }
 
@@ -90,15 +104,17 @@ impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
     }
 }
 
-impl<'wr, 'data> ReadWorkRequest<'wr, 'data> {
-    pub fn new(
-        scatter_elements: &'wr mut [ScatterElement<'data>],
-        remote_slice: &'wr RemoteMemorySlice<'data>,
-    ) -> Self {
+impl<'a, E, R> ReadWorkRequest<'a, E, R>
+where
+    E: AsMut<[ScatterElement<'a>]>,
+    R: Borrow<RemoteMemorySlice<'a>>,
+{
+    pub fn new(scatter_elements: E, remote_slice: R) -> Self {
         Self {
             scatter_elements,
             remote_slice,
+            _scatter_elements_lifetime: Default::default(),
+            _remote_mr_lifetime: Default::default(),
         }
     }
 }
- */
