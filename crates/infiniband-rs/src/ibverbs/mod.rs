@@ -8,6 +8,7 @@ pub mod protection_domain;
 pub mod queue_pair;
 pub mod queue_pair_builder;
 pub mod queue_pair_endpoint;
+pub mod remote_memory_region;
 pub mod scatter_gather_element;
 pub mod work_completion;
 pub mod work_error;

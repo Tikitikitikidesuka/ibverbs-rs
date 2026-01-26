@@ -15,7 +15,7 @@ impl WorkSuccess {
 
 impl WorkSuccess {
     pub fn immediate_data(&self) -> Option<u32> {
-        self.imm_data
+        self.imm_data.map(|imm_data| u32::from_be(imm_data))
     }
 
     pub fn gathered_length(&self) -> usize {

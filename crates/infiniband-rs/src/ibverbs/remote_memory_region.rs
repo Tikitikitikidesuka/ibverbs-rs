@@ -12,9 +12,9 @@ pub struct RemoteMemoryRegion {
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMemorySlice<'a> {
-    addr: usize,
-    length: usize,
-    rkey: u32,
+    pub(super) addr: usize,
+    pub(super) length: usize,
+    pub(super) rkey: u32,
     // SAFETY INVARIANT: SGE cannot outlive the referenced remote memory region
     _mr_lifetime: PhantomData<&'a RemoteMemoryRegion>,
 }
