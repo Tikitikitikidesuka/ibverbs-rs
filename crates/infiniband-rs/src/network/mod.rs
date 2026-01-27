@@ -28,4 +28,8 @@ impl DerefMut for Node {
     }
 }
 
-impl Node {}
+impl Node {
+    pub fn rank(&self) -> usize {
+        self.rank
+    }
+}
