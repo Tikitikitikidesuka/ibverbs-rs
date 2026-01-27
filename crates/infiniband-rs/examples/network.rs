@@ -52,7 +52,7 @@ fn main() {
         0 => {
             let mut mem = [0u8; 8];
             println!("Mem before: {mem:?}");
-            let mr = node.register_mr(&mut mem).unwrap();
+            let mr = node.register_local_mr(&mut mem).unwrap();
             node.receive(
                 1,
                 ReceiveWorkRequest::new(&mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()]),
@@ -67,7 +67,7 @@ fn main() {
         }
         1 => {
             let mut mem = [1u8; 4];
-            let mr = node.register_mr(&mut mem).unwrap();
+            let mr = node.register_local_mr(&mut mem).unwrap();
             node.send(
                 0,
                 SendWorkRequest::new(&[mr.prepare_gather_element(&mem).unwrap()]),
@@ -76,7 +76,7 @@ fn main() {
         }
         2 => {
             let mut mem = [2u8; 4];
-            let mr = node.register_mr(&mut mem).unwrap();
+            let mr = node.register_local_mr(&mut mem).unwrap();
             node.send(
                 0,
                 SendWorkRequest::new(&[mr.prepare_gather_element(&mem).unwrap()]),

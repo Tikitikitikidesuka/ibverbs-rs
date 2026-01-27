@@ -1,3 +1,3 @@
 pub mod polled;
-mod scoped;
-mod unpolled;
+pub mod scoped;
+pub mod unpolled;

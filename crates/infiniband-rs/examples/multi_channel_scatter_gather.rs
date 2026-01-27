@@ -21,7 +21,7 @@ fn main() {
     let mut multi_channel = multi_channel.handshake(endpoints).unwrap();
 
     let mut mem = [0u8; 10];
-    let mr = multi_channel.register_mr(&mut mem).unwrap();
+    let mr = multi_channel.register_local_mr(&mut mem).unwrap();
 
     let (send_mem, recv_mem) = mem.split_at_mut(5);
 
