@@ -6,7 +6,7 @@ use crate::ibverbs::work_request::WriteWorkRequest;
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
 use std::mem::{MaybeUninit, offset_of};
-use std::sync::atomic::{Ordering, fence};
+use std::sync::atomic::{AtomicUsize, Ordering, fence};
 use std::{io, slice};
 use thiserror::Error;
 
@@ -22,22 +22,22 @@ pub struct PreparedMetaMr {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct MetaMrState {
-    in_sync_epoch: usize,
-    out_sync_epoch: usize,
+    //in_sync_epoch: AtomicUsize,
+    //out_sync_epoch: AtomicUsize,
 
     // --- Incoming Write Section (Written by Peer) ---
     pub in_remote_mr: MaybeUninit<RemoteMemoryRegion>, // Incoming remote mr
-    pub peer_remote_mr_epoch: usize,                   // Number of remote mrs received
+    pub peer_remote_mr_epoch: AtomicUsize,             // Number of remote mrs received
 
-    pub local_remote_mr_ack: usize, // Number of remote mrs acknowledged by peer
+    pub local_remote_mr_ack: AtomicUsize, // Number of remote mrs acknowledged by peer
 
     // --- Outgoing Write Section (Written by Local) ---
     pub out_remote_mr: MaybeUninit<RemoteMemoryRegion>, // Outgoing remote mr
-    pub local_remote_mr_epoch: usize,                   // Number of remote mrs sent
+    pub local_remote_mr_epoch: AtomicUsize,             // Number of remote mrs sent
 
-    pub peer_remote_mr_ack: usize, // Number of remote mrs acknowledged to peer
+    pub peer_remote_mr_ack: AtomicUsize, // Number of remote mrs acknowledged to peer
 }
 
 impl PreparedMetaMr {
@@ -54,26 +54,17 @@ impl PreparedMetaMr {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum MetaMrError {
-    #[error("Missing ack from peer")]
-    PendingAck,
-    #[error(transparent)]
-    IoError(#[from] io::Error),
-}
-
 impl MetaMr {
     pub fn new(pd: &ProtectionDomain) -> io::Result<PreparedMetaMr> {
         let mut memory = Box::new(MetaMrState {
-            in_sync_epoch: 0,
-            out_sync_epoch: 0,
             in_remote_mr: MaybeUninit::uninit(),
             out_remote_mr: MaybeUninit::uninit(),
-            local_remote_mr_epoch: 0,
-            local_remote_mr_ack: 0,
-            peer_remote_mr_epoch: 0,
-            peer_remote_mr_ack: 0,
+            local_remote_mr_epoch: AtomicUsize::new(0),
+            local_remote_mr_ack: AtomicUsize::new(0),
+            peer_remote_mr_epoch: AtomicUsize::new(0),
+            peer_remote_mr_ack: AtomicUsize::new(0),
         });
+
         let mr = unsafe {
             pd.register_shared_mr(
                 memory.as_mut() as *mut MetaMrState as *mut u8,
@@ -84,23 +75,30 @@ impl MetaMr {
         Ok(PreparedMetaMr { memory, mr })
     }
 
+    /// Returns None if there peer still has not acknowledge a previous request (not ready)
     pub fn prepare_write_remote_mr_wr(
-        &mut self,
+        &'_ mut self,
         remote_mr: RemoteMemoryRegion,
-    ) -> Result<WriteWorkRequest<Vec<GatherElement>, RemoteMemorySliceMut>, MetaMrError> {
-        // Volatile read to ensure we see DMA updates
-        let ack = unsafe { std::ptr::read_volatile(&self.memory.local_remote_mr_ack) };
+    ) -> Option<WriteWorkRequest<'_, Vec<GatherElement<'_>>, RemoteMemorySliceMut<'_>>> {
+        // Load with Acquire to sync with any previous writes
+        let ack = self.memory.local_remote_mr_ack.load(Ordering::Acquire);
+        let current_epoch = self.memory.local_remote_mr_epoch.load(Ordering::Relaxed);
 
-        // Fence to ensure ordering (Ack check happens before we overwrite data)
-        fence(Ordering::Acquire);
-
-        // Check peer has consumed last sent remote mr
-        if self.memory.local_remote_mr_epoch > ack {
-            return Err(MetaMrError::PendingAck);
+        if current_epoch > ack {
+            return None;
         }
 
+        // Write Payload
+        // Since we are the only local writer to `out_remote_mr`, this is safe without atomics.
         self.memory.out_remote_mr = MaybeUninit::new(remote_mr);
-        self.memory.local_remote_mr_epoch += 1;
+
+        // Increment Epoch with Release ordering
+        // This acts as a fence: ensures the `out_remote_mr` write above
+        // is visible before the epoch update is visible.
+        let new_epoch = current_epoch + 1;
+        self.memory
+            .local_remote_mr_epoch
+            .store(new_epoch, Ordering::Release);
 
         let mr_bytes = unsafe {
             slice::from_raw_parts(
@@ -111,70 +109,81 @@ impl MetaMr {
 
         let epoch_bytes = unsafe {
             slice::from_raw_parts(
-                &self.memory.local_remote_mr_epoch as *const usize as *const u8,
+                &self.memory.local_remote_mr_epoch as *const AtomicUsize as *const u8,
                 size_of::<usize>(),
             )
         };
 
-        let sge_mr = self.mr.prepare_gather_element(mr_bytes).unwrap();
-        let sge_epoch = self.mr.prepare_gather_element(epoch_bytes).unwrap();
+        let sge_mr = self
+            .mr
+            .prepare_gather_element(mr_bytes)
+            .expect("Invariant violation: `out_remote_mr` is not within the registered `mr`");
+        let sge_epoch = self.mr.prepare_gather_element(epoch_bytes).expect(
+            "Invariant violation: `local_remote_mr_epoch` is not within the registered `mr`",
+        );
 
         let offset = offset_of!(MetaMrState, in_remote_mr);
         let len = size_of::<RemoteMemoryRegion>() + size_of::<usize>();
         let range = offset..offset + len;
+        let remote_slice = self.remote_mr.slice_mut(range).expect(
+            "Invariant violation: Remote MR is too small to contain `in_remote_mr` and epoch",
+        );
 
-        let remote_slice = self.remote_mr.slice_mut(range).ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Remote slice bounds",
-        ))?;
-
-        // Ensure written memory visible by NIC
-        fence(Ordering::Release);
-
-        Ok(WriteWorkRequest::new(vec![sge_mr, sge_epoch], remote_slice))
+        Some(WriteWorkRequest::new(vec![sge_mr, sge_epoch], remote_slice))
     }
 
     pub fn read_remote_mr(&self) -> Option<RemoteMemoryRegion> {
-        // Volatile read for the epoch written by peer
-        let epoch = unsafe { std::ptr::read_volatile(&self.memory.peer_remote_mr_epoch) };
+        // Load Epoch with Acquire
+        // Ensures we see the data payload written before this epoch was updated.
+        let epoch = self.memory.peer_remote_mr_epoch.load(Ordering::Acquire);
+        let ack = self.memory.peer_remote_mr_ack.load(Ordering::Relaxed);
 
-        // Fence to ensure we read the payload (MR) *after* checking the epoch
-        fence(Ordering::Acquire);
-
-        // Check if new data is available
-        if epoch > self.memory.peer_remote_mr_ack {
-            // SAFE: We confirmed epoch updated, so in_remote_mr must be valid
+        if epoch > ack {
+            // SAFE: Acquire ordering above guarantees `in_remote_mr` is valid/updated
             Some(unsafe { self.memory.in_remote_mr.assume_init() })
         } else {
             None
         }
     }
 
+    /// Returns None if there is no remote mr to acknowledge
     pub fn prepare_write_ack_remote_mr_wr(
-        &mut self,
-    ) -> Result<WriteWorkRequest<Vec<GatherElement>, RemoteMemorySliceMut>, MetaMrError> {
-        // Increment the acknowledgement counter
-        self.memory.peer_remote_mr_ack += 1;
+        &'_ mut self,
+    ) -> Option<WriteWorkRequest<'_, Vec<GatherElement<'_>>, RemoteMemorySliceMut<'_>>> {
+        let epoch = self.memory.peer_remote_mr_epoch.load(Ordering::Acquire);
+        let ack = self.memory.peer_remote_mr_ack.load(Ordering::Relaxed);
 
-        let ack_bytes = unsafe {
-            slice::from_raw_parts(
-                &self.memory.peer_remote_mr_ack as *const usize as *const u8,
-                size_of::<usize>(),
-            )
-        };
+        if ack < epoch {
+            // Increment Ack
+            let new_ack = ack + 1;
+            // Store with Release implies the read of the data is "done"
+            // before we tell the peer we are done.
+            self.memory
+                .peer_remote_mr_ack
+                .store(new_ack, Ordering::Release);
 
-        let sge_ack = self.mr.prepare_gather_element(ack_bytes).unwrap();
+            let ack_bytes = unsafe {
+                slice::from_raw_parts(
+                    &self.memory.peer_remote_mr_ack as *const AtomicUsize as *const u8,
+                    size_of::<usize>(),
+                )
+            };
 
-        let offset = offset_of!(MetaMrState, local_remote_mr_ack);
-        let len = size_of::<usize>();
-        let range = offset..offset + len;
+            let sge_ack = self.mr.prepare_gather_element(ack_bytes).expect(
+                "Invariant violation: `peer_remote_mr_ack` is not within the registered `mr`",
+            );
+            let offset = offset_of!(MetaMrState, local_remote_mr_ack);
+            let len = size_of::<usize>();
+            let range = offset..offset + len;
+            let remote_slice = self
+                .remote_mr
+                .slice_mut(range)
+                .expect("Invariant violation: Remote MR too small for `local_remote_mr_ack`");
 
-        let remote_slice = self.remote_mr.slice_mut(range).unwrap();
-
-        // Ensure the update to `peer_remote_mr_ack` is visible to the NIC before it reads it.
-        fence(Ordering::Release);
-
-        Ok(WriteWorkRequest::new(vec![sge_ack], remote_slice))
+            Some(WriteWorkRequest::new(vec![sge_ack], remote_slice))
+        } else {
+            None
+        }
     }
 
     /*

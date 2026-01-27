@@ -1,8 +1,10 @@
+use crate::channel::raw_channel::pending_work::WorkPollError;
 use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair_builder::AccessFlags;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use std::io;
+use std::time::Duration;
 
 impl SingleChannel {
     pub fn register_local_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
@@ -21,23 +23,65 @@ impl SingleChannel {
 
         let remote_mr = mr.remote();
 
-        // todo: handle instead of unwrap
-        let wr = self.meta_mr.prepare_write_remote_mr_wr(remote_mr).unwrap();
+        let wr = self
+            .meta_mr
+            .prepare_write_remote_mr_wr(remote_mr)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::ResourceBusy,
+                    "Peer has not acknowledged a previous remote mr share request",
+                )
+            })?;
 
-        // todo: handle instead of unwrap
-        self.channel.write(wr).unwrap();
+        self.channel.write(wr).map_err(|e| {
+            match e {
+                WorkPollError::PollError(io_error) => io_error,
+                // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
+                WorkPollError::WorkError(work_error) => {
+                    panic!(
+                        "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
+                        work_error
+                    )
+                }
+            }
+        })?;
 
         Ok(mr)
     }
 
-    pub fn accept_remote_mr(&mut self) -> io::Result<RemoteMemoryRegion> {
-        // todo: add timeout
+    pub fn accept_remote_mr(&mut self, timeout: Duration) -> io::Result<RemoteMemoryRegion> {
+        let start = std::time::Instant::now();
+
         loop {
             if let Some(remote_mr) = self.meta_mr.read_remote_mr() {
-                let wr = self.meta_mr.prepare_write_ack_remote_mr_wr().unwrap();
-                self.channel.write(wr).unwrap();
+                let wr = self.meta_mr.prepare_write_ack_remote_mr_wr().expect(
+                    "Invariant violation: Failed to prepare ACK immediately after receiving new MR",
+                );
+
+                self.channel.write(wr).map_err(|e| {
+                    match e {
+                        WorkPollError::PollError(io_error) => io_error,
+                        // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
+                        WorkPollError::WorkError(work_error) => {
+                            panic!(
+                                "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
+                                work_error
+                            )
+                        }
+                    }
+                })?;
+
                 return Ok(remote_mr);
             }
+
+            if start.elapsed() > timeout {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "Timed out waiting for peer to accept remote MR",
+                ));
+            }
+
+            std::hint::spin_loop();
         }
     }
 
