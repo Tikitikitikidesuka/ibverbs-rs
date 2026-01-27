@@ -112,7 +112,7 @@ impl RawChannel {
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
-    pub fn write_unpolled<'a, E, R, WR>(&mut self, wr: WR) -> io::Result<PendingWork<'a>>
+    pub unsafe fn write_unpolled<'a, E, R, WR>(&mut self, wr: WR) -> io::Result<PendingWork<'a>>
     where
         E: AsRef<[GatherElement<'a>]>,
         R: BorrowMut<RemoteMemorySliceMut<'a>>,

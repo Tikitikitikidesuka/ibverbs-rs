@@ -4,9 +4,9 @@ use std::ops::{Bound, Range, RangeBounds};
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    pub addr: usize,
-    pub length: usize,
-    pub rkey: u32,
+    addr: usize,
+    length: usize,
+    rkey: u32,
 }
 
 #[derive(Debug, Copy, Clone)]

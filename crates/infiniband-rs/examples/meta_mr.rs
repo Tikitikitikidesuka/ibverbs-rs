@@ -1,11 +1,11 @@
 use infiniband_rs::channel::single_channel::SingleChannel;
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use std::{env, process};
 use std::io::Read;
+use std::{env, process};
 
 const DEVICE: &str = "mlx5_0";
 
@@ -46,6 +46,25 @@ fn main() {
 
     let mut conn = prep_conn.handshake(endpoint).unwrap();
 
+    if primary {
+        let mut mem = [0u8; 1024];
+        println!("before: {:?}", &mem[0..8]);
+        std::io::stdin().read(&mut [0]).unwrap();
+        let mr = conn.register_shared_mr(&mut mem).unwrap();
+        while mem[0] == 0u8 {}
+        println!("after: {:?}", &mem[0..8]);
+    } else {
+        let mut remote_mr = conn.accept_remote_mr().unwrap();
+        let mut mem = [1u8; 1024];
+        let mr = conn.register_local_mr(&mut mem).unwrap();
+        conn.write(WriteWorkRequest::new(
+            &[mr.prepare_gather_element(&mem).unwrap()],
+            remote_mr.slice_mut(..).unwrap(),
+        ))
+        .unwrap();
+    }
+
+    /*
     println!("Sync epoch: {:?}", conn.get_sync_epoch());
     println!("Pres to inc sync epoch...");
     std::io::stdin().read(&mut [0]).unwrap();
@@ -53,4 +72,5 @@ fn main() {
     println!("Waiting sync epoch...");
     while conn.get_sync_epoch() == 0 {}
     println!("Sync epoch: {:?}", conn.get_sync_epoch());
+    */
 }

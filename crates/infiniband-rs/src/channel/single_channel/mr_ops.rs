@@ -13,22 +13,33 @@ impl SingleChannel {
         }
     }
 
-    /*
     pub fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.pd
                 .register_shared_mr(memory.as_mut_ptr(), memory.len())?
         };
 
-        // todo: share over channel
+        let remote_mr = mr.remote();
+
+        // todo: handle instead of unwrap
+        let wr = self.meta_mr.prepare_write_remote_mr_wr(remote_mr).unwrap();
+
+        // todo: handle instead of unwrap
+        self.channel.write(wr).unwrap();
 
         Ok(mr)
     }
 
     pub fn accept_remote_mr(&mut self) -> io::Result<RemoteMemoryRegion> {
-        // todo: accept shard memory region
+        // todo: add timeout
+        loop {
+            if let Some(remote_mr) = self.meta_mr.read_remote_mr() {
+                let wr = self.meta_mr.prepare_write_ack_remote_mr_wr().unwrap();
+                self.channel.write(wr).unwrap();
+                return Ok(remote_mr);
+            }
+        }
     }
-    */
 
     pub fn register_local_dmabuf_mr(
         &mut self,
