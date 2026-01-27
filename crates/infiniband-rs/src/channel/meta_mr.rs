@@ -1,20 +1,12 @@
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::GatherElement;
 use crate::ibverbs::work_request::WriteWorkRequest;
-use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::mem::{MaybeUninit, offset_of};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{io, slice};
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct MetaChannelEndpoint {
-    pub(super) channel_endpoint: QueuePairEndpoint,
-    pub(super) meta_mr_remote: RemoteMemoryRegion,
-}
 
 pub struct MetaMr {
     memory: Box<MetaMrState>,

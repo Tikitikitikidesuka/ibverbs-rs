@@ -1,7 +1,7 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::multi_channel::builder::PreparedMultiChannel;
+use crate::channel::single_channel::builder::SingleChannelEndpoint;
 use crate::ibverbs::context::Context;
-use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use crate::network::Node;
 use bon::bon;
 use serde::{Deserialize, Serialize};
@@ -47,10 +47,10 @@ pub struct PreparedNode {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LocalEndpoint {
     rank: usize,
-    endpoints: Box<[QueuePairEndpoint]>,
+    endpoints: Box<[SingleChannelEndpoint]>,
 }
 
-pub struct RemoteEndpoints(Box<[QueuePairEndpoint]>);
+pub struct RemoteEndpoints(Box<[SingleChannelEndpoint]>);
 
 impl PreparedNode {
     pub fn endpoint(&self) -> LocalEndpoint {
@@ -65,7 +65,7 @@ impl PreparedNode {
         endpoints: impl IntoIterator<Item = LocalEndpoint>,
     ) -> io::Result<RemoteEndpoints> {
         // Temporary initialization tracker
-        let mut tmp: Vec<Option<QueuePairEndpoint>> = vec![None; self.world_size];
+        let mut tmp: Vec<Option<SingleChannelEndpoint>> = vec![None; self.world_size];
 
         for endpoint in endpoints {
             // Check rank bounds
@@ -103,7 +103,7 @@ impl PreparedNode {
         }
 
         // Convert Option<Vec<_>> -> Vec<_> in one go, validating all slots are filled
-        let in_endpoints: Vec<QueuePairEndpoint> = tmp
+        let in_endpoints: Vec<SingleChannelEndpoint> = tmp
             .into_iter()
             .enumerate()
             .map(|(i, opt)| {

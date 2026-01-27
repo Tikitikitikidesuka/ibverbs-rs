@@ -1,7 +1,7 @@
 use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::remote_memory_region::{
-    RemoteMemoryRegion, RemoteMemorySlice, RemoteMemorySliceMut,
+    RemoteMemorySlice, RemoteMemorySliceMut,
 };
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::{

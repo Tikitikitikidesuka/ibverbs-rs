@@ -1,4 +1,4 @@
-use crate::channel::meta_mr::{MetaChannelEndpoint, MetaMr, PreparedMetaMr};
+use crate::channel::meta_mr::{MetaMr, PreparedMetaMr};
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::single_channel::SingleChannel;
@@ -45,15 +45,21 @@ pub struct PreparedSingleChannel {
     pd: ProtectionDomain,
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct SingleChannelEndpoint {
+    pub(crate) channel_endpoint: QueuePairEndpoint,
+    pub(crate) meta_mr_remote: RemoteMemoryRegion,
+}
+
 impl PreparedSingleChannel {
-    pub fn endpoint(&self) -> MetaChannelEndpoint {
-        MetaChannelEndpoint {
+    pub fn endpoint(&self) -> SingleChannelEndpoint {
+        SingleChannelEndpoint {
             channel_endpoint: self.channel.endpoint(),
             meta_mr_remote: self.meta_mr.remote(),
         }
     }
 
-    pub fn handshake(self, endpoint: MetaChannelEndpoint) -> io::Result<SingleChannel> {
+    pub fn handshake(self, endpoint: SingleChannelEndpoint) -> io::Result<SingleChannel> {
         let channel = self.channel.handshake(endpoint.channel_endpoint)?;
         let meta_mr = self.meta_mr.link_remote(endpoint.meta_mr_remote);
 

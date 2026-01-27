@@ -42,7 +42,7 @@ impl QueuePairBuilder {
     const DEFAULT_ACK_TIMEOUT: u8 = 4;
     const DEFAULT_ACCESS_FLAGS: ibv_access_flags = ibv_access_flags::IBV_ACCESS_LOCAL_WRITE;
 
-    pub fn new(
+    pub(super) fn new(
         pd: Arc<ProtectionDomainInner>,
         send_cq: Arc<CompletionQueueInner>,
         recv_cq: Arc<CompletionQueueInner>,

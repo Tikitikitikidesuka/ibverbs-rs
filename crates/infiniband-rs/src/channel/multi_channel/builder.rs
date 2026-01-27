@@ -1,9 +1,10 @@
+use crate::channel::meta_mr::{MetaMr, PreparedMetaMr};
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::builder::PreparedChannel;
+use crate::channel::single_channel::builder::SingleChannelEndpoint;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use bon::bon;
 use std::io;
 
@@ -23,34 +24,43 @@ impl MultiChannel {
         let channels = (0..num_channels)
             .into_iter()
             .map(|_| {
-                RawChannel::builder()
-                    .pd(&pd)
-                    .min_cq_buf_size(min_cq_buf_size)
-                    .max_send_wrs(max_send_wrs)
-                    .max_recv_wrs(max_recv_wrs)
-                    .max_send_sges(max_send_sges)
-                    .max_recv_sges(max_recv_sges)
-                    .build()
+                Ok((
+                    RawChannel::builder()
+                        .pd(&pd)
+                        .min_cq_buf_size(min_cq_buf_size)
+                        .max_send_wrs(max_send_wrs)
+                        .max_recv_wrs(max_recv_wrs)
+                        .max_send_sges(max_send_sges)
+                        .max_recv_sges(max_recv_sges)
+                        .build()?,
+                    MetaMr::new(&pd)?,
+                ))
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<io::Result<_>>()?;
         Ok(PreparedMultiChannel { channels, pd })
     }
 }
 
 pub struct PreparedMultiChannel {
-    channels: Box<[PreparedChannel]>,
+    channels: Box<[(PreparedChannel, PreparedMetaMr)]>,
     pd: ProtectionDomain,
 }
 
 impl PreparedMultiChannel {
-    pub fn endpoints(&self) -> Box<[QueuePairEndpoint]> {
+    pub fn endpoints(&self) -> Box<[SingleChannelEndpoint]> {
         self.channels
             .iter()
-            .map(|channel| channel.endpoint())
+            .map(|(channel, meta_mr)| SingleChannelEndpoint {
+                channel_endpoint: channel.endpoint(),
+                meta_mr_remote: meta_mr.remote(),
+            })
             .collect()
     }
 
-    pub fn handshake(self, endpoints: impl AsRef<[QueuePairEndpoint]>) -> io::Result<MultiChannel> {
+    pub fn handshake(
+        self,
+        endpoints: impl AsRef<[SingleChannelEndpoint]>,
+    ) -> io::Result<MultiChannel> {
         if self.channels.len() != endpoints.as_ref().len() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -66,8 +76,13 @@ impl PreparedMultiChannel {
             .channels
             .into_iter()
             .zip(endpoints.as_ref())
-            .map(|(channel, endpoint)| channel.handshake(*endpoint))
-            .collect::<Result<_, _>>()?;
+            .map(|((channel, meta_mr), endpoint)| {
+                Ok((
+                    channel.handshake(endpoint.channel_endpoint)?,
+                    meta_mr.link_remote(endpoint.meta_mr_remote),
+                ))
+            })
+            .collect::<io::Result<_>>()?;
 
         Ok(MultiChannel {
             channels,
