@@ -1,11 +1,11 @@
+use crate::channel::meta_mr::{MetaChannelEndpoint, MetaMr, PreparedMetaMr};
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::single_channel::SingleChannel;
-use crate::channel::single_channel::meta_mr::{MetaMr, PreparedMetaMr};
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
-use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
+use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use bon::bon;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -45,21 +45,15 @@ pub struct PreparedSingleChannel {
     pd: ProtectionDomain,
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub struct SingleChannelEndpoint {
-    channel_endpoint: QueuePairEndpoint,
-    meta_mr_remote: RemoteMemoryRegion,
-}
-
 impl PreparedSingleChannel {
-    pub fn endpoint(&self) -> SingleChannelEndpoint {
-        SingleChannelEndpoint {
+    pub fn endpoint(&self) -> MetaChannelEndpoint {
+        MetaChannelEndpoint {
             channel_endpoint: self.channel.endpoint(),
             meta_mr_remote: self.meta_mr.remote(),
         }
     }
 
-    pub fn handshake(self, endpoint: SingleChannelEndpoint) -> io::Result<SingleChannel> {
+    pub fn handshake(self, endpoint: MetaChannelEndpoint) -> io::Result<SingleChannel> {
         let channel = self.channel.handshake(endpoint.channel_endpoint)?;
         let meta_mr = self.meta_mr.link_remote(endpoint.meta_mr_remote);
 
