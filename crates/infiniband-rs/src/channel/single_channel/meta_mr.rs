@@ -1,11 +1,12 @@
-use crate::ibverbs::memory_region::{MemoryRegion, MemoryRegionEndpoint};
+use crate::ibverbs::memory_region::MemoryRegion;
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::GatherElement;
 use crate::ibverbs::work_request::WriteWorkRequest;
 use std::fmt::Debug;
 use std::mem::offset_of;
-use std::slice;
 use std::sync::atomic::{Ordering, fence};
+use std::{io, slice};
 
 pub struct MetaMr {
     memory: Box<MetaMrState>,
@@ -13,21 +14,59 @@ pub struct MetaMr {
     remote_mr: RemoteMemoryRegion,
 }
 
+pub struct PreparedMetaMr {
+    memory: Box<MetaMrState>,
+    mr: MemoryRegion,
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct MetaMrState {
     in_sync_epoch: u32,
     out_sync_epoch: u32,
-    in_msg_ack: u32,
-    out_msg_ack: u32,
-    _pad: u32,
-    in_message: MetaMessage,
-    out_message: MetaMessage,
+    //in_msg_ack: u32,
+    //out_msg_ack: u32,
+    //_pad: u32,
+    //in_message: MetaMessage,
+    //out_message: MetaMessage,
+}
+
+impl PreparedMetaMr {
+    pub fn remote(&self) -> RemoteMemoryRegion {
+        self.mr.remote()
+    }
+
+    pub fn link_remote(self, remote_mr: RemoteMemoryRegion) -> MetaMr {
+        MetaMr {
+            memory: self.memory,
+            mr: self.mr,
+            remote_mr,
+        }
+    }
 }
 
 impl MetaMr {
+    pub fn new(pd: &ProtectionDomain) -> io::Result<PreparedMetaMr> {
+        let mut memory = Box::new(MetaMrState {
+            in_sync_epoch: 0,
+            out_sync_epoch: 0,
+        });
+        let mr = unsafe {
+            pd.register_shared_mr(
+                memory.as_mut() as *mut MetaMrState as *mut u8,
+                size_of::<MetaMrState>(),
+            )?
+        };
+
+        Ok(PreparedMetaMr { memory, mr })
+    }
+
     pub fn increase_sync_epoch(&mut self) {
         self.memory.out_sync_epoch += 1;
+    }
+
+    pub fn get_sync_epoch(&self) -> u32 {
+        self.memory.in_sync_epoch
     }
 
     pub fn prepare_sync_epoch_wr(
@@ -38,7 +77,10 @@ impl MetaMr {
 
         // Write from out_sync
         let out_sync_bytes: &[u8] = unsafe {
-            slice::from_raw_parts(&self.memory.out_sync_epoch as *const u32 as *const u8, 4)
+            slice::from_raw_parts(
+                &self.memory.out_sync_epoch as *const u32 as *const u8,
+                size_of::<u32>(),
+            )
         };
 
         // To in_sync
@@ -52,6 +94,7 @@ impl MetaMr {
     }
 }
 
+/*
 #[derive(Debug, Copy, Clone)]
 pub enum MetaMessageView {
     SharedMemoryRegion(MemoryRegionEndpoint),
@@ -110,3 +153,4 @@ impl Debug for MetaMessage {
         write!(f, "{:?}", self.view())
     }
 }
+ */

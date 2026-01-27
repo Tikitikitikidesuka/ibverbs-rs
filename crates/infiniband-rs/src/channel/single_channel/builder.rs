@@ -1,10 +1,13 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::single_channel::SingleChannel;
+use crate::channel::single_channel::meta_mr::{MetaMr, PreparedMetaMr};
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
+use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
 use bon::bon;
+use serde::{Deserialize, Serialize};
 use std::io;
 
 #[bon]
@@ -27,24 +30,42 @@ impl SingleChannel {
             .max_send_sges(max_send_sges)
             .max_recv_sges(max_recv_sges)
             .build()?;
-        Ok(PreparedSingleChannel { channel, pd })
+        let meta_mr = MetaMr::new(&pd)?;
+        Ok(PreparedSingleChannel {
+            channel,
+            meta_mr,
+            pd,
+        })
     }
 }
 
 pub struct PreparedSingleChannel {
     channel: PreparedChannel,
+    meta_mr: PreparedMetaMr,
     pd: ProtectionDomain,
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+pub struct SingleChannelEndpoint {
+    channel_endpoint: QueuePairEndpoint,
+    meta_mr_remote: RemoteMemoryRegion,
+}
+
 impl PreparedSingleChannel {
-    pub fn endpoint(&self) -> QueuePairEndpoint {
-        self.channel.endpoint()
+    pub fn endpoint(&self) -> SingleChannelEndpoint {
+        SingleChannelEndpoint {
+            channel_endpoint: self.channel.endpoint(),
+            meta_mr_remote: self.meta_mr.remote(),
+        }
     }
 
-    pub fn handshake(self, endpoint: QueuePairEndpoint) -> io::Result<SingleChannel> {
-        let channel = self.channel.handshake(endpoint)?;
+    pub fn handshake(self, endpoint: SingleChannelEndpoint) -> io::Result<SingleChannel> {
+        let channel = self.channel.handshake(endpoint.channel_endpoint)?;
+        let meta_mr = self.meta_mr.link_remote(endpoint.meta_mr_remote);
+
         Ok(SingleChannel {
             channel,
+            meta_mr,
             pd: self.pd,
         })
     }

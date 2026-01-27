@@ -1,15 +1,13 @@
-use crate::ibverbs::protection_domain::ProtectionDomainInner;
-use ibverbs_sys::ibv_mr;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-use std::ops::{Bound, Index, Range, RangeBounds};
-use std::sync::Arc;
+use std::ops::{Bound, Range, RangeBounds};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    pd: Arc<ProtectionDomainInner>,
-    mr: *mut ibv_mr,
+    pub addr: usize,
+    pub length: usize,
+    pub rkey: u32,
 }
-
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMemorySlice<'a> {
@@ -30,8 +28,12 @@ pub struct RemoteMemorySliceMut<'a> {
 }
 
 impl RemoteMemoryRegion {
+    pub(super) fn new(addr: usize, length: usize, rkey: u32) -> Self {
+        Self { addr, length, rkey }
+    }
+
     pub fn len(&self) -> usize {
-        unsafe { *self.mr }.length
+        self.length
     }
 
     pub fn is_empty(&self) -> bool {
@@ -40,24 +42,22 @@ impl RemoteMemoryRegion {
 
     pub fn slice(&self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice> {
         let range = normalize_range(self.len(), range)?;
-        let base_addr = unsafe { (*self.mr).addr as usize };
 
         Some(RemoteMemorySlice {
-            addr: base_addr + range.start,
+            addr: self.addr + range.start,
             length: range.len(),
-            rkey: unsafe { (*self.mr).rkey },
+            rkey: self.rkey,
             _mr_lifetime: PhantomData,
         })
     }
 
     pub fn slice_mut(&mut self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySliceMut> {
         let range = normalize_range(self.len(), range)?;
-        let base_addr = unsafe { (*self.mr).addr as usize };
 
         Some(RemoteMemorySliceMut {
-            addr: base_addr + range.start,
+            addr: self.addr + range.start,
             length: range.len(),
-            rkey: unsafe { (*self.mr).rkey },
+            rkey: self.rkey,
             _mr_lifetime: Default::default(),
         })
     }

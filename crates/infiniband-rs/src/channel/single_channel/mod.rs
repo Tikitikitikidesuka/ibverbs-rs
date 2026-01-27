@@ -1,12 +1,14 @@
 pub mod builder;
-pub mod meta_mr;
+pub mod meta_ops;
 pub mod mr_ops;
 pub mod polled_ops;
 pub mod scoped_ops;
 pub mod unpolled_ops;
 
+mod meta_mr;
+
 use crate::channel::raw_channel::RawChannel;
-//use crate::channel::single_channel::meta_mr::MetaMr;
+use crate::channel::single_channel::meta_mr::MetaMr;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 
 /// This is a single channel with owned protection domain.

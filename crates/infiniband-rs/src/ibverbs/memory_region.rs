@@ -1,4 +1,5 @@
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
+use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::scatter_gather_element::{
     GatherElement, ScatterElement, ScatterGatherElementError,
 };
@@ -10,13 +11,6 @@ use std::sync::Arc;
 pub struct MemoryRegion {
     pd: Arc<ProtectionDomainInner>,
     mr: *mut ibv_mr,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct MemoryRegionEndpoint {
-    pub addr: usize,
-    pub length: usize,
-    pub rkey: u32,
 }
 
 unsafe impl Sync for MemoryRegion {}
@@ -115,12 +109,8 @@ impl MemoryRegion {
         unsafe { (*self.mr).length }
     }
 
-    pub fn endpoint(&self) -> MemoryRegionEndpoint {
-        MemoryRegionEndpoint {
-            addr: self.address() as usize,
-            length: self.length(),
-            rkey: self.rkey(),
-        }
+    pub fn remote(&self) -> RemoteMemoryRegion {
+        RemoteMemoryRegion::new(self.address() as usize, self.length(), self.rkey())
     }
 }
 

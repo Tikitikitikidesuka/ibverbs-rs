@@ -53,7 +53,7 @@ impl ProtectionDomain {
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
     pub unsafe fn register_local_mr(
-        &mut self,
+        &self,
         address: *mut u8,
         length: usize,
     ) -> io::Result<MemoryRegion> {
@@ -72,7 +72,7 @@ impl ProtectionDomain {
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
     pub unsafe fn register_shared_mr(
-        &mut self,
+        &self,
         address: *mut u8,
         length: usize,
     ) -> io::Result<MemoryRegion> {
