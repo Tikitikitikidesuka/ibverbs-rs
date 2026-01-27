@@ -22,26 +22,26 @@ impl MultiChannel {
             self.pd
                 .register_shared_mr(memory.as_mut_ptr(), memory.len())?
         };
-
-        let remote_mr = mr.remote();
-
-        let MultiChannel {
-            channels, meta_mrs, ..
-        } = self;
-        PollingScope::run(channels, |s| {
-            s.channel_post_write(
-                |s| Ok(&mut s[0]),
-                meta_mrs[0].prepare_write_remote_mr_wr(remote_mr).unwrap(),
-            )
-            .unwrap();
-        })
-        .unwrap();
-
         Ok(mr)
     }
 
-    pub fn share_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-
+    pub fn share_mr(&mut self, peer: usize, mr: MemoryRegion) -> io::Result<()> {
+        let (channel, meta_mr) = self.meta_channel(peer)?;
+        channel
+            .write(
+                meta_mr
+                    .prepare_write_remote_mr_wr(mr.remote())
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::ResourceBusy,
+                            "Peer has not acknowledged a previous remote mr share request",
+                        )
+                    })?,
+            )
+            .unwrap();
+        // Try along these lines...
+        // Or give up and go back to only send receive sync and barriers
+        Ok(())
     }
 
     pub fn accept_remote_mr(&mut self, timeout: Duration) -> io::Result<RemoteMemoryRegion> {

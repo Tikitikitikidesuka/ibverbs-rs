@@ -27,4 +27,33 @@ impl MultiChannel {
             )
         })
     }
+
+    fn meta_mr(&mut self, peer: usize) -> io::Result<&mut MetaMr> {
+        self.meta_mrs.get_mut(peer).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::AddrNotAvailable,
+                format!("Peer index {} does not exist", peer),
+            )
+        })
+    }
+
+    fn meta_channel(&mut self, peer: usize) -> io::Result<(&mut RawChannel, &mut MetaMr)> {
+        let Self {
+            channels, meta_mrs, ..
+        } = self;
+        Ok((
+            channels.get_mut(peer).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::AddrNotAvailable,
+                    format!("Peer index {} does not exist", peer),
+                )
+            })?,
+            meta_mrs.get_mut(peer).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::AddrNotAvailable,
+                    format!("Peer index {} does not exist", peer),
+                )
+            })?,
+        ))
+    }
 }
