@@ -51,7 +51,10 @@ impl RemoteMemoryRegion {
         })
     }
 
-    pub fn slice_mut(&'_ mut self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySliceMut<'_>> {
+    pub fn slice_mut(
+        &'_ mut self,
+        range: impl RangeBounds<usize>,
+    ) -> Option<RemoteMemorySliceMut<'_>> {
         let range = normalize_range(self.len(), range)?;
 
         Some(RemoteMemorySliceMut {
@@ -69,7 +72,7 @@ impl<'a> RemoteMemorySlice<'a> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.length == 0
+        self.len() == 0
     }
 
     pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
@@ -79,7 +82,10 @@ impl<'a> RemoteMemorySlice<'a> {
         }
     }
 
-    pub fn split_at_checked(&'_ self, mid: usize) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
+    pub fn split_at_checked(
+        &'_ self,
+        mid: usize,
+    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
         if mid > self.len() {
             return None;
         }
@@ -100,7 +106,7 @@ impl<'a> RemoteMemorySlice<'a> {
         ))
     }
 
-    pub fn slice(&self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'a>> {
+    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
         let range = normalize_range(self.length, range)?;
 
         Some(RemoteMemorySlice {
@@ -118,10 +124,13 @@ impl<'a> RemoteMemorySliceMut<'a> {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.length == 0
+        self.len() == 0
     }
 
-    pub fn split_at_mut(&'_ mut self, mid: usize) -> (RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>) {
+    pub fn split_at_mut(
+        &'_ mut self,
+        mid: usize,
+    ) -> (RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>) {
         match self.split_at_mut_checked(mid) {
             Some(pair) => pair,
             None => panic!("mid > len"),
@@ -152,7 +161,10 @@ impl<'a> RemoteMemorySliceMut<'a> {
         ))
     }
 
-    pub fn slice_mut(&'_ mut self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySliceMut<'_>> {
+    pub fn slice_mut(
+        &'_ mut self,
+        range: impl RangeBounds<usize>,
+    ) -> Option<RemoteMemorySliceMut<'_>> {
         let range = normalize_range(self.length, range)?;
 
         Some(RemoteMemorySliceMut {

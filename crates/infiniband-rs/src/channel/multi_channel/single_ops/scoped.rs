@@ -1,5 +1,5 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::raw_channel::pending_work::MultiWorkPollError;
+use crate::channel::raw_channel::pending_work::{MultiWorkPollError, PendingWork};
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
 use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
@@ -8,6 +8,7 @@ use crate::ibverbs::work_request::{
 };
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
+use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
 
 impl MultiChannel {
     pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, MultiWorkPollError>
@@ -39,17 +40,14 @@ impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {
         self.channel_post_receive(|m| m.channel(peer), wr)
     }
 
-    pub fn post_write<E, R, WR>(
-        &mut self,
-        peer: usize,
-        wr: WR,
-    ) -> io::Result<ScopedPendingWork<'scope>>
+    pub fn post_write<E, R, WR>(&mut self, mut wr: WR) -> io::Result<ScopedPendingWork<'scope>>
     where
         E: AsRef<[GatherElement<'env>]>,
         R: BorrowMut<RemoteMemorySliceMut<'env>>,
-        WR: BorrowMut<WriteWorkRequest<'env, E, R>>,
+        WR: BorrowMut<RankWriteWorkRequest<'env, E, R>>,
     {
-        self.channel_post_write(|m| m.channel(peer), wr)
+        let wr = wr.borrow_mut();
+        self.channel_post_write(|m| m.channel(wr.peer), &mut wr.wr)
     }
 
     pub fn post_read<E, R, WR>(

@@ -1,6 +1,8 @@
 pub mod builder;
 pub mod mr_ops;
-mod multi_ops;
+pub mod multi_ops;
+pub mod rank_remote_memory_region;
+pub mod rank_work_request;
 pub mod single_ops;
 
 use crate::channel::meta_mr::MetaMr;
