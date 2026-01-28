@@ -60,6 +60,12 @@ pub enum WorkPollError {
     WorkError(#[from] WorkError),
 }
 
+impl From<WorkPollError> for io::Error {
+    fn from(value: WorkPollError) -> Self {
+        io::Error::new(io::ErrorKind::Other, value)
+    }
+}
+
 pub type WorkSpinPollResult = Result<WorkSuccess, WorkPollError>;
 
 /// Error of a Connection Scope caught during clean up.

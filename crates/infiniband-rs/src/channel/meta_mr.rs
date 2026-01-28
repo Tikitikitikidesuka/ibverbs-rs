@@ -1,11 +1,16 @@
+use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::remote_memory_region::{RemoteMemoryRegion, RemoteMemorySliceMut};
+use crate::ibverbs::remote_memory_region::{
+    RemoteMemoryRegion, RemoteMemorySlice, RemoteMemorySliceMut,
+};
 use crate::ibverbs::scatter_gather_element::GatherElement;
 use crate::ibverbs::work_request::WriteWorkRequest;
+use bytemuck::{Pod, Zeroable};
 use std::fmt::Debug;
 use std::mem::{MaybeUninit, offset_of};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering, fence};
+use std::time::Duration;
 use std::{io, slice};
 
 pub struct MetaMr {
@@ -20,22 +25,55 @@ pub struct PreparedMetaMr {
 }
 
 #[repr(C)]
-#[derive(Debug)]
-pub struct MetaMrState {
-    //in_sync_epoch: AtomicUsize,
-    //out_sync_epoch: AtomicUsize,
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+struct MetaMrState {
+    in_remote_mr: PodRemoteMemoryRegion,
+    in_epoch: u64,
+    in_ack: u64,
+    out_remote_mr: PodRemoteMemoryRegion,
+    out_epoch: u64,
+    out_ack: u64,
+}
 
-    // --- Incoming Write Section (Written by Peer) ---
-    pub in_remote_mr: MaybeUninit<RemoteMemoryRegion>, // Incoming remote mr
-    pub peer_remote_mr_epoch: AtomicUsize,             // Number of remote mrs received
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+struct PodRemoteMemoryRegion {
+    addr: u64,
+    length: u64,
+    rkey: u32,
+    _pad: u32,
+}
 
-    pub local_remote_mr_ack: AtomicUsize, // Number of remote mrs acknowledged by peer
+impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
+    fn from(value: RemoteMemoryRegion) -> Self {
+        PodRemoteMemoryRegion {
+            addr: value.addr as u64,
+            length: value.length as u64,
+            rkey: value.rkey,
+            _pad: 0,
+        }
+    }
+}
 
-    // --- Outgoing Write Section (Written by Local) ---
-    pub out_remote_mr: MaybeUninit<RemoteMemoryRegion>, // Outgoing remote mr
-    pub local_remote_mr_epoch: AtomicUsize,             // Number of remote mrs sent
+impl From<PodRemoteMemoryRegion> for RemoteMemoryRegion {
+    fn from(value: PodRemoteMemoryRegion) -> Self {
+        RemoteMemoryRegion {
+            addr: value.addr as usize,
+            length: value.length as usize,
+            rkey: value.rkey,
+        }
+    }
+}
 
-    pub peer_remote_mr_ack: AtomicUsize, // Number of remote mrs acknowledged to peer
+impl PodRemoteMemoryRegion {
+    pub fn new() -> Self {
+        Self {
+            addr: 0,
+            length: 0,
+            rkey: 0,
+            _pad: 0,
+        }
+    }
 }
 
 impl PreparedMetaMr {
@@ -55,12 +93,12 @@ impl PreparedMetaMr {
 impl MetaMr {
     pub fn new(pd: &ProtectionDomain) -> io::Result<PreparedMetaMr> {
         let mut memory = Box::new(MetaMrState {
-            in_remote_mr: MaybeUninit::uninit(),
-            out_remote_mr: MaybeUninit::uninit(),
-            local_remote_mr_epoch: AtomicUsize::new(0),
-            local_remote_mr_ack: AtomicUsize::new(0),
-            peer_remote_mr_epoch: AtomicUsize::new(0),
-            peer_remote_mr_ack: AtomicUsize::new(0),
+            in_remote_mr: PodRemoteMemoryRegion::new(),
+            in_ack: 0,
+            in_epoch: 0,
+            out_remote_mr: PodRemoteMemoryRegion::new(),
+            out_epoch: 0,
+            out_ack: 0,
         });
 
         let mr = unsafe {
@@ -73,14 +111,104 @@ impl MetaMr {
         Ok(PreparedMetaMr { memory, mr })
     }
 
+    /// Protocol for sharing a remote memory region.
+    /// 1. Write the remote memory region to the meta mr with `set_remote_mr`.
+    /// 2. Advance the epoch with `increase_remote_mr_epoch`.
+    /// 3. RDMA write the wr from `prepare_write_remote_mr_wr`.
+    /// This writes the remote mr to the peer.
+    /// 4. RDMA write the wr from `prepare_write_remote_mr_epoch_wr`.
+    /// This advances the epoch to the peer, notifying him that he can read
+    /// the previously sent memory region. These two cannot be done in a single
+    /// work request because there is no guarantee that the operation is atomic.
+    /// However, a reliable channel like RawChannel guarantees that multiple WRs
+    /// are seen in order of issuance.
+
+    /// Protocol for receive a shared memory region
+    /// 1. Wait until the epoch is one value higher than the ack.
+    /// 2. Read the remote memory region.
+    /// 3. Acknowledge it by adding one to the ack and RDMA writing the wr generated from
+    /// `prepare_write_ack_remote_mr_wr` to the peer that shared the mr.
+
+    pub fn share_memory_region(
+        &mut self,
+        channel: &mut RawChannel,
+        mr: &MemoryRegion,
+    ) -> io::Result<()> {
+        // 0. Check the peer acknowledged the last shared remote mr
+        let in_remote_mr_ack = self.memory.in_ack; // todo: atomic loading
+        if self.memory.out_epoch > in_remote_mr_ack {
+            return Err(io::Error::new(
+                io::ErrorKind::ResourceBusy,
+                "Peer has not acknowledged a previously shared memory region",
+            ));
+        }
+
+        // 1. Write the mr's remote handle to the outgoing remote mr field
+        let remote_mr = mr.remote();
+        self.memory.out_remote_mr = remote_mr.into();
+
+        // 2. Increase the epoch in the outgoing remote mr epoch field
+        self.memory.out_ack += 1;
+
+        // Ensure previous stores are not reordered to after the write issue
+        fence(Ordering::Release);
+
+        // Slice the meta remote memory region
+        // Unwrap because we are taking the full slice
+        let mut meta_remote_mr_slice = self.remote_mr.slice_mut(..).unwrap();
+        let (mut in_remote_mr, mut rest) =
+            meta_remote_mr_slice.split_at_mut(size_of::<PodRemoteMemoryRegion>());
+        let (mut in_epoch, _rest) = rest.split_at_mut(size_of::<u64>());
+
+        // 3. Prepare RDMA write request of the remote mr
+        // Get slice of the outgoing remote mr field's bytes
+        let out_remote_mr_bytes = bytemuck::bytes_of(&self.memory.out_remote_mr);
+        // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
+        let remote_mr_sges = [self.mr.prepare_gather_element(out_remote_mr_bytes).unwrap()];
+        let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, &mut in_remote_mr);
+
+        // 4. Prepare RDMA write request of the remote mr epoch
+        // Get slice of the remote mr epoch field's bytes
+        let out_epoch_bytes = bytemuck::bytes_of(&self.memory.out_epoch);
+        // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
+        let remote_mr_epoch_sges = [self.mr.prepare_gather_element(out_epoch_bytes).unwrap()];
+        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, &mut in_epoch);
+
+        // 5. Post RDMA write operations in the correct order:
+        // - Firstly write the remote mr.
+        // - Secondly write the increased epoch.
+        channel
+            .scope(|s| {
+                s.post_write(remote_mr_wr)?.spin_poll()?;
+                s.post_write(remote_mr_epoch_wr)?.spin_poll()?;
+                Ok::<(), io::Error>(())
+            })
+            .expect("Implementation error: All wrs polled manually in the scope")?;
+
+        Ok(())
+    }
+
+    pub fn accept_memory_region(
+        &mut self,
+        channel: &mut RawChannel,
+        timeout: Duration,
+    ) -> io::Result<RemoteMemoryRegion> {
+        todo!()
+    }
+
+    /*
+    pub fn set_remote_mr() {
+        todo!()
+    }
+
     /// Returns None if there peer still has not acknowledged a previous request (not ready)
     pub fn prepare_write_remote_mr_wr(
         &'_ mut self,
         remote_mr: RemoteMemoryRegion,
     ) -> Option<WriteWorkRequest<'_, Vec<GatherElement<'_>>, RemoteMemorySliceMut<'_>>> {
         // Load with Acquire to sync with any previous writes
-        let ack = self.memory.local_remote_mr_ack.load(Ordering::Acquire);
-        let current_epoch = self.memory.local_remote_mr_epoch.load(Ordering::Relaxed);
+        let ack = self.memory.in_remote_mr_ack.load(Ordering::Acquire);
+        let current_epoch = self.memory.out_remote_mr_epoch.load(Ordering::Relaxed);
 
         if current_epoch > ack {
             return None;
@@ -95,7 +223,7 @@ impl MetaMr {
         // is visible before the epoch update is visible.
         let new_epoch = current_epoch + 1;
         self.memory
-            .local_remote_mr_epoch
+            .out_remote_mr_epoch
             .store(new_epoch, Ordering::Release);
 
         let mr_bytes = unsafe {
@@ -107,7 +235,7 @@ impl MetaMr {
 
         let epoch_bytes = unsafe {
             slice::from_raw_parts(
-                &self.memory.local_remote_mr_epoch as *const AtomicUsize as *const u8,
+                &self.memory.out_remote_mr_epoch as *const AtomicUsize as *const u8,
                 size_of::<usize>(),
             )
         };
@@ -133,8 +261,8 @@ impl MetaMr {
     pub fn read_remote_mr(&self) -> Option<RemoteMemoryRegion> {
         // Load Epoch with Acquire
         // Ensures we see the data payload written before this epoch was updated.
-        let epoch = self.memory.peer_remote_mr_epoch.load(Ordering::Acquire);
-        let ack = self.memory.peer_remote_mr_ack.load(Ordering::Relaxed);
+        let epoch = self.memory.in_remote_mr_epoch.load(Ordering::Acquire);
+        let ack = self.memory.out_remote_mr_ack.load(Ordering::Relaxed);
 
         if epoch > ack {
             // SAFE: Acquire ordering above guarantees `in_remote_mr` is valid/updated
@@ -148,8 +276,8 @@ impl MetaMr {
     pub fn prepare_write_ack_remote_mr_wr(
         &'_ mut self,
     ) -> Option<WriteWorkRequest<'_, Vec<GatherElement<'_>>, RemoteMemorySliceMut<'_>>> {
-        let epoch = self.memory.peer_remote_mr_epoch.load(Ordering::Acquire);
-        let ack = self.memory.peer_remote_mr_ack.load(Ordering::Relaxed);
+        let epoch = self.memory.in_remote_mr_epoch.load(Ordering::Acquire);
+        let ack = self.memory.out_remote_mr_ack.load(Ordering::Relaxed);
 
         if ack < epoch {
             // Increment Ack
@@ -157,12 +285,12 @@ impl MetaMr {
             // Store with Release implies the read of the data is "done"
             // before we tell the peer we are done.
             self.memory
-                .peer_remote_mr_ack
+                .out_remote_mr_ack
                 .store(new_ack, Ordering::Release);
 
             let ack_bytes = unsafe {
                 slice::from_raw_parts(
-                    &self.memory.peer_remote_mr_ack as *const AtomicUsize as *const u8,
+                    &self.memory.out_remote_mr_ack as *const AtomicUsize as *const u8,
                     size_of::<usize>(),
                 )
             };
@@ -170,7 +298,7 @@ impl MetaMr {
             let sge_ack = self.mr.prepare_gather_element(ack_bytes).expect(
                 "Invariant violation: `peer_remote_mr_ack` is not within the registered `mr`",
             );
-            let offset = offset_of!(MetaMrState, local_remote_mr_ack);
+            let offset = offset_of!(MetaMrState, in_remote_mr_ack);
             let len = size_of::<usize>();
             let range = offset..offset + len;
             let remote_slice = self
@@ -183,6 +311,7 @@ impl MetaMr {
             None
         }
     }
+    */
 
     /*
     pub fn increase_sync_epoch(&mut self) {

@@ -1,16 +1,18 @@
+use bytemuck::Pod;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::{Bound, Range, RangeBounds};
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    addr: usize,
-    length: usize,
-    rkey: u32,
+    pub(crate) addr: usize,
+    pub(crate) length: usize,
+    pub(crate) rkey: u32,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMemorySlice<'a> {
+    // todo: why not actually hold a reference
     pub(super) addr: usize,
     pub(super) length: usize,
     pub(super) rkey: u32,
@@ -20,6 +22,7 @@ pub struct RemoteMemorySlice<'a> {
 
 #[derive(Debug)]
 pub struct RemoteMemorySliceMut<'a> {
+    // todo: why not actually hold a reference
     pub(super) addr: usize,
     pub(super) length: usize,
     pub(super) rkey: u32,

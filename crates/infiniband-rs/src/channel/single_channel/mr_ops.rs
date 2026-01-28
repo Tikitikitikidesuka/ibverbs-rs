@@ -47,6 +47,8 @@ impl SingleChannel {
     }
 
     pub fn share_mr(&mut self, mr: &MemoryRegion) -> io::Result<()> {
+        self.meta_mr.share_memory_region(&mut self.channel, mr)
+        /*
         self.channel
             .write(
                 self.meta_mr
@@ -72,9 +74,14 @@ impl SingleChannel {
             })?;
 
         Ok(())
+
+             */
     }
 
     pub fn accept_remote_mr(&mut self, timeout: Duration) -> io::Result<RemoteMemoryRegion> {
+        self.meta_mr
+            .accept_memory_region(&mut self.channel, timeout)
+        /*
         let start = std::time::Instant::now();
 
         loop {
@@ -108,5 +115,6 @@ impl SingleChannel {
 
             std::hint::spin_loop();
         }
+         */
     }
 }
