@@ -39,6 +39,10 @@ impl SharedMemoryBufferReader {
     pub fn buffer_name(&self) -> &str {
         self.buffer.name()
     }
+
+    pub unsafe fn get_raw_buffer(&self) -> &[u8] {
+        unsafe { self.buffer.as_slice() }
+    }
 }
 
 impl CircularBufferReader for SharedMemoryBufferReader {
