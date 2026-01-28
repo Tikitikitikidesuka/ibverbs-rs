@@ -36,7 +36,7 @@ impl MultiChannel {
     /// # Safety
     /// This memory can be mutated at any point. It is the user's responsibility to enforce some
     /// sort of protocol to avoid breaking aliasing rules on its borrows.
-    pub fn register_shared_dmabuf_mr(
+    pub unsafe fn register_shared_dmabuf_mr(
         &mut self,
         fd: i32,
         offset: u64,
