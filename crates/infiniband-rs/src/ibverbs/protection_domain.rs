@@ -31,8 +31,9 @@ impl ProtectionDomain {
     /// Registers memory with the given access flags.
     ///
     /// # Safety
-    /// The user is responsible for ensuring the memory registered remains allocated
-    /// as long as it is used in rdma operations.
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
     pub unsafe fn register_mr_with_permissions(
         &self,
         address: *mut u8,
@@ -52,11 +53,7 @@ impl ProtectionDomain {
     /// # Safety
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
-    pub unsafe fn register_local_mr(
-        &self,
-        address: *mut u8,
-        length: usize,
-    ) -> io::Result<MemoryRegion> {
+    pub fn register_local_mr(&self, address: *mut u8, length: usize) -> io::Result<MemoryRegion> {
         let mr = unsafe {
             self.register_mr_with_permissions(
                 address,
@@ -69,8 +66,9 @@ impl ProtectionDomain {
     }
 
     /// # Safety
-    /// The user is responsible for ensuring the memory registered remains allocated
-    /// as long as it is used in rdma operations.
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
     pub unsafe fn register_shared_mr(
         &self,
         address: *mut u8,
@@ -100,8 +98,9 @@ impl ProtectionDomain {
     ///   Note: `iova` must have the same page offset as `offset`
     ///
     /// # Safety
-    /// The user is responsible for ensuring the memory registered remains allocated
-    /// as long as it is used in rdma operations.
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
     pub unsafe fn register_dmabuf(
         &self,
         fd: i32,
@@ -110,22 +109,10 @@ impl ProtectionDomain {
         iova: u64,
         access_flags: ibv_access_flags,
     ) -> io::Result<MemoryRegion> {
-        unsafe {
-            MemoryRegion::register_dmabuf(
-                self.inner.clone(),
-                fd,
-                offset,
-                length,
-                iova,
-                access_flags,
-            )
-        }
+        MemoryRegion::register_dmabuf(self.inner.clone(), fd, offset, length, iova, access_flags)
     }
 
-    /// # Safety
-    /// The user is responsible for ensuring the memory registered remains allocated
-    /// as long as it is used in rdma operations.
-    pub unsafe fn register_local_dmabuf(
+    pub fn register_local_dmabuf(
         &self,
         fd: i32,
         offset: u64,
@@ -144,8 +131,9 @@ impl ProtectionDomain {
     }
 
     /// # Safety
-    /// The user is responsible for ensuring the memory registered remains allocated
-    /// as long as it is used in rdma operations.
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
     pub unsafe fn register_shared_dmabuf(
         &self,
         fd: i32,

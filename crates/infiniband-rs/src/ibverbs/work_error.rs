@@ -1,12 +1,18 @@
 use ibverbs_sys::ibv_wc_status;
 use num_enum::FromPrimitive;
-use std::fmt;
+use std::{fmt, io};
 use thiserror::Error;
 
 #[derive(Copy, Clone, Debug, Error)]
 pub struct WorkError {
     raw_status: u32,
     vendor_code: u32,
+}
+
+impl From<WorkError> for io::Error {
+    fn from(value: WorkError) -> Self {
+        io::Error::new(io::ErrorKind::Other, format!("{value}"))
+    }
 }
 
 impl WorkError {
