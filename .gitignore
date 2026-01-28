@@ -8,3 +8,4 @@ vendor
 out
 Run_*
 demo*
+.direnv
