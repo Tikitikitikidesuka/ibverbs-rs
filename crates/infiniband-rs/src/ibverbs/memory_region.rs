@@ -45,10 +45,12 @@ impl std::fmt::Debug for MemoryRegion {
 }
 
 impl MemoryRegion {
-    /// # Safety
-    /// The user is responsible for ensuring the memory registered
-    /// is not deallocated for as long as it is registered.
-    pub(super) unsafe fn register_with_permissions(
+    /// # Safety -> This is safe because the memory region cannot be used in any ops without
+    /// first preparing a scatter gather element which take references of the corresponding memory
+    /// meaning the mr cannot be used unless its backing memory is still allocated.
+    /// It is also safe to pass a non owned memory region, it gets detected by the hardware
+    /// and returned as an error.
+    pub(super) fn register_with_permissions(
         pd: Arc<ProtectionDomainInner>,
         address: *mut u8,
         length: usize,
@@ -72,9 +74,10 @@ impl MemoryRegion {
     /// * `iova` - The argument iova specifies the virtual base address of the MR when accessed through a lkey or rkey.
     ///   Note: `iova` must have the same page offset as `offset`
     ///
-    /// # Safety
-    /// The DMA-BUF and its mapped memory must not be deallocated while they remain registered.
-    pub(super) unsafe fn register_dmabuf(
+    /// # Safety -> This is safe because the memory region cannot be used in any ops without
+    /// first preparing a scatter gather element which take references of the corresponding memory
+    /// meaning the mr cannot be used unless its backing memory is still allocated.
+    pub(super) fn register_dmabuf(
         pd: Arc<ProtectionDomainInner>,
         fd: i32,
         offset: u64,

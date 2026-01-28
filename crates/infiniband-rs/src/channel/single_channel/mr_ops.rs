@@ -7,10 +7,16 @@ use std::time::Duration;
 
 impl SingleChannel {
     pub fn register_local_mr(&mut self, memory: &[u8]) -> io::Result<MemoryRegion> {
-        unsafe {
-            self.pd
-                .register_local_mr(memory.as_ptr() as *mut _, memory.len())
-        }
+        self.pd
+            .register_local_mr(memory.as_ptr() as *mut _, memory.len())
+    }
+
+    pub fn register_local_mr_from_ptr(
+        &mut self,
+        address: *mut u8,
+        length: usize,
+    ) -> io::Result<MemoryRegion> {
+        self.pd.register_local_mr(address, length)
     }
 
     /// # Safety
@@ -21,6 +27,17 @@ impl SingleChannel {
             self.pd
                 .register_shared_mr(memory.as_ptr() as *mut _, memory.len())
         }
+    }
+
+    /// # Safety
+    /// This memory can be mutated at any point. It is the user's responsibility to enforce some
+    /// sort of protocol to avoid breaking aliasing rules on its borrows.
+    pub unsafe fn register_shared_mr_from_ptr(
+        &mut self,
+        address: *mut u8,
+        length: usize,
+    ) -> io::Result<MemoryRegion> {
+        unsafe { self.pd.register_shared_mr(address, length) }
     }
 
     pub fn register_local_dmabuf_mr(
