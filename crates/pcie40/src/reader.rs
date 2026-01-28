@@ -81,10 +81,15 @@ impl PCIe40Reader {
         self.alignment_pow2
     }
 
+    /// # Safety
+    /// The buffer's data might change due to the DMA access from the card, so it is not really immutable
     pub unsafe fn get_buffer(&self) -> &[u8] {
         unsafe { self.mapped_buffer.data() }
     }
 
+    pub fn get_buffer_size(&self) -> usize {
+        self.mapped_buffer.size()
+    }
 
     pub fn read_offset(&self) -> usize {
         self.read_offset
