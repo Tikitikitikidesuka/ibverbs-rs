@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::ops::{Bound, Range, RangeBounds};
 
+trait RemoteMemoryBounds {
+    fn addr(&self) -> usize;
+    fn len(&self) -> usize;
+    fn rkey(&self) -> u32;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
     pub(crate) addr: usize,
@@ -11,7 +21,6 @@ pub struct RemoteMemoryRegion {
 
 #[derive(Debug, Copy, Clone)]
 pub struct RemoteMemorySlice<'a> {
-    // todo: why not actually hold a reference
     pub(super) addr: usize,
     pub(super) length: usize,
     pub(super) rkey: u32,
@@ -21,7 +30,6 @@ pub struct RemoteMemorySlice<'a> {
 
 #[derive(Debug)]
 pub struct RemoteMemorySliceMut<'a> {
-    // todo: why not actually hold a reference
     pub(super) addr: usize,
     pub(super) length: usize,
     pub(super) rkey: u32,
@@ -40,6 +48,24 @@ impl RemoteMemoryRegion {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn as_slice(&'_ self) -> RemoteMemorySlice<'_> {
+        RemoteMemorySlice {
+            addr: self.addr,
+            length: self.length,
+            rkey: self.rkey,
+            _mr_lifetime: PhantomData,
+        }
+    }
+
+    pub fn as_slice_mut(&'_ mut self) -> RemoteMemorySliceMut<'_> {
+        RemoteMemorySliceMut {
+            addr: self.addr,
+            length: self.length,
+            rkey: self.rkey,
+            _mr_lifetime: PhantomData,
+        }
     }
 
     pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
@@ -77,6 +103,17 @@ impl<'a> RemoteMemorySlice<'a> {
         self.len() == 0
     }
 
+    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
+        let range = normalize_range(self.length, range)?;
+
+        Some(RemoteMemorySlice {
+            addr: self.addr + range.start,
+            length: range.len(),
+            rkey: self.rkey,
+            _mr_lifetime: PhantomData,
+        })
+    }
+
     pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
         match self.split_at_checked(mid) {
             Some(pair) => pair,
@@ -107,6 +144,16 @@ impl<'a> RemoteMemorySlice<'a> {
             },
         ))
     }
+}
+
+impl<'a> RemoteMemorySliceMut<'a> {
+    pub fn len(&self) -> usize {
+        self.length
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
         let range = normalize_range(self.length, range)?;
@@ -118,15 +165,50 @@ impl<'a> RemoteMemorySlice<'a> {
             _mr_lifetime: PhantomData,
         })
     }
-}
 
-impl<'a> RemoteMemorySliceMut<'a> {
-    pub fn len(&self) -> usize {
-        self.length
+    pub fn slice_mut(
+        &'_ mut self,
+        range: impl RangeBounds<usize>,
+    ) -> Option<RemoteMemorySliceMut<'_>> {
+        let range = normalize_range(self.length, range)?;
+
+        Some(RemoteMemorySliceMut {
+            addr: self.addr + range.start,
+            length: range.len(),
+            rkey: self.rkey,
+            _mr_lifetime: PhantomData,
+        })
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
+        match self.split_at_checked(mid) {
+            Some(pair) => pair,
+            None => panic!("mid > len"),
+        }
+    }
+
+    pub fn split_at_checked(
+        &'_ self,
+        mid: usize,
+    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
+        if mid > self.len() {
+            return None;
+        }
+
+        Some((
+            RemoteMemorySlice {
+                addr: self.addr,
+                length: mid,
+                rkey: self.rkey,
+                _mr_lifetime: PhantomData,
+            },
+            RemoteMemorySlice {
+                addr: self.addr + mid,
+                length: self.length - mid,
+                rkey: self.rkey,
+                _mr_lifetime: PhantomData,
+            },
+        ))
     }
 
     pub fn split_at_mut(
@@ -161,20 +243,6 @@ impl<'a> RemoteMemorySliceMut<'a> {
                 _mr_lifetime: PhantomData,
             },
         ))
-    }
-
-    pub fn slice_mut(
-        &'_ mut self,
-        range: impl RangeBounds<usize>,
-    ) -> Option<RemoteMemorySliceMut<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySliceMut {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
     }
 }
 
