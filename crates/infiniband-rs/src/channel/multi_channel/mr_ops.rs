@@ -6,17 +6,20 @@ use std::io;
 use std::time::Duration;
 
 impl MultiChannel {
-    pub fn register_local_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-        unsafe { self.pd.register_local_mr(memory.as_mut_ptr(), memory.len()) }
+    pub fn register_local_mr(&mut self, memory: &[u8]) -> io::Result<MemoryRegion> {
+        unsafe {
+            self.pd
+                .register_local_mr(memory.as_ptr() as *mut _, memory.len())
+        }
     }
 
     /// # Safety
     /// This memory can be mutated at any point. It is the user's responsibility to enforce some
     /// sort of protocol to avoid breaking aliasing rules on its borrows.
-    pub unsafe fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
+    pub unsafe fn register_shared_mr(&mut self, memory: &[u8]) -> io::Result<MemoryRegion> {
         unsafe {
             self.pd
-                .register_shared_mr(memory.as_mut_ptr(), memory.len())
+                .register_shared_mr(memory.as_ptr() as *mut _, memory.len())
         }
     }
 
