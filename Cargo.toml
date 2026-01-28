@@ -23,7 +23,7 @@ shared-memory-buffer.path = "crates/shared-memory-buffer"
 
 thiserror = "2.0"
 bytemuck = { version = "1.24", features = ["derive", "extern_crate_alloc"] }
-bincode = "2.0"
+bincode = { version = "2.0", features = ["serde"] }
 typed-builder = "0.23"
 strum = { version = "0.27", features = ["derive"] }
 tracing = "0.1.41"
@@ -31,6 +31,7 @@ auto_enums = "0.8"
 memmap2 = "0.9.9"
 colored = "3.0.0"
 pretty-hex = "0.4.1"
+serde = {version = "1.0", features = ["derive"]}
 
 [workspace.lints.clippy]
 cast_possible_truncation = "deny"

@@ -25,7 +25,7 @@ rust-test:
   extends: .deps_template
   stage: run-jobs
   script:
-    - cargo test --all --all-features
+    - cargo test --all --all-features --offline
 
 pages:
   extends: .deps_template

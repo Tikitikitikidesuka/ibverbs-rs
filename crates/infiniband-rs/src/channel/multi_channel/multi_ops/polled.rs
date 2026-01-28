@@ -1,0 +1,65 @@
+use crate::channel::multi_channel::MultiChannel;
+use crate::channel::raw_channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
+use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use crate::ibverbs::work_success::WorkSuccess;
+use std::borrow::{Borrow, BorrowMut};
+
+impl MultiChannel {
+    pub fn scatter<'a, I, E, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
+    where
+        I: IntoIterator<Item = (usize, WR)>,
+        E: AsRef<[GatherElement<'a>]>,
+        WR: Borrow<SendWorkRequest<'a, E>>,
+    {
+        let res = self.scope(|s| {
+            let wrs = s.post_scatter(wrs)?;
+            wrs.into_iter()
+                .map(|wr| wr.spin_poll())
+                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
+        })?;
+        debug_assert!(
+            res.is_ok(),
+            "unreachable scope error (all wrs manually polled)"
+        );
+        Ok(res.unwrap())
+    }
+
+    pub fn gather<'a, I, E, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
+    where
+        I: IntoIterator<Item = (usize, WR)>,
+        E: AsMut<[ScatterElement<'a>]>,
+        WR: BorrowMut<ReceiveWorkRequest<'a, E>>,
+    {
+        let res = self.scope(|s| {
+            let wrs = s.post_gather(wrs)?;
+            wrs.into_iter()
+                .map(|wr| wr.spin_poll())
+                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
+        })?;
+        debug_assert!(
+            res.is_ok(),
+            "unreachable scope error (all wrs manually polled)"
+        );
+        Ok(res.unwrap())
+    }
+
+    pub fn multicast<'a, I, E, WR>(&'a mut self, peers: I, wr: WR) -> MultiWorkSpinPollResult
+    where
+        I: IntoIterator<Item = usize>,
+        E: AsRef<[GatherElement<'a>]>,
+        WR: Borrow<SendWorkRequest<'a, E>>,
+    {
+        let res = self.scope(|s| {
+            let wrs = s.post_multicast(peers, wr)?;
+            wrs.into_iter()
+                .map(|wr| wr.spin_poll())
+                .collect::<Result<Vec<WorkSuccess>, WorkPollError>>()
+        })?;
+        debug_assert!(
+            res.is_ok(),
+            "unreachable scope error (all wrs manually polled)"
+        );
+        Ok(res.unwrap())
+    }
+}
