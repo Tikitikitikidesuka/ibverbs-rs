@@ -3,7 +3,7 @@ use infiniband_rs::ibverbs::devices::open_device;
 use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use std::io;
+use std::{io, ptr};
 
 const DEVICE: &str = "mlx5_0";
 
