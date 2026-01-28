@@ -76,7 +76,6 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
 
         let mut advance_size = 0;
         let mut read_data = Vec::with_capacity(num);
-        let mut offsets = Vec::with_capacity(num);
 
         for _ in 0..num {
             // Verify enough data for header
@@ -105,13 +104,11 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
             // Store reference to read entry and add advance size
             read_data.push(mfp_mem);
 
-            let start = reader.read_offset() + advance_size;
-            offsets.push(start..start + mfp_mem.packet_size() as usize);
             advance_size += aligned_size;
         }
 
         // If all checks are passed, guard the type
-        let read_guard = MultiReadGuard::new(reader, read_data, offsets, advance_size);
+        let read_guard = MultiReadGuard::new(reader, read_data, advance_size);
 
         Ok(read_guard)
     }

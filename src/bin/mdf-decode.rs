@@ -78,7 +78,7 @@ use std::{
 use clap::{ColorChoice, Parser};
 use colored::Colorize;
 use master_data_file::MdfFile;
-use pretty_hex::{Hex, HexConfig, config_hex};
+use pretty_hex::{HexConfig, config_hex};
 use std::io::Write;
 
 #[derive(Parser, Debug)]
