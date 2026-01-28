@@ -48,73 +48,10 @@ impl SingleChannel {
 
     pub fn share_mr(&mut self, mr: &MemoryRegion) -> io::Result<()> {
         self.meta_mr.share_memory_region(&mut self.channel, mr)
-        /*
-        self.channel
-            .write(
-                self.meta_mr
-                    .prepare_write_remote_mr_wr(mr.remote())
-                    .ok_or_else(|| {
-                        io::Error::new(
-                            io::ErrorKind::ResourceBusy,
-                            "Peer has not acknowledged a previous remote mr share request",
-                        )
-                    })?,
-            )
-            .map_err(|e| {
-                match e {
-                    WorkPollError::PollError(io_error) => io_error,
-                    // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
-                    WorkPollError::WorkError(work_error) => {
-                        panic!(
-                            "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
-                            work_error
-                        )
-                    }
-                }
-            })?;
-
-        Ok(())
-
-             */
     }
 
     pub fn accept_remote_mr(&mut self, timeout: Duration) -> io::Result<RemoteMemoryRegion> {
         self.meta_mr
             .accept_memory_region(&mut self.channel, timeout)
-        /*
-        let start = std::time::Instant::now();
-
-        loop {
-            if let Some(remote_mr) = self.meta_mr.read_remote_mr() {
-                let wr = self.meta_mr.prepare_write_ack_remote_mr_wr().expect(
-                    "Invariant violation: Failed to prepare ACK immediately after receiving new MR",
-                );
-
-                self.channel.write(wr).map_err(|e| {
-                    match e {
-                        WorkPollError::PollError(io_error) => io_error,
-                        // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
-                        WorkPollError::WorkError(work_error) => {
-                            panic!(
-                                "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
-                                work_error
-                            )
-                        }
-                    }
-                })?;
-
-                return Ok(remote_mr);
-            }
-
-            if start.elapsed() > timeout {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "Timed out waiting for peer to accept remote MR",
-                ));
-            }
-
-            std::hint::spin_loop();
-        }
-         */
     }
 }
