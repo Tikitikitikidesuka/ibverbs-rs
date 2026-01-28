@@ -1,38 +1,23 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::rank_remote_memory_region::{
-    RankRemoteMemoryRegion, RankRemoteMemorySliceMut,
-};
+use crate::channel::multi_channel::rank_remote_memory_region::RankRemoteMemoryRegion;
 use crate::channel::raw_channel::pending_work::WorkPollError;
 use crate::ibverbs::memory_region::MemoryRegion;
-use crate::ibverbs::queue_pair_builder::AccessFlags;
-use crate::ibverbs::remote_memory_region::RemoteMemorySliceMut;
-use crate::ibverbs::scatter_gather_element::GatherElement;
-use crate::ibverbs::work_request::WriteWorkRequest;
-use std::borrow::BorrowMut;
 use std::io;
 use std::time::Duration;
 
-
-
 impl MultiChannel {
     pub fn register_local_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd
-                .register_local_mr(memory.as_mut_ptr(), memory.len())?
-        };
-
-        Ok(mr)
+        unsafe { self.pd.register_local_mr(memory.as_mut_ptr(), memory.len()) }
     }
 
     /// # Safety
     /// This memory can be mutated at any point. It is the user's responsibility to enforce some
     /// sort of protocol to avoid breaking aliasing rules on its borrows.
     pub unsafe fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
+        unsafe {
             self.pd
-                .register_shared_mr(memory.as_mut_ptr(), memory.len())?
-        };
-        Ok(mr)
+                .register_shared_mr(memory.as_mut_ptr(), memory.len())
+        }
     }
 
     pub fn register_local_dmabuf_mr(
@@ -42,17 +27,7 @@ impl MultiChannel {
         length: usize,
         iova: u64,
     ) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd.register_dmabuf(
-                fd,
-                offset,
-                length,
-                iova,
-                AccessFlags::new().with_local_write().into(),
-            )?
-        };
-
-        Ok(mr)
+        unsafe { self.pd.register_local_dmabuf(fd, offset, length, iova) }
     }
 
     /// # Safety
@@ -65,17 +40,7 @@ impl MultiChannel {
         length: usize,
         iova: u64,
     ) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd.register_dmabuf(
-                fd,
-                offset,
-                length,
-                iova,
-                AccessFlags::new().with_local_write().into(),
-            )?
-        };
-
-        Ok(mr)
+        unsafe { self.pd.register_shared_dmabuf(fd, offset, length, iova) }
     }
 
     pub fn share_mr(&mut self, peer: usize, mr: &MemoryRegion) -> io::Result<()> {
@@ -91,7 +56,18 @@ impl MultiChannel {
                         )
                     })?,
             )
-            .unwrap();
+            .map_err(|e| {
+                match e {
+                    WorkPollError::PollError(io_error) => io_error,
+                    // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
+                    WorkPollError::WorkError(work_error) => {
+                        panic!(
+                            "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
+                            work_error
+                        )
+                    }
+                }
+            })?;
 
         Ok(())
     }

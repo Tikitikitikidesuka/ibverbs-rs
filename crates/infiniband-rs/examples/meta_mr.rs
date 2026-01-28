@@ -51,7 +51,7 @@ fn main() {
         let mut mem = [0u8; 1024];
         println!("before: {:?}", &mem[0..8]);
         std::io::stdin().read(&mut [0]).unwrap();
-        let mr = conn.register_shared_mr(&mut mem).unwrap();
+        let mr = unsafe { conn.register_shared_mr(&mut mem).unwrap() };
         while mem[0] == 0u8 {}
         println!("after: {:?}", &mem[0..8]);
     } else {

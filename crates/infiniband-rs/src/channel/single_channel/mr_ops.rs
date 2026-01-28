@@ -1,52 +1,74 @@
 use crate::channel::raw_channel::pending_work::WorkPollError;
 use crate::channel::single_channel::SingleChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
-use crate::ibverbs::queue_pair_builder::AccessFlags;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use std::io;
 use std::time::Duration;
 
 impl SingleChannel {
     pub fn register_local_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
+        unsafe { self.pd.register_local_mr(memory.as_mut_ptr(), memory.len()) }
+    }
+
+    /// # Safety
+    /// This memory can be mutated at any point. It is the user's responsibility to enforce some
+    /// sort of protocol to avoid breaking aliasing rules on its borrows.
+    pub unsafe fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
         unsafe {
-            Ok(self
-                .pd
-                .register_local_mr(memory.as_mut_ptr(), memory.len())?)
+            self.pd
+                .register_shared_mr(memory.as_mut_ptr(), memory.len())
         }
     }
 
-    pub fn register_shared_mr(&mut self, memory: &mut [u8]) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd
-                .register_shared_mr(memory.as_mut_ptr(), memory.len())?
-        };
+    pub fn register_local_dmabuf_mr(
+        &mut self,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> io::Result<MemoryRegion> {
+        unsafe { self.pd.register_local_dmabuf(fd, offset, length, iova) }
+    }
 
-        let remote_mr = mr.remote();
+    /// # Safety
+    /// This memory can be mutated at any point. It is the user's responsibility to enforce some
+    /// sort of protocol to avoid breaking aliasing rules on its borrows.
+    pub unsafe fn register_shared_dmabuf_mr(
+        &mut self,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> io::Result<MemoryRegion> {
+        unsafe { self.pd.register_shared_dmabuf(fd, offset, length, iova) }
+    }
 
-        let wr = self
-            .meta_mr
-            .prepare_write_remote_mr_wr(remote_mr)
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::ResourceBusy,
-                    "Peer has not acknowledged a previous remote mr share request",
-                )
+    pub fn share_mr(&mut self, mr: &MemoryRegion) -> io::Result<()> {
+        self.channel
+            .write(
+                self.meta_mr
+                    .prepare_write_remote_mr_wr(mr.remote())
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::ResourceBusy,
+                            "Peer has not acknowledged a previous remote mr share request",
+                        )
+                    })?,
+            )
+            .map_err(|e| {
+                match e {
+                    WorkPollError::PollError(io_error) => io_error,
+                    // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
+                    WorkPollError::WorkError(work_error) => {
+                        panic!(
+                            "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
+                            work_error
+                        )
+                    }
+                }
             })?;
 
-        self.channel.write(wr).map_err(|e| {
-            match e {
-                WorkPollError::PollError(io_error) => io_error,
-                // This means the `prepare_write_remote_mr_wr` logic generated an invalid request.
-                WorkPollError::WorkError(work_error) => {
-                    panic!(
-                        "Invariant violation: Constructed invalid RDMA Work Request: {:?}",
-                        work_error
-                    )
-                }
-            }
-        })?;
-
-        Ok(mr)
+        Ok(())
     }
 
     pub fn accept_remote_mr(&mut self, timeout: Duration) -> io::Result<RemoteMemoryRegion> {
@@ -83,30 +105,5 @@ impl SingleChannel {
 
             std::hint::spin_loop();
         }
-    }
-
-    pub fn register_local_dmabuf_mr(
-        &mut self,
-        fd: i32,
-        offset: u64,
-        length: usize,
-        iova: u64,
-    ) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.pd.register_dmabuf(
-                fd,
-                offset,
-                length,
-                iova,
-                // TODO: Start with only local_write and add remote_read and remote_write when shared
-                AccessFlags::new()
-                    .with_local_write()
-                    //.with_remote_read()
-                    //.with_remote_write()
-                    .into(),
-            )?
-        };
-
-        Ok(mr)
     }
 }
