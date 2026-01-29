@@ -4,10 +4,9 @@ pub mod config;
 pub mod tcp_exchanger;
 
 use crate::channel::multi_channel::MultiChannel;
-use crate::network::barrier::CentralizedBarrier;
-use std::borrow::Borrow;
-use std::io;
+use crate::network::barrier::{BarrierError, CentralizedBarrier};
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 
 /// A network node is a MultiChannel with an id (rank) connected to all other nodes
 /// of the network.
@@ -20,12 +19,26 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn barrier_unchecked(&mut self, peers: &[usize]) -> io::Result<()> {
-        println!("{:?}", self.barrier);
+    pub fn rank(&self) -> usize {
+        self.rank
+    }
+
+    pub fn world_size(&self) -> usize {
+        self.world_size
+    }
+
+    pub fn barrier(&mut self, peers: &[usize], timeout: Duration) -> Result<(), BarrierError> {
         self.barrier
-            .barrier_unchecked(&mut self.multi_channel, peers)?;
-        println!("{:?}", self.barrier);
-        Ok(())
+            .barrier(&mut self.multi_channel, peers, timeout)
+    }
+
+    pub fn barrier_unchecked(
+        &mut self,
+        peers: &[usize],
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        self.barrier
+            .barrier_unchecked(&mut self.multi_channel, peers, timeout)
     }
 }
 
@@ -40,11 +53,5 @@ impl Deref for Node {
 impl DerefMut for Node {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.multi_channel
-    }
-}
-
-impl Node {
-    pub fn rank(&self) -> usize {
-        self.rank
     }
 }

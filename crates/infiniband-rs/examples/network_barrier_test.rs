@@ -6,6 +6,7 @@ use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::io::Read;
+use std::time::Duration;
 use std::{env, fs, process};
 
 fn main() {
@@ -49,18 +50,20 @@ fn main() {
 
     let mut node = node.handshake(remote_endpoints).unwrap();
 
+    println!("Press a key...");
+    std::io::stdin().read(&mut []).expect("Failed to read line");
     match node.rank() {
         0 => {
-            std::io::stdin().read(&mut []).expect("Failed to read line");
-            node.barrier_unchecked(&[1, 2]).unwrap();
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         1 => {
-            std::io::stdin().read(&mut []).expect("Failed to read line");
-            node.barrier_unchecked(&[1, 2]).unwrap();
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         2 => {
-            std::io::stdin().read(&mut []).expect("Failed to read line");
-            node.barrier_unchecked(&[1, 2]).unwrap();
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         _ => {
             println!("Invalid rank: {rank}");

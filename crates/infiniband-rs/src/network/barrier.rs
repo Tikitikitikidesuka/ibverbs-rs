@@ -1,23 +1,27 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::multi_channel::rank_remote_memory_region::RankRemoteMemoryRegion;
 use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
-use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use std::borrow::Borrow;
 use std::io;
 use std::sync::atomic::{Ordering, fence};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 use zerocopy::network_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[derive(Debug, Error)]
 pub enum BarrierError {
+    #[error("Barrier is poisoned from a previous error")]
+    Poisoned,
     #[error("Self not in issued barrier's peers")]
     SelfNotInGroup,
+    #[error("Peers not in ascending order")]
+    UnorderedPeers,
+    #[error("Barrier timeout")]
+    Timeout,
     #[error("Network error: {0}")]
-    NetworkError(#[from] MultiWorkPollError),
+    NetworkError(#[from] io::Error),
 }
 
 #[derive(Debug)]
@@ -26,6 +30,7 @@ pub struct CentralizedBarrier {
     memory: Box<[CentralizedBarrierPeerFlags]>,
     mr: MemoryRegion,
     remote_mrs: Box<[RankRemoteMemoryRegion]>,
+    poisoned: bool,
 }
 
 #[derive(Debug)]
@@ -62,6 +67,7 @@ impl PreparedCentralizedBarrier {
             memory: self.memory,
             mr: self.mr,
             remote_mrs,
+            poisoned: false,
         }
     }
 }
@@ -82,48 +88,70 @@ impl CentralizedBarrier {
 }
 
 impl CentralizedBarrier {
-    pub fn barrier<I>(&mut self, multi_channel: &mut MultiChannel, peers: I) -> io::Result<()>
-    where
-        I: IntoIterator<Item = usize>,
-        I::IntoIter: ExactSizeIterator,
-    {
-        // Minimum
-        todo!()
+    pub fn barrier(
+        &mut self,
+        multi_channel: &mut MultiChannel,
+        peers: &[usize],
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        if !peers.is_sorted() {
+            panic!("peers must be sorted");
+        }
+
+        if peers.windows(2).any(|w| w[0] == w[1]) {
+            panic!("peers must not contain duplicates");
+        }
+
+        if !peers.contains(&self.rank) {
+            panic!("self must be included in peers");
+        }
+
+        self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
-    /// Assumes peers are ordered and non repeating
+    /// Assumes peers are ordered, non repeating and self is in the group
     pub fn barrier_unchecked(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],
-    ) -> io::Result<()> {
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
         if peers.len() < 2 {
             return Ok(());
         }
+
+        let start_time = Instant::now();
 
         let leader = peers[0];
 
         if self.rank == leader {
             for &peer in &peers[1..] {
-                self.await_peer_next_epoch(peer)?;
+                self.await_peer_next_epoch(peer, start_time, timeout)
+                    .map_err(|error| {
+                        self.poisoned = true;
+                        error
+                    })?;
             }
             for &peer in &peers[1..] {
-                self.notify_peer(multi_channel, peer)?;
+                self.notify_peer(multi_channel, peer).map_err(|error| {
+                    self.poisoned = true;
+                    error
+                })?;
             }
         } else {
-            self.notify_peer(multi_channel, leader)?;
-            self.await_peer_same_epoch(leader)?;
+            // If notify leader fails the resulting state is
+            self.notify_peer(multi_channel, leader).map_err(|error| {
+                self.poisoned = true;
+                error
+            })?;
+            self.await_peer_same_epoch(leader, start_time, timeout)
+                .map_err(|error| {
+                    self.poisoned = true;
+                    error
+                })?;
         }
 
         Ok(())
-    }
-
-    /// To notify a peer:
-    /// 1. The local out epoch counter is increased by one.
-    /// 2. The local out epoch counter is RDMA written into the peer's in epoch counter.
-    fn leader_notify_peer(&mut self) -> io::Result<()> {
-        // 1. Local epoch counter increased by one
-        todo!()
     }
 
     /// To notify a peer:
@@ -158,84 +186,61 @@ impl CentralizedBarrier {
         Ok(())
     }
 
-    fn await_peer_same_epoch(&mut self, peer: usize) -> io::Result<()> {
-        loop {
-            // 0. Poll in epoch (be -> native)
-            let current_in_epoch =
-                unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get();
+    const TIMEOUT_CHECK_ITERS: u32 = 1000;
 
-            // 1. Wait until the incoming epoch matches the outgoing epoch
-            println!("Current in: {current_in_epoch}");
-            println!("Current out: {}", self.memory[peer].out_epoch.get());
-            if current_in_epoch == self.memory[peer].out_epoch.get() {
+    fn await_peer_same_epoch(
+        &mut self,
+        peer: usize,
+        start_time: Instant,
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        let mut iter = 0u32;
+
+        loop {
+            if self.is_epoch_same(peer) {
                 return Ok(());
+            }
+
+            iter += 1;
+            if iter >= Self::TIMEOUT_CHECK_ITERS {
+                iter = 0;
+                if start_time.elapsed() > timeout {
+                    return Err(BarrierError::Timeout);
+                }
             }
         }
     }
 
-    fn await_peer_next_epoch(&mut self, peer: usize) -> io::Result<()> {
-        loop {
-            // 0. Poll in epoch (be -> native)
-            let current_in_epoch =
-                unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get();
+    fn await_peer_next_epoch(
+        &mut self,
+        peer: usize,
+        start_time: Instant,
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        let mut iter = 0u32;
 
-            // 1. Wait until the incoming epoch matches the outgoing epoch
-            if current_in_epoch > self.memory[peer].out_epoch.get() {
+        loop {
+            if self.is_peer_epoch_ahead(peer) {
                 return Ok(());
+            }
+
+            iter += 1;
+            if iter >= Self::TIMEOUT_CHECK_ITERS {
+                iter = 0;
+                if start_time.elapsed() > timeout {
+                    return Err(BarrierError::Timeout);
+                }
             }
         }
     }
+
+    fn is_epoch_same(&self, peer: usize) -> bool {
+        unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
+            == self.memory[peer].out_epoch.get()
+    }
+
+    fn is_peer_epoch_ahead(&self, peer: usize) -> bool {
+        unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
+            > self.memory[peer].out_epoch.get()
+    }
 }
-
-/*
-impl Node {
-    pub fn centralized_barrier<I>(
-        &mut self,
-        peers: impl AsRef<[usize]>,
-    ) -> Result<(), BarrierError> {
-        let peers = peers.as_ref();
-
-        if !peers.contains(&self.rank) {
-            return Err(BarrierError::SelfNotInGroup);
-        }
-
-        // Contains self so it is not empty (guaranteed min)
-        let coordinator = *peers.iter().min().unwrap();
-
-        if self.rank == coordinator {
-            let self_rank = self.rank;
-            self.coordinator_centralized_barrier(peers.iter().copied().filter(|&p| p != self_rank))
-        } else {
-            self.participant_centralized_barrier(coordinator)
-        }
-    }
-
-    fn coordinator_centralized_barrier(
-        &mut self,
-        participants: impl Iterator<Item=usize> + Clone,
-    ) -> Result<(), BarrierError> {
-        // Wait for all participants
-        self.gather_immediate(participants.clone())?
-            .iter()
-            .all(|wc| wc.immediate_data() == Some(Self::PARTICIPANT_READY));
-
-        // Notify all participants
-        self.multicast_with_immediate(participants, &[], Self::COORDINATOR_READY)?;
-
-        Ok(())
-    }
-
-    fn participant_centralized_barrier(&self, coordinator: usize) -> Result<(), BarrierError> {
-        todo!()
-        // Notify coordinator
-        //self.send_immediate(coordinator, Self::PARTICIPANT_READY);
-        /// :( -> This only works if specific channel for this like Alberto did
-        /// or back to the memory write read method from my previous implementation
-
-        // Wait for coordinator
-    }
-
-    const PARTICIPANT_READY: u32 = 432982347;
-    const COORDINATOR_READY: u32 = 958729371;
-}
-*/
