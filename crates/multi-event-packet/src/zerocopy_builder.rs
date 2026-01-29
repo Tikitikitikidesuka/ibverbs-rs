@@ -114,6 +114,17 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
         &mut cast_slice_mut(self.buffer)[range]
     }
 
+    pub fn get_mfp_slots<'b>(
+        &'b mut self,
+        indices: Range<usize>,
+    ) -> impl Iterator<Item = &'b mut [u8]> {
+        let buffer = cast_slice_mut(self.buffer) as *mut [u8];
+
+        // SAEFTY: mfp ranges for different indices don't overlap,
+        // get_mfp_range does not touch the mfp part of the buffer (only header)
+        indices.map(move |i| &mut unsafe { &mut *buffer }[self.get_mfp_range(i)])
+    }
+
     pub fn get_mfp(&self, index: usize) -> Result<&MultiFragmentPacket, FromRawBytesError> {
         let data = &cast_slice::<_, u8>(self.buffer)[self.get_mfp_range(index)];
         println!("{:?}", &data[0..50]);
