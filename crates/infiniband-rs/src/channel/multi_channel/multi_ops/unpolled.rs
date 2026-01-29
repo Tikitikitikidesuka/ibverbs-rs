@@ -1,12 +1,9 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
-use crate::channel::raw_channel::pending_work::{
-    MultiWorkSpinPollResult, PendingWork, WorkPollError,
-};
+use crate::channel::raw_channel::pending_work::PendingWork;
 use crate::ibverbs::remote_memory_region::RemoteMemorySliceMut;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
-use crate::ibverbs::work_success::WorkSuccess;
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 

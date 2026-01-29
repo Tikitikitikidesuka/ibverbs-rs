@@ -58,8 +58,10 @@ fn main() {
     std::io::stdin().read(&mut []).expect("Failed to read line");
 
     for i in 0..10000 {
-        let delay_ms = rng.random_range(10..10000000); // e.g., 10-1000ns
-        thread::sleep(Duration::from_nanos(delay_ms));
+        if node.rank() == 1 {
+            let delay_ms = rng.random_range(10..10000000); // e.g., 10-1000ns
+            thread::sleep(Duration::from_nanos(delay_ms));
+        }
 
         node.barrier(all_nodes.as_slice(), Duration::from_millis(10000))
             .unwrap();

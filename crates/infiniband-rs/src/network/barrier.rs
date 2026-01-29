@@ -14,10 +14,12 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 pub enum BarrierError {
     #[error("Barrier is poisoned from a previous error")]
     Poisoned,
-    #[error("Self not in issued barrier's peers")]
+    #[error("Self not in the barrier group")]
     SelfNotInGroup,
-    #[error("Peers not in ascending order")]
+    #[error("Peers not in ascending order in barrier group")]
     UnorderedPeers,
+    #[error("Duplicate peers in barrier group")]
+    DuplicatePeers,
     #[error("Barrier timeout")]
     Timeout,
     #[error("Network error: {0}")]
@@ -88,6 +90,8 @@ impl CentralizedBarrier {
 }
 
 impl CentralizedBarrier {
+    const TIMEOUT_CHECK_ITERS: u32 = 1 << 16;
+
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -95,15 +99,15 @@ impl CentralizedBarrier {
         timeout: Duration,
     ) -> Result<(), BarrierError> {
         if !peers.is_sorted() {
-            panic!("peers must be sorted");
+            return Err(BarrierError::UnorderedPeers);
         }
 
         if peers.windows(2).any(|w| w[0] == w[1]) {
-            panic!("peers must not contain duplicates");
+            return Err(BarrierError::DuplicatePeers);
         }
 
         if !peers.contains(&self.rank) {
-            panic!("self must be included in peers");
+            return Err(BarrierError::SelfNotInGroup);
         }
 
         self.barrier_unchecked(multi_channel, peers, timeout)
@@ -251,8 +255,6 @@ impl CentralizedBarrier {
 
         Ok(())
     }
-
-    const TIMEOUT_CHECK_ITERS: u32 = 1000;
 
     fn await_peer_same_epoch(
         &mut self,
