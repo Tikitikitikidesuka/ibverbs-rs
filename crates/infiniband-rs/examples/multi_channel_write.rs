@@ -22,7 +22,7 @@ fn main() {
     let mut multi_channel = multi_channel.handshake(endpoints).unwrap();
 
     let mut mem = [0u8; 10];
-    let mr = unsafe { multi_channel.register_shared_mr(&mem).unwrap() };
+    let mr = unsafe { multi_channel.register_shared_mr(&mut mem).unwrap() };
 
     multi_channel.share_mr(0, &mr).unwrap();
     let mut rmr = multi_channel
