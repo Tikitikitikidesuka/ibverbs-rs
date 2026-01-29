@@ -1,7 +1,12 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::raw_channel::pending_work::PendingWork;
+use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
+use crate::channel::raw_channel::pending_work::{
+    MultiWorkSpinPollResult, PendingWork, WorkPollError,
+};
+use crate::ibverbs::remote_memory_region::RemoteMemorySliceMut;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use crate::ibverbs::work_success::WorkSuccess;
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
@@ -14,6 +19,21 @@ impl MultiChannel {
     {
         wrs.into_iter()
             .map(|(peer, wr)| unsafe { self.send_unpolled(peer, wr) })
+            .collect()
+    }
+
+    pub fn scatter_write_unpolled<'a, I, E, R, WR>(
+        &'a mut self,
+        wrs: I,
+    ) -> io::Result<Vec<PendingWork<'a>>>
+    where
+        I: IntoIterator<Item = WR>,
+        E: AsRef<[GatherElement<'a>]>,
+        R: BorrowMut<RemoteMemorySliceMut<'a>>,
+        WR: BorrowMut<RankWriteWorkRequest<'a, E, R>>,
+    {
+        wrs.into_iter()
+            .map(|wr| unsafe { self.write_unpolled(wr) })
             .collect()
     }
 
