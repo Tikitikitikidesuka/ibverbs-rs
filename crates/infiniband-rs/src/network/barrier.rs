@@ -132,12 +132,11 @@ impl CentralizedBarrier {
                         error
                     })?;
             }
-            for &peer in &peers[1..] {
-                self.notify_peer(multi_channel, peer).map_err(|error| {
+            self.scatter_notify_peers(multi_channel, &peers[1..])
+                .map_err(|error| {
                     self.poisoned = true;
                     error
                 })?;
-            }
         } else {
             // If notify leader fails the resulting state is
             self.notify_peer(multi_channel, leader).map_err(|error| {
@@ -182,6 +181,73 @@ impl CentralizedBarrier {
 
         // 3. Post RDMA request to notify
         multi_channel.write(wr)?;
+
+        Ok(())
+    }
+
+    /// To notify a peer:
+    /// 1. The local out epoch counter is increased by one.
+    /// 2. The local out epoch counter is RDMA written into the peer's in epoch counter.
+    fn scatter_notify_peers(
+        &mut self,
+        multi_channel: &mut MultiChannel,
+        peers: &[usize],
+    ) -> io::Result<()> {
+        // 1. Increment local epochs
+        peers.iter().for_each(|&peer| {
+            let current_out_epoch = self.memory[peer].out_epoch.get();
+            self.memory[peer].out_epoch.set(current_out_epoch + 1);
+        });
+
+        // 2. Prepare SGEs
+        // Stored in a Vec to keep the memory alive while WRs reference it
+        let sges: Vec<_> = peers
+            .iter()
+            .map(|&peer| {
+                let local_out_epoch_bytes = self.memory[peer].out_epoch.as_bytes();
+                [self
+                    .mr
+                    .prepare_gather_element(local_out_epoch_bytes)
+                    .unwrap()]
+            })
+            .collect();
+
+        // 3. Prepare Remote Slices
+        let local_in_epoch_bytes = self.memory[self.rank].in_epoch.as_bytes().as_ptr();
+        let in_epoch_bytes_offset = local_in_epoch_bytes as usize - self.memory.as_ptr() as usize;
+        let range = in_epoch_bytes_offset..(in_epoch_bytes_offset + size_of::<u64>());
+
+        // We use a raw pointer to mint mutable references.
+        // This bypasses the borrow checker's inability to see that `peers` indices are distinct.
+        let base_ptr = self.remote_mrs.as_mut_ptr();
+
+        let remote_slices: Vec<_> = peers
+            .iter()
+            .map(|&peer| {
+                // SAFETY:
+                // 1. `peers` are sorted and unique (guaranteed by barrier logic)
+                // 2. `base_ptr` is valid for the lifetime of `self`
+                // 3. We are accessing distinct elements, so the mutable borrows do not overlap
+                unsafe {
+                    let rmr = &mut *base_ptr.add(peer);
+                    rmr.slice_mut(range.clone()).unwrap()
+                }
+            })
+            .collect();
+
+        // 4. Create Work Requests
+        // Use .iter() on sges to borrow (not move) the SGE arrays
+        let wrs: Vec<_> = sges
+            .iter()
+            .zip(remote_slices.into_iter())
+            .map(|(sge, rms)| RankWriteWorkRequest::new(sge, rms))
+            .collect();
+
+        // Ensure change is visible before issuing the write
+        fence(Ordering::Release);
+
+        // 5. Post RDMA request to notify
+        multi_channel.scatter_write(wrs)?;
 
         Ok(())
     }
