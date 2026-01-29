@@ -2,6 +2,7 @@ use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
+use crate::ibverbs::remote_memory_region::remote_field;
 use crate::ibverbs::work_request::WriteWorkRequest;
 use std::fmt::Debug;
 use std::io;
@@ -47,7 +48,7 @@ struct PodRemoteMemoryRegion {
 impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
     fn from(value: RemoteMemoryRegion) -> Self {
         PodRemoteMemoryRegion {
-            addr: U64::new(value.addr as u64),
+            addr: U64::new(value.addr),
             length: U64::new(value.length as u64),
             rkey: U32::new(value.rkey),
             _pad: U32::new(0),
@@ -59,7 +60,7 @@ impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
 impl From<PodRemoteMemoryRegion> for RemoteMemoryRegion {
     fn from(value: PodRemoteMemoryRegion) -> Self {
         RemoteMemoryRegion {
-            addr: value.addr.get() as usize,
+            addr: value.addr.get(),
             length: value.length.get() as usize,
             rkey: value.rkey.get(),
         }
@@ -142,24 +143,22 @@ impl MetaMr {
 
         // Slice the meta remote memory region
         // Unwrap because we are taking the full slice
-        let mut meta_remote_mr_slice = self.remote_mr.as_slice_mut();
-        let (mut in_remote_mr, mut rest) =
-            meta_remote_mr_slice.split_at_mut(size_of::<PodRemoteMemoryRegion>());
-        let (mut in_epoch, _rest) = rest.split_at_mut(size_of::<u64>());
+        let in_remote_mr = remote_field!(self.remote_mr, MetaMrState::in_remote_mr).unwrap();
+        let in_epoch = remote_field!(self.remote_mr, MetaMrState::in_epoch).unwrap();
 
         // 3. Prepare RDMA write request of the remote mr
         // Get slice of the outgoing remote mr field's bytes
         let out_remote_mr_bytes = self.memory.out_remote_mr.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
         let remote_mr_sges = [self.mr.prepare_gather_element(out_remote_mr_bytes).unwrap()];
-        let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, &mut in_remote_mr);
+        let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, in_remote_mr);
 
         // 4. Prepare RDMA write request of the remote mr epoch
         // Get slice of the remote mr epoch field's bytes
         let out_epoch_bytes = self.memory.out_epoch.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
         let remote_mr_epoch_sges = [self.mr.prepare_gather_element(out_epoch_bytes).unwrap()];
-        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, &mut in_epoch); // Ensure changes are visible before issuing the writes
+        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, in_epoch); // Ensure changes are visible before issuing the writes
 
         fence(Ordering::Release);
 
@@ -206,10 +205,8 @@ impl MetaMr {
 
                 // Slice the meta remote memory region
                 let ack_offset = offset_of!(MetaMrState, in_ack);
-                let mut meta_remote_mr_slice = self
-                    .remote_mr
-                    .slice_mut(ack_offset..ack_offset + size_of::<u64>())
-                    .unwrap();
+                let meta_remote_mr_slice =
+                    remote_field!(self.remote_mr, MetaMrState::in_ack).unwrap();
 
                 // Get slice of the remote mr ack field's bytes
                 let remote_mr_ack_sge = [self
@@ -218,7 +215,7 @@ impl MetaMr {
                     .unwrap()];
 
                 // 4. Prepare RDMA write request of the remote mr ack
-                let wr = WriteWorkRequest::new(remote_mr_ack_sge, &mut meta_remote_mr_slice);
+                let wr = WriteWorkRequest::new(&remote_mr_ack_sge, meta_remote_mr_slice);
 
                 // Ensure change is visible before issuing the write
                 fence(Ordering::Release);

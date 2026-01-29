@@ -1,6 +1,6 @@
 use crate::channel::multi_channel::MultiChannel;
 use crate::channel::multi_channel::builder::PreparedMultiChannel;
-use crate::channel::multi_channel::rank_remote_memory_region::RankRemoteMemoryRegion;
+use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::channel::single_channel::builder::SingleChannelEndpoint;
 use crate::ibverbs::context::Context;
 use crate::network::Node;
@@ -52,7 +52,7 @@ pub struct PreparedNode {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct NetworkChannelEndpoint {
     pub(crate) single_channel_endpoint: SingleChannelEndpoint,
-    pub(crate) barrier_mr_remote: RankRemoteMemoryRegion,
+    pub(crate) barrier_mr_remote: PeerRemoteMemoryRegion,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

@@ -113,7 +113,11 @@ impl MemoryRegion {
     }
 
     pub fn remote(&self) -> RemoteMemoryRegion {
-        RemoteMemoryRegion::new(self.address() as usize, self.length(), self.rkey())
+        RemoteMemoryRegion {
+            addr: self.address() as u64,
+            length: self.length(),
+            rkey: self.rkey(),
+        }
     }
 }
 

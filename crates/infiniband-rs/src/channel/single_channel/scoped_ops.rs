@@ -1,11 +1,8 @@
 use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
 use crate::channel::single_channel::SingleChannel;
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
@@ -33,15 +30,14 @@ impl<'scope, 'env> PollingScope<'scope, 'env, SingleChannel> {
         self.channel_post_receive(|s| Ok(&mut s.channel), wr)
     }
 
-    pub fn post_write<E, R, WR>(&mut self, wr: WR) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        E: AsRef<[GatherElement<'env>]>,
-        R: BorrowMut<RemoteMemorySliceMut<'env>>,
-        WR: BorrowMut<WriteWorkRequest<'env, E, R>>,
-    {
+    pub fn post_write(
+        &mut self,
+        wr: WriteWorkRequest<'_, 'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_write(|s| Ok(&mut s.channel), wr)
     }
 
+    /*
     pub fn post_read<E, R, WR>(&mut self, wr: WR) -> io::Result<ScopedPendingWork<'scope>>
     where
         E: AsMut<[ScatterElement<'env>]>,
@@ -50,4 +46,5 @@ impl<'scope, 'env> PollingScope<'scope, 'env, SingleChannel> {
     {
         self.channel_post_read(|s| Ok(&mut s.channel), wr)
     }
+    */
 }

@@ -1,8 +1,9 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::rank_remote_memory_region::RankRemoteMemoryRegion;
-use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
+use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
+use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::remote_field;
 use std::io;
 use std::sync::atomic::{Ordering, fence};
 use std::time::{Duration, Instant};
@@ -31,7 +32,7 @@ pub struct CentralizedBarrier {
     rank: usize,
     memory: Box<[CentralizedBarrierPeerFlags]>,
     mr: MemoryRegion,
-    remote_mrs: Box<[RankRemoteMemoryRegion]>,
+    remote_mrs: Box<[PeerRemoteMemoryRegion]>,
     poisoned: bool,
 }
 
@@ -59,11 +60,11 @@ impl CentralizedBarrierPeerFlags {
 }
 
 impl PreparedCentralizedBarrier {
-    pub fn remote_mr(&self) -> RankRemoteMemoryRegion {
-        RankRemoteMemoryRegion::new(self.rank, self.mr.remote())
+    pub fn remote_mr(&self) -> PeerRemoteMemoryRegion {
+        PeerRemoteMemoryRegion::new(self.rank, self.mr.remote())
     }
 
-    pub fn link_remote(self, remote_mrs: Box<[RankRemoteMemoryRegion]>) -> CentralizedBarrier {
+    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> CentralizedBarrier {
         CentralizedBarrier {
             rank: self.rank,
             memory: self.memory,
@@ -176,9 +177,9 @@ impl CentralizedBarrier {
         let local_in_epoch_bytes = self.memory[self.rank].in_epoch.as_bytes().as_ptr();
         let in_epoch_bytes_offset = local_in_epoch_bytes as usize - self.memory.as_ptr() as usize;
         let remote_in_epoch_slice = self.remote_mrs[peer]
-            .slice_mut(in_epoch_bytes_offset..(in_epoch_bytes_offset + size_of::<u64>()))
+            .sub_region(in_epoch_bytes_offset..(in_epoch_bytes_offset + size_of::<u64>()))
             .unwrap();
-        let wr = RankWriteWorkRequest::new(&local_out_epoch_sges, remote_in_epoch_slice);
+        let wr = PeerWriteWorkRequest::new(&local_out_epoch_sges, remote_in_epoch_slice);
 
         // Ensure change is visible before issuing the write
         fence(Ordering::Release);
@@ -234,7 +235,7 @@ impl CentralizedBarrier {
                 // 3. We are accessing distinct elements, so the mutable borrows do not overlap
                 unsafe {
                     let rmr = &mut *base_ptr.add(peer);
-                    rmr.slice_mut(range.clone()).unwrap()
+                    rmr.sub_region(range.clone()).unwrap()
                 }
             })
             .collect();
@@ -244,7 +245,7 @@ impl CentralizedBarrier {
         let wrs: Vec<_> = sges
             .iter()
             .zip(remote_slices.into_iter())
-            .map(|(sge, rms)| RankWriteWorkRequest::new(sge, rms))
+            .map(|(sge, rms)| PeerWriteWorkRequest::new(sge, rms))
             .collect();
 
         // Ensure change is visible before issuing the write

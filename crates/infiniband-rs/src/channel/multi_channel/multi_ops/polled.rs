@@ -1,11 +1,10 @@
 use crate::channel::multi_channel::MultiChannel;
+use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::channel::raw_channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
-use crate::ibverbs::remote_memory_region::RemoteMemorySliceMut;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use crate::ibverbs::work_success::WorkSuccess;
 use std::borrow::{Borrow, BorrowMut};
-use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
 
 impl MultiChannel {
     pub fn scatter<'a, I, E, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
@@ -27,12 +26,9 @@ impl MultiChannel {
         Ok(res.unwrap())
     }
 
-    pub fn scatter_write<'a, I, E, R, WR>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
+    pub fn scatter_write<'a, I>(&'a mut self, wrs: I) -> MultiWorkSpinPollResult
     where
-        I: IntoIterator<Item = WR>,
-        E: AsRef<[GatherElement<'a>]>,
-        R: BorrowMut<RemoteMemorySliceMut<'a>>,
-        WR: BorrowMut<RankWriteWorkRequest<'a, E, R>>,
+        I: IntoIterator<Item = PeerWriteWorkRequest<'a, 'a>>,
     {
         let res = self.scope(|s| {
             let wrs = s.post_scatter_write(wrs)?;

@@ -1,11 +1,8 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
+use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
@@ -34,16 +31,14 @@ impl MultiChannel {
         unsafe { self.channel(peer)?.receive_unpolled(wr) }
     }
 
-    pub unsafe fn write_unpolled<'a, E, R, WR>(&mut self, mut wr: WR) -> io::Result<PendingWork<'a>>
-    where
-        E: AsRef<[GatherElement<'a>]>,
-        R: BorrowMut<RemoteMemorySliceMut<'a>>,
-        WR: BorrowMut<RankWriteWorkRequest<'a, E, R>>,
-    {
-        let wr = wr.borrow_mut();
-        unsafe { self.channel(wr.peer)?.write_unpolled(&mut wr.wr) }
+    pub unsafe fn write_unpolled<'data>(
+        &'_ mut self,
+        wr: PeerWriteWorkRequest<'_, 'data>,
+    ) -> io::Result<PendingWork<'data>> {
+        unsafe { self.channel(wr.peer)?.write_unpolled(wr.wr) }
     }
 
+    /*
     pub unsafe fn read_unpolled<'a, E, R, WR>(
         &mut self,
         peer: usize,
@@ -56,4 +51,5 @@ impl MultiChannel {
     {
         unsafe { self.channel(peer)?.read_unpolled(wr) }
     }
+    */
 }

@@ -1,250 +1,47 @@
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
 use std::ops::{Bound, Range, RangeBounds};
-
-trait RemoteMemoryBounds {
-    fn addr(&self) -> usize;
-    fn len(&self) -> usize;
-    fn rkey(&self) -> u32;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    pub(crate) addr: usize,
-    pub(crate) length: usize,
-    pub(crate) rkey: u32,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct RemoteMemorySlice<'a> {
-    pub(super) addr: usize,
-    pub(super) length: usize,
-    pub(super) rkey: u32,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced remote memory region
-    _mr_lifetime: PhantomData<&'a RemoteMemoryRegion>,
-}
-
-#[derive(Debug)]
-pub struct RemoteMemorySliceMut<'a> {
-    pub(super) addr: usize,
-    pub(super) length: usize,
-    pub(super) rkey: u32,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced remote memory region
-    _mr_lifetime: PhantomData<&'a mut RemoteMemoryRegion>,
+    pub addr: u64,
+    pub length: usize,
+    pub rkey: u32,
 }
 
 impl RemoteMemoryRegion {
-    pub(super) fn new(addr: usize, length: usize, rkey: u32) -> Self {
-        Self { addr, length, rkey }
-    }
+    pub fn sub_region(&self, range: impl RangeBounds<usize>) -> Option<RemoteMemoryRegion> {
+        let range = normalize_range(self.length, range)?;
 
-    pub fn len(&self) -> usize {
-        self.length
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn as_slice(&'_ self) -> RemoteMemorySlice<'_> {
-        RemoteMemorySlice {
-            addr: self.addr,
-            length: self.length,
+        Some(RemoteMemoryRegion {
+            addr: self.addr.checked_add(range.start.try_into().ok()?)?,
+            length: range.end - range.start,
             rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        }
-    }
-
-    pub fn as_slice_mut(&'_ mut self) -> RemoteMemorySliceMut<'_> {
-        RemoteMemorySliceMut {
-            addr: self.addr,
-            length: self.length,
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        }
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.len(), range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn slice_mut(
-        &'_ mut self,
-        range: impl RangeBounds<usize>,
-    ) -> Option<RemoteMemorySliceMut<'_>> {
-        let range = normalize_range(self.len(), range)?;
-
-        Some(RemoteMemorySliceMut {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: Default::default(),
         })
     }
 }
 
-impl<'a> RemoteMemorySlice<'a> {
-    pub fn len(&self) -> usize {
-        self.length
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
-        match self.split_at_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_checked(
-        &'_ self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
-        if mid > self.len() {
-            return None;
-        }
-
-        Some((
-            RemoteMemorySlice {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySlice {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
+/// Returns a sub-`RemoteMemoryRegion` corresponding to a field of a struct stored in the remote region.
+///
+/// Conceptually, this treats the remote memory region `$mr` as if it were a value of type `$Struct`,
+/// and returns the byte range for `$Struct::$field` by computing:
+/// - `offset = offset_of!($Struct, $field)`
+/// - `length = size_of::<FieldType>()`
+/// - `addr = mr.addr + offset`
+///
+/// # Assumptions / requirements
+/// - `$mr` must cover at least the bytes of the field.
+/// - `$Struct` must have a stable layout (typically `#[repr(C)]`).
+#[macro_export]
+macro_rules! remote_field {
+    ($mr:expr, $Struct:ident :: $field:ident) => {{
+        use crate::ibverbs::remote_memory_region::__private;
+        // offset_of! returns usize. We pass it as usize and let the private helper convert it.
+        let offset = std::mem::offset_of!($Struct, $field);
+        __private::sub_region_of(&$mr, offset, |s: &$Struct| &s.$field)
+    }};
 }
 
-impl<'a> RemoteMemorySliceMut<'a> {
-    pub fn len(&self) -> usize {
-        self.length
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn slice_mut(
-        &'_ mut self,
-        range: impl RangeBounds<usize>,
-    ) -> Option<RemoteMemorySliceMut<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySliceMut {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
-        match self.split_at_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_checked(
-        &'_ self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
-        if mid > self.len() {
-            return None;
-        }
-
-        Some((
-            RemoteMemorySlice {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySlice {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
-
-    pub fn split_at_mut(
-        &'_ mut self,
-        mid: usize,
-    ) -> (RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>) {
-        match self.split_at_mut_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_mut_checked(
-        &'_ mut self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>)> {
-        if mid > self.len() {
-            return None;
-        }
-
-        Some((
-            RemoteMemorySliceMut {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySliceMut {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
-}
+pub use remote_field;
 
 /// Normalize a range relative to a memory's length.
 /// Returns Some(start..end) if valid, None if out of bounds.
@@ -265,5 +62,20 @@ fn normalize_range(memory_length: usize, range: impl RangeBounds<usize>) -> Opti
         None
     } else {
         Some(start..end)
+    }
+}
+
+#[doc(hidden)]
+pub mod __private {
+    use super::RemoteMemoryRegion;
+
+    pub fn sub_region_of<T, U>(
+        mr: &RemoteMemoryRegion,
+        offset: usize,
+        _selector: fn(&T) -> &U,
+    ) -> Option<RemoteMemoryRegion> {
+        let field_size = std::mem::size_of::<U>();
+        let end = offset.checked_add(field_size)?;
+        mr.sub_region(offset..end)
     }
 }

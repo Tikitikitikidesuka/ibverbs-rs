@@ -1,6 +1,5 @@
-use crate::ibverbs::remote_memory_region::{RemoteMemorySlice, RemoteMemorySliceMut};
+use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use std::borrow::{Borrow, BorrowMut};
 use std::marker::PhantomData;
 
 pub struct SendWorkRequest<'a, E>
@@ -20,18 +19,17 @@ where
     _data_lifetime: PhantomData<ScatterElement<'a>>,
 }
 
-pub struct WriteWorkRequest<'a, E, R>
-where
-    E: AsRef<[GatherElement<'a>]>,
-    R: BorrowMut<RemoteMemorySliceMut<'a>>,
-{
-    pub(super) gather_elements: E,
-    pub(super) remote_slice: R,
+/// 'wr is the lifetime of the work request struct. It lives from when then
+/// work request is created until its posted.
+/// 'data is the lifetime of the local data referenced by the rdma operation.
+/// It is held until the operation completes.
+pub struct WriteWorkRequest<'wr, 'data> {
+    pub(super) gather_elements: &'wr [GatherElement<'data>],
+    pub(super) remote_slice: RemoteMemoryRegion,
     pub(super) imm_data: Option<u32>,
-    _gather_elements_lifetime: PhantomData<GatherElement<'a>>,
-    _remote_mr_lifetime: PhantomData<RemoteMemorySliceMut<'a>>,
 }
 
+/*
 pub struct ReadWorkRequest<'a, E, R>
 where
     E: AsMut<[ScatterElement<'a>]>,
@@ -42,6 +40,7 @@ where
     _scatter_elements_lifetime: PhantomData<ScatterElement<'a>>,
     _remote_mr_lifetime: PhantomData<RemoteMemorySlice<'a>>,
 }
+*/
 
 impl<'a, E> SendWorkRequest<'a, E>
 where
@@ -83,18 +82,15 @@ where
     }
 }
 
-impl<'a, E, R> WriteWorkRequest<'a, E, R>
-where
-    E: AsRef<[GatherElement<'a>]>,
-    R: BorrowMut<RemoteMemorySliceMut<'a>>,
-{
-    pub fn new(gather_elements: E, remote_slice: R) -> Self {
+impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
+    pub fn new(
+        gather_elements: &'wr [GatherElement<'data>],
+        remote_slice: RemoteMemoryRegion,
+    ) -> Self {
         Self {
             gather_elements,
             remote_slice,
             imm_data: None,
-            _gather_elements_lifetime: PhantomData,
-            _remote_mr_lifetime: PhantomData,
         }
     }
 
@@ -104,6 +100,7 @@ where
     }
 }
 
+/*
 impl<'a, E, R> ReadWorkRequest<'a, E, R>
 where
     E: AsMut<[ScatterElement<'a>]>,
@@ -118,3 +115,6 @@ where
         }
     }
 }
+
+
+ */

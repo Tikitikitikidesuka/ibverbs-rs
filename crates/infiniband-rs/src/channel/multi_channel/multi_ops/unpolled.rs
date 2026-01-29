@@ -1,9 +1,8 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
+use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::remote_memory_region::RemoteMemorySliceMut;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
+use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
@@ -19,15 +18,13 @@ impl MultiChannel {
             .collect()
     }
 
-    pub fn scatter_write_unpolled<'a, I, E, R, WR>(
-        &'a mut self,
+    pub fn scatter_write_unpolled<'wr, 'data, I, WR>(
+        &'wr mut self,
         wrs: I,
-    ) -> io::Result<Vec<PendingWork<'a>>>
+    ) -> io::Result<Vec<PendingWork<'data>>>
     where
-        I: IntoIterator<Item = WR>,
-        E: AsRef<[GatherElement<'a>]>,
-        R: BorrowMut<RemoteMemorySliceMut<'a>>,
-        WR: BorrowMut<RankWriteWorkRequest<'a, E, R>>,
+        I: IntoIterator<Item = PeerWriteWorkRequest<'wr, 'data>>,
+        'data: 'wr,
     {
         wrs.into_iter()
             .map(|wr| unsafe { self.write_unpolled(wr) })
