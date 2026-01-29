@@ -1,6 +1,6 @@
 use std::{num::NonZero, ops::Range};
 
-use bytemuck::cast_slice;
+use bytemuck::{cast_slice, cast_slice_mut};
 use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 use crate::{
@@ -18,6 +18,7 @@ pub struct RegisterSizes {}
 impl Stage for RegisterSizes {}
 
 pub struct StoreMfps {
+    /// in bytes
     total_size: usize,
 }
 impl Stage for StoreMfps {}
@@ -108,6 +109,11 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
         offset..(offset + size)
     }
 
+    pub fn get_mfp_slot(&mut self, index: usize) -> &mut [u8] {
+        let range = self.get_mfp_range(index);
+        &mut cast_slice_mut(self.buffer)[range]
+    }
+
     pub fn get_mfp(&self, index: usize) -> Result<&MultiFragmentPacket, FromRawBytesError> {
         let data = &cast_slice::<_, u8>(self.buffer)[self.get_mfp_range(index)];
         println!("{:?}", &data[0..50]);
@@ -120,7 +126,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     /// - all MFPs have the same event id and number of fragments.
     ///
     /// The returned range is in **bytes** within the buffer.
-    pub fn finish(self) -> Range<usize> {
+    pub fn finish(self) -> &'a [u32] {
         let num_mfps = self.num_mfps();
         let header_size_u32 = total_header_size(num_mfps) / size_of::<u32>();
         let (header, rest) = self.buffer.split_at_mut(header_size_u32);
@@ -142,7 +148,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
             }),
         );
 
-        0..self.stage.total_size
+        &self.buffer[0..self.stage.total_size / size_of::<u32>()]
     }
 
     fn mfp_sizes_bytes(&self) -> &[usize] {
@@ -195,10 +201,9 @@ mod test {
             memory[builder.get_mfp_range(1)].copy_from_slice(mfp1.raw_packet_data());
             memory[builder.get_mfp_range(0)].copy_from_slice(mfp0.raw_packet_data());
 
-            let range = builder.finish();
+            let out_slice = builder.finish();
 
-            let mep = MultiEventPacket::from_raw_bytes(bytemuck::cast_slice(&memory[range]))
-                .expect("valid mep");
+            let mep = MultiEventPacket::from_raw_bytes(out_slice).expect("valid mep");
 
             assert_eq!(mep.num_mfps(), 2);
             assert!(mep.get_mfp(0).unwrap().source_id().is_odin());
