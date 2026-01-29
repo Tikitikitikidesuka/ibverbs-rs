@@ -11,6 +11,7 @@ use std::time::Duration;
 use zerocopy::network_endian::{U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
+#[derive(Debug)]
 pub struct MetaMr {
     memory: Box<MetaMrState>,
     mr: MemoryRegion,
@@ -101,12 +102,8 @@ impl MetaMr {
             out_ack: U64::new(0),
         });
 
-        let mr = unsafe {
-            pd.register_shared_mr(
-                memory.as_mut() as *mut MetaMrState as *mut u8,
-                size_of::<MetaMrState>(),
-            )?
-        };
+        let memory_bytes = memory.as_mut_bytes();
+        let mr = unsafe { pd.register_shared_mr(memory_bytes.as_mut_ptr(), memory_bytes.len())? };
 
         Ok(PreparedMetaMr { memory, mr })
     }
@@ -145,7 +142,7 @@ impl MetaMr {
 
         // Slice the meta remote memory region
         // Unwrap because we are taking the full slice
-        let mut meta_remote_mr_slice = self.remote_mr.slice_mut(..).unwrap();
+        let mut meta_remote_mr_slice = self.remote_mr.as_slice_mut();
         let (mut in_remote_mr, mut rest) =
             meta_remote_mr_slice.split_at_mut(size_of::<PodRemoteMemoryRegion>());
         let (mut in_epoch, _rest) = rest.split_at_mut(size_of::<u64>());
@@ -208,7 +205,6 @@ impl MetaMr {
                 self.memory.out_ack.set(new_epoch);
 
                 // Slice the meta remote memory region
-                // Unwrap because we are taking the full slice
                 let ack_offset = offset_of!(MetaMrState, in_ack);
                 let mut meta_remote_mr_slice = self
                     .remote_mr

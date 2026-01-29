@@ -1,17 +1,18 @@
 use crate::ibverbs::remote_memory_region::{
     RemoteMemoryRegion, RemoteMemorySlice, RemoteMemorySliceMut,
 };
+use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, BorrowMut};
-use std::marker::PhantomData;
 use std::ops::RangeBounds;
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RankRemoteMemoryRegion {
     peer: usize,
     remote_mr: RemoteMemoryRegion,
 }
 
 impl RankRemoteMemoryRegion {
-    pub(super) fn new(peer: usize, remote_mr: RemoteMemoryRegion) -> Self {
+    pub(crate) fn new(peer: usize, remote_mr: RemoteMemoryRegion) -> Self {
         Self { peer, remote_mr }
     }
 

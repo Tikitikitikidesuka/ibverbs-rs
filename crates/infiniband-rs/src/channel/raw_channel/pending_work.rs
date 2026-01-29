@@ -62,7 +62,7 @@ pub enum WorkPollError {
 
 impl From<WorkPollError> for io::Error {
     fn from(value: WorkPollError) -> Self {
-        io::Error::new(io::ErrorKind::Other, value)
+        io::Error::new(io::ErrorKind::Other, format!("{value}"))
     }
 }
 

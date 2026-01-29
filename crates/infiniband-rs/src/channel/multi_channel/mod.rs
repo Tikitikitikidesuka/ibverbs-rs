@@ -10,6 +10,7 @@ use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use std::io;
 
+#[derive(Debug)]
 pub struct MultiChannel {
     channels: Box<[RawChannel]>,
     meta_mrs: Box<[MetaMr]>,

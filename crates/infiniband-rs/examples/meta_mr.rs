@@ -55,7 +55,7 @@ fn main() {
         while mem[0] == 0u8 {}
         println!("after: {:?}", &mem[0..8]);
     } else {
-        let remote_mr = conn.accept_remote_mr(Duration::from_millis(3000)).unwrap();
+        let mut remote_mr = conn.accept_remote_mr(Duration::from_millis(3000)).unwrap();
         let mut mem = [1u8; 1024];
         let mr = conn.register_local_mr(&mut mem).unwrap();
         conn.write(WriteWorkRequest::new(
