@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 /// purposes.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    addr: u64,
-    length: usize,
-    rkey: u32,
+    pub(super) addr: u64,
+    pub(super) length: usize,
+    pub(super) rkey: u32,
 }
 
 impl RemoteMemoryRegion {

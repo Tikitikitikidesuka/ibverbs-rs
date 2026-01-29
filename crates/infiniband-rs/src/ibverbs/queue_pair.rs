@@ -1,7 +1,9 @@
 use crate::ibverbs::completion_queue::CompletionQueueInner;
 use crate::ibverbs::protection_domain::ProtectionDomainInner;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
+use crate::ibverbs::work_request::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 use ibverbs_sys::*;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt::Debug;
@@ -50,13 +52,10 @@ impl Debug for QueuePair {
 
 impl QueuePair {
     /// # Safety
-    /// The buffers pointed to by GatherElement must remain valid until the work request issued
-    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_send<'a, E, WR>(&mut self, wr: WR, wr_id: u64) -> io::Result<()>
-    where
-        E: AsRef<[GatherElement<'a>]>,
-        WR: Borrow<SendWorkRequest<'a, E>>,
-    {
+    /// The buffers pointed to by the work request in its gather elements must remain
+    /// valid and cannot be mutated until the work is finished by the hardware.
+    /// They must also not be aliased by a mutable reference until then.
+    pub unsafe fn post_send(&mut self, wr: SendWorkRequest, wr_id: u64) -> io::Result<()> {
         let wr = wr.borrow();
 
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
@@ -86,13 +85,14 @@ impl QueuePair {
     }
 
     /// # Safety
-    /// The buffers pointed to by GatherElement must remain valid until the work request issued
-    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    pub unsafe fn post_receive<'a, E, WR>(&mut self, mut wr: WR, wr_id: u64) -> io::Result<()>
-    where
-        E: AsMut<[ScatterElement<'a>]>,
-        WR: BorrowMut<ReceiveWorkRequest<'a, E>>,
-    {
+    /// The buffers pointed to by the work request in its scatter elements must remain
+    /// valid and cannot be read or mutated until the work is finished by the hardware.
+    /// They must not be aliased by shared or mutable references until then.
+    pub unsafe fn post_receive(
+        &mut self,
+        mut wr: ReceiveWorkRequest,
+        wr_id: u64,
+    ) -> io::Result<()> {
         let wr = wr.borrow_mut();
         let mut wr = ibv_recv_wr {
             wr_id,
@@ -104,16 +104,15 @@ impl QueuePair {
         unsafe { self.post_receive_wr(&mut wr) }
     }
 
-    /// The buffers pointed to by ScatterElement must remain valid until the work request issued
-    /// is complete. That is, the buffers pointed to by the gather elements must live for at least 'a.
-    /// IMPORTANT: Post write does not check that the length of the remote memory region. This must be done
-    /// by this library. If not, it will write further than the specified position.
-    pub unsafe fn post_write<'data>(
-        &'_ mut self,
-        wr: WriteWorkRequest<'_, 'data>,
-        wr_id: u64,
-    ) -> io::Result<()>
-where {
+    /// It is important to notice how remote memory regions work. todo: explain
+    /// The `RemoteMemoryRegion`'s length attribute is only a marker to respect bounds locally.
+    /// If a `RemoteMemoryRegion` is created with length n but gather regions with an added length
+    /// of m greater than n is RDMA written into it, the serialized
+    /// # Safety
+    /// The buffers pointed to by the work request in its gather elements must remain
+    /// valid and cannot be read or mutated until the work is finished by the hardware.
+    /// They must not be aliased by shared or mutable references until then.
+    pub unsafe fn post_write(&mut self, wr: WriteWorkRequest, wr_id: u64) -> io::Result<()> {
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_RDMA_WRITE, Default::default()),
             Some(imm_data) => (
@@ -133,8 +132,8 @@ where {
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: wr.remote_slice.addr,
-                    rkey: wr.remote_slice.rkey,
+                    remote_addr: wr.remote_mr.addr,
+                    rkey: wr.remote_mr.rkey,
                 },
             },
             qp_type: Default::default(),
@@ -145,25 +144,23 @@ where {
         unsafe { self.post_send_wr(&mut wr) }
     }
 
-    /*
-    pub unsafe fn post_read<'a, E, R, WR>(&mut self, mut wr: WR, wr_id: u64) -> io::Result<()>
-    where
-        E: AsMut<[ScatterElement<'a>]>,
-        R: Borrow<RemoteMemorySlice<'a>>,
-        WR: BorrowMut<ReadWorkRequest<'a, E, R>>,
-    {
+    /// # Safety
+    /// The buffers pointed to by the work request in its gather elements must remain
+    /// valid and cannot be read or mutated until the work is finished by the hardware.
+    /// They must not be aliased by shared or mutable references until then.
+    pub unsafe fn post_read(&mut self, mut wr: ReadWorkRequest, wr_id: u64) -> io::Result<()> {
         let wr = wr.borrow_mut();
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
-            sg_list: wr.scatter_elements.as_mut().as_ptr() as *mut ibv_sge,
-            num_sge: wr.scatter_elements.as_mut().len() as i32,
+            sg_list: wr.scatter_elements.as_ptr() as *mut ibv_sge,
+            num_sge: wr.scatter_elements.len() as i32,
             opcode: ibv_wr_opcode::IBV_WR_RDMA_READ,
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: wr.remote_slice.borrow().addr as u64,
-                    rkey: wr.remote_slice.borrow().rkey,
+                    remote_addr: wr.remote_mr.addr,
+                    rkey: wr.remote_mr.rkey,
                 },
             },
             qp_type: Default::default(),
@@ -173,7 +170,6 @@ where {
 
         unsafe { self.post_send_wr(&mut wr) }
     }
-    */
 
     #[inline(always)]
     unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {
