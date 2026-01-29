@@ -83,6 +83,12 @@ pub enum MultiWorkPollError {
     WorkError(Vec<WorkError>),
 }
 
+impl From<MultiWorkPollError> for io::Error {
+    fn from(value: MultiWorkPollError) -> Self {
+        io::Error::new(io::ErrorKind::Other, format!("{value}"))
+    }
+}
+
 pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
 pub type MultiWorkSpinPollResult = Result<Vec<WorkSuccess>, MultiWorkPollError>;
 
