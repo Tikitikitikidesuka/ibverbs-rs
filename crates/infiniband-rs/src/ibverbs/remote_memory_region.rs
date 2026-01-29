@@ -74,7 +74,7 @@ macro_rules! remote_array_field {
     ($mr:expr, $T:ty, $index:expr) => {{
         let type_size = std::mem::size_of::<$T>();
         let offset = $index * type_size;
-        $mr.from_offset(offset)
+        $mr.sub_region(offset)
     }};
 }
 

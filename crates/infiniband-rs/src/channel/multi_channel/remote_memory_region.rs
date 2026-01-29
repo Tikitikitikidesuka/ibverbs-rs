@@ -1,7 +1,12 @@
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use serde::{Deserialize, Serialize};
-use std::ops::RangeBounds;
 
+/// A wrapper around [`RemoteMemoryRegion`] associated with a specific remote `peer`.
+///
+/// This struct behaves exactly like `RemoteMemoryRegion` for One-Sided RDMA operations,
+/// but carries the destination peer index required to route the operation.
+///
+/// See [`RemoteMemoryRegion`] for details on RDMA write/read behavior and memory registration.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct PeerRemoteMemoryRegion {
     peer: usize,
@@ -9,18 +14,27 @@ pub struct PeerRemoteMemoryRegion {
 }
 
 impl PeerRemoteMemoryRegion {
-    pub(crate) fn new(peer: usize, remote_mr: RemoteMemoryRegion) -> Self {
+    /// Creates a new `PeerRemoteMemoryRegion` from a peer identifier and a `RemoteMemoryRegion`.
+    pub fn new(peer: usize, remote_mr: RemoteMemoryRegion) -> Self {
         Self { peer, remote_mr }
     }
 
+    /// Returns the peer identifier associated with this remote memory region.
     pub fn peer(&self) -> usize {
         self.peer
     }
 
-    pub fn sub_region(&self, range: impl RangeBounds<usize>) -> Option<PeerRemoteMemoryRegion> {
+    /// Delegates to [`RemoteMemoryRegion::sub_region`], returning a new `PeerRemoteMemoryRegion`
+    /// tied to the same peer.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(PeerRemoteMemoryRegion)` if the offset is within bounds.
+    /// * `None` if the offset exceeds the current length.
+    pub fn sub_region(&self, offset: usize) -> Option<PeerRemoteMemoryRegion> {
         Some(PeerRemoteMemoryRegion {
             peer: self.peer,
-            remote_mr: self.remote_mr.sub_region(range)?,
+            remote_mr: self.remote_mr.sub_region(offset)?,
         })
     }
 }

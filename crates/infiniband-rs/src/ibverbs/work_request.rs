@@ -35,6 +35,7 @@ pub struct WriteWorkRequest<'wr, 'data> {
 /// work request is created until its posted.
 /// 'data is the lifetime of the local data referenced by the rdma operation.
 /// It is held until the operation completes.
+#[derive(Debug)]
 pub struct ReadWorkRequest<'wr, 'data> {
     pub(super) scatter_elements: &'wr mut [ScatterElement<'data>],
     pub(super) remote_mr: RemoteMemoryRegion,

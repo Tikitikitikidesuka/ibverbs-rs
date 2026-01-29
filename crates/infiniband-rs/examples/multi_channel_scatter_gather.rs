@@ -39,8 +39,8 @@ fn main() {
             .map(|chunk| ReceiveWorkRequest::new(vec![mr.prepare_scatter_element(chunk).unwrap()]))
             .enumerate();
 
-        s.post_scatter(scatter_sends).unwrap();
-        s.post_gather(gather_receives).unwrap();
+        s.post_scatter_send(scatter_sends).unwrap();
+        s.post_gather_receive(gather_receives).unwrap();
     });
 
     println!("Recv mem after: {recv_mem:?}");
