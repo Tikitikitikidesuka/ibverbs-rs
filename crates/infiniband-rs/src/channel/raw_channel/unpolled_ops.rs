@@ -1,7 +1,9 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::PendingWork;
 use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
+use crate::ibverbs::work_request::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
@@ -48,11 +50,10 @@ impl RawChannel {
     /// // This violates Rust's aliasing rules and constitutes UB.
     /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
     /// ```
-    pub unsafe fn send_unpolled<'a, E, WR>(&mut self, wr: WR) -> io::Result<PendingWork<'a>>
-    where
-        E: AsRef<[GatherElement<'a>]>,
-        WR: Borrow<SendWorkRequest<'a, E>>,
-    {
+    pub unsafe fn send_unpolled<'data>(
+        &mut self,
+        wr: SendWorkRequest<'_, 'data>,
+    ) -> io::Result<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_send(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
@@ -99,18 +100,17 @@ impl RawChannel {
     /// // This violates Rust's aliasing rules and constitutes UB.
     /// println!("{:?}", &mem[0..4]);
     /// ```
-    pub unsafe fn receive_unpolled<'a, E, WR>(&mut self, wr: WR) -> io::Result<PendingWork<'a>>
-    where
-        E: AsMut<[ScatterElement<'a>]>,
-        WR: BorrowMut<ReceiveWorkRequest<'a, E>>,
-    {
+    pub unsafe fn receive_unpolled<'data>(
+        &mut self,
+        wr: ReceiveWorkRequest<'_, 'data>,
+    ) -> io::Result<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
     pub unsafe fn write_unpolled<'data>(
-        &'_ mut self,
+        &mut self,
         wr: WriteWorkRequest<'_, 'data>,
     ) -> io::Result<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
@@ -118,18 +118,14 @@ impl RawChannel {
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
 
-    /*
-    pub unsafe fn read_unpolled<'a, E, R, WR>(&mut self, wr: WR) -> io::Result<PendingWork<'a>>
-    where
-        E: AsMut<[ScatterElement<'a>]>,
-        R: Borrow<RemoteMemorySlice<'a>>,
-        WR: BorrowMut<ReadWorkRequest<'a, E, R>>,
-    {
+    pub unsafe fn read_unpolled<'data>(
+        &mut self,
+        wr: ReadWorkRequest<'_, 'data>,
+    ) -> io::Result<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_read(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
     }
-    */
 
     fn get_and_advance_wr_id(&mut self) -> u64 {
         let wr_id = self.next_wr_id;

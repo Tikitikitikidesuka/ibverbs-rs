@@ -1,9 +1,9 @@
 use crate::channel::raw_channel::RawChannel;
 use crate::channel::raw_channel::pending_work::MultiWorkPollError;
 use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
-use std::borrow::{Borrow, BorrowMut};
+use crate::ibverbs::work_request::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 use std::io;
 
 impl RawChannel {
@@ -16,19 +16,17 @@ impl RawChannel {
 }
 
 impl<'scope, 'env> PollingScope<'scope, 'env, RawChannel> {
-    pub fn post_send<E, WR>(&mut self, wr: WR) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        E: AsRef<[GatherElement<'env>]>,
-        WR: Borrow<SendWorkRequest<'env, E>>,
-    {
+    pub fn post_send(
+        &mut self,
+        wr: SendWorkRequest<'_, 'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_send(|s| Ok(s), wr)
     }
 
-    pub fn post_receive<E, WR>(&mut self, wr: WR) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        E: AsMut<[ScatterElement<'env>]>,
-        WR: BorrowMut<ReceiveWorkRequest<'env, E>>,
-    {
+    pub fn post_receive(
+        &mut self,
+        wr: ReceiveWorkRequest<'_, 'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_receive(|s| Ok(s), wr)
     }
 
@@ -39,14 +37,10 @@ impl<'scope, 'env> PollingScope<'scope, 'env, RawChannel> {
         self.channel_post_write(|s| Ok(s), wr)
     }
 
-    /*
-    pub fn post_read<E, R, WR>(&mut self, wr: WR) -> io::Result<ScopedPendingWork<'scope>>
-    where
-        E: AsMut<[ScatterElement<'env>]>,
-        R: Borrow<RemoteMemorySlice<'env>>,
-        WR: BorrowMut<ReadWorkRequest<'env, E, R>>,
-    {
+    pub fn post_read(
+        &mut self,
+        wr: ReadWorkRequest<'_, 'env>,
+    ) -> io::Result<ScopedPendingWork<'scope>> {
         self.channel_post_read(|s| Ok(s), wr)
     }
-    */
 }
