@@ -55,7 +55,7 @@ impl Drop for DeviceList {
 
 impl DeviceList {
     /// Returns an iterator over all found devices.
-    pub fn iter(&self) -> DeviceListIter {
+    pub fn iter(&self) -> DeviceListIter<'_> {
         DeviceListIter { list: self, i: 0 }
     }
 
@@ -70,12 +70,12 @@ impl DeviceList {
     }
 
     /// Returns the device at the given `index`, or `None` if out of bounds.
-    pub fn get(&self, index: usize) -> Option<DeviceRef> {
+    pub fn get(&self, index: usize) -> Option<DeviceRef<'_>> {
         if index >= self.num_devices {
             return None;
         }
 
-        Some(unsafe { DeviceRef::from_ptr(unsafe { *self.devices_ptr.add(index) }) })
+        Some(unsafe { DeviceRef::from_ptr(*self.devices_ptr.add(index)) })
     }
 }
 
@@ -111,7 +111,7 @@ impl std::fmt::Debug for DeviceList {
 }
 
 pub struct DeviceRef<'a> {
-    device_ptr: *mut ibv_device,
+    pub(super) device_ptr: *mut ibv_device,
     _dev_list: PhantomData<&'a DeviceList>,
 }
 
@@ -134,7 +134,7 @@ impl DeviceRef<'_> {
     ///  - `EMFILE`: Too many files are opened by this process (from `ibv_query_gid`).
     ///  - Other: the device is not in `ACTIVE` or `ARMED` state.
     pub fn open(&self) -> io::Result<Context> {
-        Context::with_device(self.device_ptr)
+        Context::from_device(self)
     }
 
     /// Returns a `&str` of the name, which is associated with this RDMA device.

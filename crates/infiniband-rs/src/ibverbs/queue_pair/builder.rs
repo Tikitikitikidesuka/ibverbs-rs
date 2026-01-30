@@ -64,8 +64,8 @@ impl QueuePair {
             Ok(PreparedQueuePair {
                 qp: QueuePair {
                     pd: pd.clone(),
-                    send_cq: send_cq.clone(),
-                    recv_cq: recv_cq.clone(),
+                    _send_cq: send_cq.clone(),
+                    _recv_cq: recv_cq.clone(),
                     qp,
                 },
                 endpoint,

@@ -1,5 +1,5 @@
 use crate::ibverbs::access_config::AccessFlags;
-use crate::ibverbs::protection_domain::{ProtectionDomain, ProtectionDomainInner};
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::scatter_gather_element::{
     GatherElement, ScatterElement, ScatterGatherElementError,

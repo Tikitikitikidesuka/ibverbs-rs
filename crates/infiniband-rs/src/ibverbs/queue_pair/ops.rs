@@ -41,7 +41,7 @@ impl QueuePair {
     /// They must not be aliased by shared or mutable references until then.
     pub unsafe fn post_receive(
         &mut self,
-        mut wr: ReceiveWorkRequest,
+        wr: ReceiveWorkRequest,
         wr_id: u64,
     ) -> io::Result<()> {
         let mut wr = ibv_recv_wr {
@@ -98,7 +98,7 @@ impl QueuePair {
     /// The buffers pointed to by the work request in its gather elements must remain
     /// valid and cannot be read or mutated until the work is finished by the hardware.
     /// They must not be aliased by shared or mutable references until then.
-    pub unsafe fn post_read(&mut self, mut wr: ReadWorkRequest, wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_read(&mut self, wr: ReadWorkRequest, wr_id: u64) -> io::Result<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

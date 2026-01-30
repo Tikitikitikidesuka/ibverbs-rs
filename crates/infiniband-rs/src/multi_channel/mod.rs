@@ -8,7 +8,6 @@ use crate::channel::Channel;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::builder::MultiChannelBuilder;
 use crate::multi_channel::builder::multi_channel_builder::SetPd;
-use std::io;
 
 #[derive(Debug)]
 pub struct MultiChannel {
@@ -24,7 +23,6 @@ impl MultiChannel {
     pub fn pd(&self) -> &ProtectionDomain {
         &self.pd
     }
-
 }
 
 impl ProtectionDomain {

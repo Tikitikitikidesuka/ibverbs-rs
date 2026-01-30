@@ -1,6 +1,4 @@
-use ibverbs_sys::*;
 use std::time::Duration;
-
 
 #[derive(Debug, Copy, Clone)]
 pub struct PacketSequenceNumber(u32);

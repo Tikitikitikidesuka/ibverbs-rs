@@ -36,10 +36,8 @@ impl Context {
 
 impl Context {
     /// Opens a context for the given device, and queries its port and gid.
-    pub(super) fn with_device(dev: *mut ibv_device) -> io::Result<Self> {
-        assert!(!dev.is_null());
-
-        let ibv_ctx = unsafe { ibv_open_device(dev) };
+    pub fn from_device(dev: &DeviceRef) -> io::Result<Self> {
+        let ibv_ctx = unsafe { ibv_open_device(dev.device_ptr) };
         if ibv_ctx.is_null() {
             return Err(io::Error::other("failed to open device"));
         }
