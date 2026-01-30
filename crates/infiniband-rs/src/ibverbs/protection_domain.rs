@@ -29,6 +29,10 @@ impl ProtectionDomain {
         }
     }
 
+    pub fn context(&self) -> &Context {
+        &self.inner.context
+    }
+
     pub fn create_qp(&self) -> QueuePairBuilder<'_, '_, '_, SetPd> {
         QueuePair::builder().pd(self)
     }

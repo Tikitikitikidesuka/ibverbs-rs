@@ -11,4 +11,4 @@ pub mod work_completion;
 pub mod work_error;
 pub mod work_request;
 pub mod work_success;
-mod access_config;
+pub mod access_config;

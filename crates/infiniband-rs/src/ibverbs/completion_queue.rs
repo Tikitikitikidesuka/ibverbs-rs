@@ -21,13 +21,13 @@ impl CompletionQueue {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    pub(super) fn create(context: Context, min_capacity: u32, id: isize) -> io::Result<Self> {
+    pub fn create(context: &Context, id: isize, min_capacity: u32) -> io::Result<Self> {
         let min_cq_entries = min_capacity.try_into().map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
                     "invalid min_cq_entries ({min_capacity}) \
-                        (must be 1 and dev_cap.max_cqe)"
+                        (must be between 1 and dev_cap.max_cqe)"
                 ),
             )
         })?;
@@ -77,7 +77,7 @@ impl CompletionQueue {
             log::debug!("IbvCompletionQueue created");
             Ok(CompletionQueue {
                 inner: Arc::new(CompletionQueueInner {
-                    context,
+                    context: context.clone(),
                     cc,
                     cq,
                     min_capacity: min_cq_entries as u32,

@@ -1,4 +1,4 @@
-use crate::channel::raw_channel::RawChannel;
+use crate::channel::raw_channel::Channel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
@@ -122,7 +122,7 @@ impl MetaMr {
     /// are seen in order of issuance.
     pub fn share_memory_region(
         &mut self,
-        channel: &mut RawChannel,
+        channel: &mut Channel,
         mr: &MemoryRegion,
     ) -> io::Result<()> {
         // 0. Check the peer acknowledged the last shared remote mr (be -> native)
@@ -185,7 +185,7 @@ impl MetaMr {
     /// `prepare_write_ack_remote_mr_wr` to the peer that shared the mr.
     pub fn accept_memory_region(
         &mut self,
-        channel: &mut RawChannel,
+        channel: &mut Channel,
         timeout: Duration,
     ) -> io::Result<RemoteMemoryRegion> {
         let start = std::time::Instant::now();

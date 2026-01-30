@@ -24,8 +24,8 @@ impl Context {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<CompletionQueue> {
-        CompletionQueue::create(self.clone(), min_cq_entries, id)
+    pub fn create_cq(&self, id: isize, min_cq_entries: u32) -> io::Result<CompletionQueue> {
+        CompletionQueue::create(self, id, min_cq_entries)
     }
 
     /// Allocate a protection domain (PDs) for the device's context.
