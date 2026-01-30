@@ -1,5 +1,4 @@
 use crate::ibverbs::access_config::AccessFlags;
-use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::QueuePairEndpoint;
 use crate::ibverbs::queue_pair::config::{
@@ -17,7 +16,7 @@ use std::io;
 
 #[bon]
 impl Node {
-    #[builder]
+    #[builder(state_mod(vis = "pub(crate)"))]
     pub fn builder(
         rank: usize,
         world_size: usize,

@@ -3,8 +3,11 @@ pub mod builder;
 pub mod config;
 pub mod tcp_exchanger;
 
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::network::barrier::{BarrierError, CentralizedBarrier};
+use crate::network::builder::NodeBuilder;
+use crate::network::builder::node_builder::SetPd;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
@@ -39,6 +42,12 @@ impl Node {
     ) -> Result<(), BarrierError> {
         self.barrier
             .barrier_unchecked(&mut self.multi_channel, peers, timeout)
+    }
+}
+
+impl ProtectionDomain {
+    pub fn create_node(&self) -> NodeBuilder<'_, SetPd> {
+        Node::builder().pd(self)
     }
 }
 

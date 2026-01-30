@@ -1,3 +1,5 @@
+use crate::channel::Channel;
+use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::{PreparedQueuePair, QueuePairEndpoint};
@@ -6,12 +8,10 @@ use bon::bon;
 use std::cell::RefCell;
 use std::io;
 use std::rc::Rc;
-use crate::channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::Channel;
 
 #[bon]
 impl Channel {
-    #[builder]
+    #[builder(state_mod(vis = "pub(crate)"))]
     pub fn builder(
         pd: &ProtectionDomain,
         #[builder(default =

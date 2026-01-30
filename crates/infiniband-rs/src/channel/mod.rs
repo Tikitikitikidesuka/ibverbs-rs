@@ -1,3 +1,5 @@
+use crate::channel::builder::ChannelBuilder;
+use crate::channel::builder::channel_builder::SetPd;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::QueuePair;
@@ -7,8 +9,8 @@ use std::rc::Rc;
 pub mod builder;
 pub mod pending_work;
 pub mod polled_ops;
-pub mod remote_mr_exchanger;
 pub mod polling_scope;
+pub mod remote_mr_exchanger;
 pub mod scoped_ops;
 pub mod unpolled_ops;
 
@@ -36,5 +38,11 @@ pub struct Channel {
 impl Channel {
     pub fn pd(&self) -> &ProtectionDomain {
         &self.pd
+    }
+}
+
+impl ProtectionDomain {
+    pub fn create_channel(&self) -> ChannelBuilder<'_, SetPd> {
+        Channel::builder().pd(self)
     }
 }

@@ -13,7 +13,7 @@ use std::io;
 
 #[bon]
 impl MultiChannel {
-    #[builder]
+    #[builder(state_mod(vis = "pub(crate)"))]
     pub fn builder(
         num_channels: usize,
         pd: &ProtectionDomain,
