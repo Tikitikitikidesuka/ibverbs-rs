@@ -1,5 +1,5 @@
 use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::rank_remote_memory_region::RankRemoteMemoryRegion;
+use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::ibverbs::memory_region::MemoryRegion;
 use std::io;
 use std::time::Duration;
@@ -70,9 +70,9 @@ impl MultiChannel {
         &mut self,
         peer: usize,
         timeout: Duration,
-    ) -> io::Result<RankRemoteMemoryRegion> {
+    ) -> io::Result<PeerRemoteMemoryRegion> {
         let (channel, meta_mr) = self.meta_channel(peer)?;
         let remote_mr = meta_mr.accept_memory_region(channel, timeout)?;
-        Ok(RankRemoteMemoryRegion::new(peer, remote_mr))
+        Ok(PeerRemoteMemoryRegion::new(peer, remote_mr))
     }
 }

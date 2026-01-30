@@ -1,5 +1,5 @@
 use infiniband_rs::channel::multi_channel::MultiChannel;
-use infiniband_rs::channel::multi_channel::rank_work_request::RankWriteWorkRequest;
+use infiniband_rs::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use infiniband_rs::ibverbs::devices::open_device;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
@@ -35,9 +35,9 @@ fn main() {
 
     println!("Recv mem before: {recv_mem:?}");
 
-    let result = multi_channel.write(RankWriteWorkRequest::new(
+    let result = multi_channel.write(PeerWriteWorkRequest::new(
         &[mr.prepare_gather_element(&send_mem).unwrap()],
-        rmr.slice_mut(5..).unwrap(),
+        rmr.sub_region(5).unwrap(),
     ));
 
     println!("Recv mem after: {recv_mem:?}");

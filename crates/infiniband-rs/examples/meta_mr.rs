@@ -60,7 +60,7 @@ fn main() {
         let mr = conn.register_local_mr(&mut mem).unwrap();
         conn.write(WriteWorkRequest::new(
             &[mr.prepare_gather_element(&mem).unwrap()],
-            remote_mr.as_slice_mut(),
+            remote_mr,
         ))
         .unwrap();
     }

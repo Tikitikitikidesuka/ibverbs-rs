@@ -1,8 +1,8 @@
 pub mod builder;
 pub mod mr_ops;
 pub mod multi_ops;
-pub mod rank_remote_memory_region;
-pub mod rank_work_request;
+pub mod remote_memory_region;
+pub mod work_request;
 pub mod single_ops;
 
 use crate::channel::meta_mr::MetaMr;
@@ -10,6 +10,7 @@ use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use std::io;
 
+#[derive(Debug)]
 pub struct MultiChannel {
     channels: Box<[RawChannel]>,
     meta_mrs: Box<[MetaMr]>,

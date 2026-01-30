@@ -25,6 +25,7 @@ mod unsafe_member;
 ///
 /// As of now, this is safe because the queue pair created does not allow for
 /// remote writing of the memory. Otherwise, the memory aliasing rules would not be guaranteed.
+#[derive(Debug)]
 pub struct RawChannel {
     qp: QueuePair,
     cq: Rc<RefCell<CachedCompletionQueue>>,

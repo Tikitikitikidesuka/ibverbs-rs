@@ -1,269 +1,165 @@
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::ops::{Bound, Range, RangeBounds};
 
-trait RemoteMemoryBounds {
-    fn addr(&self) -> usize;
-    fn len(&self) -> usize;
-    fn rkey(&self) -> u32;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
+/// A `RemoteMemoryRegion` acts as a handle for One-Sided RDMA (Read/Write) operations.
+/// It defines where data should be written to or read from on the remote peer.
+///
+/// When performing an RDMA Write, the local scatter/gather elements (the sge list in
+/// the Work Request) are "stitched" together by the hardware into a single serialized
+/// byte-stream. This stream is written contiguously starting at `self.addr`.
+///
+/// Writing past the bounds of the registered memory region will cause the operation to fail.
+///
+/// Although the struct contains a `length`, the RDMA hardware only uses the `addr` and `rkey`
+/// to execute the transaction. The `length` is stored here strictly for client-side informational
+/// purposes.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    pub(crate) addr: usize,
-    pub(crate) length: usize,
-    pub(crate) rkey: u32,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct RemoteMemorySlice<'a> {
-    pub(super) addr: usize,
-    pub(super) length: usize,
-    pub(super) rkey: u32,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced remote memory region
-    _mr_lifetime: PhantomData<&'a RemoteMemoryRegion>,
-}
-
-#[derive(Debug)]
-pub struct RemoteMemorySliceMut<'a> {
-    pub(super) addr: usize,
-    pub(super) length: usize,
-    pub(super) rkey: u32,
-    // SAFETY INVARIANT: SGE cannot outlive the referenced remote memory region
-    _mr_lifetime: PhantomData<&'a mut RemoteMemoryRegion>,
+    addr: u64,
+    length: usize,
+    rkey: u32,
 }
 
 impl RemoteMemoryRegion {
-    pub(super) fn new(addr: usize, length: usize, rkey: u32) -> Self {
+    /// Creates a new `RemoteMemoryRegion` from its raw components.
+    pub fn new(addr: u64, length: usize, rkey: u32) -> Self {
         Self { addr, length, rkey }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn address(&self) -> u64 {
+        self.addr
+    }
+
+    pub fn length(&self) -> usize {
         self.length
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    pub fn rkey(&self) -> u32 {
+        self.rkey
     }
 
-    pub fn as_slice(&'_ self) -> RemoteMemorySlice<'_> {
-        RemoteMemorySlice {
-            addr: self.addr,
-            length: self.length,
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        }
-    }
-
-    pub fn as_slice_mut(&'_ mut self) -> RemoteMemorySliceMut<'_> {
-        RemoteMemorySliceMut {
-            addr: self.addr,
-            length: self.length,
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        }
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.len(), range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn slice_mut(
-        &'_ mut self,
-        range: impl RangeBounds<usize>,
-    ) -> Option<RemoteMemorySliceMut<'_>> {
-        let range = normalize_range(self.len(), range)?;
-
-        Some(RemoteMemorySliceMut {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: Default::default(),
-        })
-    }
-}
-
-impl<'a> RemoteMemorySlice<'a> {
-    pub fn len(&self) -> usize {
-        self.length
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
-        match self.split_at_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_checked(
-        &'_ self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
-        if mid > self.len() {
+    /// Creates a `RemoteMemoryRegion` derived from `self` that acts as a handle on the remote
+    /// memory region, but starting at `offset` bytes from the original address.
+    ///
+    /// This is useful when you have a large registered buffer and need to target a specific
+    /// subsection within it for an RDMA operation.
+    ///
+    /// The resulting length will be `offset` bytes smaller than the original.
+    ///
+    /// # Returns
+    ///
+    /// * `Some(RemoteMemoryRegion)` if the offset is within bounds.
+    /// * `None` if the offset exceeds the current length.
+    pub fn sub_region(&self, offset: usize) -> Option<RemoteMemoryRegion> {
+        if offset > self.length {
             return None;
         }
 
-        Some((
-            RemoteMemorySlice {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySlice {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
-}
-
-impl<'a> RemoteMemorySliceMut<'a> {
-    pub fn len(&self) -> usize {
-        self.length
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    pub fn slice(&'_ self, range: impl RangeBounds<usize>) -> Option<RemoteMemorySlice<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySlice {
-            addr: self.addr + range.start,
-            length: range.len(),
+        Some(RemoteMemoryRegion {
+            addr: self.addr.checked_add(offset.try_into().ok()?)?,
+            length: self.length - offset,
             rkey: self.rkey,
-            _mr_lifetime: PhantomData,
         })
     }
-
-    pub fn slice_mut(
-        &'_ mut self,
-        range: impl RangeBounds<usize>,
-    ) -> Option<RemoteMemorySliceMut<'_>> {
-        let range = normalize_range(self.length, range)?;
-
-        Some(RemoteMemorySliceMut {
-            addr: self.addr + range.start,
-            length: range.len(),
-            rkey: self.rkey,
-            _mr_lifetime: PhantomData,
-        })
-    }
-
-    pub fn split_at(&'_ self, mid: usize) -> (RemoteMemorySlice<'_>, RemoteMemorySlice<'_>) {
-        match self.split_at_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_checked(
-        &'_ self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySlice<'_>, RemoteMemorySlice<'_>)> {
-        if mid > self.len() {
-            return None;
-        }
-
-        Some((
-            RemoteMemorySlice {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySlice {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
-
-    pub fn split_at_mut(
-        &'_ mut self,
-        mid: usize,
-    ) -> (RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>) {
-        match self.split_at_mut_checked(mid) {
-            Some(pair) => pair,
-            None => panic!("mid > len"),
-        }
-    }
-
-    pub fn split_at_mut_checked(
-        &'_ mut self,
-        mid: usize,
-    ) -> Option<(RemoteMemorySliceMut<'_>, RemoteMemorySliceMut<'_>)> {
-        if mid > self.len() {
-            return None;
-        }
-
-        Some((
-            RemoteMemorySliceMut {
-                addr: self.addr,
-                length: mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-            RemoteMemorySliceMut {
-                addr: self.addr + mid,
-                length: self.length - mid,
-                rkey: self.rkey,
-                _mr_lifetime: PhantomData,
-            },
-        ))
-    }
 }
 
-/// Normalize a range relative to a memory's length.
-/// Returns Some(start..end) if valid, None if out of bounds.
-fn normalize_range(memory_length: usize, range: impl RangeBounds<usize>) -> Option<Range<usize>> {
-    let start = match range.start_bound() {
-        Bound::Included(&n) => n,
-        Bound::Excluded(&n) => n.checked_add(1)?,
-        Bound::Unbounded => 0,
-    };
-
-    let end = match range.end_bound() {
-        Bound::Included(&n) => n.checked_add(1)?,
-        Bound::Excluded(&n) => n,
-        Bound::Unbounded => memory_length,
-    };
-
-    if start > end || end > memory_length {
-        None
-    } else {
-        Some(start..end)
-    }
+/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
+/// original one contained an array of type `T` on its first byte, such that the new one
+/// contains the N-th element on its first byte.
+///
+/// It is useful for writing to a specific index in a remote array.
+///
+/// # Example
+/// ```rust
+/// # use your_crate::{RemoteMemoryRegion, remote_array_field};
+/// # use std::mem::size_of;
+/// #
+/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 4096, 0xCAFE);
+/// #
+/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
+/// // region which contains an array of `u64` in its first byte.
+/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
+/// // starting at the first byte of the 5th element.
+/// let elem_mr = remote_array_field!(remote_mr, u64, 4).unwrap();
+/// ```
+#[macro_export]
+macro_rules! remote_array_field {
+    ($mr:expr, $T:ty, $index:expr) => {{
+        let type_size = std::mem::size_of::<$T>();
+        let offset = $index * type_size;
+        $mr.sub_region(offset)
+    }};
 }
+
+/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
+/// original one contained the given struct on its first byte, such that the new one
+/// contains the specified field on its first byte.
+///
+/// It is useful for writing to a concrete struct field remotely.
+///
+/// # Example
+/// ```rust
+/// # use your_crate::{RemoteMemoryRegion, remote_struct_field};
+/// # use std::mem::offset_of;
+/// #
+/// #[repr(C)]
+/// struct Packet {
+///     header: u32,
+///     _pad: u32,
+///     payload: [u8; 1024],
+/// }
+///
+/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 2048, 0xCAFE);
+/// #
+/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
+/// // region which contains a `Packet` struct in its first byte.
+/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
+/// // starting at the first byte of the field.
+/// let payload_mr = remote_struct_field!(remote_mr, Packet::payload).unwrap();
+/// ```
+#[macro_export]
+macro_rules! remote_struct_field {
+    ($mr:expr, $Struct:ident :: $field:ident) => {{
+        let offset = std::mem::offset_of!($Struct, $field);
+        $mr.sub_region(offset)
+    }};
+}
+
+/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
+/// original one contained an array of structs on its first byte, such that the new one
+/// contains the specified field of the N-th element on its first byte.
+///
+/// It is useful for writing to a concrete field of a specific element in a remote array.
+///
+/// # Example
+/// ```rust
+/// # use your_crate::{RemoteMemoryRegion, remote_struct_array_field};
+/// # use std::mem::{size_of, offset_of};
+/// #
+/// #[repr(C)]
+/// struct Node {
+///     id: u32,
+///     _pad: u32,
+///     data: u64,
+/// }
+///
+/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 4096, 0xCAFE);
+/// #
+/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
+/// // region which contains an array of `Node` structs in its first byte.
+/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
+/// // starting at the first byte of the field in the 3rd element.
+/// let data_mr = remote_struct_array_field!(remote_mr, Node, 2, data).unwrap();
+/// ```
+#[macro_export]
+macro_rules! remote_struct_array_field {
+    ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{
+        let struct_size = std::mem::size_of::<$Struct>();
+        let field_offset = std::mem::offset_of!($Struct, $field);
+        let total_offset = ($index * struct_size) + field_offset;
+        $mr.from_offset(total_offset)
+    }};
+}
+
+pub use remote_array_field;
+pub use remote_struct_array_field;
+pub use remote_struct_field;

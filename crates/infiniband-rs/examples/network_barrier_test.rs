@@ -1,13 +1,12 @@
-use infiniband_rs::channel::multi_channel::work_request::{
-    PeerReceiveWorkRequest, PeerSendWorkRequest,
-};
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
+use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use infiniband_rs::network::Node;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
+use std::io::Read;
+use std::time::Duration;
 use std::{env, fs, process};
 
 fn main() {
@@ -51,40 +50,20 @@ fn main() {
 
     let mut node = node.handshake(remote_endpoints).unwrap();
 
+    println!("Press a key...");
+    std::io::stdin().read(&mut []).expect("Failed to read line");
     match node.rank() {
         0 => {
-            let mut mem = [0u8; 8];
-            println!("Mem before: {mem:?}");
-            let mr = node.register_local_mr(&mut mem).unwrap();
-            node.receive(PeerReceiveWorkRequest::new(
-                1,
-                &mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()],
-            ))
-            .unwrap();
-            node.receive(PeerReceiveWorkRequest::new(
-                2,
-                &mut [mr.prepare_scatter_element(&mut mem[4..8]).unwrap()],
-            ))
-            .unwrap();
-            println!("Mem after: {mem:?}");
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         1 => {
-            let mut mem = [1u8; 4];
-            let mr = node.register_local_mr(&mut mem).unwrap();
-            node.send(PeerSendWorkRequest::new(
-                0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
-            ))
-            .unwrap_or_else(|e| panic!("Error: {e}"));
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         2 => {
-            let mut mem = [2u8; 4];
-            let mr = node.register_local_mr(&mut mem).unwrap();
-            node.send(PeerSendWorkRequest::new(
-                0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
-            ))
-            .unwrap_or_else(|e| panic!("Error: {e}"));
+            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                .unwrap();
         }
         _ => {
             println!("Invalid rank: {rank}");

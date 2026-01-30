@@ -5,6 +5,7 @@ use crate::channel::raw_channel::builder::PreparedChannel;
 use crate::channel::single_channel::builder::SingleChannelEndpoint;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use bon::bon;
 use std::io;
 
@@ -49,7 +50,7 @@ impl MultiChannel {
 pub struct PreparedMultiChannel {
     channels: Box<[PreparedChannel]>,
     meta_mrs: Box<[PreparedMetaMr]>,
-    pd: ProtectionDomain,
+    pub(crate) pd: ProtectionDomain,
 }
 
 impl PreparedMultiChannel {
@@ -64,37 +65,36 @@ impl PreparedMultiChannel {
             .collect()
     }
 
-    pub fn handshake(
-        self,
-        endpoints: impl AsRef<[SingleChannelEndpoint]>,
-    ) -> io::Result<MultiChannel> {
-        if self.channels.len() != endpoints.as_ref().len() {
+    pub fn handshake<I>(self, endpoints: I) -> io::Result<MultiChannel>
+    where
+        I: IntoIterator<Item = SingleChannelEndpoint>,
+        I::IntoIter: ExactSizeIterator,
+    {
+        let endpoints = endpoints.into_iter();
+        if self.channels.len() != endpoints.len() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!(
                     "expected {} endpoints, got {}",
                     self.channels.len(),
-                    endpoints.as_ref().len()
+                    endpoints.len()
                 ),
             ));
         }
 
-        let channels = self
-            .channels
-            .into_iter()
-            .zip(endpoints.as_ref())
-            .map(|(channel, endpoint)| channel.handshake(endpoint.channel_endpoint))
-            .collect::<io::Result<_>>()?;
-        let meta_mrs = self
-            .meta_mrs
-            .into_iter()
-            .zip(endpoints.as_ref())
-            .map(|(meta_mr, endpoint)| meta_mr.link_remote(endpoint.meta_mr_remote))
-            .collect();
+        let mut channels = Vec::with_capacity(self.channels.len());
+        let mut meta_mrs = Vec::with_capacity(self.meta_mrs.len());
+
+        for ((channel, meta_mr), endpoint) in
+            self.channels.into_iter().zip(self.meta_mrs).zip(endpoints)
+        {
+            channels.push(channel.handshake(endpoint.channel_endpoint)?);
+            meta_mrs.push(meta_mr.link_remote(endpoint.meta_mr_remote));
+        }
 
         Ok(MultiChannel {
-            channels,
-            meta_mrs,
+            channels: channels.into_boxed_slice(),
+            meta_mrs: meta_mrs.into_boxed_slice(),
             pd: self.pd,
         })
     }

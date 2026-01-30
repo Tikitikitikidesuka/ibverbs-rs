@@ -3,6 +3,7 @@ use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::work_request::WriteWorkRequest;
+use crate::remote_struct_field;
 use std::fmt::Debug;
 use std::io;
 use std::mem::offset_of;
@@ -11,6 +12,7 @@ use std::time::Duration;
 use zerocopy::network_endian::{U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
+#[derive(Debug)]
 pub struct MetaMr {
     memory: Box<MetaMrState>,
     mr: MemoryRegion,
@@ -46,9 +48,9 @@ struct PodRemoteMemoryRegion {
 impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
     fn from(value: RemoteMemoryRegion) -> Self {
         PodRemoteMemoryRegion {
-            addr: U64::new(value.addr as u64),
-            length: U64::new(value.length as u64),
-            rkey: U32::new(value.rkey),
+            addr: U64::new(value.address()),
+            length: U64::new(value.length() as u64),
+            rkey: U32::new(value.rkey()),
             _pad: U32::new(0),
         }
     }
@@ -57,11 +59,11 @@ impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
 // Big Endian -> Native
 impl From<PodRemoteMemoryRegion> for RemoteMemoryRegion {
     fn from(value: PodRemoteMemoryRegion) -> Self {
-        RemoteMemoryRegion {
-            addr: value.addr.get() as usize,
-            length: value.length.get() as usize,
-            rkey: value.rkey.get(),
-        }
+        RemoteMemoryRegion::new(
+            value.addr.get(),
+            value.length.get() as usize,
+            value.rkey.get(),
+        )
     }
 }
 
@@ -101,12 +103,8 @@ impl MetaMr {
             out_ack: U64::new(0),
         });
 
-        let mr = unsafe {
-            pd.register_shared_mr(
-                memory.as_mut() as *mut MetaMrState as *mut u8,
-                size_of::<MetaMrState>(),
-            )?
-        };
+        let memory_bytes = memory.as_mut_bytes();
+        let mr = unsafe { pd.register_shared_mr(memory_bytes.as_mut_ptr(), memory_bytes.len())? };
 
         Ok(PreparedMetaMr { memory, mr })
     }
@@ -145,24 +143,22 @@ impl MetaMr {
 
         // Slice the meta remote memory region
         // Unwrap because we are taking the full slice
-        let mut meta_remote_mr_slice = self.remote_mr.slice_mut(..).unwrap();
-        let (mut in_remote_mr, mut rest) =
-            meta_remote_mr_slice.split_at_mut(size_of::<PodRemoteMemoryRegion>());
-        let (mut in_epoch, _rest) = rest.split_at_mut(size_of::<u64>());
+        let in_remote_mr = remote_struct_field!(self.remote_mr, MetaMrState::in_remote_mr).unwrap();
+        let in_epoch = remote_struct_field!(self.remote_mr, MetaMrState::in_epoch).unwrap();
 
         // 3. Prepare RDMA write request of the remote mr
         // Get slice of the outgoing remote mr field's bytes
         let out_remote_mr_bytes = self.memory.out_remote_mr.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
         let remote_mr_sges = [self.mr.prepare_gather_element(out_remote_mr_bytes).unwrap()];
-        let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, &mut in_remote_mr);
+        let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, in_remote_mr);
 
         // 4. Prepare RDMA write request of the remote mr epoch
         // Get slice of the remote mr epoch field's bytes
         let out_epoch_bytes = self.memory.out_epoch.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
         let remote_mr_epoch_sges = [self.mr.prepare_gather_element(out_epoch_bytes).unwrap()];
-        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, &mut in_epoch); // Ensure changes are visible before issuing the writes
+        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, in_epoch); // Ensure changes are visible before issuing the writes
 
         fence(Ordering::Release);
 
@@ -208,12 +204,9 @@ impl MetaMr {
                 self.memory.out_ack.set(new_epoch);
 
                 // Slice the meta remote memory region
-                // Unwrap because we are taking the full slice
                 let ack_offset = offset_of!(MetaMrState, in_ack);
-                let mut meta_remote_mr_slice = self
-                    .remote_mr
-                    .slice_mut(ack_offset..ack_offset + size_of::<u64>())
-                    .unwrap();
+                let meta_remote_mr_slice =
+                    remote_struct_field!(self.remote_mr, MetaMrState::in_ack).unwrap();
 
                 // Get slice of the remote mr ack field's bytes
                 let remote_mr_ack_sge = [self
@@ -222,7 +215,7 @@ impl MetaMr {
                     .unwrap()];
 
                 // 4. Prepare RDMA write request of the remote mr ack
-                let wr = WriteWorkRequest::new(remote_mr_ack_sge, &mut meta_remote_mr_slice);
+                let wr = WriteWorkRequest::new(&remote_mr_ack_sge, meta_remote_mr_slice);
 
                 // Ensure change is visible before issuing the write
                 fence(Ordering::Release);
