@@ -1,8 +1,8 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
-use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
+use crate::multi_channel::work_request::PeerWriteWorkRequest;
 use std::io;
 use std::sync::atomic::{Ordering, fence};
 use std::time::{Duration, Instant};

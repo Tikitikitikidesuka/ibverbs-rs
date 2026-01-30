@@ -1,13 +1,9 @@
-use crate::channel::raw_channel::RawChannel;
-use crate::channel::raw_channel::pending_work::PendingWork;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
-use std::borrow::{Borrow, BorrowMut};
+use crate::channel::Channel;
+use crate::channel::pending_work::PendingWork;
+use crate::ibverbs::work_request::*;
 use std::io;
 
-impl RawChannel {
+impl Channel {
     /// # Safety
     /// The caller must ensure that the returned `IbvWorkRequest` is
     /// **successfully polled to completion by its drop implementation**

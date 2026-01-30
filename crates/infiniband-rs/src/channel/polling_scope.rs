@@ -1,5 +1,5 @@
-use crate::channel::raw_channel::RawChannel;
-use crate::channel::raw_channel::pending_work::{
+use crate::channel::Channel;
+use crate::channel::pending_work::{
     MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
 };
 use crate::ibverbs::work_error::WorkError;
@@ -167,7 +167,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: SendWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(wr)? }));
@@ -186,7 +186,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: ReceiveWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(wr)? }));
@@ -203,7 +203,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: WriteWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.write_unpolled(wr)? }));
@@ -220,7 +220,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: ReadWorkRequest<'_, 'env>,
     ) -> io::Result<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut RawChannel>,
+        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = Rc::new(RefCell::new(unsafe { channel.read_unpolled(wr)? }));

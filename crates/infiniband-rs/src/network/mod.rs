@@ -1,9 +1,9 @@
-mod barrier;
+pub mod barrier;
 pub mod builder;
 pub mod config;
 pub mod tcp_exchanger;
 
-use crate::channel::multi_channel::MultiChannel;
+use crate::multi_channel::MultiChannel;
 use crate::network::barrier::{BarrierError, CentralizedBarrier};
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;

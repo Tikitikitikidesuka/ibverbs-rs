@@ -1,21 +1,21 @@
-use crate::channel::raw_channel::RawChannel;
-use crate::channel::raw_channel::pending_work::MultiWorkPollError;
-use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::channel::Channel;
+use crate::channel::pending_work::MultiWorkPollError;
+use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
 use crate::ibverbs::work_request::{
     ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
 };
 use std::io;
 
-impl RawChannel {
+impl Channel {
     pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, MultiWorkPollError>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, RawChannel>) -> R,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> R,
     {
         PollingScope::run(self, f)
     }
 }
 
-impl<'scope, 'env> PollingScope<'scope, 'env, RawChannel> {
+impl<'scope, 'env> PollingScope<'scope, 'env, Channel> {
     pub fn post_send(
         &mut self,
         wr: SendWorkRequest<'_, 'env>,

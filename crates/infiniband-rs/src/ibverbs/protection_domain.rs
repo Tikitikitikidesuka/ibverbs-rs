@@ -60,6 +60,13 @@ impl ProtectionDomain {
     }
 
     /// # Safety
+    /// The user is responsible for ensuring the memory registered remains allocated
+    /// as long as it is used in rdma operations.
+    pub fn register_local_mr_slice(&self, mem: &[u8]) -> io::Result<MemoryRegion> {
+        MemoryRegion::register_local_mr(self, mem.as_ptr() as *mut u8, mem.len())
+    }
+
+    /// # Safety
     /// If the memory region registered has remote write access the memory can be DMA aliased mutably
     /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
     /// manually by the user.

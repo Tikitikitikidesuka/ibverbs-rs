@@ -1,11 +1,10 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::work_request::{
-    PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
-};
-use crate::channel::raw_channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::channel::pending_work::{MultiWorkSpinPollResult, WorkPollError};
 use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use crate::ibverbs::work_success::WorkSuccess;
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::work_request::{
+    PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
+};
 use std::borrow::{Borrow, BorrowMut};
 
 impl MultiChannel {

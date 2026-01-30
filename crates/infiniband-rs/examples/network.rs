@@ -1,4 +1,4 @@
-use infiniband_rs::channel::multi_channel::work_request::{
+use infiniband_rs::rechannel::multi_channel::work_request::{
     PeerReceiveWorkRequest, PeerSendWorkRequest,
 };
 use infiniband_rs::ibverbs::devices::open_device;

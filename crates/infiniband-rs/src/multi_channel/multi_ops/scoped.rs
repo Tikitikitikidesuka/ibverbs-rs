@@ -1,11 +1,9 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::work_request::{
+use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::ibverbs::work_request::SendWorkRequest;
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
 };
-use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
-use std::borrow::{Borrow, BorrowMut};
 use std::io;
 
 impl<'scope, 'env> PollingScope<'scope, 'env, MultiChannel> {

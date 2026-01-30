@@ -1,5 +1,5 @@
-use crate::channel::raw_channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::raw_channel::unsafe_member::UnsafeMember;
+use crate::channel::cached_completion_queue::CachedCompletionQueue;
+use crate::channel::unsafe_member::UnsafeMember;
 use crate::ibverbs::work_completion::WorkResult;
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;

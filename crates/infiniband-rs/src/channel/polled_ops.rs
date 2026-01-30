@@ -1,10 +1,10 @@
-use crate::channel::raw_channel::RawChannel;
-use crate::channel::raw_channel::pending_work::WorkSpinPollResult;
+use crate::channel::Channel;
+use crate::channel::pending_work::WorkSpinPollResult;
 use crate::ibverbs::work_request::{
     ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
 };
 
-impl RawChannel {
+impl Channel {
     pub fn send<'op>(&'op mut self, wr: SendWorkRequest<'op, 'op>) -> WorkSpinPollResult {
         let res = self.scope(|s| s.post_send(wr)?.spin_poll());
         debug_assert!(

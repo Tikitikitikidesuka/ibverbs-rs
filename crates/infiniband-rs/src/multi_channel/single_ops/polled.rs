@@ -1,13 +1,8 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::work_request::{
+use crate::channel::pending_work::WorkSpinPollResult;
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
 };
-use crate::channel::raw_channel::pending_work::WorkSpinPollResult;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
-use std::borrow::{Borrow, BorrowMut};
 
 impl MultiChannel {
     pub fn send<'op>(&'op mut self, wr: PeerSendWorkRequest<'op, 'op>) -> WorkSpinPollResult {

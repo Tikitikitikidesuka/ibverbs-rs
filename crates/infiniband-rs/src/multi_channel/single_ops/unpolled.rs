@@ -1,8 +1,8 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::work_request::{
+use crate::channel::pending_work::PendingWork;
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
 };
-use crate::channel::raw_channel::pending_work::PendingWork;
 use std::io;
 
 impl MultiChannel {

@@ -1,8 +1,14 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::builder::PreparedMultiChannel;
-use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
-use crate::channel::single_channel::builder::SingleChannelEndpoint;
+use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::context::Context;
+use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::ibverbs::queue_pair::builder::QueuePairEndpoint;
+use crate::ibverbs::queue_pair::config::{
+    AckTimeout, MaxAckRetries, MaxRnrRetries, MaximumTransferUnit, MinRnrTimer,
+    PacketSequenceNumber,
+};
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::builder::PreparedMultiChannel;
+use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::Node;
 use crate::network::barrier::{CentralizedBarrier, PreparedCentralizedBarrier};
 use bon::bon;
@@ -13,25 +19,47 @@ use std::io;
 impl Node {
     #[builder]
     pub fn builder(
-        context: &Context,
         rank: usize,
         world_size: usize,
-        #[builder(default = 32)] min_cq_buf_size: u32,
-        #[builder(default = 32)] max_send_wrs: u32,
-        #[builder(default = 32)] max_recv_wrs: u32,
-        #[builder(default = 32)] max_send_sges: u32,
-        #[builder(default = 32)] max_recv_sges: u32,
+        pd: &ProtectionDomain,
+        #[builder(default =
+            AccessFlags::new()
+                .with_local_write()
+                .with_remote_read()
+                .with_remote_write()
+        )]
+        access: AccessFlags,
+        #[builder(default = 32)] min_cq_entries: u32,
+        #[builder(default = 16)] max_send_wr: u32,
+        #[builder(default = 16)] max_recv_wr: u32,
+        #[builder(default = 16)] max_send_sge: u32,
+        #[builder(default = 16)] max_recv_sge: u32,
+        #[builder(default)] max_rnr_retries: MaxRnrRetries,
+        #[builder(default)] max_ack_retries: MaxAckRetries,
+        #[builder(default)] min_rnr_timer: MinRnrTimer,
+        #[builder(default)] ack_timeout: AckTimeout,
+        #[builder(default)] mtu: MaximumTransferUnit,
+        #[builder(default)] send_psn: PacketSequenceNumber,
+        #[builder(default)] recv_psn: PacketSequenceNumber,
     ) -> io::Result<PreparedNode> {
         let multi_channel = MultiChannel::builder()
-            .context(context)
             .num_channels(world_size)
-            .min_cq_buf_size(min_cq_buf_size)
-            .max_send_wrs(max_send_wrs)
-            .max_recv_wrs(max_recv_wrs)
-            .max_send_sges(max_send_sges)
-            .max_recv_sges(max_recv_sges)
+            .pd(pd)
+            .min_cq_entries(min_cq_entries)
+            .access(access)
+            .max_send_wr(max_send_wr)
+            .max_recv_wr(max_recv_wr)
+            .max_send_sge(max_send_sge)
+            .max_recv_sge(max_recv_sge)
+            .max_rnr_retries(max_rnr_retries)
+            .max_ack_retries(max_ack_retries)
+            .min_rnr_timer(min_rnr_timer)
+            .ack_timeout(ack_timeout)
+            .mtu(mtu)
+            .send_psn(send_psn)
+            .recv_psn(recv_psn)
             .build()?;
-        let barrier = CentralizedBarrier::new(&multi_channel.pd, rank, world_size)?;
+        let barrier = CentralizedBarrier::new(pd, rank, world_size)?;
 
         Ok(PreparedNode {
             rank,
@@ -51,7 +79,7 @@ pub struct PreparedNode {
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct NetworkChannelEndpoint {
-    pub(crate) single_channel_endpoint: SingleChannelEndpoint,
+    pub(crate) single_channel_endpoint: QueuePairEndpoint,
     pub(crate) barrier_mr_remote: PeerRemoteMemoryRegion,
 }
 
@@ -106,12 +134,12 @@ impl PreparedNode {
                 ));
             }
 
-            // Check that the endpoint has a channel for our rank
+            // Check that the endpoint has a rechannel for our rank
             let qp_endpoint = endpoint.endpoints.get(self.rank).ok_or_else(|| {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!(
-                        "Input endpoint for rank {} missing channel for local rank {}",
+                        "Input endpoint for rank {} missing rechannel for local rank {}",
                         endpoint.rank, self.rank
                     ),
                 )

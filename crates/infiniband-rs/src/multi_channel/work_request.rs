@@ -1,8 +1,6 @@
-use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
+use crate::ibverbs::scatter_gather_element::*;
+use crate::ibverbs::work_request::*;
+use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 
 #[derive(Debug, Clone)]
 pub struct PeerSendWorkRequest<'wr, 'data> {

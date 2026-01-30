@@ -1,10 +1,9 @@
-use crate::channel::multi_channel::MultiChannel;
-use crate::channel::multi_channel::work_request::{
+use crate::channel::pending_work::MultiWorkPollError;
+use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::multi_channel::MultiChannel;
+use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
 };
-use crate::channel::raw_channel::pending_work::MultiWorkPollError;
-use crate::channel::raw_channel::polling_scope::{PollingScope, ScopedPendingWork};
-use crate::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use std::io;
 
 impl MultiChannel {

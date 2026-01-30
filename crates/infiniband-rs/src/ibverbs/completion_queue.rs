@@ -171,7 +171,7 @@ impl Drop for CompletionQueueInner {
             let debug_text = format!("{:?}", self);
             let e = io::Error::from_raw_os_error(errno);
             log::error!(
-                "({debug_text}) -> Failed to release completion channel with `ibv_destroy_comp_channel({cc:p})`: {e}"
+                "({debug_text}) -> Failed to release completion rechannel with `ibv_destroy_comp_channel({cc:p})`: {e}"
             );
         }
     }
