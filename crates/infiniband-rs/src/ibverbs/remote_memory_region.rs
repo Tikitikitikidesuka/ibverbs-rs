@@ -14,15 +14,27 @@ use serde::{Deserialize, Serialize};
 /// purposes.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
-    pub(super) addr: u64,
-    pub(super) length: usize,
-    pub(super) rkey: u32,
+    addr: u64,
+    length: usize,
+    rkey: u32,
 }
 
 impl RemoteMemoryRegion {
     /// Creates a new `RemoteMemoryRegion` from its raw components.
     pub fn new(addr: u64, length: usize, rkey: u32) -> Self {
         Self { addr, length, rkey }
+    }
+
+    pub fn address(&self) -> u64 {
+        self.addr
+    }
+
+    pub fn length(&self) -> usize {
+        self.length
+    }
+
+    pub fn rkey(&self) -> u32 {
+        self.rkey
     }
 
     /// Creates a `RemoteMemoryRegion` derived from `self` that acts as a handle on the remote

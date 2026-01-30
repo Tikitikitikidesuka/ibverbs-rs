@@ -2,8 +2,8 @@ use crate::channel::raw_channel::RawChannel;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use crate::ibverbs::remote_memory_region::remote_field;
 use crate::ibverbs::work_request::WriteWorkRequest;
+use crate::remote_struct_field;
 use std::fmt::Debug;
 use std::io;
 use std::mem::offset_of;
@@ -48,9 +48,9 @@ struct PodRemoteMemoryRegion {
 impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
     fn from(value: RemoteMemoryRegion) -> Self {
         PodRemoteMemoryRegion {
-            addr: U64::new(value.addr),
-            length: U64::new(value.length as u64),
-            rkey: U32::new(value.rkey),
+            addr: U64::new(value.address()),
+            length: U64::new(value.length() as u64),
+            rkey: U32::new(value.rkey()),
             _pad: U32::new(0),
         }
     }
@@ -59,11 +59,11 @@ impl From<RemoteMemoryRegion> for PodRemoteMemoryRegion {
 // Big Endian -> Native
 impl From<PodRemoteMemoryRegion> for RemoteMemoryRegion {
     fn from(value: PodRemoteMemoryRegion) -> Self {
-        RemoteMemoryRegion {
-            addr: value.addr.get(),
-            length: value.length.get() as usize,
-            rkey: value.rkey.get(),
-        }
+        RemoteMemoryRegion::new(
+            value.addr.get(),
+            value.length.get() as usize,
+            value.rkey.get(),
+        )
     }
 }
 
@@ -143,8 +143,8 @@ impl MetaMr {
 
         // Slice the meta remote memory region
         // Unwrap because we are taking the full slice
-        let in_remote_mr = remote_field!(self.remote_mr, MetaMrState::in_remote_mr).unwrap();
-        let in_epoch = remote_field!(self.remote_mr, MetaMrState::in_epoch).unwrap();
+        let in_remote_mr = remote_struct_field!(self.remote_mr, MetaMrState::in_remote_mr).unwrap();
+        let in_epoch = remote_struct_field!(self.remote_mr, MetaMrState::in_epoch).unwrap();
 
         // 3. Prepare RDMA write request of the remote mr
         // Get slice of the outgoing remote mr field's bytes
@@ -206,7 +206,7 @@ impl MetaMr {
                 // Slice the meta remote memory region
                 let ack_offset = offset_of!(MetaMrState, in_ack);
                 let meta_remote_mr_slice =
-                    remote_field!(self.remote_mr, MetaMrState::in_ack).unwrap();
+                    remote_struct_field!(self.remote_mr, MetaMrState::in_ack).unwrap();
 
                 // Get slice of the remote mr ack field's bytes
                 let remote_mr_ack_sge = [self

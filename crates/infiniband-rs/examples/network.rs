@@ -1,3 +1,6 @@
+use infiniband_rs::channel::multi_channel::work_request::{
+    PeerReceiveWorkRequest, PeerSendWorkRequest,
+};
 use infiniband_rs::ibverbs::devices::open_device;
 use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use infiniband_rs::network::Node;
@@ -53,34 +56,34 @@ fn main() {
             let mut mem = [0u8; 8];
             println!("Mem before: {mem:?}");
             let mr = node.register_local_mr(&mut mem).unwrap();
-            node.receive(
+            node.receive(PeerReceiveWorkRequest::new(
                 1,
-                ReceiveWorkRequest::new(&mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()]),
-            )
+                &mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()],
+            ))
             .unwrap();
-            node.receive(
+            node.receive(PeerReceiveWorkRequest::new(
                 2,
-                ReceiveWorkRequest::new(&mut [mr.prepare_scatter_element(&mut mem[4..8]).unwrap()]),
-            )
+                &mut [mr.prepare_scatter_element(&mut mem[4..8]).unwrap()],
+            ))
             .unwrap();
             println!("Mem after: {mem:?}");
         }
         1 => {
             let mut mem = [1u8; 4];
             let mr = node.register_local_mr(&mut mem).unwrap();
-            node.send(
+            node.send(PeerSendWorkRequest::new(
                 0,
-                SendWorkRequest::new(&[mr.prepare_gather_element(&mem).unwrap()]),
-            )
+                &[mr.prepare_gather_element(&mem).unwrap()],
+            ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }
         2 => {
             let mut mem = [2u8; 4];
             let mr = node.register_local_mr(&mut mem).unwrap();
-            node.send(
+            node.send(PeerSendWorkRequest::new(
                 0,
-                SendWorkRequest::new(&[mr.prepare_gather_element(&mem).unwrap()]),
-            )
+                &[mr.prepare_gather_element(&mem).unwrap()],
+            ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }
         _ => {

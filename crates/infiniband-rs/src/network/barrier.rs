@@ -3,7 +3,6 @@ use crate::channel::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::channel::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::remote_field;
 use std::io;
 use std::sync::atomic::{Ordering, fence};
 use std::time::{Duration, Instant};
@@ -177,7 +176,7 @@ impl CentralizedBarrier {
         let local_in_epoch_bytes = self.memory[self.rank].in_epoch.as_bytes().as_ptr();
         let in_epoch_bytes_offset = local_in_epoch_bytes as usize - self.memory.as_ptr() as usize;
         let remote_in_epoch_slice = self.remote_mrs[peer]
-            .sub_region(in_epoch_bytes_offset..(in_epoch_bytes_offset + size_of::<u64>()))
+            .sub_region(in_epoch_bytes_offset)
             .unwrap();
         let wr = PeerWriteWorkRequest::new(&local_out_epoch_sges, remote_in_epoch_slice);
 
@@ -220,8 +219,8 @@ impl CentralizedBarrier {
         // 3. Prepare Remote Slices
         let local_in_epoch_bytes = self.memory[self.rank].in_epoch.as_bytes().as_ptr();
         let in_epoch_bytes_offset = local_in_epoch_bytes as usize - self.memory.as_ptr() as usize;
-        let range = in_epoch_bytes_offset..(in_epoch_bytes_offset + size_of::<u64>());
 
+        // todo: update to new all shared remote memory region
         // We use a raw pointer to mint mutable references.
         // This bypasses the borrow checker's inability to see that `peers` indices are distinct.
         let base_ptr = self.remote_mrs.as_mut_ptr();
@@ -235,7 +234,7 @@ impl CentralizedBarrier {
                 // 3. We are accessing distinct elements, so the mutable borrows do not overlap
                 unsafe {
                     let rmr = &mut *base_ptr.add(peer);
-                    rmr.sub_region(range.clone()).unwrap()
+                    rmr.sub_region(in_epoch_bytes_offset).unwrap()
                 }
             })
             .collect();

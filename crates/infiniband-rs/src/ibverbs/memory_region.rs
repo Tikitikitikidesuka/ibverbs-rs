@@ -96,28 +96,24 @@ impl MemoryRegion {
         }
     }
 
-    pub fn lkey(&self) -> u32 {
-        unsafe { *self.mr }.lkey
-    }
-
     pub fn rkey(&self) -> u32 {
         unsafe { *self.mr }.rkey
     }
 
-    pub fn address(&self) -> *mut u8 {
-        unsafe { (*self.mr).addr as *mut u8 }
+    pub fn address(&self) -> u64 {
+        unsafe { (*self.mr).addr as u64 }
     }
 
     pub fn length(&self) -> usize {
         unsafe { (*self.mr).length }
     }
 
+    pub fn lkey(&self) -> u32 {
+        unsafe { *self.mr }.lkey
+    }
+
     pub fn remote(&self) -> RemoteMemoryRegion {
-        RemoteMemoryRegion {
-            addr: self.address() as u64,
-            length: self.length(),
-            rkey: self.rkey(),
-        }
+        RemoteMemoryRegion::new(self.address(), self.length(), self.rkey())
     }
 }
 

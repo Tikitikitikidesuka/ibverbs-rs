@@ -7,7 +7,6 @@ use crate::ibverbs::work_request::{
 use ibverbs_sys::*;
 use std::borrow::{Borrow, BorrowMut};
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::{io, ptr};
 
@@ -132,8 +131,8 @@ impl QueuePair {
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: wr.remote_mr.addr,
-                    rkey: wr.remote_mr.rkey,
+                    remote_addr: wr.remote_mr.address(),
+                    rkey: wr.remote_mr.rkey(),
                 },
             },
             qp_type: Default::default(),
@@ -159,8 +158,8 @@ impl QueuePair {
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: ibv_send_wr__bindgen_ty_2 {
                 rdma: ibv_send_wr__bindgen_ty_2__bindgen_ty_1 {
-                    remote_addr: wr.remote_mr.addr,
-                    rkey: wr.remote_mr.rkey,
+                    remote_addr: wr.remote_mr.address(),
+                    rkey: wr.remote_mr.rkey(),
                 },
             },
             qp_type: Default::default(),

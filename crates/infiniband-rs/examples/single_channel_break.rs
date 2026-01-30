@@ -1,9 +1,9 @@
-use std::time::Duration;
 use infiniband_rs::channel::single_channel::SingleChannel;
 use infiniband_rs::ibverbs::devices::open_device;
 use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
+use std::time::Duration;
 
 const DEVICE: &str = "mlx5_0";
 
@@ -19,23 +19,18 @@ fn main() {
     let mut mem = vec![0u8; 1024];
     let mr = conn.register_local_mr(&mut mem).unwrap();
 
-
     let mut rmr = conn.accept_remote_mr(Duration::from_secs(1)).unwrap();
     let mut mem = [0u8; 8];
     let mr = conn.register_local_mr(&mut mem).unwrap();
 
     conn.scope(|s| {
-        let mut rmrs = rmr.slice_mut(0..3).unwrap();
-        let sges = mr.prepare_gather_element(&mem).unwrap();
-        let mut wr = WriteWorkRequest::new(&[sges], &mut rmrs);
+        let sges = [mr.prepare_gather_element(&mem).unwrap()];
+        let mut wr = WriteWorkRequest::new(&sges, rmr);
         // This should not be allowed...
-        s.post_write(&mut wr);
-        s.post_write(&mut wr);
-    }).unwrap();
-
-
-
-
+        s.post_write(wr.clone());
+        s.post_write(wr);
+    })
+    .unwrap();
 
     // Polling to completion
     println!("Running scoped connection and polling...");
