@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct ProtectionDomain {
-    inner: Arc<ProtectionDomainInner>,
+    pub(super) inner: Arc<ProtectionDomainInner>,
 }
 
 impl ProtectionDomain {

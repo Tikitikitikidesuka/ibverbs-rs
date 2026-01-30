@@ -1,53 +1,7 @@
-use crate::ibverbs::completion_queue::CompletionQueueInner;
-use crate::ibverbs::protection_domain::ProtectionDomainInner;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
+use crate::ibverbs::queue_pair::QueuePair;
+use crate::ibverbs::work_request::*;
 use ibverbs_sys::*;
-use std::borrow::{Borrow, BorrowMut};
-use std::fmt::Debug;
-use std::sync::Arc;
 use std::{io, ptr};
-
-pub struct QueuePair {
-    pub(super) pd: Arc<ProtectionDomainInner>,
-    pub(super) send_cq: Arc<CompletionQueueInner>,
-    pub(super) recv_cq: Arc<CompletionQueueInner>,
-    pub(super) qp: *mut ibv_qp,
-}
-
-unsafe impl Send for QueuePair {}
-unsafe impl Sync for QueuePair {}
-
-impl Drop for QueuePair {
-    fn drop(&mut self) {
-        log::debug!("IbvQueuePair destroyed");
-        let qp = self.qp;
-        let errno = unsafe { ibv_destroy_qp(self.qp) };
-        if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to destroy queue pair with `ibv_destroy_qp({qp:p})`: {e}"
-            );
-        }
-    }
-}
-
-impl Debug for QueuePair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.debug_struct("IbvQueuePair")
-            .field("handle", &unsafe { (*self.qp).handle })
-            .field("qp_num", &unsafe { (*self.qp).qp_num })
-            .field("state", &unsafe { (*self.qp).state })
-            .field("type", &unsafe { (*self.qp).qp_type })
-            .field("send_cq_handle", &unsafe { (*(*self.qp).send_cq).handle })
-            .field("recv_cq_handle", &unsafe { (*(*self.qp).recv_cq).handle })
-            .field("pd", &self.pd)
-            .finish()
-    }
-}
 
 impl QueuePair {
     /// # Safety
@@ -55,8 +9,6 @@ impl QueuePair {
     /// valid and cannot be mutated until the work is finished by the hardware.
     /// They must also not be aliased by a mutable reference until then.
     pub unsafe fn post_send(&mut self, wr: SendWorkRequest, wr_id: u64) -> io::Result<()> {
-        let wr = wr.borrow();
-
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_SEND, Default::default()),
             Some(imm_data) => (
@@ -92,7 +44,6 @@ impl QueuePair {
         mut wr: ReceiveWorkRequest,
         wr_id: u64,
     ) -> io::Result<()> {
-        let wr = wr.borrow_mut();
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -148,7 +99,6 @@ impl QueuePair {
     /// valid and cannot be read or mutated until the work is finished by the hardware.
     /// They must not be aliased by shared or mutable references until then.
     pub unsafe fn post_read(&mut self, mut wr: ReadWorkRequest, wr_id: u64) -> io::Result<()> {
-        let wr = wr.borrow_mut();
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

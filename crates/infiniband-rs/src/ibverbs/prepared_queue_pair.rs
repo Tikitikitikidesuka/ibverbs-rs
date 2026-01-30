@@ -1,5 +1,5 @@
 use crate::ibverbs::context::IB_PORT;
-use crate::ibverbs::queue_pair::QueuePair;
+use crate::ibverbs::old_queue_pair::QueuePair;
 use crate::ibverbs::queue_pair_endpoint::QueuePairEndpoint;
 use ibverbs_sys::*;
 use std::io;

@@ -12,5 +12,5 @@ pub mod remote_memory_region;
 pub mod scatter_gather_element;
 pub mod work_completion;
 pub mod work_error;
-pub mod work_success;
 pub mod work_request;
+pub mod work_success;

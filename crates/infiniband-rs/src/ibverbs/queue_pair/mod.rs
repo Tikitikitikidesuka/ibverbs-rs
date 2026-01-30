@@ -1,0 +1,49 @@
+pub mod ops;
+mod builder;
+mod config;
+
+use crate::ibverbs::completion_queue::{CompletionQueue, CompletionQueueInner};
+use crate::ibverbs::protection_domain::{ProtectionDomain, ProtectionDomainInner};
+use ibverbs_sys::{ibv_destroy_qp, ibv_qp};
+use std::fmt::Debug;
+use std::io;
+use std::sync::Arc;
+
+pub struct QueuePair {
+    pd: ProtectionDomain,
+    send_cq: CompletionQueue,
+    recv_cq: CompletionQueue,
+    qp: *mut ibv_qp,
+}
+
+unsafe impl Send for QueuePair {}
+unsafe impl Sync for QueuePair {}
+
+impl Drop for QueuePair {
+    fn drop(&mut self) {
+        log::debug!("IbvQueuePair destroyed");
+        let qp = self.qp;
+        let errno = unsafe { ibv_destroy_qp(self.qp) };
+        if errno != 0 {
+            let debug_text = format!("{:?}", self);
+            let e = io::Error::from_raw_os_error(errno);
+            log::error!(
+                "({debug_text}) -> Failed to destroy queue pair with `ibv_destroy_qp({qp:p})`: {e}"
+            );
+        }
+    }
+}
+
+impl Debug for QueuePair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("IbvQueuePair")
+            .field("handle", &unsafe { (*self.qp).handle })
+            .field("qp_num", &unsafe { (*self.qp).qp_num })
+            .field("state", &unsafe { (*self.qp).state })
+            .field("type", &unsafe { (*self.qp).qp_type })
+            .field("send_cq_handle", &unsafe { (*(*self.qp).send_cq).handle })
+            .field("recv_cq_handle", &unsafe { (*(*self.qp).recv_cq).handle })
+            .field("pd", &self.pd)
+            .finish()
+    }
+}

@@ -6,7 +6,7 @@ use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 use std::{io, ptr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompletionQueue {
     pub(super) inner: Arc<CompletionQueueInner>,
 }
