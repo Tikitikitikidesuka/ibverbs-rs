@@ -1,13 +1,12 @@
+pub mod builder;
+pub mod config;
 pub mod ops;
-mod builder;
-mod config;
 
 use crate::ibverbs::completion_queue::{CompletionQueue, CompletionQueueInner};
 use crate::ibverbs::protection_domain::{ProtectionDomain, ProtectionDomainInner};
 use ibverbs_sys::{ibv_destroy_qp, ibv_qp};
 use std::fmt::Debug;
 use std::io;
-use std::sync::Arc;
 
 pub struct QueuePair {
     pd: ProtectionDomain,

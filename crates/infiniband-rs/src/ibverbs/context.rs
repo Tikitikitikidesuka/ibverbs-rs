@@ -1,5 +1,5 @@
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::devices::Device;
+use crate::ibverbs::devices::DeviceRef;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use ibverbs_sys::*;
 use std::io;
@@ -24,15 +24,13 @@ impl Context {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    // TODO: This should not be public... This library will expose a connection as an atomic unit
     pub fn create_cq(&self, min_cq_entries: u32, id: isize) -> io::Result<CompletionQueue> {
         CompletionQueue::create(self.clone(), min_cq_entries, id)
     }
 
     /// Allocate a protection domain (PDs) for the device's context.
-    // TODO: This should not be public... This library will expose a connection as an atomic unit
     pub fn allocate_pd(&self) -> io::Result<ProtectionDomain> {
-        ProtectionDomain::allocate(self.clone())
+        ProtectionDomain::allocate(self)
     }
 }
 
@@ -81,7 +79,9 @@ impl Drop for ContextInner {
 impl std::fmt::Debug for ContextInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IbvContext")
-            .field("device", &unsafe { Device::new((&*self.ctx).device) })
+            .field("device", &unsafe {
+                DeviceRef::from_ptr((&*self.ctx).device)
+            })
             .finish()
     }
 }

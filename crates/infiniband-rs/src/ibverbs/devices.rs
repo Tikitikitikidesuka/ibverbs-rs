@@ -55,13 +55,13 @@ impl Drop for DeviceList {
 
 impl DeviceList {
     /// Returns an iterator over all found devices.
-    pub fn iter(&self) -> DeviceListIter<'_> {
+    pub fn iter(&self) -> DeviceListIter {
         DeviceListIter { list: self, i: 0 }
     }
 
     /// Returns the number of devices.
     pub fn len(&self) -> usize {
-        self.num_devices as usize
+        self.num_devices
     }
 
     /// Returns `true` if there are any devices.
@@ -70,15 +70,12 @@ impl DeviceList {
     }
 
     /// Returns the device at the given `index`, or `None` if out of bounds.
-    pub fn get(&self, index: usize) -> Option<Device<'_>> {
+    pub fn get(&self, index: usize) -> Option<DeviceRef> {
         if index >= self.num_devices {
             return None;
         }
 
-        Some(Device {
-            device_ptr: unsafe { *self.devices_ptr.add(index) },
-            _dev_list: PhantomData,
-        })
+        Some(unsafe { DeviceRef::from_ptr(unsafe { *self.devices_ptr.add(index) }) })
     }
 }
 
@@ -97,7 +94,7 @@ pub struct DeviceListIter<'iter> {
 }
 
 impl<'iter> Iterator for DeviceListIter<'iter> {
-    type Item = Device<'iter>;
+    type Item = DeviceRef<'iter>;
     fn next(&mut self) -> Option<Self::Item> {
         let opt_device = self.list.get(self.i);
         if opt_device.is_some() {
@@ -113,21 +110,15 @@ impl std::fmt::Debug for DeviceList {
     }
 }
 
-pub struct Device<'a> {
+pub struct DeviceRef<'a> {
     device_ptr: *mut ibv_device,
     _dev_list: PhantomData<&'a DeviceList>,
 }
 
-unsafe impl<'a> Sync for Device<'a> {}
-unsafe impl<'a> Send for Device<'a> {}
+unsafe impl Sync for DeviceRef<'_> {}
+unsafe impl Send for DeviceRef<'_> {}
 
-impl Device<'_> {
-    pub(super) unsafe fn new(device_ptr: *mut ibv_device) -> Self {
-        Self { device_ptr, _dev_list: PhantomData }
-    }
-}
-
-impl Device<'_> {
+impl DeviceRef<'_> {
     /// Opens an RMDA device and creates a context for further use.
     ///
     /// This context will later be used to query its resources or for creating resources.
@@ -171,7 +162,7 @@ impl Device<'_> {
     }
 }
 
-impl std::fmt::Debug for Device<'_> {
+impl std::fmt::Debug for DeviceRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format name
         let name_str = self.name().unwrap_or("<unknown>");
@@ -186,5 +177,15 @@ impl std::fmt::Debug for Device<'_> {
             .field("name", &name_str)
             .field("guid", &guid_str)
             .finish()
+    }
+}
+
+impl DeviceRef<'_> {
+    // pub super so context can print it on its debug
+    pub(super) unsafe fn from_ptr(device_ptr: *mut ibv_device) -> Self {
+        Self {
+            device_ptr,
+            _dev_list: PhantomData,
+        }
     }
 }

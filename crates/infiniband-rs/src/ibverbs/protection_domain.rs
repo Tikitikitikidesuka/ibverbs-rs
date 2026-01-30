@@ -1,7 +1,9 @@
-use crate::ibverbs::completion_queue::CompletionQueue;
+use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::memory_region::MemoryRegion;
-use crate::ibverbs::queue_pair_builder::{AccessFlags, QueuePairBuilder};
+use crate::ibverbs::queue_pair::QueuePair;
+use crate::ibverbs::queue_pair::builder::QueuePairBuilder;
+use crate::ibverbs::queue_pair::builder::queue_pair_builder::SetPd;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
@@ -12,20 +14,23 @@ pub struct ProtectionDomain {
 }
 
 impl ProtectionDomain {
-    pub(super) fn allocate(context: Context) -> io::Result<Self> {
+    pub fn allocate(context: &Context) -> io::Result<Self> {
         let pd = unsafe { ibv_alloc_pd(context.inner.ctx) };
         if pd.is_null() {
             Err(io::Error::other(io::Error::last_os_error()))
         } else {
             log::debug!("IbvProtectionDomain allocated");
             Ok(ProtectionDomain {
-                inner: Arc::new(ProtectionDomainInner { context, pd }),
+                inner: Arc::new(ProtectionDomainInner {
+                    context: context.clone(),
+                    pd,
+                }),
             })
         }
     }
 
-    pub fn context(&self) -> &Context {
-        &self.inner.context
+    pub fn create_qp(&self) -> QueuePairBuilder<'_, '_, '_, SetPd> {
+        QueuePair::builder().pd(self)
     }
 
     /// Registers memory with the given access flags.
@@ -38,31 +43,16 @@ impl ProtectionDomain {
         &self,
         address: *mut u8,
         length: usize,
-        access_flags: ibv_access_flags,
+        access_flags: AccessFlags,
     ) -> io::Result<MemoryRegion> {
-        unsafe {
-            MemoryRegion::register_with_permissions(
-                self.inner.clone(),
-                address,
-                length,
-                access_flags,
-            )
-        }
+        unsafe { MemoryRegion::register_with_permissions(self, address, length, access_flags) }
     }
 
     /// # Safety
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
     pub fn register_local_mr(&self, address: *mut u8, length: usize) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.register_mr_with_permissions(
-                address,
-                length,
-                AccessFlags::new().with_local_write().into(),
-            )?
-        };
-
-        Ok(mr)
+        MemoryRegion::register_local_mr(self, address, length)
     }
 
     /// # Safety
@@ -74,19 +64,7 @@ impl ProtectionDomain {
         address: *mut u8,
         length: usize,
     ) -> io::Result<MemoryRegion> {
-        let mr = unsafe {
-            self.register_mr_with_permissions(
-                address,
-                length,
-                AccessFlags::new()
-                    .with_local_write()
-                    .with_remote_read()
-                    .with_remote_write()
-                    .into(),
-            )?
-        };
-
-        Ok(mr)
+        unsafe { MemoryRegion::register_shared_mr(self, address, length) }
     }
 
     /// Registers a DMA-BUF with the given access flags.
@@ -107,9 +85,9 @@ impl ProtectionDomain {
         offset: u64,
         length: usize,
         iova: u64,
-        access_flags: ibv_access_flags,
+        access_flags: AccessFlags,
     ) -> io::Result<MemoryRegion> {
-        MemoryRegion::register_dmabuf(self.inner.clone(), fd, offset, length, iova, access_flags)
+        unsafe { MemoryRegion::register_dmabuf(self, fd, offset, length, iova, access_flags) }
     }
 
     pub fn register_local_dmabuf(
@@ -119,15 +97,7 @@ impl ProtectionDomain {
         length: usize,
         iova: u64,
     ) -> io::Result<MemoryRegion> {
-        unsafe {
-            self.register_dmabuf(
-                fd,
-                offset,
-                length,
-                iova,
-                AccessFlags::new().with_local_write().into(),
-            )
-        }
+        MemoryRegion::register_local_dmabuf(self, fd, offset, length, iova)
     }
 
     /// # Safety
@@ -141,31 +111,7 @@ impl ProtectionDomain {
         length: usize,
         iova: u64,
     ) -> io::Result<MemoryRegion> {
-        unsafe {
-            self.register_dmabuf(
-                fd,
-                offset,
-                length,
-                iova,
-                AccessFlags::new()
-                    .with_local_write()
-                    .with_remote_read()
-                    .with_remote_write()
-                    .into(),
-            )
-        }
-    }
-
-    pub fn create_qp(
-        &self,
-        send_cq: &CompletionQueue,
-        receive_cq: &CompletionQueue,
-    ) -> QueuePairBuilder {
-        QueuePairBuilder::new(
-            self.inner.clone(),
-            send_cq.inner.clone(),
-            receive_cq.inner.clone(),
-        )
+        unsafe { MemoryRegion::register_shared_dmabuf(self, fd, offset, length, iova) }
     }
 }
 
