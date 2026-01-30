@@ -49,6 +49,16 @@ impl<'wr, 'data> PeerSendWorkRequest<'wr, 'data> {
             wr: SendWorkRequest::only_immediate(imm_data),
         }
     }
+
+    pub fn peer(&self) -> usize {
+        self.peer
+    }
+}
+
+impl<'wr, 'data> From<PeerSendWorkRequest<'wr, 'data>> for SendWorkRequest<'wr, 'data> {
+    fn from(value: PeerSendWorkRequest<'wr, 'data>) -> Self {
+        value.wr
+    }
 }
 
 impl<'wr, 'data> PeerReceiveWorkRequest<'wr, 'data> {
@@ -61,6 +71,16 @@ impl<'wr, 'data> PeerReceiveWorkRequest<'wr, 'data> {
 
     pub fn from_wr(peer: usize, wr: ReceiveWorkRequest<'wr, 'data>) -> Self {
         Self { peer, wr }
+    }
+
+    pub fn peer(&self) -> usize {
+        self.peer
+    }
+}
+
+impl<'wr, 'data> From<PeerReceiveWorkRequest<'wr, 'data>> for ReceiveWorkRequest<'wr, 'data> {
+    fn from(value: PeerReceiveWorkRequest<'wr, 'data>) -> Self {
+        value.wr
     }
 }
 
@@ -79,6 +99,16 @@ impl<'wr, 'data> PeerWriteWorkRequest<'wr, 'data> {
         self.wr = self.wr.with_immediate(imm_data);
         self
     }
+
+    pub fn peer(&self) -> usize {
+        self.peer
+    }
+}
+
+impl<'wr, 'data> From<PeerWriteWorkRequest<'wr, 'data>> for WriteWorkRequest<'wr, 'data> {
+    fn from(value: PeerWriteWorkRequest<'wr, 'data>) -> Self {
+        value.wr
+    }
 }
 
 impl<'wr, 'data> PeerReadWorkRequest<'wr, 'data> {
@@ -90,5 +120,15 @@ impl<'wr, 'data> PeerReadWorkRequest<'wr, 'data> {
             peer: peer_remote_mr.peer(),
             wr: ReadWorkRequest::new(scatter_elements, peer_remote_mr.remote_mr),
         }
+    }
+
+    pub fn peer(&self) -> usize {
+        self.peer
+    }
+}
+
+impl<'wr, 'data> From<PeerReadWorkRequest<'wr, 'data>> for ReadWorkRequest<'wr, 'data> {
+    fn from(value: PeerReadWorkRequest<'wr, 'data>) -> Self {
+        value.wr
     }
 }

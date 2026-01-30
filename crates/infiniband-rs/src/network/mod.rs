@@ -1,6 +1,7 @@
 pub mod barrier;
 pub mod builder;
 pub mod config;
+pub mod multi_channel_ops;
 pub mod tcp_exchanger;
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
@@ -8,7 +9,6 @@ use crate::multi_channel::MultiChannel;
 use crate::network::barrier::{BarrierError, CentralizedBarrier};
 use crate::network::builder::NodeBuilder;
 use crate::network::builder::node_builder::SetPd;
-use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
 /// A network node is a MultiChannel with an id (rank) connected to all other nodes
@@ -48,19 +48,5 @@ impl Node {
 impl ProtectionDomain {
     pub fn create_node(&self) -> NodeBuilder<'_, SetPd> {
         Node::builder().pd(self)
-    }
-}
-
-impl Deref for Node {
-    type Target = MultiChannel;
-
-    fn deref(&self) -> &Self::Target {
-        &self.multi_channel
-    }
-}
-
-impl DerefMut for Node {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.multi_channel
     }
 }

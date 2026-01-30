@@ -25,15 +25,6 @@ impl MultiChannel {
         &self.pd
     }
 
-    // Helper for single ops
-    pub(super) fn channel(&mut self, peer: usize) -> io::Result<&mut Channel> {
-        self.channels.get_mut(peer).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::AddrNotAvailable,
-                format!("Peer index {} does not exist", peer),
-            )
-        })
-    }
 }
 
 impl ProtectionDomain {
