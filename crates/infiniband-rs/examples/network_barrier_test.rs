@@ -32,9 +32,10 @@ fn main() {
     let node_config: &NodeConfig = network_config.get(rank).unwrap();
 
     let ctx = open_device(&node_config.ibdev).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
-        .context(&ctx)
+        .pd(&pd)
         .rank(node_config.rankid)
         .world_size(network_config.world_size())
         .build()

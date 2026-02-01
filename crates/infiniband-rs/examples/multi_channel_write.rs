@@ -1,6 +1,5 @@
-use infiniband_rs::rechannel::multi_channel::MultiChannel;
-use infiniband_rs::rechannel::multi_channel::work_request::PeerWriteWorkRequest;
 use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::multi_channel::MultiChannel;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::time::Duration;
@@ -11,9 +10,10 @@ fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
     let ctx = open_device(DEVICE).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let multi_channel = MultiChannel::builder()
-        .context(&ctx)
+        .pd(&pd)
         .num_channels(5)
         .build()
         .unwrap();
@@ -22,7 +22,7 @@ fn main() {
     let mut multi_channel = multi_channel.handshake(endpoints).unwrap();
 
     let mut mem = [0u8; 10];
-    let mr = unsafe { multi_channel.register_shared_mr(&mut mem).unwrap() };
+    let mr = unsafe { pd.register_shared_mr(mem.as_mut_ptr(), mem.len()).unwrap() };
 
     multi_channel.share_mr(0, &mr).unwrap();
     let mut rmr = multi_channel

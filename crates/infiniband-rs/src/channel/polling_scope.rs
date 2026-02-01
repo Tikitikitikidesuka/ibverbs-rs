@@ -80,7 +80,7 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
 
 pub struct PollingScope<'scope, 'env: 'scope, C> {
     pub(crate) inner: &'env mut C,
-    wrs: Vec<Rc<RefCell<PendingWork<'scope>>>>,
+    wrs: Vec<ScopedPendingWork<'scope>>,
     // for invariance of lifetimes, see `std::thread::scope`
     scope: PhantomData<&'scope mut &'scope ()>,
     env: PhantomData<&'env mut &'env ()>,
@@ -135,11 +135,15 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // requests failed.
     pub(super) fn clean_up(self) -> Result<(), MultiWorkPollError> {
         let mut work_errors = Vec::new();
-        for wr in &self.wrs {
-            let mut wr = RefCell::borrow_mut(wr);
-            if !wr.already_polled_to_completion() {
-                // Take care of errors to report them
-                if let Err(error) = wr.spin_poll() {
+
+        for wr in self.wrs {
+            let mut wr = wr.inner.borrow_mut();
+            // Only raise error into the auto polled if not polled by the user
+            if !wr.user_polled {
+                // If io::Error from a poll it means a hardware error...
+                // QPs and CQ transition to error state and all wrs were aborted...
+                // So this is safe in case of io error as well.
+                if let Err(error) = wr.wr.spin_poll() {
                     match error {
                         WorkPollError::PollError(poll_error) => {
                             return Err(MultiWorkPollError::PollError(poll_error));
@@ -150,6 +154,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
             }
         }
 
+        // If everything goes well, no heap allocation
         if work_errors.is_empty() {
             Ok(())
         } else {
@@ -170,12 +175,9 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.send_unpolled(wr)? }));
+        let wr = ScopedPendingWork::new(unsafe { channel.send_unpolled(wr)? });
         self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
+        Ok(wr)
     }
 
     // The slice cannot be used again until the work request is consumed,
@@ -189,12 +191,9 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.receive_unpolled(wr)? }));
+        let wr = ScopedPendingWork::new(unsafe { channel.receive_unpolled(wr)? });
         self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
+        Ok(wr)
     }
 
     pub(crate) fn channel_post_write<F>(
@@ -206,12 +205,9 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.write_unpolled(wr)? }));
+        let wr = ScopedPendingWork::new(unsafe { channel.write_unpolled(wr)? });
         self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
+        Ok(wr)
     }
 
     pub(crate) fn channel_post_read<F>(
@@ -223,25 +219,46 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = Rc::new(RefCell::new(unsafe { channel.read_unpolled(wr)? }));
+        let wr = ScopedPendingWork::new(unsafe { channel.read_unpolled(wr)? });
         self.wrs.push(wr.clone());
-        Ok(ScopedPendingWork {
-            inner: wr,
-            env: Default::default(),
-        })
+        Ok(wr)
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ScopedPendingWork<'scope> {
-    inner: Rc<RefCell<PendingWork<'scope>>>,
+    inner: Rc<RefCell<ScopedPendingWorkInner<'scope>>>,
     env: PhantomData<&'scope mut &'scope ()>,
 }
 
+#[derive(Debug)]
+struct ScopedPendingWorkInner<'scope> {
+    user_polled: bool,
+    wr: PendingWork<'scope>,
+}
+
 impl<'scope> ScopedPendingWork<'scope> {
-    pub fn poll(&self) -> WorkPollResult {
-        RefCell::borrow_mut(&self.inner).poll()
+    fn new(wr: PendingWork<'scope>) -> Self {
+        ScopedPendingWork {
+            inner: Rc::new(RefCell::new(ScopedPendingWorkInner {
+                user_polled: false,
+                wr,
+            })),
+            env: PhantomData,
+        }
     }
+
+    pub fn poll(&self) -> WorkPollResult {
+        let mut wr = self.inner.borrow_mut();
+        let poll = wr.wr.poll()?;
+        wr.user_polled = true;
+        Some(poll)
+    }
+
     pub fn spin_poll(&self) -> WorkSpinPollResult {
-        RefCell::borrow_mut(&self.inner).spin_poll()
+        let mut wr = self.inner.borrow_mut();
+        let poll = wr.wr.spin_poll();
+        wr.user_polled = true;
+        poll
     }
 }

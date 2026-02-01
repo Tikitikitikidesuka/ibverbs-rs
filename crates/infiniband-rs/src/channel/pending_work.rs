@@ -33,12 +33,9 @@ impl<'a> PendingWork<'a> {
 
 impl<'a> Drop for PendingWork<'a> {
     fn drop(&mut self) {
-        if !self.already_polled_to_completion() {
-            log::warn!("IbvWorkRequest not manually polled to completion");
-            if let Err(e) = self.spin_poll() {
-                let debug_text = format!("{:?}", self);
-                log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
-            }
+        if let Err(e) = self.spin_poll() {
+            let debug_text = format!("{:?}", self);
+            log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
         }
     }
 }
@@ -147,12 +144,6 @@ impl PendingWork<'_> {
                 Some(Err(e)) => return Err(e), // work poll error
             }
         }
-    }
-
-    /// Returns true if the work request has already been polled to completion.
-    /// It does not poll however, it must have been polled by some other method.
-    pub fn already_polled_to_completion(&self) -> bool {
-        self.status.is_some()
     }
 
     fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> WorkRequestStatus {

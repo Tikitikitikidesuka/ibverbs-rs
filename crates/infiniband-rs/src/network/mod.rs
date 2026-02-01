@@ -30,6 +30,10 @@ impl Node {
         self.world_size
     }
 
+    pub fn pd(&self) -> &ProtectionDomain {
+        self.multi_channel.pd()
+    }
+
     pub fn barrier(&mut self, peers: &[usize], timeout: Duration) -> Result<(), BarrierError> {
         self.barrier
             .barrier(&mut self.multi_channel, peers, timeout)
