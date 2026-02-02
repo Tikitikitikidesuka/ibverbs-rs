@@ -1,6 +1,7 @@
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::completion_queue::CompletionQueue;
 use crate::ibverbs::context::IB_PORT;
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::queue_pair::config::*;
@@ -35,7 +36,7 @@ impl QueuePair {
         #[builder(default)] mtu: MaximumTransferUnit,
         #[builder(default)] send_psn: PacketSequenceNumber,
         #[builder(default)] recv_psn: PacketSequenceNumber,
-    ) -> io::Result<PreparedQueuePair> {
+    ) -> IbvResult<PreparedQueuePair> {
         let mut attr = ibv_qp_init_attr {
             qp_context: ptr::null::<c_void>() as *mut _,
             send_cq: send_cq.inner.cq as *const _ as *mut _,
@@ -58,9 +59,12 @@ impl QueuePair {
             lid: pd.inner.context.inner.query_port()?.lid,
         };
         if qp.is_null() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to create queue pair",
+            ))
         } else {
-            log::debug!("IbvQueuePair created");
+            log::debug!("QueuePair created");
             Ok(PreparedQueuePair {
                 qp: QueuePair {
                     pd: pd.clone(),
@@ -138,7 +142,7 @@ impl PreparedQueuePair {
     ///
     ///  - `EINVAL`: Invalid value provided in `attr` or in `attr_mask`.
     ///  - `ENOMEM`: Not enough resources to complete this operation.
-    pub fn handshake(self, remote: QueuePairEndpoint) -> io::Result<QueuePair> {
+    pub fn handshake(self, remote: QueuePairEndpoint) -> IbvResult<QueuePair> {
         // Initialize queue pair
         let mut attr = ibv_qp_attr {
             qp_state: ibv_qp_state::IBV_QPS_INIT,
@@ -153,7 +157,10 @@ impl PreparedQueuePair {
             | ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS;
         let errno = unsafe { ibv_modify_qp(self.qp.qp, &mut attr as *mut _, mask.0 as i32) };
         if errno != 0 {
-            return Err(io::Error::from_raw_os_error(errno));
+            return Err(IbvError::from_errno_with_msg(
+                errno,
+                "Failed to set queue pair to Init state",
+            ));
         }
 
         // Transition to ready to receive
@@ -184,7 +191,10 @@ impl PreparedQueuePair {
 
         let errno = unsafe { ibv_modify_qp(self.qp.qp, &mut attr as *mut _, mask.0 as i32) };
         if errno != 0 {
-            return Err(io::Error::from_raw_os_error(errno));
+            return Err(IbvError::from_errno_with_msg(
+                errno,
+                "Failed to set queue pair to Ready to Receive state",
+            ));
         }
 
         // Transition to ready to send
@@ -205,7 +215,10 @@ impl PreparedQueuePair {
             | ibv_qp_attr_mask::IBV_QP_SQ_PSN;
         let errno = unsafe { ibv_modify_qp(self.qp.qp, &mut attr as *mut _, mask.0 as i32) };
         if errno != 0 {
-            return Err(io::Error::from_raw_os_error(errno));
+            return Err(IbvError::from_errno_with_msg(
+                errno,
+                "Failed to set queue pair to Ready to Send state",
+            ));
         }
 
         Ok(self.qp)

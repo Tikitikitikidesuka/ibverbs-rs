@@ -3,10 +3,10 @@ pub mod config;
 pub mod ops;
 
 use crate::ibverbs::completion_queue::CompletionQueue;
+use crate::ibverbs::error::IbvError;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use ibverbs_sys::{ibv_destroy_qp, ibv_qp};
 use std::fmt::Debug;
-use std::io;
 
 pub struct QueuePair {
     pd: ProtectionDomain,
@@ -20,15 +20,13 @@ unsafe impl Sync for QueuePair {}
 
 impl Drop for QueuePair {
     fn drop(&mut self) {
-        log::debug!("IbvQueuePair destroyed");
+        log::debug!("QueuePair destroyed");
         let qp = self.qp;
         let errno = unsafe { ibv_destroy_qp(self.qp) };
         if errno != 0 {
             let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to destroy queue pair with `ibv_destroy_qp({qp:p})`: {e}"
-            );
+            let error = IbvError::from_errno_with_msg(errno, "Failed to destroy queue pair");
+            log::error!("({debug_text}) -> {error}");
         }
     }
 }

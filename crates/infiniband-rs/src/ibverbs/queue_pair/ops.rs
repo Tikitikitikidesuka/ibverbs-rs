@@ -1,3 +1,4 @@
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::work_request::*;
 use ibverbs_sys::*;
@@ -8,7 +9,7 @@ impl QueuePair {
     /// The buffers pointed to by the work request in its gather elements must remain
     /// valid and cannot be mutated until the work is finished by the hardware.
     /// They must also not be aliased by a mutable reference until then.
-    pub unsafe fn post_send(&mut self, wr: SendWorkRequest, wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_send(&mut self, wr: SendWorkRequest, wr_id: u64) -> IbvResult<()> {
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_SEND, Default::default()),
             Some(imm_data) => (
@@ -32,18 +33,18 @@ impl QueuePair {
             __bindgen_anon_2: Default::default(),
         };
 
-        unsafe { self.post_send_wr(&mut wr) }
+        unsafe {
+            self.post_send_wr(&mut wr).map_err(|errno| {
+                IbvError::from_errno_with_msg(errno, "Failed to post send work request")
+            })
+        }
     }
 
     /// # Safety
     /// The buffers pointed to by the work request in its scatter elements must remain
     /// valid and cannot be read or mutated until the work is finished by the hardware.
     /// They must not be aliased by shared or mutable references until then.
-    pub unsafe fn post_receive(
-        &mut self,
-        wr: ReceiveWorkRequest,
-        wr_id: u64,
-    ) -> io::Result<()> {
+    pub unsafe fn post_receive(&mut self, wr: ReceiveWorkRequest, wr_id: u64) -> IbvResult<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -51,7 +52,11 @@ impl QueuePair {
             num_sge: wr.scatter_elements.as_mut().len() as i32, // todo: fix possible error on overflow
         };
 
-        unsafe { self.post_receive_wr(&mut wr) }
+        unsafe {
+            self.post_receive_wr(&mut wr).map_err(|errno| {
+                IbvError::from_errno_with_msg(errno, "Failed to post receive work request")
+            })
+        }
     }
 
     /// It is important to notice how remote memory regions work. todo: explain
@@ -62,7 +67,7 @@ impl QueuePair {
     /// The buffers pointed to by the work request in its gather elements must remain
     /// valid and cannot be read or mutated until the work is finished by the hardware.
     /// They must not be aliased by shared or mutable references until then.
-    pub unsafe fn post_write(&mut self, wr: WriteWorkRequest, wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_write(&mut self, wr: WriteWorkRequest, wr_id: u64) -> IbvResult<()> {
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_RDMA_WRITE, Default::default()),
             Some(imm_data) => (
@@ -91,14 +96,18 @@ impl QueuePair {
             __bindgen_anon_2: Default::default(),
         };
 
-        unsafe { self.post_send_wr(&mut wr) }
+        unsafe {
+            self.post_send_wr(&mut wr).map_err(|errno| {
+                IbvError::from_errno_with_msg(errno, "Failed to post write work request")
+            })
+        }
     }
 
     /// # Safety
     /// The buffers pointed to by the work request in its gather elements must remain
     /// valid and cannot be read or mutated until the work is finished by the hardware.
     /// They must not be aliased by shared or mutable references until then.
-    pub unsafe fn post_read(&mut self, wr: ReadWorkRequest, wr_id: u64) -> io::Result<()> {
+    pub unsafe fn post_read(&mut self, wr: ReadWorkRequest, wr_id: u64) -> IbvResult<()> {
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -117,36 +126,30 @@ impl QueuePair {
             __bindgen_anon_2: Default::default(),
         };
 
-        unsafe { self.post_send_wr(&mut wr) }
+        unsafe { self.post_send_wr(&mut wr) }.map_err(|errno| {
+            IbvError::from_errno_with_msg(errno, "Failed to post read work request")
+        })
     }
 
     #[inline(always)]
-    unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> io::Result<()> {
+    unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> Result<(), i32> {
         let mut bad_wr: *mut ibv_send_wr = ptr::null::<ibv_send_wr>() as *mut _;
         let ctx = unsafe { *self.qp }.context;
         let ops = &mut unsafe { *ctx }.ops;
         let errno = unsafe {
             ops.post_send.as_mut().unwrap()(self.qp, wr as *mut _, &mut bad_wr as *mut _)
         };
-        if errno != 0 {
-            Err(io::Error::from_raw_os_error(errno))
-        } else {
-            Ok(())
-        }
+        if errno != 0 { Err(errno) } else { Ok(()) }
     }
 
     #[inline(always)]
-    unsafe fn post_receive_wr(&mut self, wr: &mut ibv_recv_wr) -> io::Result<()> {
+    unsafe fn post_receive_wr(&mut self, wr: &mut ibv_recv_wr) -> Result<(), i32> {
         let mut bad_wr: *mut ibv_recv_wr = ptr::null::<ibv_recv_wr>() as *mut _;
         let ctx = unsafe { *self.qp }.context;
         let ops = &mut unsafe { *ctx }.ops;
         let errno = unsafe {
             ops.post_recv.as_mut().unwrap()(self.qp, wr as *mut _, &mut bad_wr as *mut _)
         };
-        if errno != 0 {
-            Err(io::Error::from_raw_os_error(errno))
-        } else {
-            Ok(())
-        }
+        if errno != 0 { Err(errno) } else { Ok(()) }
     }
 }
