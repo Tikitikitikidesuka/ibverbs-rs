@@ -1,5 +1,6 @@
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::context::Context;
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::queue_pair::builder::QueuePairBuilder;
@@ -14,12 +15,15 @@ pub struct ProtectionDomain {
 }
 
 impl ProtectionDomain {
-    pub fn allocate(context: &Context) -> io::Result<Self> {
+    pub fn allocate(context: &Context) -> IbvResult<ProtectionDomain> {
         let pd = unsafe { ibv_alloc_pd(context.inner.ctx) };
         if pd.is_null() {
-            Err(io::Error::other(io::Error::last_os_error()))
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to allocate protection domain",
+            ))
         } else {
-            log::debug!("IbvProtectionDomain allocated");
+            log::debug!("ProtectionDomain allocated");
             Ok(ProtectionDomain {
                 inner: Arc::new(ProtectionDomainInner {
                     context: context.clone(),
@@ -48,21 +52,21 @@ impl ProtectionDomain {
         address: *mut u8,
         length: usize,
         access_flags: AccessFlags,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe { MemoryRegion::register_with_permissions(self, address, length, access_flags) }
     }
 
     /// # Safety
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
-    pub fn register_local_mr(&self, address: *mut u8, length: usize) -> io::Result<MemoryRegion> {
+    pub fn register_local_mr(&self, address: *mut u8, length: usize) -> IbvResult<MemoryRegion> {
         MemoryRegion::register_local_mr(self, address, length)
     }
 
     /// # Safety
     /// The user is responsible for ensuring the memory registered remains allocated
     /// as long as it is used in rdma operations.
-    pub fn register_local_mr_slice(&self, mem: &[u8]) -> io::Result<MemoryRegion> {
+    pub fn register_local_mr_slice(&self, mem: &[u8]) -> IbvResult<MemoryRegion> {
         MemoryRegion::register_local_mr(self, mem.as_ptr() as *mut u8, mem.len())
     }
 
@@ -74,7 +78,7 @@ impl ProtectionDomain {
         &self,
         address: *mut u8,
         length: usize,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe { MemoryRegion::register_shared_mr(self, address, length) }
     }
 
@@ -97,7 +101,7 @@ impl ProtectionDomain {
         length: usize,
         iova: u64,
         access_flags: AccessFlags,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe { MemoryRegion::register_dmabuf(self, fd, offset, length, iova, access_flags) }
     }
 
@@ -107,7 +111,7 @@ impl ProtectionDomain {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         MemoryRegion::register_local_dmabuf(self, fd, offset, length, iova)
     }
 
@@ -121,7 +125,7 @@ impl ProtectionDomain {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe { MemoryRegion::register_shared_dmabuf(self, fd, offset, length, iova) }
     }
 }
@@ -136,22 +140,19 @@ unsafe impl Send for ProtectionDomainInner {}
 
 impl Drop for ProtectionDomainInner {
     fn drop(&mut self) {
-        log::debug!("IbvProtectionDomain deallocated");
-        let pd = self.pd;
+        log::debug!("ProtectionDomain deallocated");
         let errno = unsafe { ibv_dealloc_pd(self.pd) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to deallocate protection domain with `ibv_dealloc_pd({pd:p})`: {e}"
-            );
+            let error =
+                IbvError::from_errno_with_msg(errno, "Failed to deallocate protection domain");
+            log::error!("{error}");
         }
     }
 }
 
 impl std::fmt::Debug for ProtectionDomainInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IbvProtectionDomainInner")
+        f.debug_struct("ProtectionDomainInner")
             .field("handle", &(unsafe { *self.pd }).handle)
             .field("context", &self.context)
             .finish()
