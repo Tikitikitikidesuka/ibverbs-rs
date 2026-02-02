@@ -55,57 +55,60 @@ pub enum ScatterGatherElementError {
 }
 
 impl<'a> GatherElement<'a> {
-    pub(super) fn new(
-        mr: &'a MemoryRegion,
-        data: &'a [u8],
-    ) -> Result<Self, ScatterGatherElementError> {
-        let data_length = data
-            .len()
-            .try_into()
-            .map_err(|_| ScatterGatherElementError::SliceTooBig)?;
-        if !mr.encloses(data) {
-            // todo: verify if this check is necessary
-            // todo: hardware may take care of it by issuing a protection error
-            // todo: if not within the registered memory boundaries
+    // Checks the slice is part of the memory region and fits in an sge when created
+    pub fn new(mr: &'a MemoryRegion, data: &'a [u8]) -> Result<Self, ScatterGatherElementError> {
+        if data.len() > u32::MAX as usize {
+            return Err(ScatterGatherElementError::SliceTooBig);
+        }
+        if !mr.encloses_slice(data) {
             return Err(ScatterGatherElementError::SliceNotWithinBounds);
         }
 
-        Ok(Self {
+        Ok(Self::new_unchecked(mr, data))
+    }
+
+    // Does not check the slice is part of the memory region and fits in an sge when created
+    // Still safe because operations that use it will fail due to protection reasons
+    pub fn new_unchecked(mr: &'a MemoryRegion, data: &'a [u8]) -> Self {
+        Self {
             sge: ibv_sge {
                 addr: data.as_ptr() as u64,
-                length: data_length,
+                length: data.len() as u32,
                 lkey: mr.lkey(),
             },
             _mr_lifetime: PhantomData::<&'a MemoryRegion>,
             _data_lifetime: PhantomData::<&'a [u8]>,
-        })
+        }
     }
 }
 
 impl<'a> ScatterElement<'a> {
-    pub(super) fn new(
+    // Checks the slice is part of the memory region and fits in an sge when created
+    pub fn new(
         mr: &'a MemoryRegion,
         data: &'a mut [u8],
     ) -> Result<Self, ScatterGatherElementError> {
-        let data_length = data
-            .len()
-            .try_into()
-            .map_err(|_| ScatterGatherElementError::SliceTooBig)?;
-        if !mr.encloses(data) {
-            // todo: verify if this check is necessary
-            // todo: hardware may take care of it by issuing a protection error
-            // todo: if not within the registered memory boundaries
+        if data.len() > u32::MAX as usize {
+            return Err(ScatterGatherElementError::SliceTooBig);
+        }
+        if !mr.encloses_slice(data) {
             return Err(ScatterGatherElementError::SliceNotWithinBounds);
         }
 
-        Ok(Self {
+        Ok(Self::new_unchecked(mr, data))
+    }
+
+    // Does not check the slice is part of the memory region and fits in an sge when created
+    // Still safe because operations that use it will fail due to protection reasons
+    pub fn new_unchecked(mr: &'a MemoryRegion, data: &'a mut [u8]) -> Self {
+        Self {
             sge: ibv_sge {
                 addr: data.as_ptr() as u64,
-                length: data_length,
+                length: data.len() as u32,
                 lkey: mr.lkey(),
             },
             _mr_lifetime: PhantomData::<&'a MemoryRegion>,
             _data_lifetime: PhantomData::<&'a mut [u8]>,
-        })
+        }
     }
 }

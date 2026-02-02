@@ -218,11 +218,19 @@ impl MemoryRegion {
         GatherElement::<'a>::new(self, data)
     }
 
+    pub fn gather_element_unchecked<'a>(&'a self, data: &'a [u8]) -> GatherElement<'a> {
+        GatherElement::<'a>::new_unchecked(self, data)
+    }
+
     pub fn scatter_element<'a>(
         &'a self,
         data: &'a mut [u8],
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         ScatterElement::<'a>::new(self, data)
+    }
+
+    pub fn scatter_element_unchecked<'a>(&'a self, data: &'a mut [u8]) -> ScatterElement<'a> {
+        ScatterElement::<'a>::new_unchecked(self, data)
     }
 
     pub fn encloses(&self, address: *const u8, length: usize) -> bool {
