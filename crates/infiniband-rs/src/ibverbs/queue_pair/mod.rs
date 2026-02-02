@@ -21,19 +21,17 @@ unsafe impl Sync for QueuePair {}
 impl Drop for QueuePair {
     fn drop(&mut self) {
         log::debug!("QueuePair destroyed");
-        let qp = self.qp;
         let errno = unsafe { ibv_destroy_qp(self.qp) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
             let error = IbvError::from_errno_with_msg(errno, "Failed to destroy queue pair");
-            log::error!("({debug_text}) -> {error}");
+            log::error!("{error}");
         }
     }
 }
 
 impl Debug for QueuePair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.debug_struct("IbvQueuePair")
+        f.debug_struct("QueuePair")
             .field("handle", &unsafe { (*self.qp).handle })
             .field("qp_num", &unsafe { (*self.qp).qp_num })
             .field("state", &unsafe { (*self.qp).state })
