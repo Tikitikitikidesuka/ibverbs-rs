@@ -7,24 +7,24 @@ pub type IbvResult<T> = Result<T, IbvError>;
 #[derive(Debug, Error)]
 pub enum IbvError {
     /// Maps to `EINVAL`.
-    #[error("invalid argument: {0}")]
+    #[error("Invalid argument: {0}")]
     InvalidInput(String),
 
     /// Maps to `ENOMEM`, `EMFILE`, `EAGAIN`.
-    #[error("resource exhausted: {0}")]
+    #[error("Resource exhausted: {0}")]
     Resource(String),
 
     /// Maps to `EPERM`, `EACCES`.
-    #[error("permission denied: {0}")]
+    #[error("Permission denied: {0}")]
     Permission(String),
 
     /// Maps to `ENOENT`.
-    #[error("entity not found: {0}")]
+    #[error("Entity not found: {0}")]
     NotFound(String),
 
     /// Catch-all for underlying OS or Driver failures that don't fit other categories.
     /// This wraps the standard `std::io::Error`.
-    #[error("driver/OS error: {0}")]
+    #[error("Driver/OS error: {0}")]
     Driver(#[from] io::Error),
 }
 
