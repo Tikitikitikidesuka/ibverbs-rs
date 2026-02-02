@@ -12,6 +12,7 @@ pub mod work_error;
 pub mod work_request;
 pub mod work_success;
 pub mod access_config;
+mod error;
 
 pub use devices::open_device;
 pub use devices::list_devices;
