@@ -13,7 +13,7 @@ pub mod builder;
 pub mod pending_work;
 pub mod polled_ops;
 pub mod polling_scope;
-//pub mod remote_mr_exchanger;
+pub mod remote_mr_exchanger;
 pub mod scoped_ops;
 pub mod unpolled_ops;
 

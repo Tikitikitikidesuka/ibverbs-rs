@@ -1,15 +1,15 @@
-use crate::channel::{Channel, TransportResult};
-use crate::ibverbs::error::IbvResult;
+use crate::channel::{Channel, TransportError, TransportResult};
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::work_request::WriteWorkRequest;
 use crate::remote_struct_field;
 use std::fmt::Debug;
-use std::io;
 use std::mem::offset_of;
 use std::sync::atomic::{Ordering, fence};
 use std::time::Duration;
+use thiserror::Error;
 use zerocopy::network_endian::{U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
@@ -93,6 +93,16 @@ impl PreparedRemoteMrExchanger {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum RemoteMrExchangerError {
+    #[error("Peer has not ACKed the previous shared memory region")]
+    SharePeerNotReady,
+    #[error("Timeout accepting shared memory region")]
+    AcceptTimeout,
+    #[error(transparent)]
+    TransportError(#[from] TransportError),
+}
+
 impl RemoteMrExchanger {
     pub fn new(pd: &ProtectionDomain) -> IbvResult<PreparedRemoteMrExchanger> {
         let mut memory = Box::new(RemoteMrExchangerState {
@@ -125,14 +135,12 @@ impl RemoteMrExchanger {
         &mut self,
         channel: &mut Channel,
         mr: &MemoryRegion,
-    ) -> TransportResult { // todo: custom error
+    ) -> Result<(), RemoteMrExchangerError> {
+        // todo: custom error
         // 0. Check the peer acknowledged the last shared remote mr (be -> native)
         let current_in_ack = unsafe { std::ptr::read_volatile(&self.memory.in_ack) }.get();
         if self.memory.out_epoch > current_in_ack {
-            return Err(io::Error::new(
-                io::ErrorKind::ResourceBusy,
-                "Peer has not acknowledged a previously shared memory region",
-            ));
+            return Err(RemoteMrExchangerError::SharePeerNotReady);
         }
 
         // 1. Write the mr's remote handle to the outgoing remote mr field
@@ -152,17 +160,16 @@ impl RemoteMrExchanger {
         // 3. Prepare RDMA write request of the remote mr
         // Get slice of the outgoing remote mr field's bytes
         let out_remote_mr_bytes = self.memory.out_remote_mr.as_bytes();
-        // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
-        let remote_mr_sges = [self.mr.gather_element(out_remote_mr_bytes).unwrap()];
+        let remote_mr_sges = [self.mr.gather_element_unchecked(out_remote_mr_bytes)];
         let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, in_remote_mr);
 
         // 4. Prepare RDMA write request of the remote mr epoch
         // Get slice of the remote mr epoch field's bytes
         let out_epoch_bytes = self.memory.out_epoch.as_bytes();
-        // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
-        let remote_mr_epoch_sges = [self.mr.gather_element(out_epoch_bytes).unwrap()];
-        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, in_epoch); // Ensure changes are visible before issuing the writes
+        let remote_mr_epoch_sges = [self.mr.gather_element_unchecked(out_epoch_bytes)];
+        let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, in_epoch);
 
+        // Ensure changes are visible before issuing the writes
         fence(Ordering::Release);
 
         // 5. Post RDMA write operations in the correct order:
@@ -173,7 +180,7 @@ impl RemoteMrExchanger {
             let epoch_wr = s.post_write(remote_mr_epoch_wr)?;
             remote_mr_wr.spin_poll()?;
             epoch_wr.spin_poll()?;
-            Ok::<(), io::Error>(())
+            Ok::<(), TransportError>(())
         })?;
 
         Ok(())
@@ -188,7 +195,7 @@ impl RemoteMrExchanger {
         &mut self,
         channel: &mut Channel,
         timeout: Duration,
-    ) -> io::Result<RemoteMemoryRegion> {
+    ) -> Result<RemoteMemoryRegion, RemoteMrExchangerError> {
         let start = std::time::Instant::now();
 
         loop {
@@ -228,10 +235,7 @@ impl RemoteMrExchanger {
             }
 
             if start.elapsed() > timeout {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "Timed out accepting shared memory region",
-                ));
+                return Err(RemoteMrExchangerError::AcceptTimeout);
             }
 
             std::hint::spin_loop()
