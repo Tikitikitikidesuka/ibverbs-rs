@@ -1,4 +1,5 @@
 use crate::ibverbs::context::Context;
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::work_completion::WorkCompletion;
 use ibverbs_sys::*;
 use std::ffi::c_void;
@@ -21,30 +22,51 @@ impl CompletionQueue {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    pub fn create(context: &Context, id: isize, min_capacity: u32) -> io::Result<Self> {
+    pub fn create(context: &Context, id: isize, min_capacity: u32) -> IbvResult<CompletionQueue> {
         let min_cq_entries = min_capacity.try_into().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "invalid min_cq_entries ({min_capacity}) \
-                        (must be between 1 and dev_cap.max_cqe)"
-                ),
-            )
+            IbvError::InvalidInput("Completion queue min_cq_entries must fit in an i32".to_string())
         })?;
 
         let cc = unsafe { ibv_create_comp_channel(context.inner.ctx) };
         if cc.is_null() {
-            return Err(io::Error::last_os_error());
+            return Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to create completion channel",
+            ));
         }
 
-        let cc_fd = unsafe { BorrowedFd::borrow_raw((*cc).fd) };
-        let flags = nix::fcntl::fcntl(cc_fd, nix::fcntl::F_GETFL)?;
-        // the file descriptor needs to be set to non-blocking because `ibv_get_cq_event()`
-        // would block otherwise.
-        let arg = nix::fcntl::FcntlArg::F_SETFL(
-            nix::fcntl::OFlag::from_bits_retain(flags) | nix::fcntl::OFlag::O_NONBLOCK,
-        );
-        nix::fcntl::fcntl(cc_fd, arg)?;
+        // If this block returns Err, we catch it and destroy the channel before returning.
+        let configure_channel = || -> IbvResult<()> {
+            let cc_fd = unsafe { BorrowedFd::borrow_raw((*cc).fd) };
+
+            let flags = nix::fcntl::fcntl(cc_fd, nix::fcntl::F_GETFL).map_err(|errno| {
+                IbvError::from_errno_with_msg(
+                    errno as i32,
+                    "Failed to get completion channel flags",
+                )
+            })?;
+
+            // The file descriptor needs to be set to non-blocking because `ibv_get_cq_event()`
+            // would block otherwise.
+            let arg = nix::fcntl::FcntlArg::F_SETFL(
+                nix::fcntl::OFlag::from_bits_retain(flags) | nix::fcntl::OFlag::O_NONBLOCK,
+            );
+
+            nix::fcntl::fcntl(cc_fd, arg).map_err(|errno| {
+                IbvError::from_errno_with_msg(
+                    errno as i32,
+                    "Failed to set completion channel to non-blocking",
+                )
+            })?;
+
+            Ok(())
+        };
+
+        // Execute configuration and cleanup on failure
+        if let Err(e) = configure_channel() {
+            unsafe { ibv_destroy_comp_channel(cc) };
+            return Err(e);
+        }
 
         let cq = unsafe {
             ibv_create_cq(
@@ -57,42 +79,32 @@ impl CompletionQueue {
         };
 
         if cq.is_null() {
-            let err = io::Error::last_os_error();
-            let err = match err.kind() {
-                io::ErrorKind::InvalidInput => io::Error::new(
-                    err.kind(), // reuse
-                    format!(
-                        "invalid min_cq_entries ({min_cq_entries}) \
-                        (must be 1 and dev_cap.max_cqe)"
-                    ),
-                ),
-                io::ErrorKind::OutOfMemory => io::Error::new(
-                    err.kind(), // reuse
-                    "not enough resources to create completion queue",
-                ),
-                _ => err,
-            };
-            Err(err)
-        } else {
-            log::debug!("IbvCompletionQueue created");
-            Ok(CompletionQueue {
-                inner: Arc::new(CompletionQueueInner {
-                    context: context.clone(),
-                    cc,
-                    cq,
-                    min_capacity: min_cq_entries as u32,
-                }),
-            })
+            unsafe { ibv_destroy_comp_channel(cc) }; // Clean up channel on failure!
+
+            return Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                &format!("Failed to create completion queue with size {min_cq_entries}"),
+            ));
         }
+
+        log::debug!("CompletionQueue created");
+        Ok(CompletionQueue {
+            inner: Arc::new(CompletionQueueInner {
+                context: context.clone(),
+                cc,
+                cq,
+                min_capacity: min_cq_entries as u32,
+            }),
+        })
     }
 
     pub fn poll<'poll_buff>(
         &self,
         completions: &'poll_buff mut [PollSlot],
-    ) -> io::Result<PolledCompletions<'poll_buff>> {
+    ) -> IbvResult<PolledCompletions<'poll_buff>> {
         let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
         let ops = &mut unsafe { &mut *ctx }.ops;
-        let n = unsafe {
+        let num_polled = unsafe {
             ops.poll_cq.as_mut().unwrap()(
                 self.inner.cq,
                 completions.len() as i32,
@@ -100,11 +112,14 @@ impl CompletionQueue {
             )
         };
 
-        if n < 0 {
-            Err(io::Error::other("ibv_poll_cq failed"))
+        if num_polled < 0 {
+            Err(IbvError::from_errno_with_msg(
+                num_polled.abs(),
+                "Failed to poll completion queue",
+            ))
         } else {
             Ok(PolledCompletions {
-                wcs: &mut completions[0..n as usize],
+                wcs: &mut completions[0..num_polled as usize],
             })
         }
     }
@@ -153,33 +168,26 @@ unsafe impl Sync for CompletionQueueInner {}
 
 impl Drop for CompletionQueueInner {
     fn drop(&mut self) {
-        log::debug!("IbvCompletionQueue destroyed");
+        log::debug!("CompletionQueue destroyed");
 
-        let cq = self.cq;
         let errno = unsafe { ibv_destroy_cq(self.cq) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to release completion queue with `ibv_destroy_cq({cq:p})`: {e}"
-            );
+            let error = IbvError::from_errno_with_msg(errno, "Failed to destroy completion queue");
+            log::error!("{error}");
         }
 
-        let cc = self.cc;
         let errno = unsafe { ibv_destroy_comp_channel(self.cc) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to release completion rechannel with `ibv_destroy_comp_channel({cc:p})`: {e}"
-            );
+            let error =
+                IbvError::from_errno_with_msg(errno, "Failed to destroy completion channel");
+            log::error!("{error}");
         }
     }
 }
 
 impl std::fmt::Debug for CompletionQueueInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IbvCompletionQueueInner")
+        f.debug_struct("CompletionQueueInner")
             .field("handle", &(unsafe { *self.cq }).handle)
             .field("capacity", &(unsafe { *self.cq }).cqe)
             .field("context", &self.context)
