@@ -1,9 +1,8 @@
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use crate::ibverbs::scatter_gather_element::{
-    GatherElement, ScatterElement, ScatterGatherElementError,
-};
+use crate::ibverbs::scatter_gather_element::*;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
@@ -18,22 +17,18 @@ unsafe impl Send for MemoryRegion {}
 
 impl Drop for MemoryRegion {
     fn drop(&mut self) {
-        log::debug!("IbvMemoryRegion deregistered");
-        let mr = self.mr;
+        log::debug!("MemoryRegion deregistered");
         let errno = unsafe { ibv_dereg_mr(self.mr) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to deregister memory region with `ibv_dereg_mr({mr:p})`: {e}"
-            );
+            let error = IbvError::from_errno_with_msg(errno, "Failed to deregister memory region");
+            log::error!("{error}");
         }
     }
 }
 
 impl std::fmt::Debug for MemoryRegion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IbvMemoryRegion")
+        f.debug_struct("MemoryRegion")
             .field("address", &(unsafe { (*self.mr).addr }))
             .field("length", &(unsafe { (*self.mr).length }))
             .field("handle", &(unsafe { (*self.mr).handle }))
@@ -56,7 +51,7 @@ impl MemoryRegion {
         address: *mut u8,
         length: usize,
         access_flags: AccessFlags,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         let mr = unsafe {
             ibv_reg_mr(
                 pd.inner.pd,
@@ -66,9 +61,12 @@ impl MemoryRegion {
             )
         };
         if mr.is_null() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to register memory region",
+            ))
         } else {
-            log::debug!("IbvMemoryRegion registered");
+            log::debug!("MemoryRegion registered");
             Ok(MemoryRegion { pd: pd.clone(), mr })
         }
     }
@@ -77,7 +75,7 @@ impl MemoryRegion {
         pd: &ProtectionDomain,
         address: *mut u8,
         length: usize,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe {
             Self::register_with_permissions(
                 pd,
@@ -92,7 +90,7 @@ impl MemoryRegion {
         pd: &ProtectionDomain,
         address: *mut u8,
         length: usize,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe {
             Self::register_with_permissions(
                 pd,
@@ -125,7 +123,7 @@ impl MemoryRegion {
         length: usize,
         iova: u64,
         access_flags: AccessFlags,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         let mr = unsafe {
             ibv_reg_dmabuf_mr(
                 pd.inner.pd,
@@ -138,7 +136,10 @@ impl MemoryRegion {
         };
 
         if mr.is_null() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to register memory region",
+            ))
         } else {
             log::debug!("IbvMemoryRegion registered");
             Ok(MemoryRegion { pd: pd.clone(), mr })
@@ -151,7 +152,7 @@ impl MemoryRegion {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe {
             Self::register_dmabuf(
                 pd,
@@ -170,7 +171,7 @@ impl MemoryRegion {
         offset: u64,
         length: usize,
         iova: u64,
-    ) -> io::Result<MemoryRegion> {
+    ) -> IbvResult<MemoryRegion> {
         unsafe {
             Self::register_dmabuf(
                 pd,
@@ -210,25 +211,29 @@ impl MemoryRegion {
 }
 
 impl MemoryRegion {
-    pub fn prepare_gather_element<'a>(
+    pub fn gather_element<'a>(
         &'a self,
         data: &'a [u8],
     ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
         GatherElement::<'a>::new(self, data)
     }
 
-    pub fn prepare_scatter_element<'a>(
+    pub fn scatter_element<'a>(
         &'a self,
         data: &'a mut [u8],
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         ScatterElement::<'a>::new(self, data)
     }
 
-    pub fn encloses(&self, slice: &[u8]) -> bool {
+    pub fn encloses(&self, address: *const u8, length: usize) -> bool {
         let mr_start = self.address() as usize;
         let mr_end = mr_start + self.length();
-        let data_start = slice.as_ptr() as usize;
-        let data_end = data_start + slice.len();
+        let data_start = address as usize;
+        let data_end = data_start + length;
         data_start >= mr_start && data_end <= mr_end
+    }
+
+    pub fn encloses_slice(&self, slice: &[u8]) -> bool {
+        self.encloses(slice.as_ptr(), slice.len())
     }
 }
