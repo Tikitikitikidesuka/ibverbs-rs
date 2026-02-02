@@ -12,6 +12,15 @@ use std::io;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
+use thiserror::Error;
+
+pub type ScopeResult<T, E> = Result<T, ScopeError<E>>;
+
+#[derive(Debug, Error)]
+pub enum ScopeError<E> {
+    ClosureError(E),
+    AutoPollError(MultiWorkPollError),
+}
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
@@ -62,17 +71,53 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub(crate) fn run<'env, F, R>(inner: &'env mut C, f: F) -> Result<R, MultiWorkPollError>
+    pub(crate) fn run<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, ScopeError<E>>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> R,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
     {
         let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.
         // The panic has to be caught to ensure clean up for exception safety.
-        let user_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
-        let clean_up_result = scope.clean_up();
-        match user_result {
-            Ok(r) => clean_up_result.map(|_| r),
+        let scope_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
+        let auto_poll_result = scope.auto_poll();
+        match scope_result {
+            Ok(closure_result) => {
+                let closure_output = closure_result
+                    .map_err(|closure_error| ScopeError::ClosureError(closure_error))?;
+                match auto_poll_result {
+                    AutoPollResult::PollError(auto_poll_error) => {
+                        Err(ScopeError::AutoPollError(auto_poll_error))
+                    }
+                    AutoPollResult::PollSuccess | AutoPollResult::NoPoll => Ok(closure_output),
+                }
+            }
+            Err(panic) => resume_unwind(panic),
+        }
+    }
+
+    /// Still safe by cleaning up. But if the closure succeeds (returns Ok(...)) but the autopoll
+    /// hast to poll manually any wr, it panics.
+    /// If the closure fails, however, the autopoll will be done but not panic and the error of the
+    /// closure will be returned.
+    pub(crate) fn run_manual_poll<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
+    where
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
+    {
+        let mut scope = PollingScope::new(inner);
+        // The user's closure may panic after issuing work requests.
+        // The panic has to be caught to ensure clean up for exception safety.
+        let scope_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
+        let auto_poll_result = scope.auto_poll();
+        match scope_result {
+            Ok(closure_result) => {
+                let closure_output = closure_result?;
+                match auto_poll_result {
+                    AutoPollResult::NoPoll => Ok(closure_output),
+                    AutoPollResult::PollError(_) | AutoPollResult::PollSuccess => {
+                        panic!("PollingScope::run_manual_poll auto polled")
+                    }
+                }
+            }
             Err(panic) => resume_unwind(panic),
         }
     }
@@ -133,20 +178,33 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // Important to notice. *Clean up does not fail*. The returned result represents the outcome
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
-    pub(super) fn clean_up(self) -> Result<(), MultiWorkPollError> {
+    // Auto polls all non manually polled work requests issued during the closure.
+    // Returns Err(MultiWorkPollError) if some auto polled work requests failed.
+    // Returns Ok(bool) with true if auto polled polled some wrs or false if all wrs
+    // were manually polled by the user.
+    // Returns NoPoll if all work requests were manually polled by the user.
+    // Returns PollSuccess if some work requests were not manually polled by the user
+    // but their autopolled outputed not errors.
+    // Returns PollSuccess if some work requests were not manually polled by the user
+    // and some of their autopolls failed
+    pub(super) fn auto_poll(self) -> AutoPollResult {
+        let mut auto_polled = false;
         let mut work_errors = Vec::new();
 
         for wr in self.wrs {
             let mut wr = wr.inner.borrow_mut();
             // Only raise error into the auto polled if not polled by the user
             if !wr.user_polled {
+                auto_polled = true;
                 // If io::Error from a poll it means a hardware error...
                 // QPs and CQ transition to error state and all wrs were aborted...
                 // So this is safe in case of io error as well.
                 if let Err(error) = wr.wr.spin_poll() {
                     match error {
                         WorkPollError::PollError(poll_error) => {
-                            return Err(MultiWorkPollError::PollError(poll_error));
+                            return AutoPollResult::PollError(MultiWorkPollError::PollError(
+                                poll_error,
+                            ));
                         }
                         WorkPollError::WorkError(work_error) => work_errors.push(work_error),
                     }
@@ -156,11 +214,21 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
 
         // If everything goes well, no heap allocation
         if work_errors.is_empty() {
-            Ok(())
+            if auto_polled {
+                AutoPollResult::NoPoll
+            } else {
+                AutoPollResult::PollSuccess
+            }
         } else {
-            Err(MultiWorkPollError::WorkError(work_errors))
+            AutoPollResult::PollError(work_errors.into())
         }
     }
+}
+
+enum AutoPollResult {
+    NoPoll,
+    PollSuccess,
+    PollError(MultiWorkPollError),
 }
 
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {

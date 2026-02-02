@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
     println!("Mem before exchange: {mem:?}");
 
     channel.write(WriteWorkRequest::new(
-        &[mr.prepare_gather_element(&mem[0..4]).unwrap()],
+        &[mr.gather_element(&mem[0..4]).unwrap()],
         remote_mr.sub_region(4).unwrap(),
     ))?;
 

@@ -143,8 +143,10 @@ impl RemoteMrExchanger {
 
         // Slice the meta remote memory region
         // Unwrap because we are taking the full slice
-        let in_remote_mr = remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_remote_mr).unwrap();
-        let in_epoch = remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_epoch).unwrap();
+        let in_remote_mr =
+            remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_remote_mr).unwrap();
+        let in_epoch =
+            remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_epoch).unwrap();
 
         // 3. Prepare RDMA write request of the remote mr
         // Get slice of the outgoing remote mr field's bytes
@@ -165,15 +167,13 @@ impl RemoteMrExchanger {
         // 5. Post RDMA write operations in the correct order:
         // - Firstly write the remote mr.
         // - Secondly write the increased epoch.
-        channel
-            .scope(|s| {
-                let remote_mr_wr = s.post_write(remote_mr_wr)?;
-                let epoch_wr = s.post_write(remote_mr_epoch_wr)?;
-                remote_mr_wr.spin_poll()?;
-                epoch_wr.spin_poll()?;
-                Ok::<(), io::Error>(())
-            })
-            .expect("Implementation error: All wrs polled manually in the scope")?;
+        channel.manual_scope(|s| {
+            let remote_mr_wr = s.post_write(remote_mr_wr)?;
+            let epoch_wr = s.post_write(remote_mr_epoch_wr)?;
+            remote_mr_wr.spin_poll()?;
+            epoch_wr.spin_poll()?;
+            Ok::<(), io::Error>(())
+        })?;
 
         Ok(())
     }

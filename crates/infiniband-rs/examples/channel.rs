@@ -1,5 +1,8 @@
+use ibverbs_sys::ibv_sge;
 use infiniband_rs::channel::Channel;
+use infiniband_rs::channel::polling_scope::ScopeError;
 use infiniband_rs::ibverbs;
+use infiniband_rs::ibverbs::scatter_gather_element::GatherElement;
 use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
@@ -24,16 +27,18 @@ fn main() -> io::Result<()> {
 
     println!("Mem before exchange: {mem:?}");
 
-    channel.scope(|s| {
-        let (send_mem, recv_mem) = mem.split_at_mut(4);
+    channel
+        .scope(|s| {
+            let (send_mem, recv_mem) = mem.split_at_mut(4);
 
-        let send_ge = [mr.prepare_gather_element(send_mem).unwrap()];
-        let mut recv_se = [mr.prepare_scatter_element(recv_mem).unwrap()];
+            let send_ge = [mr.prepare_gather_element(send_mem).unwrap()];
+            let mut recv_se = [mr.prepare_scatter_element(recv_mem).unwrap()];
 
-        s.post_receive(ReceiveWorkRequest::new(&mut recv_se))
-            .unwrap();
-        s.post_send(SendWorkRequest::new(&send_ge)).unwrap();
-    })?;
+            s.post_receive(ReceiveWorkRequest::new(&mut recv_se))?;
+            s.post_send(SendWorkRequest::new(&send_ge))?;
+            Ok::<(), io::Error>(())
+        })
+        .unwrap();
 
     println!("Mem after exchange: {mem:?}");
 

@@ -31,8 +31,8 @@ fn main() {
     let result = multi_channel.scope(|s| {
         send_mem.copy_from_slice(&[1u8; 4]);
 
-        let send_sge = [mr.prepare_gather_element(&send_mem[0..4]).unwrap()];
-        let mut recv_sge = [mr.prepare_scatter_element(&mut recv_mem[0..4]).unwrap()];
+        let send_sge = [mr.gather_element(&send_mem[0..4]).unwrap()];
+        let mut recv_sge = [mr.scatter_element(&mut recv_mem[0..4]).unwrap()];
 
         s.post_receive(PeerReceiveWorkRequest::new(1, &mut recv_sge))?;
 

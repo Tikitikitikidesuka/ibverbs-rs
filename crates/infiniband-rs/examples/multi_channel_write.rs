@@ -36,7 +36,7 @@ fn main() {
     println!("Recv mem before: {recv_mem:?}");
 
     let result = multi_channel.write(PeerWriteWorkRequest::new(
-        &[mr.prepare_gather_element(&send_mem).unwrap()],
+        &[mr.gather_element(&send_mem).unwrap()],
         rmr.sub_region(5).unwrap(),
     ));
 
