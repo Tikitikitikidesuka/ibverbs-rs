@@ -9,12 +9,6 @@ pub struct WorkError {
     vendor_code: u32,
 }
 
-impl From<WorkError> for io::Error {
-    fn from(value: WorkError) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{value}"))
-    }
-}
-
 impl WorkError {
     /// The raw status cannot be IBV_WC_SUCCESS.
     pub(super) fn new(raw_status: ibv_wc_status::Type, vendor_code: u32) -> Self {
