@@ -1,12 +1,12 @@
 use crate::channel::Channel;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::{PreparedQueuePair, QueuePairEndpoint};
 use crate::ibverbs::queue_pair::config::*;
 use bon::bon;
 use std::cell::RefCell;
-use std::io;
 use std::rc::Rc;
 
 #[bon]
@@ -33,7 +33,7 @@ impl Channel {
         #[builder(default)] mtu: MaximumTransferUnit,
         #[builder(default)] send_psn: PacketSequenceNumber,
         #[builder(default)] recv_psn: PacketSequenceNumber,
-    ) -> io::Result<PreparedChannel> {
+    ) -> IbvResult<PreparedChannel> {
         let cq = pd.context().create_cq(0, min_cq_entries)?;
         let qp = pd
             .create_qp()
@@ -72,7 +72,7 @@ impl PreparedChannel {
         self.qp.endpoint()
     }
 
-    pub fn handshake(self, endpoint: QueuePairEndpoint) -> io::Result<Channel> {
+    pub fn handshake(self, endpoint: QueuePairEndpoint) -> IbvResult<Channel> {
         let qp = self.qp.handshake(endpoint)?;
         Ok(Channel {
             qp,

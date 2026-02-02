@@ -1,4 +1,5 @@
-use crate::channel::Channel;
+use crate::channel::{Channel, TransportResult};
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
@@ -93,7 +94,7 @@ impl PreparedRemoteMrExchanger {
 }
 
 impl RemoteMrExchanger {
-    pub fn new(pd: &ProtectionDomain) -> io::Result<PreparedRemoteMrExchanger> {
+    pub fn new(pd: &ProtectionDomain) -> IbvResult<PreparedRemoteMrExchanger> {
         let mut memory = Box::new(RemoteMrExchangerState {
             in_remote_mr: PodRemoteMemoryRegion::new(),
             in_epoch: U64::new(0),
@@ -124,7 +125,7 @@ impl RemoteMrExchanger {
         &mut self,
         channel: &mut Channel,
         mr: &MemoryRegion,
-    ) -> io::Result<()> {
+    ) -> TransportResult { // todo: custom error
         // 0. Check the peer acknowledged the last shared remote mr (be -> native)
         let current_in_ack = unsafe { std::ptr::read_volatile(&self.memory.in_ack) }.get();
         if self.memory.out_epoch > current_in_ack {
@@ -152,14 +153,14 @@ impl RemoteMrExchanger {
         // Get slice of the outgoing remote mr field's bytes
         let out_remote_mr_bytes = self.memory.out_remote_mr.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
-        let remote_mr_sges = [self.mr.prepare_gather_element(out_remote_mr_bytes).unwrap()];
+        let remote_mr_sges = [self.mr.gather_element(out_remote_mr_bytes).unwrap()];
         let remote_mr_wr = WriteWorkRequest::new(&remote_mr_sges, in_remote_mr);
 
         // 4. Prepare RDMA write request of the remote mr epoch
         // Get slice of the remote mr epoch field's bytes
         let out_epoch_bytes = self.memory.out_epoch.as_bytes();
         // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
-        let remote_mr_epoch_sges = [self.mr.prepare_gather_element(out_epoch_bytes).unwrap()];
+        let remote_mr_epoch_sges = [self.mr.gather_element(out_epoch_bytes).unwrap()];
         let remote_mr_epoch_wr = WriteWorkRequest::new(&remote_mr_epoch_sges, in_epoch); // Ensure changes are visible before issuing the writes
 
         fence(Ordering::Release);
@@ -211,7 +212,7 @@ impl RemoteMrExchanger {
                 // Get slice of the remote mr ack field's bytes
                 let remote_mr_ack_sge = [self
                     .mr
-                    .prepare_gather_element(self.memory.out_ack.as_bytes())
+                    .gather_element(self.memory.out_ack.as_bytes())
                     .unwrap()];
 
                 // 4. Prepare RDMA write request of the remote mr ack

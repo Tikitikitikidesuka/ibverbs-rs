@@ -1,14 +1,12 @@
+use crate::channel::TransportResult;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
-use crate::channel::unsafe_member::UnsafeMember;
 use crate::ibverbs::work_completion::WorkResult;
 use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
-use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use thiserror::Error;
 
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {
@@ -17,79 +15,37 @@ pub struct PendingWork<'a> {
     status: Option<Result<WorkSuccess, WorkError>>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
-    _data_lifetime: UnsafeMember<PhantomData<&'a [u8]>>,
+    _data_lifetime: PhantomData<&'a [u8]>,
 }
 
 impl<'a> PendingWork<'a> {
+    /// SAFETY INVARIANT: The lifetime of the data involved must be the same as the lifetime of the work request.
     pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<CachedCompletionQueue>>) -> Self {
         Self {
             wr_id,
             cq,
             status: None,
-            _data_lifetime: unsafe { UnsafeMember::new(PhantomData::<&'a [u8]>) },
+            _data_lifetime: PhantomData::<&'a [u8]>,
         }
     }
 }
 
 impl<'a> Drop for PendingWork<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.spin_poll() {
-            let debug_text = format!("{:?}", self);
-            log::error!("({debug_text}) -> Failed to poll work request to completion: {e}")
+        if let Err(error) = self.spin_poll() {
+            log::error!("Failed to poll pending work to completion: {error}")
         }
     }
 }
 
 impl<'a> Debug for PendingWork<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IbvWorkRequest")
+        f.debug_struct("PendingWork")
             .field("wr_id", &self.wr_id)
             .field("status", &self.status)
             .finish()
     }
 }
-
-#[derive(Debug, Error)]
-pub enum WorkPollError {
-    #[error("Polling error: {0}")]
-    PollError(#[from] io::Error),
-    #[error("Polled work error: {0}")]
-    WorkError(#[from] WorkError),
-}
-
-impl From<WorkPollError> for io::Error {
-    fn from(value: WorkPollError) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{value}"))
-    }
-}
-
-pub type WorkSpinPollResult = Result<WorkSuccess, WorkPollError>;
-
-/// Error of a Connection Scope caught during clean up.
-/// - PollError means there was an error polling the completion queue.
-///   This means the completion queue and queue pair of the connection have
-///   transitioned to the error state and therefore all of the work requests
-///   were flushed uncompleted and with an error.
-/// - WorkError means at least one work request failed during its execution.
-///   This only specifies how many work requests failed. For more details do
-///   not rely on automatic polling of the scoped connection.
-// todo: naming and display coherence
-#[derive(Debug, Error)]
-pub enum MultiWorkPollError {
-    PollError(#[from] io::Error),
-    WorkError(Vec<WorkError>),
-}
-
-impl From<MultiWorkPollError> for io::Error {
-    fn from(value: MultiWorkPollError) -> Self {
-        io::Error::new(io::ErrorKind::Other, format!("{value}"))
-    }
-}
-
-pub type WorkPollResult = Option<Result<WorkSuccess, WorkPollError>>;
-pub type MultiWorkSpinPollResult = Result<Vec<WorkSuccess>, MultiWorkPollError>;
-
-pub type WorkRequestStatus = Option<WorkResult>;
 
 impl PendingWork<'_> {
     pub fn wr_id(&self) -> u64 {
@@ -102,7 +58,7 @@ impl PendingWork<'_> {
     /// `IbvWorkRequestStatus` with the status of the work request.
     /// The work request status can be `Ok(WorkCompletion)` or `Err(io::Error)`
     /// if an error occurred during the work request's operation was run.
-    pub fn poll(&mut self) -> WorkPollResult {
+    pub fn poll(&mut self) -> Option<TransportResult<WorkSuccess>> {
         // Check if previously completed
         if self.status.is_some() {
             return self.status.map(|res| res.map_err(Into::into));
@@ -136,17 +92,17 @@ impl PendingWork<'_> {
     /// It consumes the work completion from the cache. This method
     /// must be used to guarantee a work completion is finished and
     /// to free space on the completion queue.
-    pub fn spin_poll(&mut self) -> WorkSpinPollResult {
+    pub fn spin_poll(&mut self) -> TransportResult<WorkSuccess> {
         loop {
             match self.poll() {
                 None => continue,              // not ready yet, spin
                 Some(Ok(wc)) => return Ok(wc), // completed successfully
-                Some(Err(e)) => return Err(e), // work poll error
+                Some(Err(e)) => return Err(e), // completed with transport error
             }
         }
     }
 
-    fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> WorkRequestStatus {
+    fn consume_cache(wr_id: u64, cq: &mut CachedCompletionQueue) -> Option<WorkResult> {
         cq.consume(wr_id).map(|w| w.result())
     }
 }

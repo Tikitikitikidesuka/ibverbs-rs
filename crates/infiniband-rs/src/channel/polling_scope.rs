@@ -1,25 +1,29 @@
-use crate::channel::Channel;
-use crate::channel::pending_work::{
-    MultiWorkPollError, PendingWork, WorkPollError, WorkPollResult, WorkSpinPollResult,
-};
+use crate::channel::pending_work::PendingWork;
+use crate::channel::{Channel, TransportError, TransportResult};
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::work_error::WorkError;
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
+use crate::ibverbs::work_request::*;
+use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
-use std::fmt::{Display, Formatter};
 use std::io;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
 
+/// T is user closure Ok output type
+/// E is user closure Err output type
+/// If user closure returns Err(E) -> auto poll -> return E
+/// If user closure returns Ok(T)
+///     If auto poll returns io err -> return io err
+///     If auto poll returns work err -> return work err
+///     If auto poll returns Ok -> return user closure's Ok(T)
 pub type ScopeResult<T, E> = Result<T, ScopeError<E>>;
 
 #[derive(Debug, Error)]
 pub enum ScopeError<E> {
     ClosureError(E),
-    AutoPollError(MultiWorkPollError),
+    AutoPollError(Vec<TransportError>),
 }
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
@@ -80,17 +84,15 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
         // The panic has to be caught to ensure clean up for exception safety.
         let scope_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
         let auto_poll_result = scope.auto_poll();
+
         match scope_result {
-            Ok(closure_result) => {
-                let closure_output = closure_result
-                    .map_err(|closure_error| ScopeError::ClosureError(closure_error))?;
-                match auto_poll_result {
-                    AutoPollResult::PollError(auto_poll_error) => {
-                        Err(ScopeError::AutoPollError(auto_poll_error))
-                    }
-                    AutoPollResult::PollSuccess | AutoPollResult::NoPoll => Ok(closure_output),
-                }
-            }
+            Ok(closure_result) => match closure_result {
+                Err(closure_error) => Err(ScopeError::ClosureError(closure_error)),
+                Ok(closure_output) => match auto_poll_result {
+                    Ok(_) => Ok(closure_output),
+                    Err(error) => Err(ScopeError::AutoPollError(error)),
+                },
+            },
             Err(panic) => resume_unwind(panic),
         }
     }
@@ -99,7 +101,7 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// hast to poll manually any wr, it panics.
     /// If the closure fails, however, the autopoll will be done but not panic and the error of the
     /// closure will be returned.
-    pub(crate) fn run_manual_poll<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
+    pub(crate) fn run_manual<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
     {
@@ -108,13 +110,14 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
         // The panic has to be caught to ensure clean up for exception safety.
         let scope_result = catch_unwind(AssertUnwindSafe(|| f(&mut scope)));
         let auto_poll_result = scope.auto_poll();
+
         match scope_result {
             Ok(closure_result) => {
                 let closure_output = closure_result?;
                 match auto_poll_result {
-                    AutoPollResult::NoPoll => Ok(closure_output),
-                    AutoPollResult::PollError(_) | AutoPollResult::PollSuccess => {
-                        panic!("PollingScope::run_manual_poll auto polled")
+                    Ok(AutoPollSuccess::NoPendingWorks) => Ok(closure_output),
+                    Ok(AutoPollSuccess::PendingWorksSucceeded) | Err(_) => {
+                        panic!("Unpolled wrs in PollingScope::run_manual")
                     }
                 }
             }
@@ -131,40 +134,6 @@ pub struct PollingScope<'scope, 'env: 'scope, C> {
     env: PhantomData<&'env mut &'env ()>,
 }
 
-impl From<Vec<WorkError>> for MultiWorkPollError {
-    fn from(errors: Vec<WorkError>) -> Self {
-        MultiWorkPollError::WorkError(errors)
-    }
-}
-
-impl Display for MultiWorkPollError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MultiWorkPollError::PollError(io_error) => {
-                write!(
-                    f,
-                    "IbvConnectionScope poll error during clean-up: {io_error}"
-                )
-            }
-            MultiWorkPollError::WorkError(work_errors) => {
-                // Header line with count
-                writeln!(
-                    f,
-                    "IbvConnectionScope {} work errors during clean-up:",
-                    work_errors.len()
-                )?;
-
-                // Each work error on its own line with a bullet
-                for err in work_errors {
-                    writeln!(f, "- {}", err)?;
-                }
-
-                Ok(())
-            }
-        }
-    }
-}
-
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     pub(super) fn new(inner: &'env mut C) -> Self {
         PollingScope {
@@ -175,60 +144,43 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         }
     }
 
-    // Important to notice. *Clean up does not fail*. The returned result represents the outcome
+    // Important to notice. *Auto-poll does not fail*. The returned result represents the outcome
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
     // Auto polls all non manually polled work requests issued during the closure.
-    // Returns Err(MultiWorkPollError) if some auto polled work requests failed.
-    // Returns Ok(bool) with true if auto polled polled some wrs or false if all wrs
-    // were manually polled by the user.
-    // Returns NoPoll if all work requests were manually polled by the user.
-    // Returns PollSuccess if some work requests were not manually polled by the user
-    // but their autopolled outputed not errors.
-    // Returns PollSuccess if some work requests were not manually polled by the user
-    // and some of their autopolls failed
     pub(super) fn auto_poll(self) -> AutoPollResult {
         let mut auto_polled = false;
-        let mut work_errors = Vec::new();
+        let mut transport_errors = Vec::new();
 
         for wr in self.wrs {
             let mut wr = wr.inner.borrow_mut();
             // Only raise error into the auto polled if not polled by the user
-            if !wr.user_polled {
-                auto_polled = true;
-                // If io::Error from a poll it means a hardware error...
-                // QPs and CQ transition to error state and all wrs were aborted...
-                // So this is safe in case of io error as well.
-                if let Err(error) = wr.wr.spin_poll() {
-                    match error {
-                        WorkPollError::PollError(poll_error) => {
-                            return AutoPollResult::PollError(MultiWorkPollError::PollError(
-                                poll_error,
-                            ));
-                        }
-                        WorkPollError::WorkError(work_error) => work_errors.push(work_error),
-                    }
+            if !wr.user_polled_to_completion {
+                auto_polled = true; // Mark that user left some wrs unpolled
+                if let Err(transport_error) = wr.wr.spin_poll() {
+                    transport_errors.push(transport_error);
                 }
             }
         }
 
         // If everything goes well, no heap allocation
-        if work_errors.is_empty() {
-            if auto_polled {
-                AutoPollResult::NoPoll
-            } else {
-                AutoPollResult::PollSuccess
-            }
+        if !auto_polled {
+            Ok(AutoPollSuccess::NoPendingWorks)
         } else {
-            AutoPollResult::PollError(work_errors.into())
+            if transport_errors.is_empty() {
+                Ok(AutoPollSuccess::PendingWorksSucceeded)
+            } else {
+                Err(transport_errors)
+            }
         }
     }
 }
 
-enum AutoPollResult {
-    NoPoll,
-    PollSuccess,
-    PollError(MultiWorkPollError),
+type AutoPollResult = Result<AutoPollSuccess, Vec<TransportError>>;
+
+enum AutoPollSuccess {
+    NoPendingWorks,
+    PendingWorksSucceeded,
 }
 
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
@@ -238,7 +190,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         &mut self,
         channel_selector: F,
         wr: SendWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>>
+    ) -> IbvResult<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
@@ -254,7 +206,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         &mut self,
         channel_selector: F,
         wr: ReceiveWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>>
+    ) -> IbvResult<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
@@ -268,7 +220,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         &mut self,
         channel_selector: F,
         wr: WriteWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>>
+    ) -> IbvResult<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
@@ -282,7 +234,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         &mut self,
         channel_selector: F,
         wr: ReadWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>>
+    ) -> IbvResult<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> io::Result<&mut Channel>,
     {
@@ -301,7 +253,7 @@ pub struct ScopedPendingWork<'scope> {
 
 #[derive(Debug)]
 struct ScopedPendingWorkInner<'scope> {
-    user_polled: bool,
+    user_polled_to_completion: bool,
     wr: PendingWork<'scope>,
 }
 
@@ -309,24 +261,24 @@ impl<'scope> ScopedPendingWork<'scope> {
     fn new(wr: PendingWork<'scope>) -> Self {
         ScopedPendingWork {
             inner: Rc::new(RefCell::new(ScopedPendingWorkInner {
-                user_polled: false,
+                user_polled_to_completion: false,
                 wr,
             })),
             env: PhantomData,
         }
     }
 
-    pub fn poll(&self) -> WorkPollResult {
+    pub fn poll(&self) -> Option<TransportResult<WorkSuccess>> {
         let mut wr = self.inner.borrow_mut();
         let poll = wr.wr.poll()?;
-        wr.user_polled = true;
+        wr.user_polled_to_completion = true;
         Some(poll)
     }
 
-    pub fn spin_poll(&self) -> WorkSpinPollResult {
+    pub fn spin_poll(&self) -> TransportResult<WorkSuccess> {
         let mut wr = self.inner.borrow_mut();
         let poll = wr.wr.spin_poll();
-        wr.user_polled = true;
+        wr.user_polled_to_completion = true;
         poll
     }
 }

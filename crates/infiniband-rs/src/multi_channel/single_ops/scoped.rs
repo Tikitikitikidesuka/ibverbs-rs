@@ -1,5 +1,4 @@
-use crate::channel::pending_work::MultiWorkPollError;
-use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::channel::polling_scope::{PollingScope, ScopeError, ScopedPendingWork};
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
@@ -7,11 +6,18 @@ use crate::multi_channel::work_request::{
 use std::io;
 
 impl MultiChannel {
-    pub fn scope<'env, F, R>(&'env mut self, f: F) -> Result<R, MultiWorkPollError>
+    pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, MultiChannel>) -> R,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, MultiChannel>) -> Result<T, E>,
     {
         PollingScope::run(self, f)
+    }
+
+    pub fn manual_scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, E>
+    where
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, MultiChannel>) -> Result<T, E>,
+    {
+        PollingScope::run_manual_poll(self, f)
     }
 }
 

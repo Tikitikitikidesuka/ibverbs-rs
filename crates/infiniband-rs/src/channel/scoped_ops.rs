@@ -1,10 +1,7 @@
 use crate::channel::Channel;
-use crate::channel::pending_work::MultiWorkPollError;
-use crate::channel::polling_scope::{PollingScope, ScopeError, ScopedPendingWork};
-use crate::ibverbs::work_request::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
-};
-use std::io;
+use crate::channel::polling_scope::*;
+use crate::ibverbs::error::IbvResult;
+use crate::ibverbs::work_request::*;
 
 impl Channel {
     pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
@@ -18,7 +15,7 @@ impl Channel {
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
     {
-        PollingScope::run_manual_poll(self, f)
+        PollingScope::run_manual(self, f)
     }
 }
 
@@ -26,28 +23,28 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Channel> {
     pub fn post_send(
         &mut self,
         wr: SendWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
         self.channel_post_send(|s| Ok(s), wr)
     }
 
     pub fn post_receive(
         &mut self,
         wr: ReceiveWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
         self.channel_post_receive(|s| Ok(s), wr)
     }
 
     pub fn post_write(
         &mut self,
         wr: WriteWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
         self.channel_post_write(|s| Ok(s), wr)
     }
 
     pub fn post_read(
         &mut self,
         wr: ReadWorkRequest<'_, 'env>,
-    ) -> io::Result<ScopedPendingWork<'scope>> {
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
         self.channel_post_read(|s| Ok(s), wr)
     }
 }

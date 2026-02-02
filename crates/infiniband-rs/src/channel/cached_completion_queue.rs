@@ -1,7 +1,7 @@
 use crate::ibverbs::completion_queue::{CompletionQueue, PollSlot};
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work_completion::WorkCompletion;
 use intmap::IntMap;
-use std::io;
 
 #[derive(Debug)]
 pub struct CachedCompletionQueue {
@@ -24,7 +24,7 @@ impl CachedCompletionQueue {
 
     /// Polls work completions into the cache.
     /// Returns the number of new work completions polled.
-    pub fn update(&mut self) -> io::Result<usize> {
+    pub fn update(&mut self) -> IbvResult<usize> {
         // Poll the cq for new work completions
         let polled_wcs = self.cq.poll(self.poll_buf.as_mut_slice())?;
         let polled_num = polled_wcs.len();

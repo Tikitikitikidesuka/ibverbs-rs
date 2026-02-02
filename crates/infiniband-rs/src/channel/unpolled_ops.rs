@@ -1,7 +1,7 @@
 use crate::channel::Channel;
 use crate::channel::pending_work::PendingWork;
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work_request::*;
-use std::io;
 
 impl Channel {
     /// # Safety
@@ -49,7 +49,7 @@ impl Channel {
     pub unsafe fn send_unpolled<'data>(
         &mut self,
         wr: SendWorkRequest<'_, 'data>,
-    ) -> io::Result<PendingWork<'data>> {
+    ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_send(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
@@ -99,7 +99,7 @@ impl Channel {
     pub unsafe fn receive_unpolled<'data>(
         &mut self,
         wr: ReceiveWorkRequest<'_, 'data>,
-    ) -> io::Result<PendingWork<'data>> {
+    ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
@@ -108,7 +108,7 @@ impl Channel {
     pub unsafe fn write_unpolled<'data>(
         &mut self,
         wr: WriteWorkRequest<'_, 'data>,
-    ) -> io::Result<PendingWork<'data>> {
+    ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_write(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
@@ -117,7 +117,7 @@ impl Channel {
     pub unsafe fn read_unpolled<'data>(
         &mut self,
         wr: ReadWorkRequest<'_, 'data>,
-    ) -> io::Result<PendingWork<'data>> {
+    ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_read(wr, wr_id)? };
         Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
