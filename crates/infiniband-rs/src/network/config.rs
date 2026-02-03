@@ -49,6 +49,11 @@ impl RawNetworkConfig {
         self
     }
 
+    pub fn truncate(mut self, num_nodes: usize) -> Self {
+        self.hosts.truncate(num_nodes);
+        self
+    }
+
     pub fn build(mut self) -> Result<NetworkConfig, NetworkConfigError> {
         self.hosts.sort_by_key(|n| n.rankid);
 
