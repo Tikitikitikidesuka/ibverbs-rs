@@ -125,6 +125,7 @@ impl BinaryTreeBarrier {
         // 2. Notify downwards
         // 2.1 Wait for parent
         if let Some(parent_rank) = parent_rank {
+            self.barrier_mr.increase_peer_expected_epoch(parent_rank);
             self.barrier_mr
                 .spin_poll_peer_epoch_expected(parent_rank, start_time, timeout)?;
         }
