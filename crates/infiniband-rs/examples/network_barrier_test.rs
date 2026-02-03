@@ -1,5 +1,6 @@
 use infiniband_rs::ibverbs::devices::open_device;
 use infiniband_rs::network::Node;
+use infiniband_rs::network::barrier::BarrierAlgorithm;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
@@ -37,6 +38,7 @@ fn main() {
         .pd(&pd)
         .rank(node_config.rankid)
         .world_size(network_config.world_size())
+        .barrier(BarrierAlgorithm::BinaryTree)
         .build()
         .unwrap();
 

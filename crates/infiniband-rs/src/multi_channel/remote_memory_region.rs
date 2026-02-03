@@ -37,4 +37,11 @@ impl PeerRemoteMemoryRegion {
             remote_mr: self.remote_mr.sub_region(offset)?,
         })
     }
+
+    pub fn sub_region_unchecked(&self, offset: usize) -> PeerRemoteMemoryRegion {
+        PeerRemoteMemoryRegion {
+            peer: self.peer,
+            remote_mr: self.remote_mr.sub_region_unchecked(offset),
+        }
+    }
 }

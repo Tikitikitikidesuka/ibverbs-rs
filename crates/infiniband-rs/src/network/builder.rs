@@ -7,7 +7,8 @@ use crate::multi_channel::MultiChannel;
 use crate::multi_channel::builder::PreparedMultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::Node;
-use crate::network::barrier::{CentralizedBarrier, PreparedCentralizedBarrier};
+use crate::network::barrier::centralized::CentralizedBarrier;
+use crate::network::barrier::{BarrierAlgorithm, PreparedBarrier};
 use bon::bon;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -19,6 +20,7 @@ impl Node {
         rank: usize,
         world_size: usize,
         pd: &ProtectionDomain,
+        #[builder(default = BarrierAlgorithm::BinaryTree)] barrier: BarrierAlgorithm,
         #[builder(default =
             AccessFlags::new()
                 .with_local_write()
@@ -56,7 +58,7 @@ impl Node {
             .send_psn(send_psn)
             .recv_psn(recv_psn)
             .build()?;
-        let barrier = CentralizedBarrier::new(pd, rank, world_size)?;
+        let barrier = barrier.instance(&pd, rank, world_size)?;
 
         Ok(PreparedNode {
             rank,
@@ -71,7 +73,7 @@ pub struct PreparedNode {
     rank: usize,
     world_size: usize,
     multi_channel: PreparedMultiChannel,
-    barrier: PreparedCentralizedBarrier,
+    barrier: PreparedBarrier,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
