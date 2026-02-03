@@ -1,4 +1,5 @@
 use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::ibverbs::error::IbvError;
 use infiniband_rs::multi_channel::MultiChannel;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
@@ -38,7 +39,7 @@ fn main() {
 
         s.post_send(PeerSendWorkRequest::new(1, &send_sge))?;
 
-        Ok::<(), io::Error>(())
+        Ok(())
     });
 
     println!("Recv mem after: {recv_mem:?}");

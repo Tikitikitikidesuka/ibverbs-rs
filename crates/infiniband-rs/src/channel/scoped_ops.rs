@@ -1,19 +1,19 @@
-use crate::channel::Channel;
 use crate::channel::polling_scope::*;
+use crate::channel::{Channel, TransportResult};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work_request::*;
 
 impl Channel {
-    pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
+    pub fn scope<'env, F, T>(&'env mut self, f: F) -> Result<T, ScopeError>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> TransportResult<T>,
     {
         PollingScope::run(self, f)
     }
 
-    pub fn manual_scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, E>
+    pub fn manual_scope<'env, F, T>(&'env mut self, f: F) -> TransportResult<T>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> TransportResult<T>,
     {
         PollingScope::run_manual(self, f)
     }

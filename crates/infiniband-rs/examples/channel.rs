@@ -34,7 +34,7 @@ fn main() {
             s.post_receive(ReceiveWorkRequest::new(&mut recv_se))?;
             s.post_send(SendWorkRequest::new(&send_ge))?;
 
-            Ok::<(), IbvError>(())
+            Ok(())
         })
         .unwrap();
 

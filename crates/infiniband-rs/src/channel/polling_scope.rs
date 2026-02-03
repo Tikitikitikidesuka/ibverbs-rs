@@ -1,11 +1,9 @@
 use crate::channel::pending_work::PendingWork;
 use crate::channel::{Channel, TransportError, TransportResult};
 use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::work_error::WorkError;
 use crate::ibverbs::work_request::*;
 use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
-use std::io;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
@@ -18,11 +16,13 @@ use thiserror::Error;
 ///     If auto poll returns io err -> return io err
 ///     If auto poll returns work err -> return work err
 ///     If auto poll returns Ok -> return user closure's Ok(T)
-pub type ScopeResult<T, E> = Result<T, ScopeError<E>>;
+pub type ScopeResult<T> = Result<T, ScopeError>;
 
 #[derive(Debug, Error)]
-pub enum ScopeError<E> {
-    ClosureError(E),
+pub enum ScopeError {
+    #[error("Closure error: {0}")]
+    ClosureError(TransportError),
+    #[error("Auto poll error: {0:?}")]
     AutoPollError(Vec<TransportError>),
 }
 
@@ -75,9 +75,9 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub(crate) fn run<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, ScopeError<E>>
+    pub(crate) fn run<'env, F, T>(inner: &'env mut C, f: F) -> Result<T, ScopeError>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> TransportResult<T>,
     {
         let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.
@@ -101,9 +101,9 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// hast to poll manually any wr, it panics.
     /// If the closure fails, however, the autopoll will be done but not panic and the error of the
     /// closure will be returned.
-    pub(crate) fn run_manual<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
+    pub(crate) fn run_manual<'env, F, T>(inner: &'env mut C, f: F) -> TransportResult<T>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> TransportResult<T>,
     {
         let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.
@@ -192,7 +192,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: SendWorkRequest<'_, 'env>,
     ) -> IbvResult<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = ScopedPendingWork::new(unsafe { channel.send_unpolled(wr)? });
@@ -208,7 +208,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: ReceiveWorkRequest<'_, 'env>,
     ) -> IbvResult<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = ScopedPendingWork::new(unsafe { channel.receive_unpolled(wr)? });
@@ -222,7 +222,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: WriteWorkRequest<'_, 'env>,
     ) -> IbvResult<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = ScopedPendingWork::new(unsafe { channel.write_unpolled(wr)? });
@@ -236,7 +236,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
         wr: ReadWorkRequest<'_, 'env>,
     ) -> IbvResult<ScopedPendingWork<'scope>>
     where
-        F: FnOnce(&mut C) -> io::Result<&mut Channel>,
+        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
     {
         let channel = channel_selector(self.inner)?;
         let wr = ScopedPendingWork::new(unsafe { channel.read_unpolled(wr)? });

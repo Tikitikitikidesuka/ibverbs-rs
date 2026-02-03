@@ -1,6 +1,7 @@
 use crate::channel::Channel;
 use crate::channel::builder::PreparedChannel;
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::QueuePairEndpoint;
 use crate::ibverbs::queue_pair::config::{
@@ -9,7 +10,6 @@ use crate::ibverbs::queue_pair::config::{
 };
 use crate::multi_channel::MultiChannel;
 use bon::bon;
-use std::io;
 
 #[bon]
 impl MultiChannel {
@@ -36,7 +36,7 @@ impl MultiChannel {
         #[builder(default)] mtu: MaximumTransferUnit,
         #[builder(default)] send_psn: PacketSequenceNumber,
         #[builder(default)] recv_psn: PacketSequenceNumber,
-    ) -> io::Result<PreparedMultiChannel> {
+    ) -> IbvResult<PreparedMultiChannel> {
         let channels = (0..num_channels)
             .into_iter()
             .map(|_| {
@@ -57,7 +57,7 @@ impl MultiChannel {
                     .recv_psn(recv_psn)
                     .build()
             })
-            .collect::<Result<_, _>>()?;
+            .collect::<IbvResult<_>>()?;
 
         Ok(PreparedMultiChannel {
             channels,
@@ -76,21 +76,18 @@ impl PreparedMultiChannel {
         self.channels.iter().map(|c| c.endpoint()).collect()
     }
 
-    pub fn handshake<I>(self, endpoints: I) -> io::Result<MultiChannel>
+    pub fn handshake<I>(self, endpoints: I) -> IbvResult<MultiChannel>
     where
         I: IntoIterator<Item = QueuePairEndpoint>,
         I::IntoIter: ExactSizeIterator,
     {
         let endpoints = endpoints.into_iter();
         if self.channels.len() != endpoints.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "expected {} endpoints, got {}",
-                    self.channels.len(),
-                    endpoints.len()
-                ),
-            ));
+            return Err(IbvError::InvalidInput(format!(
+                "Expected {} endpoints but got {}",
+                self.channels.len(),
+                endpoints.len()
+            )));
         }
 
         let channels = self

@@ -51,8 +51,9 @@ fn main() {
             .map(|(peer, sges)| PeerReceiveWorkRequest::new(peer, sges));
 
         // 3. Post
-        s.post_scatter_send(scatter_sends).unwrap();
-        s.post_gather_receive(gather_receives).unwrap();
+        s.post_scatter_send(scatter_sends)?;
+        s.post_gather_receive(gather_receives)?;
+        Ok(())
     });
 
     println!("Recv mem after: {recv_mem:?}");
