@@ -1,3 +1,5 @@
+use crate::channel::{TransportError, TransportResult};
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
@@ -22,8 +24,8 @@ pub enum BarrierError {
     DuplicatePeers,
     #[error("Barrier timeout")]
     Timeout,
-    #[error("Network error: {0}")]
-    NetworkError(#[from] io::Error),
+    #[error("Transport error: {0}")]
+    TransportError(#[from] TransportError),
 }
 
 #[derive(Debug)]
@@ -79,7 +81,7 @@ impl CentralizedBarrier {
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
-    ) -> io::Result<PreparedCentralizedBarrier> {
+    ) -> IbvResult<PreparedCentralizedBarrier> {
         let mut memory = vec![CentralizedBarrierPeerFlags::new(); world_size].into_boxed_slice();
 
         let memory_bytes = memory.as_mut_bytes();
@@ -160,7 +162,11 @@ impl CentralizedBarrier {
     /// To notify a peer:
     /// 1. The local out epoch counter is increased by one.
     /// 2. The local out epoch counter is RDMA written into the peer's in epoch counter.
-    fn notify_peer(&mut self, multi_channel: &mut MultiChannel, peer: usize) -> io::Result<()> {
+    fn notify_peer(
+        &mut self,
+        multi_channel: &mut MultiChannel,
+        peer: usize,
+    ) -> TransportResult<()> {
         // 1. Local epoch counter increased by one
         let current_out_epoch = self.memory[peer].out_epoch.get();
         self.memory[peer].out_epoch.set(current_out_epoch + 1);
@@ -168,11 +174,7 @@ impl CentralizedBarrier {
         // 2. Prepare the RDMA write wr to write the local out epoch counter
         // into the peer's in epoch counter.
         let local_out_epoch_bytes = self.memory[peer].out_epoch.as_bytes();
-        // Unwrap because the bytes are guaranteed to be in the mr and fit in a sge.
-        let local_out_epoch_sges = [self
-            .mr
-            .prepare_gather_element(local_out_epoch_bytes)
-            .unwrap()];
+        let local_out_epoch_sges = [self.mr.gather_element_unchecked(local_out_epoch_bytes)];
         let local_in_epoch_bytes = self.memory[self.rank].in_epoch.as_bytes().as_ptr();
         let in_epoch_bytes_offset = local_in_epoch_bytes as usize - self.memory.as_ptr() as usize;
         let remote_in_epoch_slice = self.remote_mrs[peer]
@@ -196,7 +198,7 @@ impl CentralizedBarrier {
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],
-    ) -> io::Result<()> {
+    ) -> TransportResult<()> {
         // 1. Increment local epochs
         peers.iter().for_each(|&peer| {
             let current_out_epoch = self.memory[peer].out_epoch.get();
@@ -209,10 +211,7 @@ impl CentralizedBarrier {
             .iter()
             .map(|&peer| {
                 let local_out_epoch_bytes = self.memory[peer].out_epoch.as_bytes();
-                [self
-                    .mr
-                    .prepare_gather_element(local_out_epoch_bytes)
-                    .unwrap()]
+                [self.mr.gather_element_unchecked(local_out_epoch_bytes)]
             })
             .collect();
 

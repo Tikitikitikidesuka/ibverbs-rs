@@ -1,10 +1,8 @@
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::QueuePairEndpoint;
-use crate::ibverbs::queue_pair::config::{
-    AckTimeout, MaxAckRetries, MaxRnrRetries, MaximumTransferUnit, MinRnrTimer,
-    PacketSequenceNumber,
-};
+use crate::ibverbs::queue_pair::config::*;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::builder::PreparedMultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
@@ -40,7 +38,7 @@ impl Node {
         #[builder(default)] mtu: MaximumTransferUnit,
         #[builder(default)] send_psn: PacketSequenceNumber,
         #[builder(default)] recv_psn: PacketSequenceNumber,
-    ) -> io::Result<PreparedNode> {
+    ) -> IbvResult<PreparedNode> {
         let multi_channel = MultiChannel::builder()
             .num_channels(world_size)
             .pd(pd)
@@ -165,7 +163,7 @@ impl PreparedNode {
         Ok(RemoteEndpoints(in_endpoints.into_boxed_slice()))
     }
 
-    pub fn handshake(self, endpoints: RemoteEndpoints) -> io::Result<Node> {
+    pub fn handshake(self, endpoints: RemoteEndpoints) -> IbvResult<Node> {
         let multi_channel = self
             .multi_channel
             .handshake(endpoints.0.iter().map(|e| e.single_channel_endpoint))?;

@@ -56,12 +56,12 @@ fn main() {
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 1,
-                &mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[0..4]).unwrap()],
             ))
             .unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 2,
-                &mut [mr.prepare_scatter_element(&mut mem[4..8]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[4..8]).unwrap()],
             ))
             .unwrap();
             println!("Mem after: {mem:?}");
@@ -71,7 +71,7 @@ fn main() {
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.send(PeerSendWorkRequest::new(
                 0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
+                &[mr.gather_element(&mem).unwrap()],
             ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }
@@ -80,7 +80,7 @@ fn main() {
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.send(PeerSendWorkRequest::new(
                 0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
+                &[mr.gather_element(&mem).unwrap()],
             ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }
