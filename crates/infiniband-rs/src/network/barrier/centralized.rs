@@ -122,6 +122,7 @@ impl CentralizedBarrier {
                     self.poisoned = true;
                     error
                 })?;
+            self.barrier_mr.increase_peer_expected_epoch(leader);
             self.barrier_mr
                 .spin_poll_peer_epoch_expected(leader, start_time, timeout)
                 .map_err(|error| {
