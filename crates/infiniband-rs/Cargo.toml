@@ -5,9 +5,6 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
-[profile.release]
-codegen-units = 1
-lto = "fat"
 
 [dependencies]
 ibverbs-sys = "0.3.2"

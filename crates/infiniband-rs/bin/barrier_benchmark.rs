@@ -4,15 +4,19 @@ use infiniband_rs::network::Node;
 use infiniband_rs::network::barrier::BarrierAlgorithm;
 use infiniband_rs::network::config::RawNetworkConfig;
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
-use log::LevelFilter::Debug;
-use simple_logger::SimpleLogger;
 use std::fs;
 use std::time::{Duration, Instant};
 
 fn main() {
-    SimpleLogger::new().with_level(Debug).init().unwrap();
-
     let args = Args::parse();
+
+    let algorithm = format!("{:?}", args.algorithm).to_lowercase();
+    let world_size = args.world_size;
+    let sample_iters = args.sample_iters;
+
+    println!(
+        "barrier_benchmark[algorithm={algorithm},world_size={world_size},sample_iters={sample_iters}]",
+    );
 
     let json_network = fs::read_to_string(&args.config_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
@@ -70,7 +74,7 @@ fn benchmark(node: &mut Node, args: &Args) {
 
     let elapsed = start.elapsed();
     let nanos_for_barrier = elapsed.as_nanos() / args.sample_iters as u128;
-    println!("[{}] -> Barrier in {} ns", node.rank(), nanos_for_barrier);
+    println!("{} ns/barrier", nanos_for_barrier);
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
