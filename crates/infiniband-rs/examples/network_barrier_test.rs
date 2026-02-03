@@ -38,7 +38,7 @@ fn main() {
         .pd(&pd)
         .rank(node_config.rankid)
         .world_size(network_config.world_size())
-        .barrier(BarrierAlgorithm::BinaryTree)
+        .barrier(BarrierAlgorithm::Centralized)
         .build()
         .unwrap();
 

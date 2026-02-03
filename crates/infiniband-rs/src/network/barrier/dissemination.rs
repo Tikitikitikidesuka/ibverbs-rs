@@ -69,6 +69,23 @@ impl DisseminationBarrier {
         peers: &[usize],
         timeout: Duration,
     ) -> Result<(), BarrierError> {
+        if self.poisoned {
+            return Err(BarrierError::Poisoned);
+        }
+
+        let result = self.run_barrier(multi_channel, peers, timeout);
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
+    }
+
+    pub fn run_barrier(
+        &mut self,
+        multi_channel: &mut MultiChannel,
+        peers: &[usize],
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
         if peers.len() < 2 {
             return Ok(());
         }

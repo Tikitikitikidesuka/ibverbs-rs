@@ -64,8 +64,25 @@ impl BinaryTreeBarrier {
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
-    /// Assumes peers are ordered, non repeating and self is in the group
     pub fn barrier_unchecked(
+        &mut self,
+        multi_channel: &mut MultiChannel,
+        peers: &[usize],
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        if self.poisoned {
+            return Err(BarrierError::Poisoned);
+        }
+
+        let result = self.run_barrier(multi_channel, peers, timeout);
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
+    }
+
+    /// Assumes peers are ordered, non repeating and self is in the group
+    pub fn run_barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],
