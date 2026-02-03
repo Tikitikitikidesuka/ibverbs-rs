@@ -52,23 +52,28 @@ fn main() {
 
     let mut node = node.handshake(remote_endpoints).unwrap();
 
-    println!("Press a key...");
-    std::io::stdin().read(&mut []).expect("Failed to read line");
-    match node.rank() {
-        0 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
+    for i in 0..3 {
+        println!("Press enter...");
+        let mut buffer = String::new();
+        std::io::stdin().read_line(&mut buffer).expect("Failed to read line");
+        println!("Barrier start!");
+        match node.rank() {
+            0 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            1 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            2 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            _ => {
+                println!("Invalid rank: {rank}");
+            }
         }
-        1 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
-        }
-        2 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
-        }
-        _ => {
-            println!("Invalid rank: {rank}");
-        }
+        println!("Barrier end!");
     }
 }

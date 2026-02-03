@@ -12,7 +12,7 @@ use zerocopy::network_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[derive(Debug)]
-pub struct BarrierMem {
+pub struct BarrierMr {
     rank: usize,
     memory: Box<[BarrierPeerFlags]>,
     mr: MemoryRegion,
@@ -20,7 +20,7 @@ pub struct BarrierMem {
 }
 
 #[derive(Debug)]
-pub struct PreparedBarrierMem {
+pub struct PreparedBarrierMr {
     rank: usize,
     memory: Box<[BarrierPeerFlags]>,
     mr: MemoryRegion,
@@ -29,26 +29,28 @@ pub struct PreparedBarrierMem {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, FromBytes, IntoBytes, Immutable, KnownLayout)]
 struct BarrierPeerFlags {
-    in_epoch: U64,
+    expected_in_epoch: u64, // Only written and read locally
     out_epoch: U64,
+    in_epoch: U64,
 }
 
 impl BarrierPeerFlags {
     pub fn new() -> Self {
         Self {
+            expected_in_epoch: 0,
             in_epoch: U64::new(0),
             out_epoch: U64::new(0),
         }
     }
 }
 
-impl PreparedBarrierMem {
+impl PreparedBarrierMr {
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         PeerRemoteMemoryRegion::new(self.rank, self.mr.remote())
     }
 
-    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BarrierMem {
-        BarrierMem {
+    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BarrierMr {
+        BarrierMr {
             rank: self.rank,
             memory: self.memory,
             mr: self.mr,
@@ -57,20 +59,20 @@ impl PreparedBarrierMem {
     }
 }
 
-impl BarrierMem {
+impl BarrierMr {
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
-    ) -> IbvResult<PreparedBarrierMem> {
+    ) -> IbvResult<PreparedBarrierMr> {
         let mut memory = vec![BarrierPeerFlags::new(); world_size].into_boxed_slice();
         let memory_bytes = memory.as_mut_bytes();
         let mr = unsafe { pd.register_shared_mr(memory_bytes.as_mut_ptr(), memory_bytes.len())? };
-        Ok(PreparedBarrierMem { rank, memory, mr })
+        Ok(PreparedBarrierMr { rank, memory, mr })
     }
 }
 
-impl BarrierMem {
+impl BarrierMr {
     // Increases local epoch and writes it to peer
     pub fn notify_peer(
         &mut self,
@@ -127,7 +129,7 @@ impl BarrierMem {
 
     const TIMEOUT_CHECK_ITERS: u32 = 1 << 16;
 
-    pub fn spin_poll_peer_same_epoch(
+    pub fn spin_poll_peer_epoch_expected(
         &mut self,
         peer: usize,
         start_time: Instant,
@@ -136,7 +138,7 @@ impl BarrierMem {
         let mut iter = 0u32;
 
         loop {
-            if self.is_epoch_same(peer) {
+            if self.is_peer_epoch_expected(peer) {
                 return Ok(());
             }
 
@@ -150,36 +152,12 @@ impl BarrierMem {
         }
     }
 
-    pub fn spin_poll_peer_epoch_ahead(
-        &mut self,
-        peer: usize,
-        start_time: Instant,
-        timeout: Duration,
-    ) -> Result<(), BarrierError> {
-        let mut iter = 0u32;
-
-        loop {
-            if self.is_peer_epoch_ahead(peer) {
-                return Ok(());
-            }
-
-            iter += 1;
-            if iter >= Self::TIMEOUT_CHECK_ITERS {
-                iter = 0;
-                if start_time.elapsed() > timeout {
-                    return Err(BarrierError::Timeout);
-                }
-            }
-        }
+    pub fn increase_peer_expected_epoch(&mut self, peer: usize) {
+        self.memory[peer].expected_in_epoch += 1;
     }
 
-    fn is_epoch_same(&self, peer: usize) -> bool {
+    pub fn is_peer_epoch_expected(&mut self, peer: usize) -> bool {
         unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
-            == self.memory[peer].out_epoch.get()
-    }
-
-    fn is_peer_epoch_ahead(&self, peer: usize) -> bool {
-        unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
-            > self.memory[peer].out_epoch.get()
+            == self.memory[peer].expected_in_epoch
     }
 }

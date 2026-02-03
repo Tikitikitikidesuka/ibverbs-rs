@@ -1,36 +1,33 @@
 use crate::ibverbs::error::IbvResult;
-use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::barrier::BarrierError;
-use crate::network::barrier::memory::{BarrierMem, PreparedBarrierMem};
+use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
-use zerocopy::network_endian::U64;
-use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[derive(Debug)]
 pub struct BinaryTreeBarrier {
     rank: usize,
-    mem: BarrierMem,
+    barrier_mr: BarrierMr,
     poisoned: bool,
 }
 
 #[derive(Debug)]
 pub struct PreparedBinaryTreeBarrier {
     rank: usize,
-    mem: PreparedBarrierMem,
+    barrier_mr: PreparedBarrierMr,
 }
 
 impl PreparedBinaryTreeBarrier {
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
-        self.mem.remote()
+        self.barrier_mr.remote()
     }
 
     pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BinaryTreeBarrier {
         BinaryTreeBarrier {
             rank: self.rank,
-            mem: self.mem.link_remote(remote_mrs),
+            barrier_mr: self.barrier_mr.link_remote(remote_mrs),
             poisoned: false,
         }
     }
@@ -44,7 +41,7 @@ impl BinaryTreeBarrier {
     ) -> IbvResult<PreparedBinaryTreeBarrier> {
         Ok(PreparedBinaryTreeBarrier {
             rank,
-            mem: BarrierMem::new(pd, rank, world_size)?,
+            barrier_mr: BarrierMr::new(pd, rank, world_size)?,
         })
     }
 }
@@ -99,22 +96,23 @@ impl BinaryTreeBarrier {
         // 1. Notify upwards
         // 1.1 Wait for children
         for &child_rank in children_ranks {
-            self.mem
-                .spin_poll_peer_epoch_ahead(child_rank, start_time, timeout)?;
+            self.barrier_mr.increase_peer_expected_epoch(child_rank);
+            self.barrier_mr
+                .spin_poll_peer_epoch_expected(child_rank, start_time, timeout)?;
         }
         // 1.2 Notify parent
         if let Some(parent_rank) = parent_rank {
-            self.mem.notify_peer(multi_channel, parent_rank)?;
+            self.barrier_mr.notify_peer(multi_channel, parent_rank)?;
         }
 
         // 2. Notify downwards
         // 2.1 Wait for parent
         if let Some(parent_rank) = parent_rank {
-            self.mem
-                .spin_poll_peer_same_epoch(parent_rank, start_time, timeout)?;
+            self.barrier_mr
+                .spin_poll_peer_epoch_expected(parent_rank, start_time, timeout)?;
         }
         //2.2 Notify children
-        self.mem
+        self.barrier_mr
             .scatter_notify_peers(multi_channel, children_ranks)?;
 
         Ok(())

@@ -5,11 +5,13 @@ use crate::multi_channel::MultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::barrier::binary_tree::{BinaryTreeBarrier, PreparedBinaryTreeBarrier};
 use crate::network::barrier::centralized::{CentralizedBarrier, PreparedCentralizedBarrier};
+use crate::network::barrier::dissemination::{DisseminationBarrier, PreparedDisseminationBarrier};
 use std::time::Duration;
 use thiserror::Error;
 
 pub mod binary_tree;
 pub mod centralized;
+pub mod dissemination;
 mod memory;
 
 #[derive(Debug, Error)]
@@ -32,6 +34,7 @@ pub enum BarrierError {
 pub enum BarrierAlgorithm {
     Centralized,
     BinaryTree,
+    Dissemination,
 }
 
 impl BarrierAlgorithm {
@@ -44,6 +47,7 @@ impl BarrierAlgorithm {
         match self {
             BarrierAlgorithm::Centralized => Barrier::new_centralized(pd, rank, world_size),
             BarrierAlgorithm::BinaryTree => Barrier::new_binary_tree(pd, rank, world_size),
+            BarrierAlgorithm::Dissemination => Barrier::new_dissemination(pd, rank, world_size),
         }
     }
 }
@@ -52,6 +56,7 @@ impl BarrierAlgorithm {
 pub enum Barrier {
     Centralized(CentralizedBarrier),
     BinaryTree(BinaryTreeBarrier),
+    Dissemination(DisseminationBarrier),
 }
 
 impl Barrier {
@@ -75,6 +80,16 @@ impl Barrier {
         )?))
     }
 
+    pub fn new_dissemination(
+        pd: &ProtectionDomain,
+        rank: usize,
+        world_size: usize,
+    ) -> IbvResult<PreparedBarrier> {
+        Ok(PreparedBarrier::Dissemination(DisseminationBarrier::new(
+            pd, rank, world_size,
+        )?))
+    }
+
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -84,6 +99,7 @@ impl Barrier {
         match self {
             Barrier::Centralized(b) => b.barrier(multi_channel, peers, timeout),
             Barrier::BinaryTree(b) => b.barrier(multi_channel, peers, timeout),
+            Barrier::Dissemination(b) => b.barrier(multi_channel, peers, timeout),
         }
     }
 
@@ -97,6 +113,7 @@ impl Barrier {
         match self {
             Barrier::Centralized(b) => b.barrier_unchecked(multi_channel, peers, timeout),
             Barrier::BinaryTree(b) => b.barrier_unchecked(multi_channel, peers, timeout),
+            Barrier::Dissemination(b) => b.barrier_unchecked(multi_channel, peers, timeout),
         }
     }
 }
@@ -105,6 +122,7 @@ impl Barrier {
 pub enum PreparedBarrier {
     Centralized(PreparedCentralizedBarrier),
     BinaryTree(PreparedBinaryTreeBarrier),
+    Dissemination(PreparedDisseminationBarrier),
 }
 
 impl PreparedBarrier {
@@ -112,6 +130,7 @@ impl PreparedBarrier {
         match self {
             PreparedBarrier::Centralized(p) => p.remote(),
             PreparedBarrier::BinaryTree(p) => p.remote(),
+            PreparedBarrier::Dissemination(p) => p.remote(),
         }
     }
 
@@ -119,6 +138,7 @@ impl PreparedBarrier {
         match self {
             PreparedBarrier::Centralized(p) => Barrier::Centralized(p.link_remote(remote_mrs)),
             PreparedBarrier::BinaryTree(p) => Barrier::BinaryTree(p.link_remote(remote_mrs)),
+            PreparedBarrier::Dissemination(p) => Barrier::Dissemination(p.link_remote(remote_mrs)),
         }
     }
 }

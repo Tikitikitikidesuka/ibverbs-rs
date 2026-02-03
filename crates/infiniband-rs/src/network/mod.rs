@@ -6,7 +6,6 @@ pub mod tcp_exchanger;
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
-use crate::network::barrier::centralized::CentralizedBarrier;
 use crate::network::barrier::{Barrier, BarrierError};
 use crate::network::builder::NodeBuilder;
 use crate::network::builder::node_builder::SetPd;

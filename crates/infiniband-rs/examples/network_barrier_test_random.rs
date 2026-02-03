@@ -8,6 +8,7 @@ use simple_logger::SimpleLogger;
 use std::io::Read;
 use std::time::Duration;
 use std::{env, fs, process, thread};
+use infiniband_rs::network::barrier::BarrierAlgorithm;
 
 fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
@@ -37,6 +38,7 @@ fn main() {
     let node = Node::builder()
         .pd(&pd)
         .rank(node_config.rankid)
+        .barrier(BarrierAlgorithm::Dissemination)
         .world_size(network_config.world_size())
         .build()
         .unwrap();

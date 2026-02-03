@@ -7,25 +7,25 @@ use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
-pub struct CentralizedBarrier {
+pub struct DisseminationBarrier {
     rank: usize,
     barrier_mr: BarrierMr,
     poisoned: bool,
 }
 
 #[derive(Debug)]
-pub struct PreparedCentralizedBarrier {
+pub struct PreparedDisseminationBarrier {
     rank: usize,
     barrier_mr: PreparedBarrierMr,
 }
 
-impl PreparedCentralizedBarrier {
+impl PreparedDisseminationBarrier {
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
     }
 
-    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> CentralizedBarrier {
-        CentralizedBarrier {
+    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> DisseminationBarrier {
+        DisseminationBarrier {
             rank: self.rank,
             barrier_mr: self.barrier_mr.link_remote(remote_mrs),
             poisoned: false,
@@ -33,13 +33,13 @@ impl PreparedCentralizedBarrier {
     }
 }
 
-impl CentralizedBarrier {
+impl DisseminationBarrier {
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
-    ) -> IbvResult<PreparedCentralizedBarrier> {
-        Ok(PreparedCentralizedBarrier {
+    ) -> IbvResult<PreparedDisseminationBarrier> {
+        Ok(PreparedDisseminationBarrier {
             rank,
             barrier_mr: BarrierMr::new(pd, rank, world_size)?,
         })
@@ -59,10 +59,6 @@ impl CentralizedBarrier {
             return Err(BarrierError::DuplicatePeers);
         }
 
-        peers
-            .binary_search(&self.rank)
-            .map_err(|_| BarrierError::SelfNotInGroup)?;
-
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
@@ -79,38 +75,29 @@ impl CentralizedBarrier {
 
         let start_time = Instant::now();
 
-        let leader = peers[0];
+        let idx = peers
+            .binary_search(&self.rank)
+            .map_err(|_| BarrierError::SelfNotInGroup)?;
 
-        if self.rank == leader {
-            for &peer in &peers[1..] {
-                self.barrier_mr.increase_peer_expected_epoch(peer);
-                self.barrier_mr
-                    .spin_poll_peer_epoch_expected(peer, start_time, timeout)
-                    .map_err(|error| {
-                        self.poisoned = true;
-                        error
-                    })?;
-            }
+        let len = peers.len();
+        let mut distance = 1;
+
+        while distance < len {
+            let right_idx = (idx + distance) % len;
+            let left_idx = (idx + len - (distance % len)) % len;
+
+            let right_rank = peers[right_idx];
+            let left_rank = peers[left_idx];
+
+            // 1. Notify the peer to the right
+            self.barrier_mr.notify_peer(multi_channel, right_rank)?;
+
+            // 2. Wait for the peer to the left
+            self.barrier_mr.increase_peer_expected_epoch(left_rank);
             self.barrier_mr
-                .scatter_notify_peers(multi_channel, &peers[1..])
-                .map_err(|error| {
-                    self.poisoned = true;
-                    error
-                })?;
-        } else {
-            // If notify leader fails the resulting state is
-            self.barrier_mr
-                .notify_peer(multi_channel, leader)
-                .map_err(|error| {
-                    self.poisoned = true;
-                    error
-                })?;
-            self.barrier_mr
-                .spin_poll_peer_epoch_expected(leader, start_time, timeout)
-                .map_err(|error| {
-                    self.poisoned = true;
-                    error
-                })?;
+                .spin_poll_peer_epoch_expected(left_rank, start_time, timeout)?;
+
+            distance *= 2;
         }
 
         Ok(())
