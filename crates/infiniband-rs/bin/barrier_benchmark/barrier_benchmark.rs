@@ -43,13 +43,9 @@ fn main() {
 
     let endpoint = node.endpoint();
 
-    let remote_endpoints = Exchanger::await_exchange_all(
-        rank,
-        &network_config,
-        &endpoint,
-        &ExchangeConfig::default(),
-    )
-    .unwrap();
+    let remote_endpoints =
+        Exchanger::await_exchange_all(rank, &network_config, &endpoint, &ExchangeConfig::default())
+            .unwrap();
 
     let remote_endpoints = node.gather_endpoints(remote_endpoints).unwrap();
 
@@ -74,11 +70,13 @@ fn benchmark(node: &mut Node, args: &Args) {
     // 1. Warmup: Run unmeasured iterations to warm up instruction cache / branch predictors
     // and resolve any lazy network state.
     for _ in 0..100 {
-        node.barrier(&peers, Duration::from_millis(10000)).unwrap();
+        node.barrier_unchecked(&peers, Duration::from_millis(10000))
+            .unwrap();
     }
 
     // 2. Coordinated Start: Ensure all nodes are ready to start the timer together.
-    node.barrier(&peers, Duration::from_secs(5)).unwrap();
+    node.barrier_unchecked(&peers, Duration::from_secs(5))
+        .unwrap();
 
     let start = Instant::now();
 
