@@ -125,7 +125,7 @@ impl MultiEventPacket {
     pub fn get_odin_mfp(&self) -> &MultiFragmentPacket {
         // As MFPs are sorted by source id, the odin mfp is first.
         let mfp = self.get_mfp(0).expect("odin mfp exists");
-        assert!(mfp.source_id().is_odin());
+        assert!(mfp.source_id().is_odin(), "expect first mfp to be odin mfp");
         mfp
     }
 
