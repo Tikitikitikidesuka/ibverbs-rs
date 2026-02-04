@@ -4,44 +4,47 @@ use infiniband_rs::network::Node;
 use infiniband_rs::network::barrier::BarrierAlgorithm;
 use infiniband_rs::network::config::RawNetworkConfig;
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
+use rand::Rng;
 use std::fs;
 use std::time::{Duration, Instant};
 
 fn main() {
     let args = Args::parse();
 
-    let algorithm = format!("{:?}", args.algorithm).to_lowercase();
+    let rank = args.rank;
+    let algorithm: BarrierAlgorithm = args.algorithm.into();
+    let algorithm_str = format!("{:?}", args.algorithm).to_lowercase();
     let world_size = args.world_size;
     let sample_iters = args.sample_iters;
 
     println!(
-        "barrier_benchmark[algorithm={algorithm},world_size={world_size},sample_iters={sample_iters}]",
+        "[{rank}] -> barrier_benchmark[algorithm={algorithm_str},world_size={world_size},sample_iters={sample_iters}]",
     );
 
     let json_network = fs::read_to_string(&args.config_file).unwrap();
     let network_config = serde_json::from_str::<RawNetworkConfig>(&json_network)
         .unwrap()
-        .truncate(args.world_size)
+        .truncate(world_size)
         .build()
         .unwrap();
 
-    let node_config = network_config.get(args.rank).unwrap();
+    let node_config = network_config.get(rank).unwrap();
 
     let ctx = open_device(&node_config.ibdev).unwrap();
     let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
         .pd(&pd)
-        .rank(args.rank)
-        .world_size(args.world_size)
-        .barrier(args.algorithm.into())
+        .rank(rank)
+        .world_size(world_size)
+        .barrier(algorithm)
         .build()
         .unwrap();
 
     let endpoint = node.endpoint();
 
     let remote_endpoints = Exchanger::await_exchange_all(
-        args.rank,
+        rank,
         &network_config,
         &endpoint,
         &ExchangeConfig::default(),
@@ -64,17 +67,40 @@ fn main() {
 }
 
 fn benchmark(node: &mut Node, args: &Args) {
+    let peers = (0..node.world_size()).collect::<Vec<_>>();
+    let mut latencies = Vec::with_capacity(args.sample_iters);
+    let mut rng = rand::rng();
+
+    // 1. Warmup: Run unmeasured iterations to warm up instruction cache / branch predictors
+    // and resolve any lazy network state.
+    for _ in 0..100 {
+        node.barrier(&peers, Duration::from_millis(10000)).unwrap();
+    }
+
+    // 2. Coordinated Start: Ensure all nodes are ready to start the timer together.
+    node.barrier(&peers, Duration::from_secs(5)).unwrap();
+
     let start = Instant::now();
 
-    let peers = (0..node.world_size()).collect::<Vec<_>>();
+    for _ in 0..args.sample_iters {
+        // 3. Jitter Injection: Simulate computation imbalance.
+        // Without this, nodes naturally synchronize into a lockstep "wave" that
+        // artificially inflates performance.
+        if args.jitter_ns > 0 {
+            let delay: u64 = rng.random_range(0..args.jitter_ns);
+            if delay > 0 {
+                std::thread::sleep(Duration::from_nanos(delay));
+            }
+        }
 
-    for i in 0..args.sample_iters {
-        node.barrier(&peers, Duration::from_millis(2000)).unwrap()
+        let iter_start = Instant::now();
+        node.barrier(&peers, Duration::from_millis(1000)).unwrap();
+        latencies.push(iter_start.elapsed());
     }
 
     let elapsed = start.elapsed();
     let nanos_for_barrier = elapsed.as_nanos() / args.sample_iters as u128;
-    println!("{} ns/barrier", nanos_for_barrier);
+    println!("[{}] -> {} ns", args.rank, nanos_for_barrier);
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -103,6 +129,8 @@ struct Args {
     rank: usize,
     #[arg(short, long)]
     world_size: usize,
+    #[arg(long, default_value_t = 1024)]
+    jitter_ns: u64,
     #[arg(short, long)]
     sample_iters: usize,
     #[arg(short, long)]

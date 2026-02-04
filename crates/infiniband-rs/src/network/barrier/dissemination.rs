@@ -101,7 +101,7 @@ impl DisseminationBarrier {
 
         while distance < len {
             let right_idx = (idx + distance) % len;
-            let left_idx = (idx + len - (distance % len)) % len;
+            let left_idx = (idx + len - distance) % len;
 
             let right_rank = peers[right_idx];
             let left_rank = peers[left_idx];
