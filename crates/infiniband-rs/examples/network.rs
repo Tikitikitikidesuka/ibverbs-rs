@@ -1,8 +1,5 @@
-use infiniband_rs::channel::multi_channel::work_request::{
-    PeerReceiveWorkRequest, PeerSendWorkRequest,
-};
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
+use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use infiniband_rs::network::Node;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
@@ -33,9 +30,10 @@ fn main() {
     let node_config: &NodeConfig = network_config.get(rank).unwrap();
 
     let ctx = open_device(&node_config.ibdev).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
-        .context(&ctx)
+        .pd(&pd)
         .rank(node_config.rankid)
         .world_size(network_config.world_size())
         .build()
@@ -55,34 +53,34 @@ fn main() {
         0 => {
             let mut mem = [0u8; 8];
             println!("Mem before: {mem:?}");
-            let mr = node.register_local_mr(&mut mem).unwrap();
+            let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 1,
-                &mut [mr.prepare_scatter_element(&mut mem[0..4]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[0..4]).unwrap()],
             ))
             .unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 2,
-                &mut [mr.prepare_scatter_element(&mut mem[4..8]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[4..8]).unwrap()],
             ))
             .unwrap();
             println!("Mem after: {mem:?}");
         }
         1 => {
-            let mut mem = [1u8; 4];
-            let mr = node.register_local_mr(&mut mem).unwrap();
+            let mem = [1u8; 4];
+            let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.send(PeerSendWorkRequest::new(
                 0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
+                &[mr.gather_element(&mem).unwrap()],
             ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }
         2 => {
-            let mut mem = [2u8; 4];
-            let mr = node.register_local_mr(&mut mem).unwrap();
+            let mem = [2u8; 4];
+            let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.send(PeerSendWorkRequest::new(
                 0,
-                &[mr.prepare_gather_element(&mem).unwrap()],
+                &[mr.gather_element(&mem).unwrap()],
             ))
             .unwrap_or_else(|e| panic!("Error: {e}"));
         }

@@ -1,15 +1,14 @@
-use crate::ibverbs::protection_domain::ProtectionDomainInner;
+use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::error::{IbvError, IbvResult};
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use crate::ibverbs::scatter_gather_element::{
-    GatherElement, ScatterElement, ScatterGatherElementError,
-};
+use crate::ibverbs::scatter_gather_element::*;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
-use std::sync::Arc;
 
 pub struct MemoryRegion {
-    pd: Arc<ProtectionDomainInner>,
+    pd: ProtectionDomain,
     mr: *mut ibv_mr,
 }
 
@@ -18,22 +17,18 @@ unsafe impl Send for MemoryRegion {}
 
 impl Drop for MemoryRegion {
     fn drop(&mut self) {
-        log::debug!("IbvMemoryRegion deregistered");
-        let mr = self.mr;
+        log::debug!("MemoryRegion deregistered");
         let errno = unsafe { ibv_dereg_mr(self.mr) };
         if errno != 0 {
-            let debug_text = format!("{:?}", self);
-            let e = io::Error::from_raw_os_error(errno);
-            log::error!(
-                "({debug_text}) -> Failed to deregister memory region with `ibv_dereg_mr({mr:p})`: {e}"
-            );
+            let error = IbvError::from_errno_with_msg(errno, "Failed to deregister memory region");
+            log::error!("{error}");
         }
     }
 }
 
 impl std::fmt::Debug for MemoryRegion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IbvMemoryRegion")
+        f.debug_struct("MemoryRegion")
             .field("address", &(unsafe { (*self.mr).addr }))
             .field("length", &(unsafe { (*self.mr).length }))
             .field("handle", &(unsafe { (*self.mr).handle }))
@@ -45,24 +40,67 @@ impl std::fmt::Debug for MemoryRegion {
 }
 
 impl MemoryRegion {
-    /// # Safety -> This is safe because the memory region cannot be used in any ops without
-    /// first preparing a scatter gather element which take references of the corresponding memory
-    /// meaning the mr cannot be used unless its backing memory is still allocated.
+    /// # Safety
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
     /// It is also safe to pass a non owned memory region, it gets detected by the hardware
     /// and returned as an error.
-    pub(super) fn register_with_permissions(
-        pd: Arc<ProtectionDomainInner>,
+    pub unsafe fn register_with_permissions(
+        pd: &ProtectionDomain,
         address: *mut u8,
         length: usize,
-        access_flags: ibv_access_flags,
-    ) -> io::Result<MemoryRegion> {
-        let mr =
-            unsafe { ibv_reg_mr(pd.pd, address as *mut c_void, length, access_flags.0 as i32) };
+        access_flags: AccessFlags,
+    ) -> IbvResult<MemoryRegion> {
+        let mr = unsafe {
+            ibv_reg_mr(
+                pd.inner.pd,
+                address as *mut c_void,
+                length,
+                access_flags.code() as i32,
+            )
+        };
         if mr.is_null() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to register memory region",
+            ))
         } else {
-            log::debug!("IbvMemoryRegion registered");
-            Ok(MemoryRegion { pd, mr })
+            log::debug!("MemoryRegion registered");
+            Ok(MemoryRegion { pd: pd.clone(), mr })
+        }
+    }
+
+    pub fn register_local_mr(
+        pd: &ProtectionDomain,
+        address: *mut u8,
+        length: usize,
+    ) -> IbvResult<MemoryRegion> {
+        unsafe {
+            Self::register_with_permissions(
+                pd,
+                address,
+                length,
+                AccessFlags::new().with_local_write(),
+            )
+        }
+    }
+
+    pub unsafe fn register_shared_mr(
+        pd: &ProtectionDomain,
+        address: *mut u8,
+        length: usize,
+    ) -> IbvResult<MemoryRegion> {
+        unsafe {
+            Self::register_with_permissions(
+                pd,
+                address,
+                length,
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write(),
+            )
         }
     }
 
@@ -74,28 +112,83 @@ impl MemoryRegion {
     /// * `iova` - The argument iova specifies the virtual base address of the MR when accessed through a lkey or rkey.
     ///   Note: `iova` must have the same page offset as `offset`
     ///
-    /// # Safety -> This is safe because the memory region cannot be used in any ops without
-    /// first preparing a scatter gather element which take references of the corresponding memory
-    /// meaning the mr cannot be used unless its backing memory is still allocated.
-    pub(super) fn register_dmabuf(
-        pd: Arc<ProtectionDomainInner>,
+    /// # Safety
+    /// If the memory region registered has remote write access the memory can be DMA aliased mutably
+    /// by remote peers. It can change at any point so Rust aliasing rules on the memory must be enforced
+    /// manually by the user.
+    pub unsafe fn register_dmabuf(
+        pd: &ProtectionDomain,
         fd: i32,
         offset: u64,
         length: usize,
         iova: u64,
-        access_flags: ibv_access_flags,
-    ) -> io::Result<MemoryRegion> {
-        let mr =
-            unsafe { ibv_reg_dmabuf_mr(pd.pd, offset, length, iova, fd, access_flags.0 as i32) };
+        access_flags: AccessFlags,
+    ) -> IbvResult<MemoryRegion> {
+        let mr = unsafe {
+            ibv_reg_dmabuf_mr(
+                pd.inner.pd,
+                offset,
+                length,
+                iova,
+                fd,
+                access_flags.code() as i32,
+            )
+        };
 
         if mr.is_null() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "Failed to register memory region",
+            ))
         } else {
             log::debug!("IbvMemoryRegion registered");
-            Ok(MemoryRegion { pd, mr })
+            Ok(MemoryRegion { pd: pd.clone(), mr })
         }
     }
 
+    pub fn register_local_dmabuf(
+        pd: &ProtectionDomain,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> IbvResult<MemoryRegion> {
+        unsafe {
+            Self::register_dmabuf(
+                pd,
+                fd,
+                offset,
+                length,
+                iova,
+                AccessFlags::new().with_local_write(),
+            )
+        }
+    }
+
+    pub unsafe fn register_shared_dmabuf(
+        pd: &ProtectionDomain,
+        fd: i32,
+        offset: u64,
+        length: usize,
+        iova: u64,
+    ) -> IbvResult<MemoryRegion> {
+        unsafe {
+            Self::register_dmabuf(
+                pd,
+                fd,
+                offset,
+                length,
+                iova,
+                AccessFlags::new()
+                    .with_local_write()
+                    .with_remote_read()
+                    .with_remote_write(),
+            )
+        }
+    }
+}
+
+impl MemoryRegion {
     pub fn rkey(&self) -> u32 {
         unsafe { *self.mr }.rkey
     }
@@ -118,25 +211,37 @@ impl MemoryRegion {
 }
 
 impl MemoryRegion {
-    pub fn prepare_gather_element<'a>(
+    pub fn gather_element<'a>(
         &'a self,
         data: &'a [u8],
     ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
         GatherElement::<'a>::new(self, data)
     }
 
-    pub fn prepare_scatter_element<'a>(
+    pub fn gather_element_unchecked<'a>(&'a self, data: &'a [u8]) -> GatherElement<'a> {
+        GatherElement::<'a>::new_unchecked(self, data)
+    }
+
+    pub fn scatter_element<'a>(
         &'a self,
         data: &'a mut [u8],
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
         ScatterElement::<'a>::new(self, data)
     }
 
-    pub fn encloses(&self, slice: &[u8]) -> bool {
+    pub fn scatter_element_unchecked<'a>(&'a self, data: &'a mut [u8]) -> ScatterElement<'a> {
+        ScatterElement::<'a>::new_unchecked(self, data)
+    }
+
+    pub fn encloses(&self, address: *const u8, length: usize) -> bool {
         let mr_start = self.address() as usize;
         let mr_end = mr_start + self.length();
-        let data_start = slice.as_ptr() as usize;
-        let data_end = data_start + slice.len();
+        let data_start = address as usize;
+        let data_end = data_start + length;
         data_start >= mr_start && data_end <= mr_end
+    }
+
+    pub fn encloses_slice(&self, slice: &[u8]) -> bool {
+        self.encloses(slice.as_ptr(), slice.len())
     }
 }

@@ -60,6 +60,16 @@ impl RemoteMemoryRegion {
             rkey: self.rkey,
         })
     }
+
+    /// Same as `sub_region` but does not check remote memory region boundaries.
+    /// Safe because rdma operations will fail due to hardware protection errors.
+    pub fn sub_region_unchecked(&self, offset: usize) -> RemoteMemoryRegion {
+        RemoteMemoryRegion {
+            addr: self.addr + offset as u64,
+            length: self.length - offset,
+            rkey: self.rkey,
+        }
+    }
 }
 
 /// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
@@ -83,6 +93,15 @@ impl RemoteMemoryRegion {
 /// ```
 #[macro_export]
 macro_rules! remote_array_field {
+    ($mr:expr, $T:ty, $index:expr) => {{
+        let type_size = std::mem::size_of::<$T>();
+        let offset = $index * type_size;
+        $mr.sub_region(offset)
+    }};
+}
+
+#[macro_export]
+macro_rules! remote_array_field_unchecked {
     ($mr:expr, $T:ty, $index:expr) => {{
         let type_size = std::mem::size_of::<$T>();
         let offset = $index * type_size;
@@ -124,6 +143,14 @@ macro_rules! remote_struct_field {
     }};
 }
 
+#[macro_export]
+macro_rules! remote_struct_field_unchecked {
+    ($mr:expr, $Struct:ident :: $field:ident) => {{
+        let offset = std::mem::offset_of!($Struct, $field);
+        $mr.sub_region_unchecked(offset)
+    }};
+}
+
 /// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
 /// original one contained an array of structs on its first byte, such that the new one
 /// contains the specified field of the N-th element on its first byte.
@@ -156,10 +183,23 @@ macro_rules! remote_struct_array_field {
         let struct_size = std::mem::size_of::<$Struct>();
         let field_offset = std::mem::offset_of!($Struct, $field);
         let total_offset = ($index * struct_size) + field_offset;
-        $mr.from_offset(total_offset)
+        $mr.sub_region(total_offset)
+    }};
+}
+
+#[macro_export]
+macro_rules! remote_struct_array_field_unchecked {
+    ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{
+        let struct_size = std::mem::size_of::<$Struct>();
+        let field_offset = std::mem::offset_of!($Struct, $field);
+        let total_offset = ($index * struct_size) + field_offset;
+        $mr.sub_region_unchecked(total_offset)
     }};
 }
 
 pub use remote_array_field;
+pub use remote_array_field_unchecked;
 pub use remote_struct_array_field;
+pub use remote_struct_array_field_unchecked;
 pub use remote_struct_field;
+pub use remote_struct_field_unchecked;

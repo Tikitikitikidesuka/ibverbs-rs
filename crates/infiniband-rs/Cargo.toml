@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+
 [dependencies]
 ibverbs-sys = "0.3.2"
 log = "0.4.29"
@@ -20,7 +21,12 @@ serde.workspace = true
 bincode.workspace = true
 tokio = { version = "1.48", features = ["net", "io-util", "time", "rt"] }
 bon = "3.8.2"
+clap = { version = "4.5", features = ["derive"] }
 
 # [[bin]]
 # path = "bin/demo.rs"
 # name = "demo"
+
+[[bin]]
+path = "bin/barrier_benchmark.rs"
+name = "barrier_benchmark"

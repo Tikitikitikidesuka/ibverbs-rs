@@ -482,6 +482,7 @@ version = "0.2.0"
 dependencies = [
  "bincode",
  "bon",
+ "clap",
  "ibverbs-sys",
  "intmap",
  "log",

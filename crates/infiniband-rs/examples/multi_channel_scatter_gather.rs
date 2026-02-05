@@ -1,8 +1,6 @@
-use infiniband_rs::channel::multi_channel::MultiChannel;
-use infiniband_rs::channel::multi_channel::work_request::{
-    PeerReceiveWorkRequest, PeerSendWorkRequest,
-};
 use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::multi_channel::MultiChannel;
+use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 
@@ -12,9 +10,10 @@ fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
     let ctx = open_device(DEVICE).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let multi_channel = MultiChannel::builder()
-        .context(&ctx)
+        .pd(&pd)
         .num_channels(5)
         .build()
         .unwrap();
@@ -23,7 +22,7 @@ fn main() {
     let mut multi_channel = multi_channel.handshake(endpoints).unwrap();
 
     let mut mem = [0u8; 10];
-    let mr = multi_channel.register_local_mr(&mut mem).unwrap();
+    let mr = pd.register_local_mr_slice(&mem).unwrap();
 
     let (send_mem, recv_mem) = mem.split_at_mut(5);
     send_mem.copy_from_slice(&[1u8, 2u8, 3u8, 4u8, 5u8]);
@@ -32,12 +31,12 @@ fn main() {
 
     let send_sges: Vec<Vec<_>> = send_mem
         .chunks(1)
-        .map(|chunk| vec![mr.prepare_gather_element(chunk).unwrap()])
+        .map(|chunk| vec![mr.gather_element(chunk).unwrap()])
         .collect();
 
     let mut recv_sges: Vec<Vec<_>> = recv_mem
         .chunks_mut(1)
-        .map(|chunk| vec![mr.prepare_scatter_element(chunk).unwrap()])
+        .map(|chunk| vec![mr.scatter_element(chunk).unwrap()])
         .collect();
 
     let result = multi_channel.scope(|s| {
@@ -52,8 +51,9 @@ fn main() {
             .map(|(peer, sges)| PeerReceiveWorkRequest::new(peer, sges));
 
         // 3. Post
-        s.post_scatter_send(scatter_sends).unwrap();
-        s.post_gather_receive(gather_receives).unwrap();
+        s.post_scatter_send(scatter_sends)?;
+        s.post_gather_receive(gather_receives)?;
+        Ok(())
     });
 
     println!("Recv mem after: {recv_mem:?}");

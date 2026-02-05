@@ -1,6 +1,6 @@
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use infiniband_rs::network::Node;
+use infiniband_rs::network::barrier::BarrierAlgorithm;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
@@ -32,11 +32,13 @@ fn main() {
     let node_config: &NodeConfig = network_config.get(rank).unwrap();
 
     let ctx = open_device(&node_config.ibdev).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
-        .context(&ctx)
+        .pd(&pd)
         .rank(node_config.rankid)
         .world_size(network_config.world_size())
+        .barrier(BarrierAlgorithm::Centralized)
         .build()
         .unwrap();
 
@@ -50,23 +52,28 @@ fn main() {
 
     let mut node = node.handshake(remote_endpoints).unwrap();
 
-    println!("Press a key...");
-    std::io::stdin().read(&mut []).expect("Failed to read line");
-    match node.rank() {
-        0 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
+    for i in 0..3 {
+        println!("Press enter...");
+        let mut buffer = String::new();
+        std::io::stdin().read_line(&mut buffer).expect("Failed to read line");
+        println!("Barrier start!");
+        match node.rank() {
+            0 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            1 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            2 => {
+                node.barrier(&[0, 1, 2], Duration::from_millis(10000))
+                    .unwrap();
+            }
+            _ => {
+                println!("Invalid rank: {rank}");
+            }
         }
-        1 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
-        }
-        2 => {
-            node.barrier(&[0, 1, 2], Duration::from_millis(10000))
-                .unwrap();
-        }
-        _ => {
-            println!("Invalid rank: {rank}");
-        }
+        println!("Barrier end!");
     }
 }

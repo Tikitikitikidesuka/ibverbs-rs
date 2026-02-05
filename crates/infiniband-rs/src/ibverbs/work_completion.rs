@@ -28,13 +28,6 @@ impl WorkCompletion {
         self.wr_id
     }
 
-    /*
-    pub fn op_code(&self) {
-
-        self.wc.opcode()
-    }
-    */
-
     pub fn result(&self) -> Result<WorkSuccess, WorkError> {
         self.result
     }

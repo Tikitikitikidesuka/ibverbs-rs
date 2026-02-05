@@ -1,5 +1,4 @@
 use infiniband_rs::ibverbs::devices::open_device;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use infiniband_rs::network::Node;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
@@ -9,6 +8,7 @@ use simple_logger::SimpleLogger;
 use std::io::Read;
 use std::time::Duration;
 use std::{env, fs, process, thread};
+use infiniband_rs::network::barrier::BarrierAlgorithm;
 
 fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
@@ -33,10 +33,12 @@ fn main() {
     let node_config: &NodeConfig = network_config.get(rank).unwrap();
 
     let ctx = open_device(&node_config.ibdev).unwrap();
+    let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
-        .context(&ctx)
+        .pd(&pd)
         .rank(node_config.rankid)
+        .barrier(BarrierAlgorithm::Dissemination)
         .world_size(network_config.world_size())
         .build()
         .unwrap();
