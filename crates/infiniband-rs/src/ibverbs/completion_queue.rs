@@ -7,6 +7,7 @@ use std::os::fd::BorrowedFd;
 use std::sync::Arc;
 use std::{io, ptr};
 
+/// A shared handle to a Completion Queue (CQ).
 #[derive(Debug, Clone)]
 pub struct CompletionQueue {
     pub(super) inner: Arc<CompletionQueueInner>,
@@ -27,71 +28,28 @@ impl CompletionQueue {
             IbvError::InvalidInput("Completion queue min_cq_entries must fit in an i32".to_string())
         })?;
 
-        let cc = unsafe { ibv_create_comp_channel(context.inner.ctx) };
-        if cc.is_null() {
-            return Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
-                "Failed to create completion channel",
-            ));
-        }
-
-        // If this block returns Err, we catch it and destroy the channel before returning.
-        let configure_channel = || -> IbvResult<()> {
-            let cc_fd = unsafe { BorrowedFd::borrow_raw((*cc).fd) };
-
-            let flags = nix::fcntl::fcntl(cc_fd, nix::fcntl::F_GETFL).map_err(|errno| {
-                IbvError::from_errno_with_msg(
-                    errno as i32,
-                    "Failed to get completion channel flags",
-                )
-            })?;
-
-            // The file descriptor needs to be set to non-blocking because `ibv_get_cq_event()`
-            // would block otherwise.
-            let arg = nix::fcntl::FcntlArg::F_SETFL(
-                nix::fcntl::OFlag::from_bits_retain(flags) | nix::fcntl::OFlag::O_NONBLOCK,
-            );
-
-            nix::fcntl::fcntl(cc_fd, arg).map_err(|errno| {
-                IbvError::from_errno_with_msg(
-                    errno as i32,
-                    "Failed to set completion channel to non-blocking",
-                )
-            })?;
-
-            Ok(())
-        };
-
-        // Execute configuration and cleanup on failure
-        if let Err(e) = configure_channel() {
-            unsafe { ibv_destroy_comp_channel(cc) };
-            return Err(e);
-        }
-
+        // Create the CQ without a completion channel (polling mode only)
         let cq = unsafe {
             ibv_create_cq(
                 context.inner.ctx,
                 min_cq_entries,
-                ptr::null::<c_void>().offset(0) as *mut _,
-                cc,
-                0,
+                ptr::null::<c_void>().offset(0) as *mut _, // cq_context (user data), unused
+                ptr::null::<ibv_comp_channel>() as *mut _, // comp_channel (NULL = polling only)
+                0, // comp_vector (CPU affinity, unused w/o channel)
             )
         };
 
         if cq.is_null() {
-            unsafe { ibv_destroy_comp_channel(cc) }; // Clean up channel on failure!
-
             return Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error().raw_os_error().unwrap_or(0),
                 &format!("Failed to create completion queue with size {min_cq_entries}"),
             ));
         }
 
-        log::debug!("CompletionQueue created");
+        log::debug!("CompletionQueue created with capacity {}", min_capacity);
         Ok(CompletionQueue {
             inner: Arc::new(CompletionQueueInner {
                 context: context.clone(),
-                cc,
                 cq,
                 min_capacity: min_cq_entries as u32,
             }),
@@ -159,7 +117,6 @@ impl<'a> IntoIterator for PolledCompletions<'a> {
 pub(super) struct CompletionQueueInner {
     pub(super) context: Context,
     pub(super) cq: *mut ibv_cq,
-    pub(super) cc: *mut ibv_comp_channel,
     pub(super) min_capacity: u32,
 }
 
@@ -173,13 +130,6 @@ impl Drop for CompletionQueueInner {
         let errno = unsafe { ibv_destroy_cq(self.cq) };
         if errno != 0 {
             let error = IbvError::from_errno_with_msg(errno, "Failed to destroy completion queue");
-            log::error!("{error}");
-        }
-
-        let errno = unsafe { ibv_destroy_comp_channel(self.cc) };
-        if errno != 0 {
-            let error =
-                IbvError::from_errno_with_msg(errno, "Failed to destroy completion channel");
             log::error!("{error}");
         }
     }
