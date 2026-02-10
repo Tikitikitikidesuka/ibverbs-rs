@@ -1,3 +1,60 @@
+//! Device discovery and management.
+//!
+//! This module provides the entry point for working with RDMA devices.
+//! Before allocating resources (Protection Domains, Queue Pairs, etc.), you must
+//! identify a specific RDMA device available on the system and open a [`Context`] from it.
+//!
+//! # Core Concepts
+//!
+//! *   **Discovery**: Use [`list_devices`] to enumerate all available hardware, or
+//!     [`open_device`] to look up a specific device by name (e.g., `"mlx5_0"`).
+//! *   **Device List**: The [`DeviceList`] struct owns the underlying list of devices
+//!     returned by the system. It handles memory management (freeing the list when dropped).
+//! *   **Device Reference**: A [`DeviceRef`] is a transient handle to a specific device.
+//!     It is obtained by iterating a list or querying a context.
+//!
+//! # Quick start: Open by name
+//!
+//! Opening a [`Context`] into a specific device by name can be accomplished easily using [`open_device`].
+//!
+//! ```
+//! use infiniband_rs::ibverbs::devices::open_device;
+//! use infiniband_rs::ibverbs::error::IbvResult;
+//!
+//! fn main() -> IbvResult<()> {
+//!     let ctx = open_device("mlx5_0")?;
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Example: Enumerating Devices
+//!
+//! ```
+//! use infiniband_rs::ibverbs::devices;
+//! use infiniband_rs::ibverbs::error::IbvResult;
+//!
+//! fn main() -> IbvResult<()> {
+//!     // 1. Get the list of available devices
+//!     let dev_list = devices::list_devices()?;
+//!
+//!     if dev_list.is_empty() {
+//!         println!("No RDMA devices found.");
+//!         return Ok(());
+//!     }
+//!
+//!     // 2. Iterate and print info
+//!     for dev in dev_list.iter() {
+//!         println!("Name: {:?}, GUID: {:?}", dev.name(), dev.guid());
+//!     }
+//!
+//!     // 3. Open the first available device
+//!     let first_dev = dev_list.get(0).unwrap();
+//!     let context = first_dev.open()?;
+//!
+//!     Ok(())
+//! }
+//! ```
+
 use crate::ibverbs::context::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::global_unique_id::Guid;
@@ -6,6 +63,15 @@ use std::ffi::CStr;
 use std::io;
 use std::marker::PhantomData;
 
+/// Convenience function to open an ibverbs RDMA device by name.
+///
+/// This function searches the list of available ibverbs devices for one whose
+/// name matches `name` and opens a [`Context`] for it.
+///
+/// # Errors
+///
+/// * Returns [`IbvError::NotFound`] if no device with the given name exists.
+/// * Propagates system errors if the device list cannot be retrieved or if the
 pub fn open_device(name: impl AsRef<str>) -> IbvResult<Context> {
     let name = name.as_ref();
     let devices = list_devices()?;
@@ -16,6 +82,15 @@ pub fn open_device(name: impl AsRef<str>) -> IbvResult<Context> {
     device.open()
 }
 
+/// Returns a list of all available ibverbs RDMA devices.
+///
+/// The returned [`DeviceList`] owns the underlying device list allocated by
+/// `libibverbs` and will free it automatically when dropped.
+///
+/// # Errors
+///
+/// Returns an [`IbvError`] if the underlying `ibv_get_device_list` call fails or returns `NULL`
+/// with a non-zero `errno`.
 pub fn list_devices() -> IbvResult<DeviceList> {
     let mut num_devices = 0i32;
     let devices_ptr = unsafe { ibv_get_device_list(&mut num_devices as *mut _) };
@@ -38,45 +113,62 @@ pub fn list_devices() -> IbvResult<DeviceList> {
     })
 }
 
+/// Owned list of available ibverbs RDMA devices.
+///
+/// This type wraps the device list returned by `ibv_get_device_list`.
+/// The underlying resources are released automatically when the value
+/// is dropped.
+///
+/// Individual devices can be accessed via iteration or indexing using
+/// [`DeviceList::iter`] or [`DeviceList::get`].
 pub struct DeviceList {
     devices_ptr: *mut *mut ibv_device,
     num_devices: usize,
 }
 
+/// SAFETY: libibverbs components are thread safe.
 unsafe impl Sync for DeviceList {}
+/// SAFETY: libibverbs components are thread safe.
 unsafe impl Send for DeviceList {}
 
 impl Drop for DeviceList {
     fn drop(&mut self) {
         if !self.devices_ptr.is_null() {
             log::debug!("DeviceList dropped");
+            // SAFETY: self.devices_ptr is guaranteed to be a valid pointer returned
+            // by ibv_get_device_list or null (checked above).
             unsafe { ibv_free_device_list(self.devices_ptr) };
         }
     }
 }
 
 impl DeviceList {
-    /// Returns an iterator over all found devices.
+    /// Returns an iterator over all available devices.
     pub fn iter(&self) -> DeviceListIter<'_> {
         DeviceListIter { list: self, i: 0 }
     }
 
-    /// Returns the number of devices.
+    /// Returns the number of available devices.
     pub fn len(&self) -> usize {
         self.num_devices
     }
 
-    /// Returns `true` if there are any devices.
+    /// Returns `true` if no devices are available.
     pub fn is_empty(&self) -> bool {
         self.num_devices == 0
     }
 
-    /// Returns the device at the given `index`, or `None` if out of bounds.
+    /// Returns a reference to the device at the given index.
+    ///
+    /// Returns `None` if the index is out of bounds. The returned [`DeviceRef`]
+    /// is bound to the lifetime of this list.
     pub fn get(&self, index: usize) -> Option<DeviceRef<'_>> {
         if index >= self.num_devices {
             return None;
         }
 
+        // SAFETY: Verified `index` is within `num_devices` and `devices_ptr`
+        // is an array of pointers to `ibv_device` structs.
         Some(unsafe { DeviceRef::from_ptr(*self.devices_ptr.add(index)) })
     }
 }
@@ -89,7 +181,10 @@ impl<'a> IntoIterator for &'a DeviceList {
     }
 }
 
-/// Iterator over a `DeviceList`.
+/// An iterator over the devices in a [`DeviceList`].
+///
+/// This struct is created by the [`iter`](DeviceList::iter) method on [`DeviceList`].
+/// Each item yielded is a [`DeviceRef`] that borrows from the parent list.
 pub struct DeviceListIter<'iter> {
     list: &'iter DeviceList,
     i: usize,
@@ -112,35 +207,45 @@ impl std::fmt::Debug for DeviceList {
     }
 }
 
+/// A reference to an RDMA device.
+///
+/// This type represents a borrowed handle to an RDMA device.
+/// It can be obtained from a [`DeviceList`] or a [`Context`].
+///
+/// The reference is valid only as long as the source object ([`DeviceList`] or [`Context`])
+/// remains alive.
+///
+/// To perform operations on the device, you must first [`open`](DeviceRef::open) it to obtain a [`Context`].
 pub struct DeviceRef<'a> {
     pub(super) device_ptr: *mut ibv_device,
     _dev_list: PhantomData<&'a DeviceList>,
 }
 
+/// SAFETY: libibverbs components are thread safe.
 unsafe impl Sync for DeviceRef<'_> {}
+/// SAFETY: libibverbs components are thread safe.
 unsafe impl Send for DeviceRef<'_> {}
 
 impl DeviceRef<'_> {
-    /// Opens an RMDA device and creates a context for further use.
+    /// Opens a context for this RDMA device.
     ///
-    /// This context will later be used to query its resources or for creating resources.
-    ///
-    /// Unlike what the verb name suggests, it doesn't actually open the device. This device was
-    /// opened by the kernel low-level driver and may be used by other user/kernel level code. This
-    /// verb only opens a context to allow user level applications to use it.
+    /// The resulting [`Context`] is the primary object used for allocating resources
+    /// (PDs, QPs, CQs) and managing the device.
     ///
     /// # Errors
     ///
-    ///  - `EINVAL`: `PORT_NUM` is invalid (from `ibv_query_port_attr`).
-    ///  - `ENOMEM`: Out of memory (from `ibv_query_port_attr`).
-    ///  - `EMFILE`: Too many files are opened by this process (from `ibv_query_gid`).
-    ///  - Other: the device is not in `ACTIVE` or `ARMED` state.
+    /// Returns an error if the device cannot be opened (e.g., due to permission issues
+    /// or resource exhaustion).
     pub fn open(&self) -> IbvResult<Context> {
         Context::from_device(self)
     }
 
-    /// Returns a `&str` of the name, which is associated with this RDMA device.
+    /// Returns the system name of the device (e.g., "mlx5_0").
+    ///
+    /// Returns `None` if the name cannot be retrieved or is not valid UTF-8.
     pub fn name(&self) -> Option<&str> {
+        // SAFETY: ibv_get_device_name returns a pointer to a static string managed
+        // by libibverbs. It is valid as long as the device ref is valid.
         let name_ptr = unsafe { ibv_get_device_name(self.device_ptr) };
         if name_ptr.is_null() {
             None
@@ -149,15 +254,19 @@ impl DeviceRef<'_> {
         }
     }
 
-    /// Returns the Global Unique IDentifier (GUID) of this RDMA device.
+    /// Returns the Global Unique Identifier (GUID) of this RDMA device.
     ///
     /// # Errors
-    ///  - `EMFILE`: Too many files are opened by this process.
-    pub fn guid(&self) -> io::Result<Guid> {
+    ///
+    /// Returns an error if the GUID is reserved (invalid) or cannot be read.
+    pub fn guid(&self) -> IbvResult<Guid> {
         let guid_int = unsafe { ibv_get_device_guid(self.device_ptr) };
         let guid: Guid = guid_int.into();
         if guid.is_reserved() {
-            Err(io::Error::last_os_error())
+            Err(IbvError::from_errno_with_msg(
+                io::Error::last_os_error().raw_os_error().unwrap(),
+                "GID is reserved or invalid",
+            ))
         } else {
             Ok(guid)
         }
@@ -183,7 +292,12 @@ impl std::fmt::Debug for DeviceRef<'_> {
 }
 
 impl DeviceRef<'_> {
-    // pub super so context can print it on its debug
+    /// Wraps a raw `ibv_device` pointer into a `DeviceRef`.
+    ///
+    /// # Safety
+    ///
+    /// * `device_ptr` must be a valid pointer obtained from `ibv_get_device_list` or an active `ibv_context`.
+    /// * The lifetime of the returned `DeviceRef` must not outlive the object that owns the pointer.
     pub(super) unsafe fn from_ptr(device_ptr: *mut ibv_device) -> Self {
         Self {
             device_ptr,
