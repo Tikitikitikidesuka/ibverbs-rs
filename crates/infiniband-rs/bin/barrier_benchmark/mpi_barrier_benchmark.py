@@ -6,12 +6,13 @@ import re
 import csv
 import statistics
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 # --- Regex Patterns ---
 HEADER_RE = re.compile(r'barrier_benchmark\[(.*?)\]')
-# Captures: [rank] -> timing ns
-RANK_NS_RE = re.compile(r'\[(\d+)\]\s*->\s*(\d+)\s*ns')
+# Matches lowercase "mean:" and "std:"
+# Log line: "[0] -> mean: 13930.64 ns, std: 6940.22 ns"
+RANK_STATS_RE = re.compile(r'\[(\d+)\]\s*->\s*mean:\s*([\d\.]+)\s*ns,\s*std:\s*([\d\.]+)\s*ns', re.IGNORECASE)
 
 
 def get_world_size_from_hostfile(hostfile_path: str) -> int:
@@ -56,8 +57,9 @@ def main() -> None:
     p.add_argument("--hostfile", required=True, help="Path to MPI hostfile")
     p.add_argument("--rankfile", required=True, help="Path to MPI rankfile")
     p.add_argument("--config-file", required=True, help="Network config file for the benchmark")
-    p.add_argument("--sample-iters", type=int, required=True, help="Number of sampling iterations")
-    p.add_argument("--benchmark-iters", type=int, required=True, help="Number of benchmark iterations")
+    p.add_argument("--sample-iters", type=int, required=True, help="Number of sampling iterations inside Rust")
+    p.add_argument("--benchmark-iters", type=int, required=True, help="Number of times to run the benchmark loop")
+    p.add_argument("--warmup-iters", type=int, default=128, help="Number of warmup iterations (default: 128)")
     p.add_argument("--algorithm", required=True, help="Barrier algorithm (e.g., dissemination)")
     p.add_argument("--jitter-ns", type=int, default=0, help="Jitter in nanoseconds (default: 0)")
     p.add_argument("--bin", default="./barrier_benchmark", help="Path to benchmark binary")
@@ -79,6 +81,7 @@ def main() -> None:
         f"--config-file {args.config_file} "
         f"--world-size {size_var} "
         f"--sample-iters {args.sample_iters} "
+        f"--warmup-iters {args.warmup_iters} "
         f"--algorithm {args.algorithm} "
         f"--rank {rank_var} "
         f"--benchmark-iters {args.benchmark_iters} "
@@ -98,32 +101,30 @@ def main() -> None:
     # Open optional raw log file
     raw_log_f = open(args.raw_log, "w", encoding="utf-8") if args.raw_log else None
 
-    # Data collection: Key = (rank, world_size, algorithm), Value = List[ns]
-    samples: Dict[Tuple[int, int, str], List[int]] = defaultdict(list)
+    # Data collection: Key = (rank, world_size, algorithm), Value = List[(mean, std)]
+    # We store tuples of (mean, std) because Rust now reports both.
+    samples: Dict[Tuple[int, int, str], List[Tuple[float, float]]] = defaultdict(list)
 
     # State tracking
-    cur_algorithm = args.algorithm  # Default to arg, but update if seen in log
-    cur_world_size = world_size  # Default to detected, update if seen in log
+    cur_algorithm = args.algorithm
+    cur_world_size = world_size
 
     # 4. Execute and Stream
     try:
-        # Popen allows us to read stdout line-by-line while process runs
         with subprocess.Popen(
                 mpirun_cmd,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,  # Merge stderr into stdout to capture all logs
+                stderr=subprocess.STDOUT,  # Merge stderr into stdout
                 text=True,
                 bufsize=1  # Line buffered
         ) as proc:
 
-            # Read line by line
             if proc.stdout:
                 for line in proc.stdout:
-                    # Write to raw log if requested
                     if raw_log_f:
                         raw_log_f.write(line)
 
-                    # Parse Header: barrier_benchmark[algorithm=...,world_size=...]
+                    # Parse Header
                     hm = HEADER_RE.search(line)
                     if hm:
                         kv = parse_kv_list(hm.group(1))
@@ -135,12 +136,13 @@ def main() -> None:
                             except ValueError:
                                 pass
 
-                    # Parse Data: [64] -> 78272 ns
-                    tm = RANK_NS_RE.search(line)
+                    # Parse Data: [64] -> Mean: 78272.50 ns, Std: 120.00 ns
+                    tm = RANK_STATS_RE.search(line)
                     if tm:
                         rank = int(tm.group(1))
-                        ns = int(tm.group(2))
-                        samples[(rank, cur_world_size, cur_algorithm)].append(ns)
+                        mean_val = float(tm.group(2))
+                        std_val = float(tm.group(3))
+                        samples[(rank, cur_world_size, cur_algorithm)].append((mean_val, std_val))
 
             proc.wait()
             if proc.returncode != 0:
@@ -162,18 +164,21 @@ def main() -> None:
 
     for key in sorted_keys:
         rank, w_size, algo = key
-        vals = samples[key]
+        data_points = samples[key]
 
-        if not vals:
+        if not data_points:
             continue
 
-        avg = statistics.mean(vals)
-        # Use population stdev (pstdev) or sample stdev (stdev).
-        # Using pstdev here as it matches standard benchmark stats usually,
-        # but switch to stdev if you prefer n-1.
-        std = statistics.pstdev(vals) if len(vals) > 1 else 0.0
+        # Extract lists
+        means = [d[0] for d in data_points]
+        stds = [d[1] for d in data_points]
 
-        writer.writerow([rank, w_size, algo, f"{avg:.2f}", f"{std:.2f}"])
+        # Calculate aggregations
+        # If benchmark_iters > 1, we average the Means and average the Stds reported by Rust.
+        final_avg = statistics.mean(means)
+        final_std = statistics.mean(stds)
+
+        writer.writerow([rank, w_size, algo, f"{final_avg:.2f}", f"{final_std:.2f}"])
 
 
 if __name__ == "__main__":

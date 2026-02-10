@@ -79,6 +79,9 @@ Examples:
   
   # 3. Explicit manual sizes (Overrides distribution settings)
   python3 run_sweep.py --manual-sizes 16 32 64 128
+  
+  # 4. Inject Jitter (500ns)
+  python3 run_sweep.py --jitter-ns 500
         """
     )
 
@@ -110,12 +113,17 @@ Examples:
     conf_group.add_argument("--starting-port", type=int, default=DEFAULT_STARTING_PORT)
     conf_group.add_argument("--allow-repetition", action="store_true", default=True,
                             help="Allow cycling hosts if world_size > physical nodes")
+    conf_group.add_argument("--jitter-ns", type=int, default=0, help="Jitter injection in nanoseconds (default: 0)")
+    conf_group.add_argument("--warmup-iters", type=int, default=1024, help="Number of iters for warmup (default: 1024)")
 
     # --- Output Control ---
     out_group = parser.add_argument_group("Output Control")
     out_group.add_argument("--output-dir", default="./sweep_outputs", help="Directory for all outputs")
     out_group.add_argument("--plot-title", default="Barrier Performance", help="Title for the generated plot")
     out_group.add_argument("--plot-output", default="barrier_comparison.png", help="Filename for plot output")
+
+    # Note: Added x-scale arg here to match updated plot script requirement
+    out_group.add_argument("--x-scale", choices=["linear", "log"], default="log", help="Plot X-axis scale (default: log)")
 
     args = parser.parse_args()
 
@@ -192,7 +200,7 @@ Examples:
             rankfile = configs_dir / f"ranks.{size}"
             raw_log = logs_dir / f"log_{algo}_{size}.txt"
 
-            print(f"[{current_run}/{total_runs}] Algorithm: {algo}, Size: {size}")
+            print(f"[{current_run}/{total_runs}] Algorithm: {algo}, Size: {size}, Jitter: {args.jitter_ns}ns")
 
             # Construct command
             cmd = LAUNCHER_SCRIPT + [
@@ -202,7 +210,9 @@ Examples:
                 "--sample-iters", str(args.sample_iters),
                 "--benchmark-iters", str(args.benchmark_iters),
                 "--algorithm", algo,
-                "--raw-log", str(raw_log)
+                "--raw-log", str(raw_log),
+                "--jitter-ns", str(args.jitter_ns),
+                "--warmup-iters", str(args.warmup_iters)
             ]
 
             try:
@@ -219,25 +229,6 @@ Examples:
             except subprocess.CalledProcessError as e:
                 print(f"⚠️  Error running benchmark: {e}", file=sys.stderr)
                 continue
-
-    # 6. Plot Results
-    print("\n=== Generating Plots ===")
-    plot_output = out_dir / args.plot_output
-
-    plot_cmd = PLOT_SCRIPT + [
-        str(master_csv),
-        "--output", str(plot_output),
-        "--title", args.plot_title,
-        "--std-bands"
-    ]
-
-    try:
-        subprocess.run(plot_cmd, check=True)
-        print(f"\n✓ Sweep Complete!")
-        print(f"  Results: {master_csv}")
-        print(f"  Plot:    {plot_output}")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️  Error generating plot: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

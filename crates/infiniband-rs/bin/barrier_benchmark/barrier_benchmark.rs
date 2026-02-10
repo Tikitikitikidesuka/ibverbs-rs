@@ -65,30 +65,31 @@ fn main() {
 fn benchmark(node: &mut Node, args: &Args) {
     let peers = (0..node.world_size()).collect::<Vec<_>>();
     let mut latencies = Vec::with_capacity(args.sample_iters);
-    let mut rng = rand::rng();
 
-    // 1. Warmup: Run unmeasured iterations to warm up instruction cache / branch predictors
-    // and resolve any lazy network state.
-    for _ in 0..100 {
+    let mut rng = rand::rng();
+    let delay_ns = if args.jitter_ns > 0 {
+        (0..args.sample_iters)
+            .map(|_| Duration::from_nanos(rng.random_range(0..args.jitter_ns)))
+            .collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
+
+    // 1. Warmup
+    for _ in 0..args.warmup_iters {
         node.barrier_unchecked(&peers, Duration::from_millis(10000))
             .unwrap();
     }
 
-    // 2. Coordinated Start: Ensure all nodes are ready to start the timer together.
+    // 2. Coordinated Start
     node.barrier_unchecked(&peers, Duration::from_secs(5))
         .unwrap();
 
-    let start = Instant::now();
-
-    for _ in 0..args.sample_iters {
-        // 3. Jitter Injection: Simulate computation imbalance.
-        // Without this, nodes naturally synchronize into a lockstep "wave" that
-        // artificially inflates performance.
-        if args.jitter_ns > 0 {
-            let delay: u64 = rng.random_range(0..args.jitter_ns);
-            if delay > 0 {
-                std::thread::sleep(Duration::from_nanos(delay));
-            }
+    // Loop
+    for i in 0..args.sample_iters {
+        // 3. Jitter Injection
+        if !delay_ns.is_empty() {
+            jitter_delay(delay_ns[i]);
         }
 
         let iter_start = Instant::now();
@@ -96,9 +97,32 @@ fn benchmark(node: &mut Node, args: &Args) {
         latencies.push(iter_start.elapsed());
     }
 
-    let elapsed = start.elapsed();
-    let nanos_for_barrier = elapsed.as_nanos() / args.sample_iters as u128;
-    println!("[{}] -> {} ns", args.rank, nanos_for_barrier);
+    // 4. Statistics Calculation
+    // We calculate mean from `latencies` directly to exclude jitter sleep times.
+    let count = latencies.len() as f64;
+    let sum_ns: f64 = latencies.iter().map(|d| d.as_nanos() as f64).sum();
+    let mean = sum_ns / count;
+
+    let variance = latencies
+        .iter()
+        .map(|d| {
+            let diff = mean - (d.as_nanos() as f64);
+            diff * diff
+        })
+        .sum::<f64>()
+        / count;
+
+    let std_dev = variance.sqrt();
+
+    println!(
+        "[{}] -> mean: {:.2} ns, std: {:.2} ns",
+        args.rank, mean, std_dev
+    );
+}
+
+fn jitter_delay(delay: Duration) {
+    let start = Instant::now();
+    while start.elapsed() < delay {}
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -131,6 +155,8 @@ struct Args {
     jitter_ns: u64,
     #[arg(short, long)]
     sample_iters: usize,
+    #[arg(short, long)]
+    warmup_iters: usize,
     #[arg(short, long)]
     benchmark_iters: Option<usize>,
     #[arg(short, long)]

@@ -7,25 +7,25 @@ use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
 
 #[derive(Debug)]
-pub struct CentralizedBarrier {
+pub struct LinearBarrier {
     rank: usize,
     barrier_mr: BarrierMr,
     poisoned: bool,
 }
 
 #[derive(Debug)]
-pub struct PreparedCentralizedBarrier {
+pub struct PreparedLinearBarrier {
     rank: usize,
     barrier_mr: PreparedBarrierMr,
 }
 
-impl PreparedCentralizedBarrier {
+impl PreparedLinearBarrier {
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
     }
 
-    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> CentralizedBarrier {
-        CentralizedBarrier {
+    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> LinearBarrier {
+        LinearBarrier {
             rank: self.rank,
             barrier_mr: self.barrier_mr.link_remote(remote_mrs),
             poisoned: false,
@@ -33,13 +33,13 @@ impl PreparedCentralizedBarrier {
     }
 }
 
-impl CentralizedBarrier {
+impl LinearBarrier {
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
-    ) -> IbvResult<PreparedCentralizedBarrier> {
-        Ok(PreparedCentralizedBarrier {
+    ) -> IbvResult<PreparedLinearBarrier> {
+        Ok(PreparedLinearBarrier {
             rank,
             barrier_mr: BarrierMr::new(pd, rank, world_size)?,
         })
