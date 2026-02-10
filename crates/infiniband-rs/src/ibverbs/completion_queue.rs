@@ -142,6 +142,7 @@ impl CompletionQueue {
         self.inner.min_capacity
     }
 
+    /// Returns a reference to the Context associated with this CQ.
     pub fn context(&self) -> &Context {
         &self.inner.context
     }
