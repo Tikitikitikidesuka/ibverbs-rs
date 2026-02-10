@@ -22,7 +22,7 @@ impl CompletionQueue {
     /// # Errors
     ///  - `EINVAL`: Invalid `min_cq_entries` (must be `1 <= cqe <= dev_cap.max_cqe`).
     ///  - `ENOMEM`: Not enough resources to create completion queue.
-    pub fn create(context: &Context, id: isize, min_capacity: u32) -> IbvResult<CompletionQueue> {
+    pub fn create(context: &Context, min_capacity: u32) -> IbvResult<CompletionQueue> {
         let min_cq_entries = min_capacity.try_into().map_err(|_| {
             IbvError::InvalidInput("Completion queue min_cq_entries must fit in an i32".to_string())
         })?;
@@ -72,7 +72,7 @@ impl CompletionQueue {
             ibv_create_cq(
                 context.inner.ctx,
                 min_cq_entries,
-                ptr::null::<c_void>().offset(id) as *mut _,
+                ptr::null::<c_void>().offset(0) as *mut _,
                 cc,
                 0,
             )
