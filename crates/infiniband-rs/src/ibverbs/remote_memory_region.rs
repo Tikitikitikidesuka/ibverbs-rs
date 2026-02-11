@@ -1,17 +1,41 @@
 use serde::{Deserialize, Serialize};
 
-/// A `RemoteMemoryRegion` acts as a handle for One-Sided RDMA (Read/Write) operations.
-/// It defines where data should be written to or read from on the remote peer.
+/// A handle to a memory region on a **remote peer**.
 ///
-/// When performing an RDMA Write, the local scatter/gather elements (the sge list in
-/// the Work Request) are "stitched" together by the hardware into a single serialized
-/// byte-stream. This stream is written contiguously starting at `self.addr`.
+/// This struct provides the necessary coordinates (Address, Length, RKey) to perform
+/// One-Sided RDMA operations (Read/Write) against a remote node.
 ///
-/// Writing past the bounds of the registered memory region will cause the operation to fail.
+/// # The "Contiguous" Constraint
 ///
-/// Although the struct contains a `length`, the RDMA hardware only uses the `addr` and `rkey`
-/// to execute the transaction. The `length` is stored here strictly for client-side informational
-/// purposes.
+/// Unlike local operations which support Scatter/Gather (using lists of SGEs to stitch
+/// fragmented memory together), **remote operations are strictly contiguous**.
+///
+/// *   **Targeting**: You specify a single starting address and a total length.
+/// *   **Behavior**: The RDMA hardware reads or writes a continuous stream of bytes starting
+///     at that virtual address.
+///
+/// If you need to write to multiple non-contiguous buffers on a remote peer, you must issue
+/// multiple distinct RDMA Write operations.
+///
+/// # Safety: The Remote UB Risk
+///
+/// In local operations ([`MemoryRegion`](crate::ibverbs::memory_region::MemoryRegion)), we "tie" the
+/// lifetime of the memory buffer to the operation to ensure safety.
+///
+/// **This is not possible with Remote Memory Regions.**
+///
+/// Because the memory resides on a different machine, the local node has no knowledge of the
+/// remote buffer's lifecycle.
+///
+/// *   **Local Safety**: Safe. Even if the remote memory is invalid, the local operation simply
+///     fails or succeeds. Your local process memory remains uncorrupted.
+/// *   **Remote Safety**: **Unsafe**. If you write to a `RemoteMemoryRegion` that points to
+///     memory that has been deallocated on the remote peer, the remote NIC will unknowingly
+///     overwrite that memory (use-after-free).
+///
+/// This **Remote Undefined Behavior** is why registering memory for remote access
+/// (`register_shared_mr`) is an `unsafe` operation. The remote application assumes the
+/// responsibility of keeping the memory alive for as long as peers hold valid keys to it.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
     addr: u64,
@@ -21,34 +45,40 @@ pub struct RemoteMemoryRegion {
 
 impl RemoteMemoryRegion {
     /// Creates a new `RemoteMemoryRegion` from its raw components.
+    ///
+    /// This is typically done after receiving these values from a remote peer via an
+    /// out-of-band communication channel (like a TCP socket or UD message).
     pub fn new(addr: u64, length: usize, rkey: u32) -> Self {
         Self { addr, length, rkey }
     }
 
+    /// Returns the starting virtual address of the remote memory.
     pub fn address(&self) -> u64 {
         self.addr
     }
 
+    /// Returns the length of the remote memory region.
+    ///
+    /// **Note**: This value is stored for client-side bounds checking and convenience.
+    /// The actual hardware enforcement depends on how the memory was registered on the remote peer.
     pub fn length(&self) -> usize {
         self.length
     }
 
+    /// Returns the Remote Key (rkey) authorizing access to this memory.
     pub fn rkey(&self) -> u32 {
         self.rkey
     }
 
-    /// Creates a `RemoteMemoryRegion` derived from `self` that acts as a handle on the remote
-    /// memory region, but starting at `offset` bytes from the original address.
+    /// Creates a generic sub-region derived from this one.
     ///
-    /// This is useful when you have a large registered buffer and need to target a specific
-    /// subsection within it for an RDMA operation.
-    ///
-    /// The resulting length will be `offset` bytes smaller than the original.
+    /// This acts as a handle to a specific slice of the remote memory, starting at `offset`
+    /// bytes from the base address.
     ///
     /// # Returns
     ///
-    /// * `Some(RemoteMemoryRegion)` if the offset is within bounds.
-    /// * `None` if the offset exceeds the current length.
+    /// *   `Some(RemoteMemoryRegion)`: If `offset <= self.length`. The new length is `self.length - offset`.
+    /// *   `None`: If `offset > self.length`.
     pub fn sub_region(&self, offset: usize) -> Option<RemoteMemoryRegion> {
         if offset > self.length {
             return None;
@@ -61,8 +91,13 @@ impl RemoteMemoryRegion {
         })
     }
 
-    /// Same as `sub_region` but does not check remote memory region boundaries.
-    /// Safe because rdma operations will fail due to hardware protection errors.
+    /// Same as [`sub_region`](Self::sub_region) but without client-side bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// This is safe from a Rust memory model perspective **locally**. If the calculated address/length
+    /// falls outside the actual bounds registered on the remote peer, the RDMA hardware
+    /// will reject the operation with a **Remote Access Error**.
     pub fn sub_region_unchecked(&self, offset: usize) -> RemoteMemoryRegion {
         RemoteMemoryRegion {
             addr: self.addr + offset as u64,
@@ -72,24 +107,19 @@ impl RemoteMemoryRegion {
     }
 }
 
-/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
-/// original one contained an array of type `T` on its first byte, such that the new one
-/// contains the N-th element on its first byte.
+/// Creates a [`RemoteMemoryRegion`] pointing to the N-th element of a remote array.
 ///
-/// It is useful for writing to a specific index in a remote array.
+/// This macro assumes the original `mr` points to the start of an array of type `T`.
+/// It calculates the byte offset for the index and returns a new handle.
 ///
 /// # Example
 /// ```rust
-/// # use your_crate::{RemoteMemoryRegion, remote_array_field};
-/// # use std::mem::size_of;
-/// #
-/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 4096, 0xCAFE);
-/// #
-/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
-/// // region which contains an array of `u64` in its first byte.
-/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
-/// // starting at the first byte of the 5th element.
+/// // Remote memory contains: [u64; 10]
+/// let remote_mr = RemoteMemoryRegion::new(0x1000, 80, rkey);
+///
+/// // Get a handle to the 5th element (index 4)
 /// let elem_mr = remote_array_field!(remote_mr, u64, 4).unwrap();
+/// // elem_mr.address() is now 0x1020
 /// ```
 #[macro_export]
 macro_rules! remote_array_field {
@@ -100,6 +130,9 @@ macro_rules! remote_array_field {
     }};
 }
 
+/// Unchecked version of [`remote_array_field!`].
+///
+/// Does not check if the resulting offset is within the client-known bounds of the MR.
 #[macro_export]
 macro_rules! remote_array_field_unchecked {
     ($mr:expr, $T:ty, $index:expr) => {{
@@ -109,31 +142,25 @@ macro_rules! remote_array_field_unchecked {
     }};
 }
 
-/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
-/// original one contained the given struct on its first byte, such that the new one
-/// contains the specified field on its first byte.
+/// Creates a [`RemoteMemoryRegion`] pointing to a specific field of a remote struct.
 ///
-/// It is useful for writing to a concrete struct field remotely.
+/// This macro assumes the original `mr` points to the start of a struct `Struct`.
+/// It uses `offset_of!` to calculate the new address.
 ///
 /// # Example
 /// ```rust
-/// # use your_crate::{RemoteMemoryRegion, remote_struct_field};
-/// # use std::mem::offset_of;
-/// #
 /// #[repr(C)]
 /// struct Packet {
 ///     header: u32,
-///     _pad: u32,
 ///     payload: [u8; 1024],
 /// }
 ///
-/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 2048, 0xCAFE);
-/// #
-/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
-/// // region which contains a `Packet` struct in its first byte.
-/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
-/// // starting at the first byte of the field.
+/// // Remote memory contains a `Packet`
+/// let remote_mr = RemoteMemoryRegion::new(0x1000, 1028, rkey);
+///
+/// // Get a handle to the 'payload' field
 /// let payload_mr = remote_struct_field!(remote_mr, Packet::payload).unwrap();
+/// // payload_mr.address() is now 0x1004
 /// ```
 #[macro_export]
 macro_rules! remote_struct_field {
@@ -143,6 +170,9 @@ macro_rules! remote_struct_field {
     }};
 }
 
+/// Unchecked version of [`remote_struct_field!`].
+///
+/// Does not check if the resulting offset is within the client-known bounds of the MR.
 #[macro_export]
 macro_rules! remote_struct_field_unchecked {
     ($mr:expr, $Struct:ident :: $field:ident) => {{
@@ -151,30 +181,23 @@ macro_rules! remote_struct_field_unchecked {
     }};
 }
 
-/// Creates a `RemoteMemoryRegion` derived from another one by offsetting it assuming the
-/// original one contained an array of structs on its first byte, such that the new one
-/// contains the specified field of the N-th element on its first byte.
+/// Creates a [`RemoteMemoryRegion`] pointing to a specific field within an element of a remote array.
 ///
-/// It is useful for writing to a concrete field of a specific element in a remote array.
+/// This combines array indexing and field access. It assumes the `mr` points to an array
+/// of `Struct`.
 ///
 /// # Example
 /// ```rust
-/// # use your_crate::{RemoteMemoryRegion, remote_struct_array_field};
-/// # use std::mem::{size_of, offset_of};
-/// #
 /// #[repr(C)]
 /// struct Node {
 ///     id: u32,
-///     _pad: u32,
 ///     data: u64,
 /// }
 ///
-/// # let remote_mr = RemoteMemoryRegion::new(0x1000, 4096, 0xCAFE);
-/// #
-/// // Assuming remote_mr is a `RemoteMemoryRegion` pointing to a remote memory
-/// // region which contains an array of `Node` structs in its first byte.
-/// // Create a `RemoteMemoryRegion` pointing to the sub remote memory region
-/// // starting at the first byte of the field in the 3rd element.
+/// // Remote memory contains: [Node; 5]
+/// let remote_mr = RemoteMemoryRegion::new(0x1000, 60, rkey);
+///
+/// // Get a handle to the 'data' field of the 3rd Node (index 2)
 /// let data_mr = remote_struct_array_field!(remote_mr, Node, 2, data).unwrap();
 /// ```
 #[macro_export]
@@ -187,6 +210,9 @@ macro_rules! remote_struct_array_field {
     }};
 }
 
+/// Unchecked version of [`remote_struct_array_field!`].
+///
+/// Does not check if the resulting offset is within the client-known bounds of the MR.
 #[macro_export]
 macro_rules! remote_struct_array_field_unchecked {
     ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{
