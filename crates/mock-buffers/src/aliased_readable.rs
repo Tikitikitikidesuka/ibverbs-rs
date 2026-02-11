@@ -9,12 +9,12 @@ use thiserror::Error;
 pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
 
 #[derive(Debug, Error)]
-pub enum ReadError {
+pub enum ReadError<T = ()> {
     #[error("Type not found on buffer")]
     NotFound,
 
     #[error("Not enough data for requested type")]
-    NotEnoughData,
+    NotEnoughData(T),
 
     #[error("Data is corrupt for requested type")]
     CorruptData,
@@ -28,7 +28,7 @@ impl CircularBufferReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
 
         // Verify enough data for header
         if readable_region.len() < size_of::<Self>() {
-            return Err(ReadError::NotEnoughData);
+            return Err(ReadError::NotEnoughData(()));
         }
 
         // Cast to header
@@ -44,7 +44,7 @@ impl CircularBufferReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
         let total_length = size_of::<Self>() + diary_entry_mem.note().len();
         let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
         if readable_region.len() < aligned_size {
-            return Err(ReadError::NotEnoughData);
+            return Err(ReadError::NotEnoughData(()));
         }
 
         // If all checks are passed guard the type
@@ -55,7 +55,10 @@ impl CircularBufferReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
 }
 
 impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry {
-    type MultiReadResult<'a> = Result<MultiReadGuard<'a, MockAliasedBufferReader, Self>, ReadError>;
+    type MultiReadResult<'a> = Result<
+        MultiReadGuard<'a, MockAliasedBufferReader, Self>,
+        ReadError<MultiReadGuard<'a, MockAliasedBufferReader, Self>>,
+    >;
 
     fn read_multiple(
         reader: &mut MockAliasedBufferReader,
@@ -69,7 +72,11 @@ impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry
         for _ in 0..num {
             // Verify enough data for header
             if readable_region.len() < size_of::<Self>() + advance_size {
-                return Err(ReadError::NotEnoughData);
+                return Err(ReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Cast to header
@@ -85,10 +92,13 @@ impl CircularBufferMultiReadable<MockAliasedBufferReader> for BufferedDiaryEntry
 
             // Verify enough data for whole entry and alignment
             let total_length = size_of::<Self>() + diary_entry_mem.note().len();
-            let aligned_size =
-                ebutils::align_up_pow2(total_length, reader.alignment_pow2());
+            let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
-                return Err(ReadError::NotEnoughData);
+                return Err(ReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Store reference to read entry and add advance size

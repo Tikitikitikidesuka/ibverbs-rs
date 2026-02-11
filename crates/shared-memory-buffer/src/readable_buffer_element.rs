@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum SharedMemoryTypedReadError {
+pub enum SharedMemoryTypedReadError<T = ()> {
     #[error("Type not found on buffer")]
     NotFound,
 
     #[error("Not enough data for requested type")]
-    NotEnoughData,
+    NotEnoughData(T),
 
     #[error("Data is corrupt for requested type")]
     CorruptData,
@@ -44,13 +44,11 @@ macro_rules! impl_circular_buffer_single_readable {
                 let element_ptr = element as *const Self;
                 let element = unsafe { &*element_ptr };
 
-                let aligned_size = ebutils::align_up_pow2(
-                    element.length_in_bytes(),
-                    reader.alignment_pow2(),
-                );
+                let aligned_size =
+                    ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
 
                 if readable_region.len() < aligned_size {
-                    return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
+                    return Err($crate::SharedMemoryTypedReadError::NotEnoughData(()));
                 }
 
                 let discard_size = region_offset + aligned_size;
@@ -71,7 +69,9 @@ macro_rules! impl_circular_buffer_multi_readable {
         impl $crate::CircularBufferMultiReadable<$crate::SharedMemoryBufferReader> for $type {
             type MultiReadResult<'a> = Result<
                 $crate::MultiReadGuard<'a, $crate::SharedMemoryBufferReader, Self>,
-                $crate::SharedMemoryTypedReadError,
+                $crate::SharedMemoryTypedReadError<
+                    $crate::MultiReadGuard<'a, $crate::SharedMemoryBufferReader, Self>,
+                >,
             >;
 
             fn read_multiple(
@@ -89,7 +89,18 @@ macro_rules! impl_circular_buffer_multi_readable {
                 for _i in 0..num {
                     let (current_region, offset) = if !wrapped {
                         if advance_size == primary_region.len()
-                            || Self::check_wrap_flag(&primary_region[advance_size..])?
+                            || match Self::check_wrap_flag(&primary_region[advance_size..]) {
+                                Ok(b) => b,
+                                Err(_) => {
+                                    return Err($crate::SharedMemoryTypedReadError::NotEnoughData(
+                                        $crate::MultiReadGuard::new(
+                                            reader,
+                                            read_data,
+                                            advance_size,
+                                        ),
+                                    ));
+                                }
+                            }
                         {
                             wrapped = true;
                             advance_size = primary_region.len();
@@ -102,20 +113,24 @@ macro_rules! impl_circular_buffer_multi_readable {
                         (secondary_region, offset)
                     };
 
-                    let element = Self::cast_to_element(&current_region[offset..])?;
+                    let Ok(element) = Self::cast_to_element(&current_region[offset..]) else {
+                        return Err($crate::SharedMemoryTypedReadError::NotEnoughData(
+                            $crate::MultiReadGuard::new(reader, read_data, advance_size),
+                        ));
+                    };
 
                     // Untie lifetimes to allow MultiReadGuard to take both ref to reader and element
                     // The safety of this operation is based on the MultiReadGuard's safety promises
                     let element_ptr = element as *const Self;
                     let element = unsafe { &*element_ptr };
 
-                    let aligned_size = ebutils::align_up_pow2(
-                        element.length_in_bytes(),
-                        reader.alignment_pow2(),
-                    );
+                    let aligned_size =
+                        ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
 
                     if current_region.len() < aligned_size + offset {
-                        return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
+                        return Err($crate::SharedMemoryTypedReadError::NotEnoughData(
+                            $crate::MultiReadGuard::new(reader, read_data, advance_size),
+                        ));
                     }
 
                     read_data.push(element);

@@ -10,14 +10,14 @@ use tracing::error;
 
 /// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
-pub enum PCIe40TypedReadError {
+pub enum PCIe40TypedReadError<T = ()> {
     /// No data is yet present in the buffer.
     #[error("Type not found on buffer")]
     NotFound,
 
     /// Not enough data is yet present it the buffer to satisfy the request.
     #[error("Not enough data for requested type")]
-    NotEnoughData,
+    NotEnoughData(T),
 
     /// Corrupted data was returned, i.e. detected by an invalid magic number.
     #[error("Data is corrupt for requested type")]
@@ -30,7 +30,7 @@ pub enum PCIe40TypedReadError {
 
 impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
     type ReadResult<'a>
-        = Result<ReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
+        = Result<ReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError<()>>
     where
         Self: 'a,
         PCIe40Reader: 'a;
@@ -40,7 +40,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
 
         // Verify enough data for header
         if readable_region.len() < Self::HEADER_SIZE {
-            return Err(PCIe40TypedReadError::NotEnoughData);
+            return Err(PCIe40TypedReadError::NotEnoughData(()));
         }
 
         // Cast to mfp
@@ -55,7 +55,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
         let aligned_size =
             ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
         if readable_region.len() < aligned_size {
-            return Err(PCIe40TypedReadError::NotEnoughData);
+            return Err(PCIe40TypedReadError::NotEnoughData(()));
         }
 
         // If all checks are passed, guard the type
@@ -67,7 +67,10 @@ impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
 
 impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
     type MultiReadResult<'a>
-        = Result<MultiReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
+        = Result<
+        MultiReadGuard<'a, PCIe40Reader, Self>,
+        PCIe40TypedReadError<MultiReadGuard<'a, PCIe40Reader, Self>>,
+    >
     where
         Self: 'a;
 
@@ -80,7 +83,11 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
         for _ in 0..num {
             // Verify enough data for header
             if readable_region.len() < Self::HEADER_SIZE + advance_size {
-                return Err(PCIe40TypedReadError::NotEnoughData);
+                return Err(PCIe40TypedReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Cast to mfp
@@ -98,7 +105,11 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
             let aligned_size =
                 ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
-                return Err(PCIe40TypedReadError::NotEnoughData);
+                return Err(PCIe40TypedReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Store reference to read entry and add advance size

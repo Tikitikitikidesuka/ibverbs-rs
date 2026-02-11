@@ -10,12 +10,12 @@ pub const VALID_MAGIC: [u8; 2] = [0xAA, 0xAA];
 pub const WRAP_MAGIC: [u8; 2] = [0x55, 0x55];
 
 #[derive(Debug, Error)]
-pub enum ReadError {
+pub enum ReadError<T = ()> {
     #[error("Type not found on buffer")]
     NotFound,
 
     #[error("Not enough data for requested type")]
-    NotEnoughData,
+    NotEnoughData(T),
 
     #[error("Data is corrupt for requested type")]
     CorruptData,
@@ -29,7 +29,7 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
 
         // Check if we have enough data to read the wrap flag
         if primary_region.len() < Self::magic_bytes_size() {
-            return Err(ReadError::NotEnoughData);
+            return Err(ReadError::NotEnoughData(()));
         }
 
         // Determine which region to read from based on wrap flag
@@ -42,7 +42,7 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
 
         // Validate minimum size for header
         if readable_region.len() < size_of::<Self>() {
-            return Err(ReadError::NotEnoughData);
+            return Err(ReadError::NotEnoughData(()));
         }
 
         // Cast to diary entry and validate magic
@@ -58,7 +58,7 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
         let aligned_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
 
         if readable_region.len() < aligned_size {
-            return Err(ReadError::NotEnoughData);
+            return Err(ReadError::NotEnoughData(()));
         }
 
         Ok(ReadGuard::new(reader, diary_entry, aligned_size))
@@ -66,8 +66,10 @@ impl CircularBufferReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
 }
 
 impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEntry {
-    type MultiReadResult<'a> =
-        Result<MultiReadGuard<'a, MockNonAliasedBufferReader, Self>, ReadError>;
+    type MultiReadResult<'a> = Result<
+        MultiReadGuard<'a, MockNonAliasedBufferReader, Self>,
+        ReadError<MultiReadGuard<'a, MockNonAliasedBufferReader, Self>>,
+    >;
 
     fn read_multiple(
         reader: &mut MockNonAliasedBufferReader,
@@ -83,7 +85,11 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
             let (current_region, offset) = if !wrapped {
                 // Check for wrap marker at current position
                 if advance_size + Self::magic_bytes_size() > primary_region.len() {
-                    return Err(ReadError::NotEnoughData);
+                    return Err(ReadError::NotEnoughData(MultiReadGuard::new(
+                        reader,
+                        read_data,
+                        advance_size,
+                    )));
                 }
 
                 let is_wrap = unsafe {
@@ -105,7 +111,11 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
 
             // Validate space for header
             if current_region.len() < size_of::<Self>() + offset {
-                return Err(ReadError::NotEnoughData);
+                return Err(ReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Cast to diary entry and validate magic
@@ -119,11 +129,14 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
 
             // Calculate entry size and validate total space
             let total_length = size_of::<Self>() + diary_entry.note().len();
-            let aligned_entry_size =
-                ebutils::align_up_pow2(total_length, reader.alignment_pow2());
+            let aligned_entry_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
 
             if current_region.len() < aligned_entry_size + offset {
-                return Err(ReadError::NotEnoughData);
+                return Err(ReadError::NotEnoughData(MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_size,
+                )));
             }
 
             // Store entry and advance position
