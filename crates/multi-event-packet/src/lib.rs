@@ -67,7 +67,7 @@ impl MultiEventPacket {
     /// Returns the total size of this MEP packet in units of byets.
     ///
     /// This is just a `self.packet_size_u32() * size_of::<u32>()`.
-    pub fn packet_size_byets(&self) -> usize {
+    pub fn packet_size_bytes(&self) -> usize {
         self.packet_size_u32() as usize * size_of::<u32>()
     }
 
@@ -168,7 +168,7 @@ impl MultiEventPacket {
     /// Returns this packet as raw byte slice.
     pub fn data(&self) -> &[u8] {
         // SAFETY: Data of length packet_size (in bytes!) belongs to this MEP. Returned lifetime is same as of self.
-        unsafe { slice::from_raw_parts(self as *const Self as *const u8, self.packet_size_byets()) }
+        unsafe { slice::from_raw_parts(self as *const Self as *const u8, self.packet_size_bytes()) }
     }
 
     /// Returns this packet as [`u32`] slice.
