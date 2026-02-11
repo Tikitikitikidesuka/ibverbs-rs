@@ -33,13 +33,13 @@
 //!  }
 //! ```
 
+use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::work_completion::WorkCompletion;
+use crate::ibverbs::work::WorkCompletion;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::sync::Arc;
 use std::{io, ptr};
-use crate::ibverbs::device::Context;
 
 /// A shared handle to a Completion Queue (CQ).
 ///

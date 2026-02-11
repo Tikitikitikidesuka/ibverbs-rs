@@ -1,7 +1,9 @@
 use crate::channel::Channel;
 use crate::channel::pending_work::PendingWork;
 use crate::ibverbs::error::IbvResult;
-use crate::ibverbs::work_request::*;
+use crate::ibverbs::work::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 
 impl Channel {
     /// # Safety

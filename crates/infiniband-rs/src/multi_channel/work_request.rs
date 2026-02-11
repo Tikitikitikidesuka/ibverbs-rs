@@ -1,5 +1,5 @@
 use crate::ibverbs::memory::{GatherElement, ScatterElement};
-use crate::ibverbs::work_request::*;
+use crate::ibverbs::work::*;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 
 #[derive(Debug, Clone)]

@@ -4,10 +4,10 @@ use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::error::IbvError;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::QueuePair;
-use crate::ibverbs::work_error::WorkError;
 use std::cell::RefCell;
 use std::rc::Rc;
 use thiserror::Error;
+use crate::ibverbs::work::WorkError;
 
 pub mod builder;
 pub mod pending_work;

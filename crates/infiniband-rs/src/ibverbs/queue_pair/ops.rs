@@ -1,8 +1,8 @@
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::queue_pair::QueuePair;
-use crate::ibverbs::work_request::*;
+use crate::ibverbs::work::{ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
 use ibverbs_sys::*;
-use std::{io, ptr};
+use std::ptr;
 
 impl QueuePair {
     /// # Safety
