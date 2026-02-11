@@ -132,6 +132,10 @@ use std::io;
 /// This struct manages the registration lifecycle. Note that it does **not** own the underlying
 /// memory buffer. Ownership and validity of the buffer are checked when creating Scatter/Gather
 /// elements.
+///
+/// It holds a struct ([`ProtectionDomain`]) referencing the protection domain
+/// under which it was registered. This guarantees that the Protection Domain remains
+/// allocated as long as this Memory Region exists.
 pub struct MemoryRegion {
     pd: ProtectionDomain,
     mr: *mut ibv_mr,
