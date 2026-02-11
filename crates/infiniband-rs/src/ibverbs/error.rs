@@ -1,3 +1,5 @@
+//! Error types for RDMA operations.
+
 use nix::libc;
 use std::io;
 use thiserror::Error;

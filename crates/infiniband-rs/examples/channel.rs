@@ -1,8 +1,8 @@
 use infiniband_rs::channel::Channel;
-use infiniband_rs::ibverbs::work_request::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use infiniband_rs::ibverbs;
+use infiniband_rs::ibverbs::work::{ReceiveWorkRequest, SendWorkRequest};
 
 const DEVICE: &str = "mlx5_0";
 
