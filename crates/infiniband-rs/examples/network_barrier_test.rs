@@ -1,13 +1,14 @@
-use infiniband_rs::ibverbs::devices::open_device;
+use infiniband_rs::ibverbs;
 use infiniband_rs::network::Node;
 use infiniband_rs::network::barrier::BarrierAlgorithm;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
 use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use std::io::Read;
 use std::time::Duration;
 use std::{env, fs, process};
+
+const DEVICE: &str = "mlx5_0";
 
 fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
@@ -31,7 +32,7 @@ fn main() {
 
     let node_config: &NodeConfig = network_config.get(rank).unwrap();
 
-    let ctx = open_device(&node_config.ibdev).unwrap();
+    let ctx = ibverbs::open_device(DEVICE).unwrap();
     let pd = ctx.allocate_pd().unwrap();
 
     let node = Node::builder()
@@ -55,7 +56,9 @@ fn main() {
     for i in 0..3 {
         println!("Press enter...");
         let mut buffer = String::new();
-        std::io::stdin().read_line(&mut buffer).expect("Failed to read line");
+        std::io::stdin()
+            .read_line(&mut buffer)
+            .expect("Failed to read line");
         println!("Barrier start!");
         match node.rank() {
             0 => {
