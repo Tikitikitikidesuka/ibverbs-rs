@@ -1,6 +1,6 @@
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::context::IB_PORT;
+use crate::ibverbs::device::IB_PORT;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::QueuePair;

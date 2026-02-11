@@ -1,63 +1,5 @@
-//! Device discovery and management.
-//!
-//! This module provides the entry point for working with RDMA devices.
-//! Before allocating resources (Protection Domains, Queue Pairs, etc.), you must
-//! identify a specific RDMA device available on the system and open a [`Context`] from it.
-//!
-//! # Core Concepts
-//!
-//! *   **Discovery**: Use [`list_devices`] to enumerate all available hardware, or
-//!     [`open_device`] to look up a specific device by name (e.g., `"mlx5_0"`).
-//! *   **Device List**: The [`DeviceList`] struct owns the underlying list of devices
-//!     returned by the system. It handles memory management (freeing the list when dropped).
-//! *   **Device Reference**: A [`DeviceRef`] is a transient handle to a specific device.
-//!     It is obtained by iterating a list or querying a context.
-//!
-//! # Quick start: Open by name
-//!
-//! Opening a [`Context`] into a specific device by name can be accomplished easily using [`open_device`].
-//!
-//! ```
-//! use infiniband_rs::ibverbs::devices::open_device;
-//! use infiniband_rs::ibverbs::error::IbvResult;
-//!
-//! fn main() -> IbvResult<()> {
-//!     let ctx = open_device("mlx5_0")?;
-//!     Ok(())
-//! }
-//! ```
-//!
-//! # Example: Enumerating Devices
-//!
-//! ```
-//! use infiniband_rs::ibverbs::devices;
-//! use infiniband_rs::ibverbs::error::IbvResult;
-//!
-//! fn main() -> IbvResult<()> {
-//!     // 1. Get the list of available devices
-//!     let dev_list = devices::list_devices()?;
-//!
-//!     if dev_list.is_empty() {
-//!         println!("No RDMA devices found.");
-//!         return Ok(());
-//!     }
-//!
-//!     // 2. Iterate and print info
-//!     for dev in dev_list.iter() {
-//!         println!("Name: {:?}, GUID: {:?}", dev.name(), dev.guid());
-//!     }
-//!
-//!     // 3. Open the first available device
-//!     let first_dev = dev_list.get(0).unwrap();
-//!     let context = first_dev.open()?;
-//!
-//!     Ok(())
-//! }
-//! ```
-
-use crate::ibverbs::context::Context;
+use crate::ibverbs::device::{Context, Guid};
 use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::global_unique_id::Guid;
 use ibverbs_sys::*;
 use std::ffi::CStr;
 use std::io;
@@ -71,7 +13,7 @@ use std::marker::PhantomData;
 /// # Errors
 ///
 /// * Returns [`IbvError::NotFound`] if no device with the given name exists.
-/// * Propagates system errors if the device list cannot be retrieved or if the
+/// * Propagates system errors if the device list cannot be retrieved.
 pub fn open_device(name: impl AsRef<str>) -> IbvResult<Context> {
     let name = name.as_ref();
     let devices = list_devices()?;

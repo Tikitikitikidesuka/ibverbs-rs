@@ -1,78 +1,54 @@
-//! Context management for RDMA devices.
-//!
-//! The [`Context`] represents an active user-space session with a specific RDMA device.
-//! It serves as the root factory for creating all other RDMA resources.
-//!
-//! # Resource Management & Shared Ownership
-//!
-//! The `Context` uses **shared ownership** (via [`Arc`]) to manage the underlying device connection.
-//! This design simplifies resource management by allowing multiple handles to the same hardware context.
-//!
-//! All resources created from a `Context` (such as [`ProtectionDomain`], [`CompletionQueue`], etc.)
-//! implicitly hold a clone of this `Arc`. This creates a robust ownership hierarchy:
-//!
-//! 1.  **Child Keeps Parent Alive**: Even if you drop your main `Context` handle, the underlying
-//!     hardware connection remains open as long as *any* child resource (PD, QP, MR) is still alive.
-//! 2.  **Automatic Cleanup**: The actual `ibv_close_device` call only happens when the *last*
-//!     reference to the context is dropped.
-//!
-//! This ensures that resources are always deallocated in the correct order (Children first, then Context).
-//!
-//! # Example: The Resource Lifecycle
-//!
-//! ```
-//! use infiniband_rs::ibverbs::devices::open_device;
-//! use infiniband_rs::ibverbs::error::IbvResult;
-//!
-//! fn main() -> IbvResult<()> {
-//!     // 1. Open the context
-//!     let context = open_device("mlx5_0")?;
-//!
-//!     // 2. Create resources (PD and CQ)
-//!     // These resources now hold a reference to the context internally.
-//!     let pd = context.allocate_pd()?;
-//!     let cq = context.create_cq(0, 16)?;
-//!
-//!     // 3. Drop the context explicitly (optional)
-//!     // The device connection remains OPEN because 'pd' and 'cq' are still alive.
-//!     drop(context);
-//!
-//!     println!("Resources are still valid!");
-//!
-//!     // 4. End of main: 'pd' and 'cq' are dropped, ref count hits zero, context closes.
-//!     Ok(())
-//! }
-//! ```
-
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::devices::DeviceRef;
+use crate::ibverbs::device::{DeviceRef, IB_PORT};
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
 
-/// Port number 1 of each HCA is the RDMA port.
-pub(super) const IB_PORT: u8 = 1;
-/// Port number 2 of each HCA is the Ethernet port.
-pub(super) const ETH_PORT: u8 = 2;
-
 /// A handle to an open RDMA device context.
 ///
-/// This struct wraps the `ibv_context` from `libibverbs`. It uses internal reference
-/// counting ([`Arc`]), so it is cheap to [`Clone`].
+/// The `Context` represents an active user-space session with a specific RDMA device.
+/// It serves as the root factory for creating all other RDMA resources.
 ///
-/// # Lifetime
+/// # Resource Management & Shared Ownership
 ///
-/// Cloning creates a new handle to the *same* underlying hardware context. The underlying
-/// device connection is closed only when the **last** `Context` handle is dropped.
+/// The `Context` uses **shared ownership** (via [`Arc`]) to manage the underlying device connection.
+/// This design simplifies resource management by allowing multiple handles to the same hardware context.
 ///
-/// Because child resources (like [`ProtectionDomain`]) hold a clone of this `Context`,
-/// you can safely drop the `Context` immediately after creating your resources if you
-/// no longer need direct access to it.
+/// All resources created from a `Context` (such as [`ProtectionDomain`], [`CompletionQueue`], etc.)
+/// implicitly hold a clone of this `Arc`. This creates a robust ownership hierarchy:
+///
+/// 1.  **Child Keeps Parent Alive**: Even if you drop your main `Context` handle, the underlying
+///     hardware connection remains open as long as *any* child resource (PD, QP, MR) is still alive.
+/// 2.  **Automatic Cleanup**: The actual `ibv_close_device` call only happens when the *last*
+///     reference to the context is dropped.
+///
+/// # Example: The Resource Lifecycle
+///
+/// ```no_run
+/// # use infiniband_rs::ibverbs::devices::open_device;
+/// # use infiniband_rs::ibverbs::error::IbvResult;
+/// # fn main() -> IbvResult<()> {
+/// // 1. Open the context
+/// let context = open_device("mlx5_0")?;
+///
+/// // 2. Create resources (PD and CQ)
+/// // These resources now hold a reference to the context internally.
+/// let pd = context.allocate_pd()?;
+/// let cq = context.create_cq(0, 16)?;
+///
+/// // 3. Drop the context explicitly (optional)
+/// // The device connection remains OPEN because 'pd' and 'cq' are still alive.
+/// drop(context);
+///
+/// // 4. End of main: 'pd' and 'cq' are dropped, ref count hits zero, context closes.
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone)]
 pub struct Context {
-    pub(super) inner: Arc<ContextInner>,
+    pub(crate) inner: Arc<ContextInner>,
 }
 
 impl Context {
@@ -145,8 +121,8 @@ impl Context {
 }
 
 /// Inner wrapper to manage the lifecycle of the raw `ibv_context` pointer.
-pub(super) struct ContextInner {
-    pub(super) ctx: *mut ibv_context,
+pub(crate) struct ContextInner {
+    pub(crate) ctx: *mut ibv_context,
 }
 
 /// SAFETY: libibverbs components are thread safe.
@@ -182,7 +158,7 @@ impl std::fmt::Debug for ContextInner {
 
 impl ContextInner {
     /// Queries the properties of the primary port ([`IB_PORT`]).
-    pub(super) fn query_port(&self) -> IbvResult<ibv_port_attr> {
+    pub(crate) fn query_port(&self) -> IbvResult<ibv_port_attr> {
         let mut port_attr = ibv_port_attr::default();
         // SAFETY: `ibv_query_port` is a safe read operation if the context and pointer are valid.
         let errno = unsafe {
