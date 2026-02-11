@@ -53,7 +53,7 @@ impl ProtectionDomain {
         length: usize,
         access_flags: AccessFlags,
     ) -> IbvResult<MemoryRegion> {
-        unsafe { MemoryRegion::register_with_permissions(self, address, length, access_flags) }
+        unsafe { MemoryRegion::register_mr_with_access(self, address, length, access_flags) }
     }
 
     /// # Safety
@@ -102,7 +102,7 @@ impl ProtectionDomain {
         iova: u64,
         access_flags: AccessFlags,
     ) -> IbvResult<MemoryRegion> {
-        unsafe { MemoryRegion::register_dmabuf(self, fd, offset, length, iova, access_flags) }
+        unsafe { MemoryRegion::register_dmabuf_mr_with_access(self, fd, offset, length, iova, access_flags) }
     }
 
     pub fn register_local_dmabuf(
@@ -112,7 +112,7 @@ impl ProtectionDomain {
         length: usize,
         iova: u64,
     ) -> IbvResult<MemoryRegion> {
-        MemoryRegion::register_local_dmabuf(self, fd, offset, length, iova)
+        MemoryRegion::register_local_dmabuf_mr(self, fd, offset, length, iova)
     }
 
     /// # Safety
@@ -126,7 +126,7 @@ impl ProtectionDomain {
         length: usize,
         iova: u64,
     ) -> IbvResult<MemoryRegion> {
-        unsafe { MemoryRegion::register_shared_dmabuf(self, fd, offset, length, iova) }
+        unsafe { MemoryRegion::register_shared_dmabuf_mr(self, fd, offset, length, iova) }
     }
 }
 
