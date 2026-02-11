@@ -64,78 +64,49 @@
 //! locally, its aliasing guarantees will be broken.
 */
 
-//! Memory Region (MR) management.
-//!
-//! A [`MemoryRegion`] represents a block of memory registered with the NIC.
-//!
-//! # What is Registration?
-//!
-//! "Registration" is the process of pinning a memory buffer (preventing the OS from swapping it out)
-//! and providing the NIC with a translation from virtual addresses to physical addresses.
-//! This allows the NIC to access the memory directly (DMA) without CPU intervention.
-//!
-//! # Safety Architecture: The "Usage-Time" Guarantee
-//!
-//! RDMA safety is complex because the hardware accesses memory asynchronously. To ensure safety
-//! without forcing the [`MemoryRegion`] to own the underlying data (which would be inflexible),
-//! this library enforces safety at **usage time** via Scatter/Gather Elements (SGE).
-//!
-//! ## 1. Two-Sided Operations (Send/Receive)
-//!
-//! In Send/Receive operations, both the sender and receiver actively post Work Requests.
-//!
-//! *   **Sending (Gather)**: The sender *reads* from local memory to send to the network.
-//!     You use [`gather_element`](MemoryRegion::gather_element) which takes a shared reference (`&[u8]`).
-//! *   **Receiving (Scatter)**: The receiver *writes* incoming data into local memory.
-//!     You use [`scatter_element`](MemoryRegion::scatter_element) which takes a mutable reference (`&mut [u8]`).
-//!
-//! **The Guarantee**: Creating an SGE requires passing a Rust slice. This binds the lifetime of the SGE
-//! to the lifetime of the data. You cannot post a request if the data has been dropped, because the
-//! borrow checker prevents creating the SGE.
-//!
-//! ## 2. One-Sided Operations (RDMA Write/Read)
-//!
-//! In RDMA Write/Read, one active peer accesses the passive peer's memory directly.
-//!
-//! *   **Active Side (Initiator)**: Safe. The initiator creates an SGE for their *local* source/dest
-//!     buffer. The same lifetime guarantees apply as above.
-//! *   **Passive Side (Target)**: **Unsafe**. The target does *not* post a Work Request. They
-//!     simply register memory with remote access (like `remote_write`) and wait.
-//!     *   There is no SGE to bind the lifetime to.
-//!     *   **Aliasing**: A remote peer can write to this memory at any time. This violates Rust's
-//!         memory model if safe code is simultaneously accessing it.
-//!
-//! # Registration & Permissions
-//!
-//! You can register memory with different [`AccessFlags`]
-//! to control what operations are allowed:
-//!
-//! *   [`register_local_mr`](MemoryRegion::register_local_mr): **Safe**. Sets only local write access.
-//!     Allows usage in Send, Receive, and as the *initiator* of RDMA Reads/Writes.
-//! *   [`register_shared_mr`](MemoryRegion::register_shared_mr): **Unsafe**.
-//!     Sets remote read and remote write access as well.
-//!     Allows the memory to be the *target* of RDMA operations.
-//! *   [`register_mr_with_access`](MemoryRegion::register_mr_with_access): **Unsafe**.
-//!     Manual control of the memory region's access.
-
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::error::{IbvError, IbvResult};
+use crate::ibverbs::memory::{
+    GatherElement, RemoteMemoryRegion, ScatterElement, ScatterGatherElementError,
+};
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use crate::ibverbs::scatter_gather_element::*;
 use ibverbs_sys::*;
 use std::ffi::c_void;
 use std::io;
 
 /// A handle to a registered Memory Region.
 ///
-/// This struct manages the registration lifecycle. Note that it does **not** own the underlying
-/// memory buffer. Ownership and validity of the buffer are checked when creating Scatter/Gather
-/// elements.
+/// A `MemoryRegion` represents a block of memory registered with the NIC for RDMA operations.
 ///
-/// It holds a struct ([`ProtectionDomain`]) referencing the protection domain
-/// under which it was registered. This guarantees that the Protection Domain remains
-/// allocated as long as this Memory Region exists.
+/// # What is Registration?
+///
+/// Registration pins a memory buffer (preventing OS swapping) and provides the NIC with
+/// virtual-to-physical address translation, enabling direct memory access (DMA) without CPU
+/// involvement.
+///
+/// # Ownership Model
+///
+/// `MemoryRegion` does **not** own the underlying buffer. This design allows:
+/// *   Registering the same buffer in multiple Protection Domains
+/// *   Registering memory owned by other structures
+/// *   Flexible memory management strategies
+///
+/// Safety is enforced at **usage time** when creating [`GatherElement`] or [`ScatterElement`]
+/// instances (see the [memory module](crate::ibverbs::memory) for details).
+///
+/// # Registration Methods
+///
+/// ## Safe Registration
+///
+/// *   [`register_local_mr`](MemoryRegion::register_local_mr): Local write access only.
+///     Safe because all operations require creating SGEs with valid Rust references.
+///
+/// ## Unsafe Registration
+///
+/// *   [`register_shared_mr`](MemoryRegion::register_shared_mr): Adds remote read/write access.
+///     Unsafe because remote peers can access memory asynchronously, breaking aliasing guarantees.
+/// *   [`register_mr_with_access`](MemoryRegion::register_mr_with_access): Full manual control.
+///     Unsafe when remote access flags are enabled.
 pub struct MemoryRegion {
     pd: ProtectionDomain,
     mr: *mut ibv_mr,

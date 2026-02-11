@@ -1,13 +1,13 @@
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::context::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::memory_region::MemoryRegion;
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::queue_pair::builder::QueuePairBuilder;
 use crate::ibverbs::queue_pair::builder::queue_pair_builder::SetPd;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
+use crate::ibverbs::memory::MemoryRegion;
 
 #[derive(Debug, Clone)]
 pub struct ProtectionDomain {

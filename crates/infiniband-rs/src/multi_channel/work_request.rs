@@ -1,4 +1,4 @@
-use crate::ibverbs::scatter_gather_element::*;
+use crate::ibverbs::memory::{GatherElement, ScatterElement};
 use crate::ibverbs::work_request::*;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 

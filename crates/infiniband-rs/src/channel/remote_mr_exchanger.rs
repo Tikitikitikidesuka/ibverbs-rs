@@ -1,8 +1,7 @@
-use crate::channel::{Channel, TransportError, TransportResult};
-use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::memory_region::MemoryRegion;
+use crate::channel::{Channel, TransportError};
+use crate::ibverbs::error::IbvResult;
+use crate::ibverbs::memory::{MemoryRegion, RemoteMemoryRegion};
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use crate::ibverbs::work_request::WriteWorkRequest;
 use crate::remote_struct_field;
 use std::fmt::Debug;

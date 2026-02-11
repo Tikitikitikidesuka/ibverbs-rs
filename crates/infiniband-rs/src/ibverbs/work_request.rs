@@ -1,5 +1,4 @@
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
-use crate::ibverbs::scatter_gather_element::{GatherElement, ScatterElement};
+use crate::ibverbs::memory::{GatherElement, RemoteMemoryRegion, ScatterElement};
 
 /// 'wr is the lifetime of the work request struct. It lives from when then
 /// work request is created until its posted.

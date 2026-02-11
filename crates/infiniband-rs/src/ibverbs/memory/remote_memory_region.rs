@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// # The "Contiguous" Constraint
 ///
-/// Unlike local operations which support Scatter/Gather (using lists of SGEs to stitch
-/// fragmented memory together), **remote operations are strictly contiguous**.
+/// Unlike local operations which support Scatter/Gather (stitching fragmented memory together),
+/// **remote operations are strictly contiguous**.
 ///
 /// *   **Targeting**: You specify a single starting address and a total length.
 /// *   **Behavior**: The RDMA hardware reads or writes a continuous stream of bytes starting
@@ -17,25 +17,17 @@ use serde::{Deserialize, Serialize};
 /// If you need to write to multiple non-contiguous buffers on a remote peer, you must issue
 /// multiple distinct RDMA Write operations.
 ///
-/// # Safety: The Remote UB Risk
+/// # Safety and Responsibility
 ///
-/// In local operations ([`MemoryRegion`](crate::ibverbs::memory_region::MemoryRegion)), we "tie" the
-/// lifetime of the memory buffer to the operation to ensure safety.
+/// As discussed in the [memory module](crate::ibverbs::memory), remote memory safety cannot
+/// be enforced by the Rust compiler.
 ///
-/// **This is not possible with Remote Memory Regions.**
-///
-/// Because the memory resides on a different machine, the local node has no knowledge of the
-/// remote buffer's lifecycle.
-///
-/// *   **Local Safety**: Safe. Even if the remote memory is invalid, the local operation simply
-///     fails or succeeds. Your local process memory remains uncorrupted.
-/// *   **Remote Safety**: **Unsafe**. If you write to a `RemoteMemoryRegion` that points to
-///     memory that has been deallocated on the remote peer, the remote NIC will unknowingly
-///     overwrite that memory (use-after-free).
-///
-/// This **Remote Undefined Behavior** is why registering memory for remote access
-/// (`register_shared_mr`) is an `unsafe` operation. The remote application assumes the
-/// responsibility of keeping the memory alive for as long as peers hold valid keys to it.
+/// *   **Local Safety**: **Safe**. Even if this handle points to invalid memory, issuing an
+///     operation using it will only result in an error (or success), but will never corrupt
+///     *local* process memory.
+/// *   **Remote Safety**: **Unsafe**. If you write to a `RemoteMemoryRegion` that has been
+///     deallocated on the remote peer, the remote NIC will unknowingly overwrite that memory.
+///     **This causes Undefined Behavior on the remote peer.**
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
     addr: u64,
@@ -222,10 +214,3 @@ macro_rules! remote_struct_array_field_unchecked {
         $mr.sub_region_unchecked(total_offset)
     }};
 }
-
-pub use remote_array_field;
-pub use remote_array_field_unchecked;
-pub use remote_struct_array_field;
-pub use remote_struct_array_field_unchecked;
-pub use remote_struct_field;
-pub use remote_struct_field_unchecked;

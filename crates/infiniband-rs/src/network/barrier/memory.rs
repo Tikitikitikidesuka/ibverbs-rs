@@ -1,6 +1,6 @@
 use crate::channel::TransportResult;
 use crate::ibverbs::error::IbvResult;
-use crate::ibverbs::memory_region::MemoryRegion;
+use crate::ibverbs::memory::MemoryRegion;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;

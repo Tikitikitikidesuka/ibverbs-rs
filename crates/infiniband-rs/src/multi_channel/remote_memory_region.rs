@@ -1,5 +1,5 @@
-use crate::ibverbs::remote_memory_region::RemoteMemoryRegion;
 use serde::{Deserialize, Serialize};
+use crate::ibverbs::memory::RemoteMemoryRegion;
 
 /// A wrapper around [`RemoteMemoryRegion`] associated with a specific remote `peer`.
 ///
