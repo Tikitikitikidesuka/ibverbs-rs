@@ -64,7 +64,7 @@ impl MultiEventPacket {
         self.header.packet_size
     }
 
-    /// Returns the total size of this MEP packet in units of byets.
+    /// Returns the total size of this MEP packet in units of bytes.
     ///
     /// This is just a `self.packet_size_u32() * size_of::<u32>()`.
     pub fn packet_size_bytes(&self) -> usize {
@@ -121,12 +121,9 @@ impl MultiEventPacket {
 
     /// Returns a reference to the MFP containing the ODIN fragments.
     ///
-    /// This is just a convenience method to access the first MFP.
-    pub fn get_odin_mfp(&self) -> &MultiFragmentPacket {
-        // As MFPs are sorted by source id, the odin mfp is first.
-        let mfp = self.get_mfp(0).expect("odin mfp exists");
-        assert!(mfp.source_id().is_odin(), "expect first mfp to be odin mfp");
-        mfp
+    /// Returns `None` when the MEP does not contain an ODIN MFP.
+    pub fn get_odin_mfp(&self) -> Option<&MultiFragmentPacket> {
+        self.mfp_iter().find(|m| m.source_id().is_odin())
     }
 
     /// Returns a range over the event ids each of this MEP's MFPs contain.
@@ -152,17 +149,31 @@ impl MultiEventPacket {
 
     /// Returns an iterator over the MFPs in a sub-range of source ids.
     ///
+    /// **Important!** This function **requires** the mep to be **sorted by source id**.
+    /// If it is not (which is a valid MEP), the behavior is undefined.
+    /// Try checking [`Self::is_sorted_by_source_id`].
+    ///
     /// Getting this iterator takes `O(log n)` where `n` is the number of MFPs.
     /// This is caused by the binary search performed on the source ids.
     pub fn mfp_iter_srcid_range(&self, range: Range<SourceId>) -> MultiEventPacketIterator<'_> {
         let start_idx = self.mfp_source_ids().partition_point(|v| *v < range.start);
         let end_idx = self.mfp_source_ids().partition_point(|v| *v < range.end);
 
+        assert!(
+            start_idx <= end_idx,
+            "The MEP is clearly not sorted by source id"
+        );
+
         MultiEventPacketIterator {
             mep: self,
             next_idx: start_idx,
             end: Some(end_idx),
         }
+    }
+
+    /// Returns true if the MFPs in this MEP are sorted by source id in ascending order.
+    pub fn is_sorted_by_source_id(&self) -> bool {
+        self.mfp_source_ids().is_sorted()
     }
 
     /// Returns this packet as raw byte slice.
@@ -219,7 +230,7 @@ impl MultiEventPacket {
     }
 
     /// # Safety
-    /// Assumes data contains a valid MEP, with MFPs sorted by srcid.
+    /// Assumes data contains a valid MEP.
     unsafe fn unchecked_from_raw_bytes(data: &[u32]) -> &Self {
         // SAFETY: Data contains valid MEP and returned lifetime is same as of data.
         unsafe { &*(data.as_ptr() as *const MultiEventPacket) }
