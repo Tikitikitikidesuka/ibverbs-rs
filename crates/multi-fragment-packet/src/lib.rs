@@ -12,7 +12,7 @@ pub mod odin_mock;
 pub use builder::MultiFragmentPacketBuilder;
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;
-use ebutils::{EventId, Uninstantiatable};
+use ebutils::{END_OF_RUN, EventId, Uninstantiatable};
 pub mod owned;
 
 pub use owned::MultiFragmentPacketOwned;
@@ -125,6 +125,18 @@ impl MultiFragmentPacket {
     /// The event ids of the fragments are sequential, so the event id of fragment `n` is `event_id() + n`.
     pub fn event_id(&self) -> EventId {
         self.header().event_id
+    }
+
+    /// Returns true if thes MFP marks the end of a run, i.e. has event id [`END_OF_RUN`].
+    /// 
+    /// Those MFPs are always empty.
+    pub fn is_end_of_run(&self) -> bool {
+        if self.event_id() == END_OF_RUN {
+            assert_eq!(self.fragment_count(), 0, "End of run has no fragments");
+            true
+        } else {
+            false
+        }
     }
 
     /// Returns the Source ID of all of the fragments in this packet.
