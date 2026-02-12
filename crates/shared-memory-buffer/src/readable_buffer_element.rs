@@ -138,7 +138,7 @@ macro_rules! impl_circular_buffer_multi_readable {
 
                     read_data.push(element);
                     advance_size += aligned_size;
-                    advance_sizes.push(aligned_size);
+                    advance_sizes.push(advance_size);
                 }
 
                 Ok($crate::MultiReadGuard::new(
