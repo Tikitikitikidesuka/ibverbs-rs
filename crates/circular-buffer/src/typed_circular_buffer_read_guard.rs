@@ -46,9 +46,20 @@ impl<'a, R: CircularBufferReader, T> MultiReadGuard<'a, R, T> {
         }
     }
 
+    /// Truncates the guard to the given number of elements.
+    ///
+    /// All the truncated elements are **not** discarded but just kept in buffer for the next read.
+    /// This is useful to just call [`Self::discard_all`] later.
+    pub fn truncate(&mut self, new_num: usize) {
+        assert!(new_num <= self.num_elements());
+        self.data.truncate(new_num);
+        self.advance_sizes.truncate(new_num);
+    }
+
     pub fn discard_n(self, num: usize) -> R::AdvanceResult {
         self.reader.advance_read_pointer(self.advance_sizes[num])
     }
+
     pub fn discard_all(self) -> R::AdvanceResult {
         self.reader
             .advance_read_pointer(self.advance_sizes.last().copied().unwrap_or_default())

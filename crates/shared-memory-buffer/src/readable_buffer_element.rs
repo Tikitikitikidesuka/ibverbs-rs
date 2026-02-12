@@ -2,9 +2,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SharedMemoryTypedReadError {
-    #[error("Type not found on buffer")]
-    NotFound,
-
     #[error("Not enough data for requested type")]
     NotEnoughData,
 
