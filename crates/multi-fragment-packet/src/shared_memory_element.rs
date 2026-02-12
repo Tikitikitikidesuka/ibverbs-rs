@@ -1,4 +1,4 @@
-use crate::{MultiFragmentPacket, MultiFragmentPacketOwned};
+use crate::{MultiFragmentPacketOwned, MultiFragmentPacket};
 use circular_buffer::CircularBufferWriter;
 use shared_memory_buffer::{
     ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError,
@@ -22,7 +22,7 @@ impl ReadableSharedMemoryBufferElement for MultiFragmentPacket {
     fn cast_to_element(data: &[u8]) -> Result<&Self, SharedMemoryTypedReadError> {
         // Verify enough data for header
         if data.len() < Self::HEADER_SIZE {
-            return Err(SharedMemoryTypedReadError::NotEnoughData(()));
+            return Err(SharedMemoryTypedReadError::NotEnoughData);
         }
 
         // Cast to mfp
@@ -39,7 +39,7 @@ impl ReadableSharedMemoryBufferElement for MultiFragmentPacket {
     fn check_wrap_flag(bytes: &[u8]) -> Result<bool, SharedMemoryTypedReadError> {
         // Check enough data for magic
         if bytes.len() < Self::magic_field_offset() + Self::magic_field_size() {
-            return Err(SharedMemoryTypedReadError::NotEnoughData(()));
+            return Err(SharedMemoryTypedReadError::NotEnoughData);
         }
 
         // If there is, cast mfp
