@@ -44,10 +44,8 @@ macro_rules! impl_circular_buffer_single_readable {
                 let element_ptr = element as *const Self;
                 let element = unsafe { &*element_ptr };
 
-                let aligned_size = ebutils::align_up_pow2(
-                    element.length_in_bytes(),
-                    reader.alignment_pow2(),
-                );
+                let aligned_size =
+                    ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
 
                 if readable_region.len() < aligned_size {
                     return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
@@ -84,12 +82,23 @@ macro_rules! impl_circular_buffer_multi_readable {
 
                 let mut read_data = Vec::with_capacity(num);
                 let mut advance_size = 0;
+                let mut advance_sizes = Vec::with_capacity(num);
                 let mut wrapped = false;
 
                 for _i in 0..num {
                     let (current_region, offset) = if !wrapped {
                         if advance_size == primary_region.len()
-                            || Self::check_wrap_flag(&primary_region[advance_size..])?
+                            || match Self::check_wrap_flag(&primary_region[advance_size..]) {
+                                Ok(b) => b,
+                                Err($crate::SharedMemoryTypedReadError::NotEnoughData) => {
+                                    return Ok($crate::MultiReadGuard::new(
+                                        reader,
+                                        read_data,
+                                        advance_sizes,
+                                    ));
+                                }
+                                Err(e) => return Err(e),
+                            }
                         {
                             wrapped = true;
                             advance_size = primary_region.len();
@@ -102,27 +111,44 @@ macro_rules! impl_circular_buffer_multi_readable {
                         (secondary_region, offset)
                     };
 
-                    let element = Self::cast_to_element(&current_region[offset..])?;
+                    let element = match Self::cast_to_element(&current_region[offset..]) {
+                        Ok(element) => element,
+                        Err($crate::SharedMemoryTypedReadError::NotEnoughData) => {
+                            return Ok($crate::MultiReadGuard::new(
+                                reader,
+                                read_data,
+                                advance_sizes,
+                            ));
+                        }
+                        Err(e) => return Err(e),
+                    };
 
                     // Untie lifetimes to allow MultiReadGuard to take both ref to reader and element
                     // The safety of this operation is based on the MultiReadGuard's safety promises
                     let element_ptr = element as *const Self;
                     let element = unsafe { &*element_ptr };
 
-                    let aligned_size = ebutils::align_up_pow2(
-                        element.length_in_bytes(),
-                        reader.alignment_pow2(),
-                    );
+                    let aligned_size =
+                        ebutils::align_up_pow2(element.length_in_bytes(), reader.alignment_pow2());
 
                     if current_region.len() < aligned_size + offset {
-                        return Err($crate::SharedMemoryTypedReadError::NotEnoughData);
+                        return Ok($crate::MultiReadGuard::new(
+                            reader,
+                            read_data,
+                            advance_sizes,
+                        ));
                     }
 
                     read_data.push(element);
                     advance_size += aligned_size;
+                    advance_sizes.push(aligned_size);
                 }
 
-                Ok($crate::MultiReadGuard::new(reader, read_data, advance_size))
+                Ok($crate::MultiReadGuard::new(
+                    reader,
+                    read_data,
+                    advance_sizes,
+                ))
             }
         }
     };

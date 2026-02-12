@@ -95,5 +95,5 @@ fn main() {
         println!("Read many: {}", entry);
     });
     println!("Discarding them...");
-    read_entries.discard().unwrap();
+    read_entries.discard_all().unwrap();
 }

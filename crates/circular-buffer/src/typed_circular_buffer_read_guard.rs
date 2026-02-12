@@ -28,23 +28,34 @@ impl<'a, R: CircularBufferReader, T> std::ops::Deref for ReadGuard<'a, R, T> {
     }
 }
 
+// This is unsafe as the data references the reader. It is an invariant that the reader is not modified while the data may still be accessd.
+// Todo: make this safer, this requires a neccesary refactor of the whole circular buffer trait system.
 pub struct MultiReadGuard<'a, R: CircularBufferReader, T> {
     reader: &'a mut R,
     data: Vec<&'a T>,
-    advance_size: usize,
+    advance_sizes: Vec<usize>,
 }
 
 impl<'a, R: CircularBufferReader, T> MultiReadGuard<'a, R, T> {
-    pub fn new(reader: &'a mut R, data: Vec<&'a T>, advance_size: usize) -> Self {
+    pub fn new(reader: &'a mut R, data: Vec<&'a T>, advance_sizes: Vec<usize>) -> Self {
+        assert_eq!(data.len(), advance_sizes.len());
         Self {
             reader,
             data,
-            advance_size,
+            advance_sizes,
         }
     }
 
-    pub fn discard(self) -> R::AdvanceResult {
-        self.reader.advance_read_pointer(self.advance_size)
+    pub fn discard_n(self, num: usize) -> R::AdvanceResult {
+        self.reader.advance_read_pointer(self.advance_sizes[num])
+    }
+    pub fn discard_all(self) -> R::AdvanceResult {
+        self.reader
+            .advance_read_pointer(self.advance_sizes.last().copied().unwrap_or_default())
+    }
+
+    pub fn num_elements(&self) -> usize {
+        self.data.len()
     }
 
     pub fn get_reader(&self) -> &R {

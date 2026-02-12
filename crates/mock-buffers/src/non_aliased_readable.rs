@@ -75,6 +75,7 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
     ) -> Self::MultiReadResult<'_> {
         let (primary_region, secondary_region) = reader.readable_region();
         let mut read_data = Vec::with_capacity(num);
+        let mut advance_sizes = Vec::with_capacity(num);
         let mut advance_size = 0;
         let mut wrapped = false;
 
@@ -105,7 +106,7 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
 
             // Validate space for header
             if current_region.len() < size_of::<Self>() + offset {
-                return Err(ReadError::NotEnoughData);
+                return Ok(MultiReadGuard::new(reader, read_data, advance_sizes));
             }
 
             // Cast to diary entry and validate magic
@@ -119,18 +120,18 @@ impl CircularBufferMultiReadable<MockNonAliasedBufferReader> for BufferedDiaryEn
 
             // Calculate entry size and validate total space
             let total_length = size_of::<Self>() + diary_entry.note().len();
-            let aligned_entry_size =
-                ebutils::align_up_pow2(total_length, reader.alignment_pow2());
+            let aligned_entry_size = ebutils::align_up_pow2(total_length, reader.alignment_pow2());
 
             if current_region.len() < aligned_entry_size + offset {
-                return Err(ReadError::NotEnoughData);
+                return Ok(MultiReadGuard::new(reader, read_data, advance_sizes));
             }
 
             // Store entry and advance position
             read_data.push(diary_entry);
             advance_size += aligned_entry_size;
+            advance_sizes.push(advance_size);
         }
 
-        Ok(MultiReadGuard::new(reader, read_data, advance_size))
+        Ok(MultiReadGuard::new(reader, read_data, advance_sizes))
     }
 }

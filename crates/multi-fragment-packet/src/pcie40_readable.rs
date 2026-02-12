@@ -11,10 +11,6 @@ use tracing::error;
 /// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
 pub enum PCIe40TypedReadError {
-    /// No data is yet present in the buffer.
-    #[error("Type not found on buffer")]
-    NotFound,
-
     /// Not enough data is yet present it the buffer to satisfy the request.
     #[error("Not enough data for requested type")]
     NotEnoughData,
@@ -75,12 +71,13 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
         let readable_region = reader.readable_region()?;
 
         let mut advance_size = 0;
-        let mut read_data = Vec::with_capacity(num);
+        let mut advance_sizes = Vec::with_capacity(num);
+        let mut data = Vec::with_capacity(num);
 
         for _ in 0..num {
             // Verify enough data for header
             if readable_region.len() < Self::HEADER_SIZE + advance_size {
-                return Err(PCIe40TypedReadError::NotEnoughData);
+                return Ok(MultiReadGuard::new(reader, data, advance_sizes));
             }
 
             // Cast to mfp
@@ -98,18 +95,16 @@ impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
             let aligned_size =
                 ebutils::align_up_pow2(mfp_mem.packet_size() as usize, reader.alignment_pow2());
             if readable_region.len() < aligned_size + advance_size {
-                return Err(PCIe40TypedReadError::NotEnoughData);
+                return Ok(MultiReadGuard::new(reader, data, advance_sizes));
             }
 
             // Store reference to read entry and add advance size
-            read_data.push(mfp_mem);
-
             advance_size += aligned_size;
+            data.push(mfp_mem);
+            advance_sizes.push(advance_size);
         }
 
         // If all checks are passed, guard the type
-        let read_guard = MultiReadGuard::new(reader, read_data, advance_size);
-
-        Ok(read_guard)
+        Ok(MultiReadGuard::new(reader, data, advance_sizes))
     }
 }
