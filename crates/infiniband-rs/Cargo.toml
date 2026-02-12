@@ -1,6 +1,5 @@
 [package]
 name = "infiniband-rs"
-authors = ["Miguel Hermoso Mantecon"]
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

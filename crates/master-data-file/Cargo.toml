@@ -1,7 +1,6 @@
 [package]
 name = "master-data-file"
 description = "Crate for reading and writing MDF files."
-authors = ["Jonatan Ziegler"]
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

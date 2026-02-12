@@ -1,7 +1,6 @@
 [package]
 name = "multi-event-packet"
 description = "Crate for building and reading MEPs."
-authors = ["Jonatan Ziegler"]
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

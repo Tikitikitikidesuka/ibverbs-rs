@@ -1,7 +1,6 @@
 [package]
 name = "shared-memory-buffer"
 description = "Safe Rust shared memory buffer implementation for interprocess communication for the LHCb Event Builder"
-authors = ["Miguel Hermoso Mantecon"]
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

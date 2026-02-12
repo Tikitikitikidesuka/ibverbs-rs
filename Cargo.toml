@@ -5,7 +5,6 @@ members = ["crates/*"]
 
 [workspace.package]
 version = "0.2.0"
-authors = ["Miguel Hermoso Mantecon", "Jonatan Ziegler"]
 description = "A collection of crates for an LHCb event builder at CERN."
 repository = "https://gitlab.cern.ch/lhcb-online/rusteb"
 edition = "2024"
@@ -47,7 +46,6 @@ unwrap_used = "warn"
 [package]
 name = "rusteb"
 description = "Crate containing examples and tools utilizing the other rusteb crates."
-authors.workspace = true
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
