@@ -128,11 +128,10 @@ impl MultiFragmentPacket {
     }
 
     /// Returns true if thes MFP marks the end of a run, i.e. has event id [`END_OF_RUN`].
-    /// 
-    /// Those MFPs are always empty.
+    ///
+    /// Those MFPs may contain fragments, but they are empty.
     pub fn is_end_of_run(&self) -> bool {
         if self.event_id() == END_OF_RUN {
-            assert_eq!(self.fragment_count(), 0, "End of run has no fragments");
             true
         } else {
             false
