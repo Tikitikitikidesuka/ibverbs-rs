@@ -1,18 +1,16 @@
 use crate::channel::TransportResult;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
-use crate::ibverbs::work_completion::WorkResult;
-use crate::ibverbs::work_error::WorkError;
-use crate::ibverbs::work_success::WorkSuccess;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::rc::Rc;
+use crate::ibverbs::work::{WorkResult, WorkSuccess};
 
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    status: Option<Result<WorkSuccess, WorkError>>,
+    status: Option<WorkResult>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
     _data_lifetime: PhantomData<&'a [u8]>,

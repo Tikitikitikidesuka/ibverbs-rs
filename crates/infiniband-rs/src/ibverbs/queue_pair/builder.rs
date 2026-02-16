@@ -1,6 +1,6 @@
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::context::IB_PORT;
+use crate::ibverbs::device::IB_PORT;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::QueuePair;
@@ -13,12 +13,25 @@ use std::{io, ptr};
 
 #[bon]
 impl QueuePair {
+    /// Configures and allocates a new Queue Pair.
+    ///
+    /// This builder creates the QP hardware resources.
+    /// It returns a [`PreparedQueuePair`] which must be connected via a handshake before it can be used.
+    ///
+    /// # Arguments
+    ///
+    /// *   `pd`: The Protection Domain this QP belongs to.
+    /// *   `send_cq` / `recv_cq`: The completion queues for operation results.
+    /// *   `access`: The operations allowed on this QP (e.g., Remote Write).
+    /// *   `max_*`: Hardware limits for the Work Queues.
+    ///
     /// # Errors
-    ///  - `EINVAL`: Invalid `ProtectionDomain`, sending or receiving `Context`, or invalid value
-    ///    provided in `max_send_wr`, `max_recv_wr`, or in `max_inline_data`.
-    ///  - `ENOMEM`: Not enough resources to complete this operation.
-    ///  - `ENOSYS`: QP with this Transport Service Type isn't supported by this RDMA device.
-    ///  - `EPERM`: Not enough permissions to create a QP with this Transport Service Type.
+    ///
+    /// *   [`IbvError::InvalidInput`]: Invalid `ProtectionDomain`, invalid Context, or invalid configuration
+    ///     values (e.g., `max_send_wr` exceeds hardware limits).
+    /// *   [`IbvError::Resource`]: Insufficient memory or hardware resources to create the QP.
+    /// *   [`IbvError::Permission`]: Not enough permissions to create this type of QP.
+    /// *   [`IbvError::Driver`]: Underlying driver failure (e.g., `ENOSYS` if the transport type isn't supported).
     #[builder(state_mod(vis = "pub(crate)"))]
     pub fn builder(
         pd: &ProtectionDomain,
@@ -91,14 +104,17 @@ impl QueuePair {
     }
 }
 
-/// An allocated but uninitialized `QueuePair`.
+/// An allocated but unconnected `QueuePair`.
 ///
-/// Specifically, this `QueuePair` has been allocated with `ibv_create_qp`, but has not yet been
-/// initialized with calls to `ibv_modify_qp`.
+/// This struct represents a QP that has been created on the device
+/// but is not yet connected to a remote peer.
 ///
-/// To complete the construction of the `QueuePair`, you will need to obtain the
-/// `QueuePairEndpoint` of the remote end (by using `PreparedQueuePair::endpoint`), and then call
-/// `PreparedQueuePair::handshake` on both sides with the other side's `QueuePairEndpoint`:
+/// # The Connection Process
+///
+/// 1.  **Exchange Endpoints**: Use [`endpoint()`](Self::endpoint) to get your local connection info.
+///     Send this to the remote peer via an out-of-band channel (e.g., TCP). Receive the
+///     peer's `QueuePairEndpoint` in return.
+/// 2.  **Handshake**: Call [`handshake`](Self::handshake) with the remote peer's endpoint.
 #[derive(Debug)]
 pub struct PreparedQueuePair {
     qp: QueuePair,
@@ -118,7 +134,10 @@ pub struct PreparedQueuePair {
     recv_psn: PacketSequenceNumber,
 }
 
-/// An identifier for the network endpoint of a `QueuePair`.
+/// The addressing information required to connect to a specific Queue Pair.
+///
+/// This struct contains the Local Identifier (LID) and Queue Pair Number (QPN).
+/// You must send this information to the remote peer so they can connect their QP to this one.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct QueuePairEndpoint {
     pub num: u32,
@@ -126,22 +145,25 @@ pub struct QueuePairEndpoint {
 }
 
 impl PreparedQueuePair {
-    /// Get the network endpoint for this `QueuePair`.
+    /// Returns the network endpoint information for this `QueuePair`.
     ///
-    /// This endpoint will need to be communicated to the `QueuePair` on the remote end.
+    /// Share this with the remote peer so it can connect its remote QP to this one.
     pub fn endpoint(&self) -> QueuePairEndpoint {
         self.endpoint
     }
 
-    /// Set up the `QueuePair` such that it is ready to exchange packets with a remote `QueuePair`.
+    /// Connects this Queue Pair to a remote peer.
     ///
-    /// Internally, this uses `ibv_modify_qp` to mark the `QueuePair` as initialized
-    /// (`IBV_QPS_INIT`), ready to receive (`IBV_QPS_RTR`), and ready to send (`IBV_QPS_RTS`).
+    /// This consumes the `PreparedQueuePair` and returns a connected `QueuePair`.
+    ///
+    /// # Arguments
+    ///
+    /// *   `remote`: The endpoint information received from the remote peer.
     ///
     /// # Errors
     ///
-    ///  - `EINVAL`: Invalid value provided in `attr` or in `attr_mask`.
-    ///  - `ENOMEM`: Not enough resources to complete this operation.
+    /// *   [`IbvError::InvalidInput`]: Invalid state transition parameters (e.g., invalid port or access flags).
+    /// *   [`IbvError::Resource`]: Hardware resource exhaustion during state transition.
     pub fn handshake(self, remote: QueuePairEndpoint) -> IbvResult<QueuePair> {
         // Initialize queue pair
         let mut attr = ibv_qp_attr {

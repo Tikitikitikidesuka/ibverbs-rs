@@ -1,8 +1,12 @@
 use ibverbs_sys::ibv_wc_status;
 use num_enum::FromPrimitive;
-use std::{fmt, io};
+use std::fmt;
 use thiserror::Error;
 
+/// Represents a failed Work Request.
+///
+/// This error is returned when polling the Completion Queue results in a status other than `IBV_WC_SUCCESS`.
+/// It encapsulates the standard ibverbs status code as well as vendor-specific diagnostic information.
 #[derive(Copy, Clone, Debug, Error)]
 pub struct WorkError {
     raw_status: u32,
@@ -10,7 +14,8 @@ pub struct WorkError {
 }
 
 impl WorkError {
-    /// The raw status cannot be IBV_WC_SUCCESS.
+    /// Creates a new WorkError.
+    /// This function is not intended to be called with `IBV_WC_SUCCESS`.
     pub(super) fn new(raw_status: ibv_wc_status::Type, vendor_code: u32) -> Self {
         Self {
             raw_status,
@@ -18,17 +23,20 @@ impl WorkError {
         }
     }
 
-    /// Raw `ibv_wc.status` value.
+    /// Returns the raw `ibv_wc.status` value returned by the hardware.
     pub fn raw_status(&self) -> u32 {
         self.raw_status
     }
 
-    /// Vendor-specific error code.
+    /// Returns the vendor-specific error syndrome.
+    ///
+    /// This value is hardware-dependent (e.g., Mellanox/NVIDIA ConnectX syndrome).
+    /// It can be used to look up deep hardware diagnostics in the vendor's programmer manual.
     pub fn vendor_code(&self) -> u32 {
         self.vendor_code
     }
 
-    /// Canonical ibverbs error code derived from `raw_status`.
+    /// Returns the canonical error code enum.
     pub fn code(&self) -> WorkErrorCode {
         WorkErrorCode::from(self.raw_status)
     }
@@ -51,7 +59,7 @@ impl fmt::Display for WorkError {
     }
 }
 
-/// Broad classification of where the failure occurred.
+/// Broad classification of failure domains.
 #[derive(Debug, Copy, Clone)]
 pub enum WorkErrorClass {
     /// Bug or invalid usage in local application code.
@@ -76,7 +84,7 @@ pub enum WorkErrorClass {
     Unknown,
 }
 
-/// Canonical ibverbs WC error codes.
+/// Canonical ibverbs Work Completion status codes.
 ///
 /// Numeric values match `enum ibv_wc_status`.
 #[derive(Debug, Copy, Clone, Error, FromPrimitive)]

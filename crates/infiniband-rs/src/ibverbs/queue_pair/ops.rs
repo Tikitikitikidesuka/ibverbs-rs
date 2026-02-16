@@ -1,14 +1,21 @@
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::queue_pair::QueuePair;
-use crate::ibverbs::work_request::*;
+use crate::ibverbs::work::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 use ibverbs_sys::*;
-use std::{io, ptr};
+use std::ptr;
 
 impl QueuePair {
+    /// Posts a **Send** request to the Send Queue.
+    ///
     /// # Safety
-    /// The buffers pointed to by the work request in its gather elements must remain
-    /// valid and cannot be mutated until the work is finished by the hardware.
-    /// They must also not be aliased by a mutable reference until then.
+    ///
+    /// The buffers referenced by the `gather_elements` must remain **valid** and **immutable**
+    /// until the work is finished by the hardware (signaled via the Send CQ).
+    ///
+    /// You must ensure that the lifetime of the data, which was tied to the
+    /// `GatherElement`, is manually extended until completion.
     pub unsafe fn post_send(&mut self, wr: SendWorkRequest, wr_id: u64) -> IbvResult<()> {
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_SEND, Default::default()),
@@ -40,10 +47,14 @@ impl QueuePair {
         }
     }
 
+    /// Posts a **Receive** request to the Receive Queue.
+    ///
     /// # Safety
-    /// The buffers pointed to by the work request in its scatter elements must remain
-    /// valid and cannot be read or mutated until the work is finished by the hardware.
-    /// They must not be aliased by shared or mutable references until then.
+    ///
+    /// The buffers referenced by the `scatter_elements` must remain **valid** and **exclusive**
+    /// (mutable) until the work is finished by the hardware (signaled via the Recv CQ).
+    ///
+    /// Accessing these buffers before completion results in a data race (Undefined Behavior).
     pub unsafe fn post_receive(&mut self, wr: ReceiveWorkRequest, wr_id: u64) -> IbvResult<()> {
         let mut wr = ibv_recv_wr {
             wr_id,
@@ -59,14 +70,15 @@ impl QueuePair {
         }
     }
 
-    /// It is important to notice how remote memory regions work. todo: explain
-    /// The `RemoteMemoryRegion`'s length attribute is only a marker to respect bounds locally.
-    /// If a `RemoteMemoryRegion` is created with length n but gather regions with an added length
-    /// of m greater than n is RDMA written into it, the serialized
+    /// Posts an **RDMA Write** request.
+    ///
     /// # Safety
-    /// The buffers pointed to by the work request in its gather elements must remain
-    /// valid and cannot be read or mutated until the work is finished by the hardware.
-    /// They must not be aliased by shared or mutable references until then.
+    ///
+    /// The buffers referenced by the `gather_elements` must remain **valid** and **immutable**
+    /// until the work is finished by the hardware.
+    ///
+    /// Additionally, the remote address range must be valid on the remote peer; otherwise,
+    /// a Remote Access Error will occur.
     pub unsafe fn post_write(&mut self, wr: WriteWorkRequest, wr_id: u64) -> IbvResult<()> {
         let (opcode, __bindgen_anon_1) = match wr.imm_data {
             None => (ibv_wr_opcode::IBV_WR_RDMA_WRITE, Default::default()),
@@ -103,10 +115,12 @@ impl QueuePair {
         }
     }
 
+    /// Posts an **RDMA Read** request.
+    ///
     /// # Safety
-    /// The buffers pointed to by the work request in its gather elements must remain
-    /// valid and cannot be read or mutated until the work is finished by the hardware.
-    /// They must not be aliased by shared or mutable references until then.
+    ///
+    /// The buffers referenced by the `scatter_elements` must remain **valid** and **exclusive**
+    /// (mutable) until the work is finished by the hardware.
     pub unsafe fn post_read(&mut self, wr: ReadWorkRequest, wr_id: u64) -> IbvResult<()> {
         let mut wr = ibv_send_wr {
             wr_id,

@@ -34,7 +34,7 @@ impl Channel {
         #[builder(default)] send_psn: PacketSequenceNumber,
         #[builder(default)] recv_psn: PacketSequenceNumber,
     ) -> IbvResult<PreparedChannel> {
-        let cq = pd.context().create_cq(0, min_cq_entries)?;
+        let cq = pd.context().create_cq(min_cq_entries)?;
         let qp = pd
             .create_qp()
             .send_cq(&cq)

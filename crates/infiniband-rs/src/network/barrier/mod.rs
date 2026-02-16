@@ -4,13 +4,13 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::barrier::binary_tree::{BinaryTreeBarrier, PreparedBinaryTreeBarrier};
-use crate::network::barrier::centralized::{CentralizedBarrier, PreparedCentralizedBarrier};
+use crate::network::barrier::linear::{LinearBarrier, PreparedLinearBarrier};
 use crate::network::barrier::dissemination::{DisseminationBarrier, PreparedDisseminationBarrier};
 use std::time::Duration;
 use thiserror::Error;
 
 pub mod binary_tree;
-pub mod centralized;
+pub mod linear;
 pub mod dissemination;
 mod memory;
 
@@ -54,7 +54,7 @@ impl BarrierAlgorithm {
 
 #[derive(Debug)]
 pub enum Barrier {
-    Centralized(CentralizedBarrier),
+    Centralized(LinearBarrier),
     BinaryTree(BinaryTreeBarrier),
     Dissemination(DisseminationBarrier),
 }
@@ -65,7 +65,7 @@ impl Barrier {
         rank: usize,
         world_size: usize,
     ) -> IbvResult<PreparedBarrier> {
-        Ok(PreparedBarrier::Centralized(CentralizedBarrier::new(
+        Ok(PreparedBarrier::Centralized(LinearBarrier::new(
             pd, rank, world_size,
         )?))
     }
@@ -120,7 +120,7 @@ impl Barrier {
 
 #[derive(Debug)]
 pub enum PreparedBarrier {
-    Centralized(PreparedCentralizedBarrier),
+    Centralized(PreparedLinearBarrier),
     BinaryTree(PreparedBinaryTreeBarrier),
     Dissemination(PreparedDisseminationBarrier),
 }

@@ -1,9 +1,16 @@
+//! Error types for RDMA operations.
+
 use nix::libc;
 use std::io;
 use thiserror::Error;
 
+/// A specialized result type for ibverbs operations.
 pub type IbvResult<T> = Result<T, IbvError>;
 
+/// Represents errors that can occur when interacting with the RDMA subsystem.
+///
+/// This enum maps low-level OS/Driver error codes (`errno`) into high-level semantic categories
+/// to help applications decide how to recover (e.g., retrying on resource exhaustion vs. panicking on invalid input).
 #[derive(Debug, Error)]
 pub enum IbvError {
     /// Maps to `EINVAL`.

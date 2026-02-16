@@ -1,6 +1,5 @@
 use crate::channel::TransportResult;
-use crate::ibverbs::work_request::SendWorkRequest;
-use crate::ibverbs::work_success::WorkSuccess;
+use crate::ibverbs::work::{SendWorkRequest, WorkSuccess};
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;
 

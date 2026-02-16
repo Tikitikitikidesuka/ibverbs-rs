@@ -1,13 +1,12 @@
 use crate::channel::pending_work::PendingWork;
 use crate::channel::{Channel, TransportError, TransportResult};
-use crate::ibverbs::error::{IbvError, IbvResult};
-use crate::ibverbs::work_request::*;
-use crate::ibverbs::work_success::WorkSuccess;
+use crate::ibverbs::error::IbvResult;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
+use crate::ibverbs::work::{ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest};
 
 /// T is user closure Ok output type
 /// E is user closure Err output type

@@ -1,15 +1,15 @@
-use infiniband_rs::ibverbs::devices::open_device;
 use infiniband_rs::multi_channel::MultiChannel;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
+use infiniband_rs::ibverbs;
 
 const DEVICE: &str = "mlx5_0";
 
 fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
-    let ctx = open_device(DEVICE).unwrap();
+    let ctx = ibverbs::open_device(DEVICE).unwrap();
     let pd = ctx.allocate_pd().unwrap();
 
     let multi_channel = MultiChannel::builder()

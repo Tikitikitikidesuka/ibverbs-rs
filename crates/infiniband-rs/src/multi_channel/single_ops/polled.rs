@@ -1,5 +1,5 @@
 use crate::channel::TransportResult;
-use crate::ibverbs::work_success::WorkSuccess;
+use crate::ibverbs::work::*;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
