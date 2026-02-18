@@ -1,18 +1,116 @@
 use crate::channel::TransportResult;
 use crate::channel::pending_work::PendingWork;
-use crate::channel::polling_scope::{PollingScope, ScopeError};
+use crate::channel::polling_scope::{PollingScope, ScopeError, ScopedPendingWork};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work::{SendWorkRequest, WorkSuccess};
-use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;
 use crate::network::Node;
+use crate::network::barrier::BarrierError;
+use std::time::Duration;
 
 impl Node {
     pub fn scope<'env, F, T>(&'env mut self, f: F) -> Result<T, ScopeError>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, MultiChannel>) -> TransportResult<T>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Node>) -> TransportResult<T>,
     {
-        PollingScope::run(&mut self.multi_channel, f)
+        PollingScope::run(self, f)
+    }
+}
+
+impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
+    pub fn post_scatter_send<'wr, I>(&mut self, wrs: I) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = PeerSendWorkRequest<'wr, 'env>>,
+        'env: 'wr,
+    {
+        wrs.into_iter().map(|wr| self.post_send(wr)).collect()
+    }
+
+    pub fn post_scatter_write<'wr, I>(
+        &mut self,
+        wrs: I,
+    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = PeerWriteWorkRequest<'wr, 'env>>,
+        'env: 'wr,
+    {
+        wrs.into_iter().map(|wr| self.post_write(wr)).collect()
+    }
+
+    pub fn post_gather_receive<'wr, I>(
+        &mut self,
+        wrs: I,
+    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = PeerReceiveWorkRequest<'wr, 'env>>,
+        'env: 'wr,
+    {
+        wrs.into_iter().map(|wr| self.post_receive(wr)).collect()
+    }
+
+    pub fn post_gather_read<'wr, I>(&mut self, wrs: I) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = PeerReadWorkRequest<'wr, 'env>>,
+        'env: 'wr,
+    {
+        wrs.into_iter().map(|wr| self.post_read(wr)).collect()
+    }
+
+    pub fn post_multicast_send<'wr, I>(
+        &mut self,
+        peers: I,
+        wr: SendWorkRequest<'wr, 'env>,
+    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    where
+        I: IntoIterator<Item = usize>,
+        'env: 'wr,
+    {
+        peers
+            .into_iter()
+            .map(|peer| self.post_send(PeerSendWorkRequest::from_wr(peer, wr.clone())))
+            .collect()
+    }
+}
+
+impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
+    pub fn barrier(&mut self, peers: &[usize], timeout: Duration) -> Result<(), BarrierError> {
+        self.inner.barrier(peers, timeout)
+    }
+
+    pub fn barrier_unchecked(
+        &mut self,
+        peers: &[usize],
+        timeout: Duration,
+    ) -> Result<(), BarrierError> {
+        self.inner.barrier_unchecked(peers, timeout)
+    }
+
+    pub fn post_send(
+        &mut self,
+        wr: PeerSendWorkRequest<'_, 'env>,
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
+        self.channel_post_send(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    }
+
+    pub fn post_receive(
+        &mut self,
+        wr: PeerReceiveWorkRequest<'_, 'env>,
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
+        self.channel_post_receive(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    }
+
+    pub fn post_write(
+        &mut self,
+        wr: PeerWriteWorkRequest<'_, 'env>,
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
+        self.channel_post_write(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    }
+
+    pub fn post_read(
+        &mut self,
+        wr: PeerReadWorkRequest<'_, 'env>,
+    ) -> IbvResult<ScopedPendingWork<'scope>> {
+        self.channel_post_read(|n| n.multi_channel.channel(wr.peer), wr.wr)
     }
 }
 

@@ -4,26 +4,26 @@ use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 
 #[derive(Debug, Clone)]
 pub struct PeerSendWorkRequest<'wr, 'data> {
-    pub(super) peer: usize,
-    pub(super) wr: SendWorkRequest<'wr, 'data>,
+    pub(crate) peer: usize,
+    pub(crate) wr: SendWorkRequest<'wr, 'data>,
 }
 
 #[derive(Debug)]
 pub struct PeerReceiveWorkRequest<'wr, 'data> {
-    pub(super) peer: usize,
-    pub(super) wr: ReceiveWorkRequest<'wr, 'data>,
+    pub(crate) peer: usize,
+    pub(crate) wr: ReceiveWorkRequest<'wr, 'data>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PeerWriteWorkRequest<'wr, 'data> {
-    pub(super) peer: usize,
-    pub(super) wr: WriteWorkRequest<'wr, 'data>,
+    pub(crate) peer: usize,
+    pub(crate) wr: WriteWorkRequest<'wr, 'data>,
 }
 
 #[derive(Debug)]
 pub struct PeerReadWorkRequest<'wr, 'data> {
-    pub(super) peer: usize,
-    pub(super) wr: ReadWorkRequest<'wr, 'data>,
+    pub(crate) peer: usize,
+    pub(crate) wr: ReadWorkRequest<'wr, 'data>,
 }
 
 impl<'wr, 'data> PeerSendWorkRequest<'wr, 'data> {
