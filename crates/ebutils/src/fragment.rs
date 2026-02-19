@@ -1,5 +1,6 @@
 //! A fragment represents a piece of data for one event from one source of some sub-detector.
 use std::fmt::{Debug, Display};
+#[cfg(feature = "pretty")]
 use std::io::Write;
 
 use derive_where::derive_where;

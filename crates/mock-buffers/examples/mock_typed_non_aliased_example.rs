@@ -18,10 +18,7 @@ fn main() {
     writable_entry_0_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_0_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_0_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [0,1, , ]
@@ -35,10 +32,7 @@ fn main() {
     writable_entry_2_32.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_2_32.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_2_32.buffered_size(), writer.alignment_pow2())
     );
 
     // [ ,1,2, ]
@@ -57,10 +51,7 @@ fn main() {
     writable_entry_3_64.write(&mut writer).unwrap();
     println!(
         "Size: {}",
-        ebutils::align_up_pow2(
-            writable_entry_3_64.buffered_size(),
-            writer.alignment_pow2()
-        )
+        ebutils::align_up_pow2(writable_entry_3_64.buffered_size(), writer.alignment_pow2())
     );
 
     // [ , , , ]
@@ -68,5 +59,5 @@ fn main() {
     read_entries.iter().for_each(|entry| {
         println!("Read many: {}", entry);
     });
-    read_entries.discard().unwrap();
+    read_entries.discard_all().unwrap();
 }

@@ -2,7 +2,6 @@
 
 [![Static Badge](https://img.shields.io/badge/docs-available-blue)](https://lb-rusteb-docs.docs.cern.ch)
 
-
 This is a work in progress Rust version of the Event Builder for [LHCb](https://home.cern/science/experiments/lhcb)
 at [CERN](https://home.cern).
 
@@ -11,7 +10,8 @@ building, as well as a binary that runs the Event Builder process itself.
 
 The sub-crates represent the major components of the Event Builder:
 
-- [`pcie40`](crates/pcie40/): Rust bindings for the C driver of the `PCIe40` data acquisition card.
+- ['infiniband-rs'](crates/infiniband-rs/): Ergonomic, safe and versatile Rust bindings for the InfiniBand ibverbs API.
+- [`pcie40`](crates/pcie40/): Rust bindings for the C driver of the PCIe40 data acquisition card.
 - [`shared-memory-buffer`](crates/shared-memory-buffer/): Shared memory transport for inter-process data exchange.
   Compatible with LHCb’s established shared memory protocol and designed to serve as a drop-in replacement.
 - [`mock-buffers`](crates/mock-buffers/): TODO: Remove this crate and move each mock buffer to its corresponding crate.
@@ -22,17 +22,20 @@ The sub-crates represent the major components of the Event Builder:
 - [`multi-event-packet`](crates/multi-event-packet/): Library for assembling and reading MEPs.
 - [`master-data-file`](crates/master-data-file/): Library for reading and writing MDF files.
 
-
 The following binaries are provided:
-- [`mdf-reader`](src/bin/mdf-reader.rs): Simple tool to inspect MDF files, similar to `pcie40_mdfreader`.
 
-Additionally, there are some examples in the [`examples`](examples) directory.
+- [`mdf-reader`](src/bin/mdf-reader.rs): Simple tool to inspect MDF files, similar to `pcie40_mdfreader`.
+- [`mep-reader`](src/bin/mep-reader.rs): Simple tool to inspect MEP files.
+
+Additionally, there are some examples in the [`examples`](./examples) directory.
 
 ## Overview of data formats and their relationships
+
 - **Fragment**: Just some detector specific data for some event.
-- **Multi Fragment Packet** *(MFP)*: Multiple Fragments from the same source (detector part) for consecutive events.
-- **Multi Event Packet** *(MEP, pronounced /mæp/)*: Multiple MFPs for the same events but from different sources concatenated
-- **Master Data File** *(MDF)*: File format that stores all the fragments for one event together. An MDF file contains many MDF records for many events.
+- **Multi Fragment Packet** _(MFP)_: Multiple Fragments from the same source (detector part) for consecutive events.
+- **Multi Event Packet** _(MEP, pronounced /mæp/)_: Multiple MFPs for the same events but from different sources concatenated
+- **Master Data File** _(MDF)_: File format that stores all the fragments for one event together. An MDF file contains many MDF records for many events.
 
 <!-- To update this, click on the link, edit in browser, and then generate new link under "Actions". Make sure to change `img` to `svg` in the path to get an svg image.-->
+
 [![](https://mermaid.ink/svg/pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA?type=png)](https://mermaid.live/edit#pako:eNp1kU1vgzAMhv-K5TOgUCDQXNch7VCp54lL2gSKVkiVj2ob8N8X2FoxTTvaef08tjLgSQmJDKXetbzRvKv6_a6EcQzDcYBS86aTvQUGlU_2pjUWVA1RFEGtNBjeSZC3OfGyA94LEG1dSz03jHL6JH3fVPgNnWboCPvnw8I7uvYioNaqWwK-6x_DELx3Xx7uRuuV5l-ngaOzv6TaraTlinm_ZQ3-w30svRwzx-TJ2fa2MlaIATa6FcisdjLATuqOzyUOVQ-ebs-ykxXOIsH127zJ5GeuvH9VqruPaeWaM7KaX4yv3FVwK3_-4NH1Nwmpn5TrLbI43ZKFgmzAd2SbJI2SzbaIi3yTZUW2TQP8QEZpRPKc0DSL05iSmE4Bfi5eEhVFmhJS5JRQuk2KZPoCe_SiyA)

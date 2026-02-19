@@ -9,12 +9,13 @@ use std::{
 use bytemuck::{AnyBitPattern, NoUninit, cast_slice};
 use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
-pub mod builder;
 pub mod owned;
+pub mod simple_builder;
 pub mod zerocopy_builder;
-pub use builder::MultiEventPacketBuilder;
 use ebutils::{EventId, Uninstantiatable, source_id::SourceId};
 pub use owned::MultiEventPacketOwned;
+pub use simple_builder::SimpleMepBuilder;
+pub use zerocopy_builder::ZeroCopyMepBuilder;
 
 #[cfg(not(target_endian = "little"))]
 compile_error!("Only little endian supported!");
@@ -32,7 +33,7 @@ pub(crate) struct MultiEventPacketConstHeader {
 ///
 /// It can be thought of similar to [`str`] in a way that it only ever exists behind references `&MultiEventPacket`, never owned.
 /// If you want an owned version, use [`MultiEventPacketOwned`].
-/// There also exists a builder for that: [`MultiEventPacketBuilder`].
+/// There also exists a builder for that: [`SimpleMepBuilder`].
 ///
 /// Its relationship to [`MultiEventPacketOwned`] is as [`str`] to [`String`].
 ///
