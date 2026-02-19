@@ -1,8 +1,8 @@
+use infiniband_rs::ibverbs;
 use infiniband_rs::multi_channel::MultiChannel;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
-use infiniband_rs::ibverbs;
 
 const DEVICE: &str = "mlx5_0";
 

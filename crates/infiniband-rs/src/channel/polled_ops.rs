@@ -1,5 +1,7 @@
 use crate::channel::{Channel, TransportResult};
-use crate::ibverbs::work::{ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest};
+use crate::ibverbs::work::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest,
+};
 
 impl Channel {
     pub fn send<'op>(&'op mut self, wr: SendWorkRequest<'op, 'op>) -> TransportResult<WorkSuccess> {

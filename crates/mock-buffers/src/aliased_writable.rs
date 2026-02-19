@@ -14,8 +14,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
     diary_entry: &T,
     writer: &mut MockAliasedBufferWriter,
 ) -> Result<(), WriteError> {
-    let aligned_size =
-        ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
+    let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
 
     let writable_region = writer.writable_region();
 

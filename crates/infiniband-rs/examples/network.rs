@@ -1,3 +1,4 @@
+use infiniband_rs::ibverbs;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use infiniband_rs::network::Node;
 use infiniband_rs::network::config::{NodeConfig, RawNetworkConfig};
@@ -5,7 +6,6 @@ use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::{env, fs, process};
-use infiniband_rs::ibverbs;
 
 const DEVICE: &str = "mlx5_0";
 

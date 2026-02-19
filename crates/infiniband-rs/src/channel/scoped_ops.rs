@@ -1,7 +1,9 @@
 use crate::channel::polling_scope::*;
 use crate::channel::{Channel, TransportResult};
 use crate::ibverbs::error::IbvResult;
-use crate::ibverbs::work::{ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest};
+use crate::ibverbs::work::{
+    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WriteWorkRequest,
+};
 
 impl Channel {
     pub fn scope<'env, F, T>(&'env mut self, f: F) -> Result<T, ScopeError>

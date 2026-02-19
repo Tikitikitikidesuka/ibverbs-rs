@@ -1,7 +1,7 @@
 use crate::ibverbs::completion_queue::{CompletionQueue, PollSlot};
 use crate::ibverbs::error::IbvResult;
-use intmap::IntMap;
 use crate::ibverbs::work::WorkCompletion;
+use intmap::IntMap;
 
 #[derive(Debug)]
 pub struct CachedCompletionQueue {

@@ -2,6 +2,7 @@ use crate::channel::{Channel, TransportError};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::memory::{MemoryRegion, RemoteMemoryRegion};
 use crate::ibverbs::protection_domain::ProtectionDomain;
+use crate::ibverbs::work::WriteWorkRequest;
 use crate::remote_struct_field;
 use std::fmt::Debug;
 use std::mem::offset_of;
@@ -10,7 +11,6 @@ use std::time::Duration;
 use thiserror::Error;
 use zerocopy::network_endian::{U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
-use crate::ibverbs::work::WriteWorkRequest;
 
 #[derive(Debug)]
 pub struct RemoteMrExchanger {

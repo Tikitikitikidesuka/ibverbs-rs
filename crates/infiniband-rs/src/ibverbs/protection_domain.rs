@@ -1,13 +1,13 @@
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
+use crate::ibverbs::memory::MemoryRegion;
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::queue_pair::builder::QueuePairBuilder;
 use crate::ibverbs::queue_pair::builder::queue_pair_builder::SetPd;
 use ibverbs_sys::*;
 use std::io;
 use std::sync::Arc;
-use crate::ibverbs::device::Context;
-use crate::ibverbs::memory::MemoryRegion;
 
 #[derive(Debug, Clone)]
 pub struct ProtectionDomain {
@@ -102,7 +102,16 @@ impl ProtectionDomain {
         iova: u64,
         access_flags: AccessFlags,
     ) -> IbvResult<MemoryRegion> {
-        unsafe { MemoryRegion::register_dmabuf_mr_with_access(self, fd, offset, length, iova, access_flags) }
+        unsafe {
+            MemoryRegion::register_dmabuf_mr_with_access(
+                self,
+                fd,
+                offset,
+                length,
+                iova,
+                access_flags,
+            )
+        }
     }
 
     pub fn register_local_dmabuf(

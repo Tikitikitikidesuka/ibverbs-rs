@@ -1,10 +1,10 @@
 use crate::channel::TransportResult;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
+use crate::ibverbs::work::{WorkResult, WorkSuccess};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use crate::ibverbs::work::{WorkResult, WorkSuccess};
 
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {

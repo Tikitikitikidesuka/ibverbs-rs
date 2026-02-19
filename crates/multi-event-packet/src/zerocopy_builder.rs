@@ -9,7 +9,9 @@ use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
 
 use crate::{
     MultiEventPacket, MultiEventPacketConstHeader,
-    simple_builder::{access_offsets, offsets_iter, write_const_header, write_offsets, write_source_ids},
+    simple_builder::{
+        access_offsets, offsets_iter, write_const_header, write_offsets, write_source_ids,
+    },
     total_header_size,
     zerocopy_builder::internal::Stage,
 };
@@ -181,10 +183,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     }
 
     /// Returns an iterator over a range of MFP slots.
-    pub fn get_mfp_slots(
-        &mut self,
-        indices: Range<usize>,
-    ) -> impl Iterator<Item = &mut [u8]> {
+    pub fn get_mfp_slots(&mut self, indices: Range<usize>) -> impl Iterator<Item = &mut [u8]> {
         let buffer = cast_slice_mut(self.buffer) as *mut [u8];
 
         // SAEFTY: mfp ranges for different indices don't overlap,

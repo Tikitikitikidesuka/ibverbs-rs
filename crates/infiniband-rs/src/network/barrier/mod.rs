@@ -4,14 +4,14 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
 use crate::network::barrier::binary_tree::{BinaryTreeBarrier, PreparedBinaryTreeBarrier};
-use crate::network::barrier::linear::{LinearBarrier, PreparedLinearBarrier};
 use crate::network::barrier::dissemination::{DisseminationBarrier, PreparedDisseminationBarrier};
+use crate::network::barrier::linear::{LinearBarrier, PreparedLinearBarrier};
 use std::time::Duration;
 use thiserror::Error;
 
 pub mod binary_tree;
-pub mod linear;
 pub mod dissemination;
+pub mod linear;
 mod memory;
 
 #[derive(Debug, Error)]
