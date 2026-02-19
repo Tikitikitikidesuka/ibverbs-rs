@@ -12,9 +12,9 @@ fn main() {
     const DEVICE_NAME: &str = "tdtel203_1";
 
     let controller = PCIe40ControllerManager::open_by_device_name(DEVICE_NAME).unwrap();
-    let meta_alignment_pow2 = match ebutils::is_pow2(controller.meta_alignment().unwrap()) {
-        ebutils::IsPow2Result::Yes(pow2) => pow2,
-        ebutils::IsPow2Result::No => {
+    let meta_alignment_pow2 = match ebutils::pow2_exponent(controller.meta_alignment().unwrap()) {
+        Some(pow2) => pow2,
+        None => {
             panic!("Meta alignment is not a power of 2")
         }
     };

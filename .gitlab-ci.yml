@@ -20,12 +20,14 @@ rust-check:
     - cargo check --all-features
     - cargo clippy --all-features --no-deps
     - cargo fmt -- --check
+  when: always
 
 rust-test:
   extends: .deps_template
   stage: run-jobs
   script:
     - cargo test --all --all-features --offline
+  when: always
 
 pages:
   extends: .deps_template
@@ -38,14 +40,6 @@ pages:
   artifacts:
     paths:
       - public
-
-# TODO: CHECK HOW TO PROPERLY DO HARDWARE TESTS
-#rust-test-hardware:
-#extends: .online_template
-#stage: test
-#script:
-#- cargo test --features hardware-tests
-#tags:
-#- online_network
-#- docker
-##- pcie40-hardware # Add a specific tag for runners with the hardware
+  only:
+    - master
+  when: always
