@@ -1,25 +1,27 @@
-use crate::mock_buffers::dynamic_size_element::{
-    BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry,
-};
-use crate::{CircularBufferWritable, CircularBufferWriter};
+use crate::dynamic_size_element::{BufferedDiaryEntry, DiaryEntry, MockWritable, OwnedDiaryEntry};
+use crate::non_aliased_buffer::MockNonAliasedBufferWriter;
+use crate::non_aliased_readable::{VALID_MAGIC, WRAP_MAGIC};
+use circular_buffer::{CircularBufferWritable, CircularBufferWriter};
+use thiserror::Error;
 
-use crate::mock_buffers::WriteError;
-use crate::mock_buffers::non_aliased::{MockNonAliasedBufferWriter, VALID_MAGIC, WRAP_MAGIC};
+#[derive(Debug, Error)]
+pub enum WriteError {
+    #[error("Not enough space for requested type")]
+    NotEnoughSpace,
+}
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for BufferedDiaryEntry {
-    type WriteStatus = ();
-    type WriteError = WriteError;
+    type WriteResult = Result<(), WriteError>;
 
-    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
+    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Self::WriteResult {
         write_diary_entry(self, writer)
     }
 }
 
 impl CircularBufferWritable<MockNonAliasedBufferWriter> for OwnedDiaryEntry {
-    type WriteStatus = ();
-    type WriteError = WriteError;
+    type WriteResult = Result<(), WriteError>;
 
-    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Result<(), Self::WriteError> {
+    fn write(&self, writer: &mut MockNonAliasedBufferWriter) -> Self::WriteResult {
         write_diary_entry(self, writer)
     }
 }
@@ -29,7 +31,7 @@ fn write_diary_entry<T: DiaryEntry + MockWritable>(
     writer: &mut MockNonAliasedBufferWriter,
 ) -> Result<(), WriteError> {
     let aligned_size = ebutils::align_up_pow2(diary_entry.buffered_size(), writer.alignment_pow2());
-    let (primary_region, secondary_region) = writer.writable_region().unwrap();
+    let (primary_region, secondary_region) = writer.writable_region();
 
     // Determine which region to write to and calculate advance size
     let (writable_region, advance_size) = if aligned_size <= primary_region.len() {

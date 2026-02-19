@@ -1,0 +1,28 @@
+[package]
+name = "mock-buffers"
+description = "Mock buffer implementations for the circular buffer interface of the LHCb Event Builder"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+ebutils.workspace = true
+circular-buffer.workspace = true
+
+thiserror.workspace = true
+
+[[example]]
+name = "mock_aliased_example"
+path = "examples/mock_aliased_example.rs"
+
+[[example]]
+name = "mock_non_aliased_example"
+path = "examples/mock_non_aliased_example.rs"
+
+[[example]]
+name = "mock_typed_aliased_example"
+path = "examples/mock_typed_aliased_example.rs"
+
+[[example]]
+name = "mock_typed_non_aliased_example"
+path = "examples/mock_typed_non_aliased_example.rs"

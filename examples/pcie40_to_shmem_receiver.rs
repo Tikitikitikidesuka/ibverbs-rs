@@ -1,4 +1,4 @@
-use circular_buffer::CircularBufferReadable;
+use circular_buffer::CircularBufferMultiReadable;
 use multi_fragment_packet::MultiFragmentPacket;
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError,
@@ -51,12 +51,12 @@ fn main() {
 
         // Check MFPs follow proper order
         let local_first_event = mfps[0].event_id();
-        let local_last_event = mfps[4].event_id() + mfps[4].fragment_count() as u64;
+        let local_last_event = mfps[4].event_id() + u64::from(mfps[4].fragment_count());
         let local_num_events = mfps.iter().fold(0, |acc, x| acc + x.fragment_count());
         assert_eq!(last_event, local_first_event);
         assert_eq!(
             local_last_event - local_first_event,
-            local_num_events as u64
+            u64::from(local_num_events)
         );
         last_event = local_last_event;
 
@@ -68,7 +68,7 @@ fn main() {
 
         println!("Discarding MFPs...");
 
-        mfps.discard().unwrap();
+        mfps.discard_all().unwrap();
 
         println!("Discarded MFPs successfully");
 
@@ -112,9 +112,7 @@ fn shmem_wait_for_mfps(
     loop {
         match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(_) => return Ok(()),
-            Err(
-                SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,
-            ) => {
+            Err(SharedMemoryTypedReadError::NotEnoughData) => {
                 println!("No MFPs found, waiting for more data...");
                 std::thread::sleep(poll_interval);
             }

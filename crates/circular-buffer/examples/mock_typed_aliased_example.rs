@@ -1,9 +1,4 @@
-use circular_buffer::{CircularBufferReadable, CircularBufferWritable, ReadGuard};
-use circular_buffer::mock_buffers::{
-    BufferedDiaryEntry, MockAliasedBuffer, MockAliasedBufferReader, MockAliasedBufferWriter,
-    MockWritable, OwnedDiaryEntry,
-};
-
+/*
 fn main() {
     // [ , , , ]
     let demo_buffer = MockAliasedBuffer::new(128, 5).unwrap();
@@ -54,3 +49,7 @@ fn main() {
     });
     read_entries.discard().unwrap();
 }
+
+
+ */
+fn main() {}

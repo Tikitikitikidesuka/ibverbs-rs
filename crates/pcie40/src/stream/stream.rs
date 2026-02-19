@@ -1,4 +1,4 @@
-use crate::bindings::*;
+use crate::bindings::{self, *};
 use crate::id::PCIe40IdManager;
 use crate::stream::locked_stream::PCIe40LockedStream;
 use std::fmt::{Display, Formatter};
@@ -327,6 +327,10 @@ impl PCIe40Stream {
 
     pub fn stream_format(&self) -> PCIe40DAQStreamFormat {
         self.stream_format
+    }
+
+    pub fn dma_buffer_fd(&self) -> i32 {
+        unsafe { bindings::p40_stream_get_dmabuf(self.stream_fd) }
     }
 
     #[instrument(skip_all, fields(

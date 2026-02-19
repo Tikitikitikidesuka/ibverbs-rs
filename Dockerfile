@@ -60,6 +60,10 @@ RUN rustup install stable && \
 # Set working directory to the project dir
 WORKDIR /app
 
+# Make /app a dummy rust project to vendor dependencies
+RUN cargo init
+
+# Copy the entire project
 # Copy project files
 COPY . .
 

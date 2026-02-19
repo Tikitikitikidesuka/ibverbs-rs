@@ -95,29 +95,6 @@ impl CircularBufferStatus {
         }
     }
 
-    pub fn buffer_is_empty(write_status: PtrStatus, read_status: PtrStatus) -> bool {
-        // Buffer is empty when read and write positions are equal and on the same wrap
-        write_status.ptr() == read_status.ptr() && write_status.wrap() == read_status.wrap()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        Self::buffer_is_empty(self.write_status(), self.read_status())
-    }
-
-    pub fn buffer_is_full(write_status: PtrStatus, read_status: PtrStatus) -> bool {
-        // Buffer is full when read and write positions are equal but not on the same wrap
-        write_status.ptr() == read_status.ptr() && write_status.wrap() != read_status.wrap()
-    }
-
-    pub fn is_full(&self) -> bool {
-        Self::buffer_is_full(self.write_status(), self.read_status())
-    }
-
-    pub fn same_page(&self) -> bool {
-        // Read and write pointers are on the same page when their wrap flags are the same
-        (self.write_status & WRAP_MASK) == (self.read_status & WRAP_MASK)
-    }
-
     pub fn write_status(&self) -> PtrStatus {
         PtrStatus::new(self.write_status)
     }
@@ -218,10 +195,6 @@ impl CircularBufferStatus {
 
     pub fn size(&self) -> usize {
         self.size
-    }
-
-    pub fn id(&self) -> c_int {
-        self.id
     }
 
     pub fn alignment_pow2(&self) -> usize {

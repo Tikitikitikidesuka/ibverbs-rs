@@ -1,7 +1,6 @@
 use crate::bindings::*;
 use crate::stream::mapped_stream::PCIe40MappedStream;
 use crate::stream::stream::{PCIe40Stream, PCIe40StreamError};
-use std::slice;
 use tracing::instrument;
 use tracing::{debug, trace, warn};
 
@@ -128,7 +127,7 @@ impl PCIe40LockedStream {
         device_id = self.stream.device_id(),
         stream_type = ?self.stream.stream_type()
     ))]
-    pub fn map_buffer<'a>(self) -> Result<PCIe40MappedStream<'a>, PCIe40StreamError> {
+    pub fn map_buffer(self) -> Result<PCIe40MappedStream, PCIe40StreamError> {
         debug!(
             "Mapping buffer for stream {} on device {}",
             self.stream.stream_type(),
@@ -137,6 +136,7 @@ impl PCIe40LockedStream {
 
         trace!("Calling p40_stream_map({})", self.stream.stream_fd);
         let buff_ptr = unsafe { p40_stream_map(self.stream.stream_fd) };
+        println!("buff_ptr {buff_ptr:?}");
         trace!("p40_stream_map returned {:p}", buff_ptr);
 
         if buff_ptr.is_null() {
@@ -180,8 +180,9 @@ impl PCIe40LockedStream {
             self.stream.device_id()
         );
 
-        Ok(PCIe40MappedStream::new(self, unsafe {
-            slice::from_raw_parts(buff_ptr as *const u8, buff_size as usize)
-        }))
+        Ok(PCIe40MappedStream::new(
+            self,
+            std::ptr::slice_from_raw_parts(buff_ptr as *const u8, buff_size as usize),
+        ))
     }
 }

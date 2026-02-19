@@ -137,7 +137,7 @@ pub use buffer_element::{
     ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, WritableSharedMemoryBufferElement,
 };
 pub use circular_buffer::*;
-pub use readable_buffer_element::{SharedMemoryBufferReadGuard, SharedMemoryTypedReadError};
+pub use readable_buffer_element::SharedMemoryTypedReadError;
 pub use reader::{SharedMemoryBufferAdvanceError, SharedMemoryBufferReader};
 pub use writable_buffer_element::SharedMemoryTypedWriteError;
 pub use writer::SharedMemoryBufferWriter;

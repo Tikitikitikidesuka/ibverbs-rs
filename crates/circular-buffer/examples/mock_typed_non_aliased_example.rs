@@ -1,8 +1,4 @@
-use circular_buffer::mock_buffers::{
-    BufferedDiaryEntry, MockNonAliasedBuffer, MockNonAliasedBufferReader,
-    MockNonAliasedBufferWriter, MockWritable, OwnedDiaryEntry,
-};
-use circular_buffer::{CircularBufferReadable, CircularBufferWritable, ReadGuard};
+/*
 
 fn main() {
     // [ , , , ]
@@ -59,3 +55,5 @@ fn main() {
     });
     read_entries.discard().unwrap();
 }
+ */
+fn main() {}

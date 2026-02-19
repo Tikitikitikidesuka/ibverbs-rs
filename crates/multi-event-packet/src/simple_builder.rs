@@ -1,4 +1,10 @@
-use std::{borrow::Cow, slice};
+//! This module contains the [`SimpleMepBuilder`] for creating [`MultiEventPacket`]s out of [`MultiFragmentPacket`]s.
+//! It is convenient to use but not suitable for high-performance zero-copy applications.
+//! For such cases, use [`ZeroCopyMepBuilder`](crate::zerocopy_builder::ZeroCopyMepBuilder).
+//!
+//! This builder is mostly intended for testing purpouses.
+
+use std::borrow::Cow;
 
 use bytemuck::cast_slice_mut;
 use ebutils::{fragment_type::FragmentType, source_id::SourceId};
@@ -7,31 +13,31 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, header_size,
-    src_ids_size,
+    MultiEventPacket, MultiEventPacketConstHeader, MultiEventPacketOwned, Offset, src_ids_size,
+    total_header_size,
 };
 
 /// This is a builder struct for constructing an MEP out of MFPs for the same events and different source ids.
 ///
-/// At least one MFP from an ODIN source is required ([`SourceId::is_odin`] and Containing [`ebutils::OdinPayload`] fragments).
+/// It is not suitable for high-performance zero-copy applications. For such cases, use [`ZeroCopyMepBuilder`](crate::zerocopy_builder::ZeroCopyMepBuilder).
 ///
 /// # Example
 /// ```
-/// # use multi_event_packet::MultiEventPacketBuilder;
+/// # use multi_event_packet::SimpleMepBuilder;
 /// # use ebutils::{odin::dummy_odin_payload, FragmentType, SourceId};
 /// # use multi_fragment_packet::MultiFragmentPacketOwned;
 /// # let mfp1 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(0)).with_align_log(2).with_fragment_version(0)
-/// # .add_fragment(FragmentType::Odin, dummy_odin_payload(0)).build();
+/// # .add_fragment(FragmentType::ODIN, dummy_odin_payload(0)).build();
 /// # let mfp2 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(12213)).with_align_log(2).with_fragment_version(0)
 /// # .add_fragment(FragmentType::DAQ, b"Hello").build();
 /// // getting mfp1 and mfp2 from somewhere
-/// let mep = MultiEventPacketBuilder::with_capacity(2)
+/// let mep = SimpleMepBuilder::with_capacity(2)
 ///     .add_mfp(mfp1).unwrap()
 ///     .add_mfp(mfp2).unwrap()
 ///     .build().unwrap();
 /// ```
 #[derive(Default)]
-pub struct MultiEventPacketBuilder<'a> {
+pub struct SimpleMepBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
     odin_added: bool,
     // general settings, don't get reset
@@ -39,7 +45,7 @@ pub struct MultiEventPacketBuilder<'a> {
     allow_superfluous_odin_mfp: bool,
 }
 
-impl<'a> MultiEventPacketBuilder<'a> {
+impl<'a> SimpleMepBuilder<'a> {
     pub const DEFAULT_MFP_ALIGN: usize = align_of::<u64>();
 
     /// Creates a new builder.
@@ -147,45 +153,26 @@ impl<'a> MultiEventPacketBuilder<'a> {
         let _ = self.offsets_iter(&mut total_size).count(); // just iterate thorugh to get total size
         let mut data = vec![0u32; total_size / size_of::<u32>()].into_boxed_slice();
 
-        // set header
-        {
-            let header = unsafe { &mut *(data.as_mut_ptr() as *mut MultiEventPacketConstHeader) };
-            header.magic = MultiEventPacket::MAGIC;
-            header.num_mfps = num_mfps;
-            header.packet_size = (total_size / size_of::<u32>())
-                .try_into()
-                .expect("packet size fits into u32");
-        }
+        write_const_header(
+            &mut data,
+            MultiEventPacketConstHeader {
+                magic: MultiEventPacket::MAGIC,
+                num_mfps,
+                packet_size: (total_size / size_of::<u32>())
+                    .try_into()
+                    .expect("packet size fits into u32"),
+            },
+        );
 
         // set src ids
-        {
-            let src_ids = unsafe {
-                data.as_mut_ptr()
-                    .byte_add(size_of::<MultiEventPacketConstHeader>())
-                    as *mut SourceId
-            };
-            let src_ids = unsafe { slice::from_raw_parts_mut(src_ids, num_mfps as _) };
-            for (src_id, mfp) in src_ids.iter_mut().zip(self.mfps.iter()) {
-                *src_id = mfp.source_id();
-            }
-        }
+        write_source_ids(
+            &mut data,
+            num_mfps as usize,
+            self.mfps.iter().map(|m| m.source_id()),
+        );
 
         // set offsets
-        {
-            let offset_slots = unsafe {
-                data.as_mut_ptr()
-                    .byte_add(size_of::<MultiEventPacketConstHeader>())
-                    .byte_add(src_ids_size(num_mfps as _)) as *mut Offset
-            };
-            let offset_slots = unsafe { slice::from_raw_parts_mut(offset_slots, num_mfps as _) };
-            for (offset_slot, offset_value) in
-                offset_slots.iter_mut().zip(self.offsets_iter(&mut 0))
-            {
-                *offset_slot = (offset_value / size_of::<u32>())
-                    .try_into()
-                    .expect("offsets fit into u32");
-            }
-        }
+        write_offsets(&mut data, num_mfps as usize, self.offsets_iter(&mut 0));
 
         // set mfps
         for (offset, mfp) in self.offsets_iter(&mut 0).zip(&self.mfps) {
@@ -214,21 +201,78 @@ impl<'a> MultiEventPacketBuilder<'a> {
         self.mfps.clear();
         self.odin_added = false;
     }
-
     /// Generates the MFP offsets in bytes from the start of the header.
     /// Also stores the total size in the out parameter.
     fn offsets_iter(&self, total_size: &mut usize) -> impl Iterator<Item = usize> {
-        let align = self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN);
-        *total_size = header_size(self.mfps.len());
+        offsets_iter(
+            self.mfps.iter().map(|m| m.packet_size() as usize),
+            self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN),
+            total_size,
+        )
+    }
+}
 
-        self.mfps
-            .iter()
-            .map(move |mfp| (mfp.packet_size() as usize).next_multiple_of(align))
-            .scan(total_size, move |sum, b| {
-                let ret = **sum;
-                **sum += b;
-                Some(ret)
-            })
+/// Generates the MFP offsets in bytes from the start of the header.
+/// Also stores the total size in the out parameter.
+///
+///
+pub(crate) fn offsets_iter(
+    mfp_sizes_bytes: impl ExactSizeIterator<Item = usize>,
+    mfp_align: usize,
+    total_size: &mut usize,
+) -> impl Iterator<Item = usize> {
+    *total_size = total_header_size(mfp_sizes_bytes.len());
+
+    mfp_sizes_bytes
+        .map(move |size| size.next_multiple_of(mfp_align))
+        .scan(total_size, move |sum, b| {
+            let ret = **sum;
+            **sum += b;
+            Some(ret)
+        })
+}
+
+pub(crate) fn write_const_header(mfp: &mut [u32], header: MultiEventPacketConstHeader) {
+    let header_slot = &mut mfp[0..size_of::<MultiEventPacketConstHeader>() / size_of::<u32>()];
+    bytemuck::cast_slice_mut(header_slot).copy_from_slice(bytemuck::bytes_of(&header));
+}
+
+pub(crate) fn write_source_ids(
+    mfp: &mut [u32],
+    num_mfps: usize,
+    source_ids: impl Iterator<Item = SourceId>,
+) {
+    let start = size_of::<MultiEventPacketConstHeader>() / size_of::<u32>();
+    let slots: &mut [SourceId] = &mut bytemuck::cast_slice_mut(&mut mfp[start..])[..num_mfps];
+
+    for (slot, soruce_id) in slots.iter_mut().zip(source_ids) {
+        *slot = soruce_id;
+    }
+
+    assert!(slots.is_sorted(), "Source IDs are not sorted! {slots:?}");
+}
+
+/// Offsets in **u32**!
+pub(crate) fn access_offsets(mfp: &[u32], num_mfps: usize) -> &[Offset] {
+    let start =
+        (size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps)) / size_of::<u32>();
+    &mfp[start..][..num_mfps]
+}
+
+/// `offsets` iterator over offset in bytes.
+pub(crate) fn write_offsets(
+    mfp: &mut [u32],
+    num_mfps: usize,
+    offsets: impl Iterator<Item = usize>,
+) {
+    let start =
+        (size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps)) / size_of::<u32>();
+    let offset_slots: &mut [Offset] = &mut mfp[start..][..num_mfps];
+
+    for (slot, offset) in offset_slots.iter_mut().zip(offsets) {
+        *slot = (offset / size_of::<u32>())
+            .try_into()
+            .expect("offsets fit into u32");
     }
 }
 

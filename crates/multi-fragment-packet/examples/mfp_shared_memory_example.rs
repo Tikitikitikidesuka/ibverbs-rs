@@ -1,5 +1,7 @@
-use circular_buffer::{CircularBufferReadable, CircularBufferWritable, ReadGuard};
-use ebutils::{fragment_type::FragmentType, SubDetector};
+use circular_buffer::{
+    CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
+};
+use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use shared_memory_buffer::{
     SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
@@ -21,9 +23,9 @@ fn main() {
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(0)
-        .with_source_id(SubDetector::Hcal.to_source_id(5))
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
-        .add_fragment(FragmentType::DAQ, (0..190).collect::<Vec<_>>())
+        .add_fragment(FragmentType::CaloSpecial, (0..190).collect::<Vec<_>>())
         .build();
     mfp_0_256.write(&mut writer).unwrap();
     println!(
@@ -35,7 +37,7 @@ fn main() {
     // Writable is also implemented for the buffered entry so one can be
     // read and written again without copying it out of the buffer
     println!("Writing MFP 0 again to shmem...");
-    let read_mfp = MultiFragmentPacket::read(&mut reader, 1).unwrap()[0];
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
     read_mfp.write(&mut writer).unwrap();
     println!(
         "Done! Size on buffer: {}",
@@ -47,7 +49,7 @@ fn main() {
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(2)
-        .with_source_id(SubDetector::Rich2.to_source_id(5))
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
         .add_fragment(FragmentType::FTNZS, (40..255).collect::<Vec<_>>())
         .build();
@@ -59,15 +61,15 @@ fn main() {
 
     // [ ,1,2, ]
     println!("Reading first instance of MFP 0 from shmem...");
-    let read_mfp = MultiFragmentPacket::read(&mut reader, 1).unwrap();
-    println!("Read: {}", read_mfp[0]);
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
+    println!("Read: {}", *read_mfp);
     println!("Discarding it...");
     read_mfp.discard().unwrap();
 
     // [ , ,2, ]
     println!("Reading second instance of MFP 0 from shmem...");
-    let read_mfp = MultiFragmentPacket::read(&mut reader, 1).unwrap();
-    println!("Read: {}", read_mfp[0]);
+    let read_mfp = MultiFragmentPacket::read(&mut reader).unwrap();
+    println!("Read: {}", *read_mfp);
     println!("Discarding it...");
     read_mfp.discard().unwrap();
 
@@ -76,7 +78,7 @@ fn main() {
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(3)
-        .with_source_id(SubDetector::VeloA.to_source_id(5))
+        .with_source_id(SourceId(1))
         .with_fragment_version(1)
         .add_fragment(FragmentType::DAQ, (0..255).collect::<Vec<_>>())
         .build();
@@ -88,10 +90,10 @@ fn main() {
 
     // [ , , , ]
     println!("Reading MFPs 0 and 3 from shmem...");
-    let read_entries = MultiFragmentPacket::read(&mut reader, 2).unwrap();
+    let read_entries = MultiFragmentPacket::read_multiple(&mut reader, 2).unwrap();
     read_entries.iter().for_each(|entry| {
         println!("Read many: {}", entry);
     });
     println!("Discarding them...");
-    read_entries.discard().unwrap();
+    read_entries.discard_all().unwrap();
 }

@@ -1,4 +1,5 @@
 use crate::bindings::*;
+use ebutils::SourceId;
 use std::ffi::CString;
 use std::ptr::null;
 use thiserror::Error;
@@ -360,7 +361,18 @@ impl PCIe40IdEndpoint {
     // TODO: register_map_version -> p40_id_get_regmap
     // TODO: read_test_register -> p40_id_get_rwtest
     // TODO: write_test_register -> p40_id_set_rwtest
-    // TODO: unique_source_number -> p40_id_get_source
+
+    pub fn source_id(&self) -> Result<SourceId, PCIe40IdEndpointError> {
+        let id = unsafe { p40_id_get_source(self.id_fd) };
+        if id < 0 {
+            warn!("Failed to get source ID for device {}", self.device_id);
+            Err(PCIe40IdEndpointError::DeviceReadError {
+                device_id: self.device_id,
+            })
+        } else {
+            Ok(SourceId(id as u16))
+        }
+    }
     // TODO: set_unique_source_number -> p40_id_set_source
     // TODO: pcie_version -> p40_id_get_version
 }

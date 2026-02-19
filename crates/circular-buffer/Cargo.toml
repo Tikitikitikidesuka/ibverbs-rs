@@ -1,34 +1,6 @@
 [package]
 name = "circular-buffer"
-description = "Single producer, single consumer zero copy circular buffer interface for the buffers of the LHCb Event Builder"
-authors = ["Miguel Hermoso Mantecon"]
+description = "Single writer, single reader circular buffer interface for the buffers of the LHCb Event Builder"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
-
-[features]
-mock-buffers = ["ebutils", "thiserror"]
-
-[dependencies]
-ebutils = { workspace = true, optional = true }
-thiserror = { workspace = true, optional = true }
-
-[[example]]
-name = "mock_aliased_example"
-path = "examples/mock_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_non_aliased_example"
-path = "examples/mock_non_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_typed_aliased_example"
-path = "examples/mock_typed_aliased_example.rs"
-required-features = ["mock-buffers"]
-
-[[example]]
-name = "mock_typed_non_aliased_example"
-path = "examples/mock_typed_non_aliased_example.rs"
-required-features = ["mock-buffers"]

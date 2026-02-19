@@ -1,0 +1,30 @@
+[package]
+name = "infiniband-rs"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+ibverbs-sys = "0.3.2"
+log = "0.4.29"
+intmap = "3.1.3"
+num_enum = "0.7.5"
+simple_logger = "5.1.0"
+nix = { version = "0.30.0", default-features = false, features = ["fs", "poll"] }
+thiserror.workspace = true
+serde_json = "1.0.149"
+zerocopy = { version = "0.8.35", features = ["derive"] }
+rand = "0.9.2"
+serde.workspace = true
+bincode.workspace = true
+tokio = { version = "1.48", features = ["net", "io-util", "time", "rt"] }
+bon = "3.8.2"
+clap = { version = "4.5", features = ["derive"] }
+
+[[bin]]
+path = "bin/barrier_benchmark/barrier_benchmark.rs"
+name = "barrier_benchmark"
+
+[[bin]]
+path = "bin/throughput_benchmark/throughput_benchmark.rs"
+name = "throughput_benchmark"

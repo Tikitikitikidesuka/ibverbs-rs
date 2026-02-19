@@ -12,9 +12,6 @@ pub enum SharedMemoryCreateError {
 
     #[error("Invalid shared memory path: {path}")]
     InvalidSegmentName { path: PathBuf },
-
-    #[error("Shared memory \"{path}\" already exists")]
-    AlreadyExists { path: PathBuf },
 }
 
 #[derive(Error, Debug)]
@@ -27,27 +24,12 @@ pub enum SharedMemoryOpenError {
 }
 
 #[derive(Error, Debug)]
-pub enum SharedMemoryCloseError {
-    #[error("IO error trying to close shared memory: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-#[derive(Error, Debug)]
 pub enum SharedMemoryDeleteError {
     #[error("IO error trying to delete shared memory: {0}")]
     Io(#[from] std::io::Error),
 
     #[error("Invalid shared memory path: {path}")]
     InvalidSegmentName { path: PathBuf },
-}
-
-#[derive(Error, Debug)]
-pub enum SharedMemoryCloseAndDeleteError {
-    #[error("Error trying to close shared memory: {0}")]
-    CloseError(#[from] SharedMemoryCloseError),
-
-    #[error("Error trying to delete shared memory: {0}")]
-    DeleteError(#[from] SharedMemoryDeleteError),
 }
 
 #[derive(Error, Debug)]
@@ -84,7 +66,7 @@ impl SharedMemory {
         debug!("Checking if shared memory exists");
 
         debug!("Turning Rust Path into C string");
-        let c_name = match Self::path_to_cstring(&path) {
+        let c_name = match Self::path_to_cstring(path) {
             Some(c_name) => c_name,
             None => {
                 warn!("Failed to convert Rust Path to C string");
@@ -124,13 +106,12 @@ impl SharedMemory {
         debug!("Creating shared memory");
 
         debug!("Turning Rust Path into C string");
-        let c_name = Self::path_to_cstring(&path)
+        let c_name = Self::path_to_cstring(path)
             .ok_or_else(|| SharedMemoryCreateError::InvalidSegmentName {
                 path: path.to_owned(),
             })
-            .map_err(|error| {
+            .inspect_err(|_error| {
                 warn!("Failed to convert Rust Path to C string");
-                error
             })?;
 
         debug!(
@@ -176,13 +157,12 @@ impl SharedMemory {
         debug!("Opening shared memory");
 
         debug!("Turning Rust Path into C string");
-        let c_name = Self::path_to_cstring(&path)
+        let c_name = Self::path_to_cstring(path)
             .ok_or_else(|| SharedMemoryOpenError::InvalidSegmentName {
                 path: path.to_owned(),
             })
-            .map_err(|error| {
+            .inspect_err(|_error| {
                 warn!("Failed to convert Rust Path to C string");
-                error
             })?;
 
         debug!("Opening shared memory with shm_open. Flags O_RDWR");
@@ -221,13 +201,12 @@ impl SharedMemory {
         let path = path.as_ref();
 
         debug!("Turning Rust Path into C string");
-        let c_name = Self::path_to_cstring(&path)
+        let c_name = Self::path_to_cstring(path)
             .ok_or_else(|| SharedMemoryDeleteError::InvalidSegmentName {
                 path: path.to_owned(),
             })
-            .map_err(|error| {
+            .inspect_err(|_error| {
                 warn!("Failed to convert Rust Path to C string");
-                error
             })?;
 
         debug!("Deleting shared memory with shm_unlink");

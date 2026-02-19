@@ -1,5 +1,5 @@
+use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
 use ebutils::IsPow2Result;
-use circular_buffer::{CircularBufferReadable, CircularBufferWritable};
 use multi_fragment_packet::MultiFragmentPacket;
 use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
 use pcie40::ctrl::PCIe40ControllerManager;
@@ -99,7 +99,7 @@ fn main() {
 
         println!("Discarding MFPs...");
 
-        mfps.discard().unwrap();
+        mfps.discard_all().unwrap();
 
         println!("Discarded MFPs successfully");
 
@@ -115,7 +115,7 @@ fn pcie40_wait_for_mfps(
     loop {
         match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(_) => return Ok(()),
-            Err(PCIe40TypedReadError::NotFound | PCIe40TypedReadError::NotEnoughData) => {
+            Err(PCIe40TypedReadError::NotEnoughData) => {
                 println!("No MFPs found, waiting for more data...");
                 std::thread::sleep(poll_interval);
             }
@@ -134,9 +134,9 @@ fn shmem_write_mfps(
     for mfp in mfps {
         loop {
             match mfp.write(writer) {
-                Ok(_) => break, // Move to next MFP
+                Ok(()) => break, // Move to next MFP
                 Err(error) => {
-                    if let SharedMemoryTypedWriteError::NotEnoughSpace = error {
+                    if matches!(error, SharedMemoryTypedWriteError::NotEnoughSpace) {
                         println!("Temporary error writing MFP: {error:?}, retrying...");
                         std::thread::sleep(poll_interval);
                     }

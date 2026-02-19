@@ -1,11 +1,11 @@
 use crate::stream::mapped_stream::PCIe40MappedStream;
 use crate::stream::stream::PCIe40StreamError;
-use circular_buffer::{CircularBufferReader, SizedReadGuard};
+use circular_buffer::CircularBufferReader;
 use thiserror::Error;
 use tracing::{debug, instrument, warn};
 
-pub struct PCIe40Reader<'a> {
-    mapped_buffer: PCIe40MappedStream<'a>,
+pub struct PCIe40Reader {
+    mapped_buffer: PCIe40MappedStream,
     read_offset: usize,
     alignment_pow2: u8,
 }
@@ -38,13 +38,13 @@ pub enum PCIe40AdvanceError {
     NotAligned,
 }
 
-impl<'a> PCIe40Reader<'a> {
+impl PCIe40Reader {
     #[instrument(skip_all, fields(
         device_id = mapped_buffer.device_id(),
         alignment_pow2 = alignment_pow2
     ))]
     pub fn new(
-        mapped_buffer: PCIe40MappedStream<'a>,
+        mapped_buffer: PCIe40MappedStream,
         alignment_pow2: u8,
     ) -> Result<Self, PCIe40ReaderInstanceError> {
         debug!("Creating PCIe40Reader instance");
@@ -80,19 +80,35 @@ impl<'a> PCIe40Reader<'a> {
     pub fn alignment_pow2(&self) -> u8 {
         self.alignment_pow2
     }
+
+    /// # Safety
+    /// The buffer's data might change due to the DMA access from the card, so it is not really immutable
+    pub unsafe fn get_buffer(&self) -> &[u8] {
+        unsafe { self.mapped_buffer.data() }
+    }
+
+    pub fn get_buffer_size(&self) -> usize {
+        self.mapped_buffer.size()
+    }
+
+    pub fn read_offset(&self) -> usize {
+        self.read_offset
+    }
+
+    pub fn dma_buffer_fd(&self) -> i32 {
+        self.mapped_buffer.dma_buffer_fd()
+    }
 }
 
-impl<'buf> CircularBufferReader for PCIe40Reader<'buf> {
-    type AdvanceStatus = ();
-    type AdvanceError = PCIe40AdvanceError;
-    type ReadableRegion<'buf_ref>
-        = &'buf_ref [u8]
+impl CircularBufferReader for PCIe40Reader {
+    type AdvanceResult = Result<(), PCIe40AdvanceError>;
+    type ReadableRegionResult<'a>
+        = Result<&'a [u8], PCIe40StreamError>
     where
-        Self: 'buf_ref;
-    type ReadableRegionError = PCIe40StreamError;
+        Self: 'a;
 
     #[instrument(skip_all, fields(device_id = self.mapped_buffer.device_id(), bytes = bytes))]
-    fn advance_read_pointer(&mut self, bytes: usize) -> Result<(), Self::AdvanceError> {
+    fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
         debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
 
         debug!("Checking buffer's alignment");
@@ -118,7 +134,7 @@ impl<'buf> CircularBufferReader for PCIe40Reader<'buf> {
     }
 
     #[instrument(skip_all, fields(device_id = self.mapped_buffer.device_id()))]
-    fn readable_region(&self) -> Result<Self::ReadableRegion<'_>, Self::ReadableRegionError> {
+    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
         debug!("Getting the buffer's readable region");
         let available_bytes = self.mapped_buffer.available_bytes()?;
         debug!("Available bytes: {available_bytes}");
@@ -126,5 +142,3 @@ impl<'buf> CircularBufferReader for PCIe40Reader<'buf> {
             [self.read_offset..(self.read_offset + available_bytes)])
     }
 }
-
-pub type PCIe40ReadGuard<'guard, 'buf, T> = SizedReadGuard<'guard, PCIe40Reader<'buf>, T>;

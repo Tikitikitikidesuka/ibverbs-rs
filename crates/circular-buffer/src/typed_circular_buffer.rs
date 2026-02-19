@@ -1,65 +1,33 @@
 use crate::circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use std::error::Error;
-use std::ops::Deref;
 
-// Since no extra header data can be added to either PCIe40 or SharedMemoryBuffer data
-// without updating current protocols already in production, each type must define how its
-// written and read from each buffer. This is the abstraction that allows for that.
+// todo these traits are completely useless as almost everything about them is generic. There is not even a bound on what is returned by read etc.
+// these need heavy refactoring and simplification to avoid needing to reimplement everything for every type that can be read by a "CircularBufferReader".
 
-pub trait CircularBufferReadable<'guard, 'buf, Reader: CircularBufferReader + 'buf>
-where
-    'buf: 'guard,
-{
-    type ReadGuard: ReadGuard<'guard, Reader, Self>
+pub trait CircularBufferReadable<R: CircularBufferReader> {
+    type ReadResult<'a>
     where
-        Self: 'guard,
-        Reader: 'buf;
-    type ReadError: Error;
+        R: 'a;
 
-    fn read(reader: &'guard mut Reader, num: usize) -> Result<Self::ReadGuard, Self::ReadError>;
+    fn read(reader: &mut R) -> Self::ReadResult<'_>;
 }
 
-pub trait ReadGuard<'guard, Reader: CircularBufferReader + ?Sized, T: ?Sized + 'guard>:
-Deref<Target = [&'guard T]>
-{
-    fn discard(self) -> Result<Reader::AdvanceStatus, Reader::AdvanceError>
+pub trait CircularBufferMultiReadable<R: CircularBufferReader> {
+    type MultiReadResult<'a>
     where
-        Self: Sized;
+        R: 'a;
+
+    /// Reads up to `num` elements from the reader.
+    ///
+    /// If less than `num` elements are available, the reader will read as many as possible.
+    /// It is possible to discard less than the requested number of elements afterwards.
+    fn read_multiple(reader: &mut R, num: usize) -> Self::MultiReadResult<'_>;
 }
 
-pub trait CircularBufferWritable<Writer: CircularBufferWriter> {
-    type WriteStatus;
-    type WriteError: Error;
+pub trait CircularBufferWritable<W: CircularBufferWriter> {
+    type WriteResult;
 
-    fn write(&self, writer: &mut Writer) -> Result<Self::WriteStatus, Self::WriteError>;
+    fn write(&self, writer: &mut W) -> Self::WriteResult;
 }
 
 // To write multiple structures, the user can call write many times or implement
 // the writing abstraction over a collection type like Vec<T> or &[T]
-/*
-pub trait CircularBufferTypedReader: CircularBufferReader {
-    type ReadGuard<'guard, T: ?Sized + 'guard>: ReadGuard<'guard, Self, T>
-    where
-        Self: 'guard;
-    type ReadError: Error;
-
-    fn typed_read<T: ?Sized>(
-        &mut self,
-        num: usize,
-    ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError>;
-}
-
-pub trait ReadGuard<'guard, Reader: CircularBufferReader + ?Sized, T: ?Sized + 'guard>:
-    Deref<Target = [&'guard T]>
-{
-    fn discard(self) -> Reader::AdvanceResult
-    where
-        Self: Sized;
-}
-
-pub trait CircularBufferTypedWriter: CircularBufferReader {
-    type WriteError: Error;
-
-    fn typed_write<T: ?Sized>(&mut self, data: &T) -> Result<(), Self::WriteError>;
-}
-*/

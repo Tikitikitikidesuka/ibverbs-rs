@@ -1,7 +1,6 @@
 [package]
 name = "multi-fragment-packet"
 description = "Multi Fragment Packet structure for the LHCb Event Builder"
-authors.workspace = true
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -35,9 +34,9 @@ required-features = ["shmem-io"]
 [[example]]
 name = "continouous_mfp_pcie40_example"
 path = "examples/continuous_mfp_pcie40_example.rs"
-required-features = ["pcie40-io"]
+required-features = ["pcie40-readable"]
 
 [[example]]
 name = "mfp_pcie40_example"
 path = "examples/mfp_pcie40_example.rs"
-required-features = ["pcie40-io"]
+required-features = ["pcie40-readable"]

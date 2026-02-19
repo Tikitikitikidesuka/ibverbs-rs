@@ -1,7 +1,6 @@
 [package]
 name = "multi-event-packet"
 description = "Crate for building and reading MEPs."
-authors = ["Jonatan Ziegler"]
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -14,9 +13,11 @@ bincode = { workspace = true, optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 bytemuck.workspace = true
+memmap2 = { workspace = true, optional = true }
 
 [features]
 bincode = ["dep:bincode"]
+mmap = ["dep:memmap2"]
 
 [lints]
 workspace = true

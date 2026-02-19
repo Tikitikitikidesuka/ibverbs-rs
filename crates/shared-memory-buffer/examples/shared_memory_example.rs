@@ -32,7 +32,7 @@ fn main() {
 }
 
 fn print_non_contiguous_buffer(reader: &SharedMemoryBufferReader) {
-    let (primary_region, secondary_region) = reader.readable_region().unwrap();
+    let (primary_region, secondary_region) = reader.readable_region();
 
     println!("\nREAD: ");
     println!("Primary: {:?}", primary_region);
@@ -40,7 +40,7 @@ fn print_non_contiguous_buffer(reader: &SharedMemoryBufferReader) {
 }
 
 fn write_to_buffer(writer: &mut SharedMemoryBufferWriter, data: &[u8]) -> Result<(), ()> {
-    let (primary_region, secondary_region) = writer.writable_region().unwrap();
+    let (primary_region, secondary_region) = writer.writable_region();
     println!("Primary: {primary_region:?}, Secondary: {secondary_region:?}");
 
     if data.len() > primary_region.len() + secondary_region.len() {

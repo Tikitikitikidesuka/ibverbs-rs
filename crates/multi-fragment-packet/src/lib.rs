@@ -10,9 +10,9 @@ pub mod shared_memory_element;
 pub mod odin_mock;
 
 pub use builder::MultiFragmentPacketBuilder;
-use ebutils::EventId;
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;
+use ebutils::{END_OF_RUN, EventId, Uninstantiatable};
 pub mod owned;
 
 pub use owned::MultiFragmentPacketOwned;
@@ -54,7 +54,7 @@ pub struct MultiFragmentPacket {
     // Array of fragment types is dynamically sized [FragmentType]
     // Array of fragment sizes is dynamically sized [FragmentSize]
     // Array of fragments is dynamically sized [Fragment ([u8])]
-    body: [u8],
+    _unin: Uninstantiatable,
 }
 
 impl MultiFragmentPacket {
@@ -66,43 +66,41 @@ impl MultiFragmentPacket {
     /// Casts a byte slice to an MFP checking for the magic number and size.
     ///
     /// The passed slice must only be at least as large as the MFP, it may be larger as well.
-    pub fn from_raw_bytes(data: &[u8]) -> Result<&Self, MultiFragmentPacketFromRawBytesError> {
+    pub fn from_raw_bytes(data: &[u8]) -> Result<&Self, FromRawBytesError> {
         // Check if there is enough data for the header
         if data.len() < Self::HEADER_SIZE {
-            Err(
-                MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                    required_data: Self::HEADER_SIZE,
-                    available_data: data.len(),
-                },
-            )?;
+            Err(FromRawBytesError::NotEnoughDataAvailable {
+                required_data: Self::HEADER_SIZE,
+                available_data: data.len(),
+            })?;
         }
 
         let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
 
         // Check the magic bytes are not corrupt
         if mfp.magic() != Self::VALID_MAGIC {
-            Err(MultiFragmentPacketFromRawBytesError::CorruptedMagic {
+            Err(FromRawBytesError::CorruptedMagic {
                 read_magic: mfp.magic(),
                 expected_magic: Self::VALID_MAGIC,
             })?
         }
 
         if mfp.packet_size() as usize > data.len() {
-            Err(
-                MultiFragmentPacketFromRawBytesError::NotEnoughDataAvailable {
-                    required_data: mfp.packet_size() as usize,
-                    available_data: data.len(),
-                },
-            )?;
+            Err(FromRawBytesError::NotEnoughDataAvailable {
+                required_data: mfp.packet_size() as usize,
+                available_data: data.len(),
+            })?;
         }
 
         Ok(mfp)
     }
 
+    #[allow(unused)]
     pub(crate) fn magic_field_offset() -> usize {
         offset_of!(MultiFragmentPacketHeader, magic)
     }
 
+    #[allow(unused)]
     pub(crate) fn magic_field_size() -> usize {
         size_of::<u16>()
     }
@@ -127,6 +125,13 @@ impl MultiFragmentPacket {
     /// The event ids of the fragments are sequential, so the event id of fragment `n` is `event_id() + n`.
     pub fn event_id(&self) -> EventId {
         self.header().event_id
+    }
+
+    /// Returns true if thes MFP marks the end of a run, i.e. has event id [`END_OF_RUN`].
+    ///
+    /// Those MFPs may contain fragments, but they are empty.
+    pub fn is_end_of_run(&self) -> bool {
+        self.event_id() == END_OF_RUN
     }
 
     /// Returns the Source ID of all of the fragments in this packet.
@@ -227,7 +232,7 @@ impl MultiFragmentPacket {
     /// The passed data must be at least as large as the header size, and as the size indicated in the header.
     unsafe fn unchecked_ref_from_raw_bytes(data: &[u8]) -> &Self {
         // SAFETY: See function preconditions
-        unsafe { &*(&data[..data.len() - Self::HEADER_SIZE] as *const [u8] as *const MultiFragmentPacket) }
+        unsafe { &*(data.as_ptr().cast()) }
     }
 
     fn header(&self) -> &MultiFragmentPacketHeader {
@@ -254,7 +259,7 @@ impl MultiFragmentPacket {
 
 /// Errors that can be encountered when trying to construct a MultiFragmentPacket from raw bytes.
 #[derive(Debug, Error)]
-pub enum MultiFragmentPacketFromRawBytesError {
+pub enum FromRawBytesError {
     /// Not enough bytes presented to decode MFP.
     #[error(
         "Not enough data available: Required {required_data} bytes. Only {available_data} bytes are available in the buffer"
@@ -545,11 +550,11 @@ mod tests {
         let iter = mfp.fragment_iter();
         assert_eq!(iter.len(), 5);
 
-        // After consuming some elements, len() should report remaining length
+        // After consuming some elements, len() should still report total length
         let mut iter = mfp.fragment_iter();
         iter.next();
         iter.next();
-        assert_eq!(iter.len(), 3);
+        assert_eq!(iter.len(), 5);
 
         // Confirm we can iterate through all elements
         let mut count = 0;

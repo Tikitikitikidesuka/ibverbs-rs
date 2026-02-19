@@ -1,5 +1,7 @@
 //! A fragment represents a piece of data for one event from one source of some sub-detector.
 use std::fmt::{Debug, Display};
+#[cfg(feature = "pretty")]
+use std::io::Write;
 
 use derive_where::derive_where;
 
@@ -95,6 +97,156 @@ impl<'a, T: ?Sized + AsRef<[u8]>> Fragment<'a, T> {
             source_id: self.source_id,
             data: f(self.data),
         }
+    }
+}
+
+#[cfg(feature = "pretty")]
+impl Fragment<'_> {
+    pub fn pretty_print(&self, writer: &mut impl Write, indent: usize) -> std::io::Result<()> {
+        use colored::Colorize;
+
+        let config = pretty_hex::HexConfig {
+            title: false,
+            ascii: true,
+            width: 16,
+            group: 2,
+            chunk: 2,
+            max_bytes: 256,
+            display_offset: 0,
+        };
+
+        let indent = " ".repeat(indent);
+        let frag = *self;
+
+        let name = frag
+            .fragment_type_parsed()
+            .map(|ty| format!("{:?}", ty))
+            .unwrap_or_else(|| "Unknown".into());
+        writeln!(
+            writer,
+            "{indent}{} {} ({:#X}) {} {}{} {}{} {} {}",
+            "Fragment".bold().black(),
+            name.green().bold(),
+            frag.fragment_type_raw(),
+            "Version".black(),
+            frag.version(),
+            ", Source".black(),
+            frag.source_id(),
+            ", Size".black(),
+            frag.fragment_size(),
+            "bytes".black()
+        )?;
+
+        if let Ok(odin) = frag.try_into_odin() {
+            let odin = odin.payload();
+
+            writeln!(
+                writer,
+                "{indent}  {:<15} {1} ({1:#X})",
+                "Event Id".black(),
+                odin.event_id()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:}",
+                "Event Type".black(),
+                odin.event_type()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:}",
+                "Time".black(),
+                odin.gps_time()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:#08X}",
+                "Partition".black(),
+                odin.partition_id()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:}",
+                "Step enabled?".black(),
+                odin.step_run_enable()
+            )?;
+            if odin.step_run_enable() {
+                writeln!(
+                    writer,
+                    "{indent}  {:<15} {} ({1:#X})",
+                    "StepNumber".black(),
+                    odin.step_number()
+                )?;
+            }
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:?} ({1:#X})",
+                "Orbit Id".black(),
+                odin.orbit_id()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {} ({1:#X})",
+                "Bunch Id".black(),
+                odin.bunch_id()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:?}",
+                "BunchType".black(),
+                odin.bx_type()
+            )?;
+            writeln!(writer, "{indent}  {:<15} {}", "TCK".black(), odin.tck())?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {}",
+                "Is nzs event?".black(),
+                odin.is_nzs_event()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {} ({1:#X})",
+                "Calib type".black(),
+                odin.calib_type()
+            )?;
+            writeln!(
+                writer,
+                "{indent}  {:<15} {:?} ({1:#X})",
+                "Trigger type".black(),
+                odin.trigger_type()
+            )?;
+            if odin.tae_window() > 0 {
+                writeln!(
+                    writer,
+                    "{indent}  {:<15} {:?}",
+                    "Tae window".black(),
+                    odin.tae_window()
+                )?;
+                writeln!(
+                    writer,
+                    "{indent}  {:<15} {:?}",
+                    "Tae central".black(),
+                    odin.tae_central()
+                )?;
+                writeln!(
+                    writer,
+                    "{indent}  {:<15} {:?}",
+                    "Tae first".black(),
+                    odin.tae_first()
+                )?;
+            } else {
+                writeln!(writer, "{indent}  {}", "Tae disabled".black())?;
+            }
+        } else {
+            writeln!(
+                writer,
+                "{indent}  {}",
+                pretty_hex::config_hex(&frag.payload_bytes(), config)
+                    .replace("\n", &format!("\n  {indent}"))
+            )?;
+        }
+
+        Ok(())
     }
 }
 
