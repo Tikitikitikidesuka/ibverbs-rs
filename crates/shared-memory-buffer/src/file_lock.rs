@@ -19,12 +19,6 @@ pub struct LockFile {
 }
 
 impl LockFile {
-    /// Locks the file exclusively blocking
-    #[instrument(skip_all, fields(path = ?path.as_ref().display()))]
-    pub fn lock<P: AsRef<Path>>(path: P) -> Result<Self, LockFileError> {
-        Self::lock_helper(path, FlockArg::LockExclusive)
-    }
-
     /// Locks the file exclusively non-blocking
     #[instrument(skip_all, fields(path = ?path.as_ref().display()))]
     pub fn try_lock<P: AsRef<Path>>(path: P) -> Result<Self, LockFileError> {
@@ -80,9 +74,5 @@ impl LockFile {
 
     fn open(path: &Path) -> Result<File, std::io::Error> {
         OpenOptions::new().read(true).open(path)
-    }
-
-    pub fn delete(path: &Path) -> Result<(), std::io::Error> {
-        std::fs::remove_file(path)
     }
 }
