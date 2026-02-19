@@ -68,7 +68,7 @@ fn main() {
 
         println!("Discarding MFPs...");
 
-        mfps.discard().unwrap();
+        mfps.discard_all().unwrap();
 
         println!("Discarded MFPs successfully");
 
@@ -112,9 +112,7 @@ fn shmem_wait_for_mfps(
     loop {
         match MultiFragmentPacket::read_multiple(reader, num) {
             Ok(_) => return Ok(()),
-            Err(
-                SharedMemoryTypedReadError::NotFound | SharedMemoryTypedReadError::NotEnoughData,
-            ) => {
+            Err(SharedMemoryTypedReadError::NotEnoughData) => {
                 println!("No MFPs found, waiting for more data...");
                 std::thread::sleep(poll_interval);
             }
