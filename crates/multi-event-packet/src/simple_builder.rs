@@ -1,3 +1,9 @@
+//! This module contains the [`SimpleMepBuilder`] for creating [`MultiEventPacket`]s out of [`MultiFragmentPacket`]s.
+//! It is convenient to use but not suitable for high-performance zero-copy applications.
+//! For such cases, use [`ZeroCopyMepBuilder`](crate::zerocopy_builder::ZeroCopyMepBuilder).
+//!
+//! This builder is mostly intended for testing purpouses.
+
 use std::borrow::Cow;
 
 use bytemuck::cast_slice_mut;
@@ -13,25 +19,25 @@ use crate::{
 
 /// This is a builder struct for constructing an MEP out of MFPs for the same events and different source ids.
 ///
-/// At least one MFP from an ODIN source is required ([`SourceId::is_odin`] and Containing [`ebutils::OdinPayload`] fragments).
+/// It is not suitable for high-performance zero-copy applications. For such cases, use [`ZeroCopyMepBuilder`](crate::zerocopy_builder::ZeroCopyMepBuilder).
 ///
 /// # Example
 /// ```
-/// # use multi_event_packet::MultiEventPacketBuilder;
+/// # use multi_event_packet::SimpleMepBuilder;
 /// # use ebutils::{odin::dummy_odin_payload, FragmentType, SourceId};
 /// # use multi_fragment_packet::MultiFragmentPacketOwned;
 /// # let mfp1 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(0)).with_align_log(2).with_fragment_version(0)
-/// # .add_fragment(FragmentType::Odin, dummy_odin_payload(0)).build();
+/// # .add_fragment(FragmentType::ODIN, dummy_odin_payload(0)).build();
 /// # let mfp2 = MultiFragmentPacketOwned::builder().with_event_id(0).with_source_id(SourceId(12213)).with_align_log(2).with_fragment_version(0)
 /// # .add_fragment(FragmentType::DAQ, b"Hello").build();
 /// // getting mfp1 and mfp2 from somewhere
-/// let mep = MultiEventPacketBuilder::with_capacity(2)
+/// let mep = SimpleMepBuilder::with_capacity(2)
 ///     .add_mfp(mfp1).unwrap()
 ///     .add_mfp(mfp2).unwrap()
 ///     .build().unwrap();
 /// ```
 #[derive(Default)]
-pub struct MultiEventPacketBuilder<'a> {
+pub struct SimpleMepBuilder<'a> {
     mfps: Vec<Cow<'a, MultiFragmentPacket>>,
     odin_added: bool,
     // general settings, don't get reset
@@ -39,7 +45,7 @@ pub struct MultiEventPacketBuilder<'a> {
     allow_superfluous_odin_mfp: bool,
 }
 
-impl<'a> MultiEventPacketBuilder<'a> {
+impl<'a> SimpleMepBuilder<'a> {
     pub const DEFAULT_MFP_ALIGN: usize = align_of::<u64>();
 
     /// Creates a new builder.

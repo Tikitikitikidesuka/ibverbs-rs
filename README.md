@@ -10,7 +10,7 @@ building, as well as a binary that runs the Event Builder process itself.
 
 The sub-crates represent the major components of the Event Builder:
 
-- ['infiniband-rs'](crates/infiniband-rs/): Ergonomic Rust bindings for the InfiniBand ibverbs API.
+- ['infiniband-rs'](crates/infiniband-rs/): Ergonomic, safe and versatile Rust bindings for the InfiniBand ibverbs API.
 - [`pcie40`](crates/pcie40/): Rust bindings for the C driver of the PCIe40 data acquisition card.
 - [`shared-memory-buffer`](crates/shared-memory-buffer/): Shared memory transport for inter-process data exchange.
   Compatible with LHCb’s established shared memory protocol and designed to serve as a drop-in replacement.
@@ -27,7 +27,7 @@ The following binaries are provided:
 - [`mdf-reader`](src/bin/mdf-reader.rs): Simple tool to inspect MDF files, similar to `pcie40_mdfreader`.
 - [`mep-reader`](src/bin/mep-reader.rs): Simple tool to inspect MEP files.
 
-Additionally, there are some examples in the [`examples`](examples) directory.
+Additionally, there are some examples in the [`examples`](./examples) directory.
 
 ## Overview of data formats and their relationships
 

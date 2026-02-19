@@ -2,13 +2,13 @@ use std::{borrow::Borrow, ops::Deref};
 
 use multi_fragment_packet::FromRawBytesError;
 
-use crate::{MultiEventPacket, builder::MultiEventPacketBuilder};
+use crate::{MultiEventPacket, simple_builder::SimpleMepBuilder};
 
 /// This struct represents an owned [`MultiEventPacket`].
 ///
 /// Its relationship to [`MultiEventPacket`] is as [`String`] to [`str`].
 ///
-/// An owned MEP can be constructed using the [`MultiEventPacketBuilder`].
+/// An owned MEP can be constructed using the [`SimpleMepBuilder`].
 #[derive(Clone)]
 pub struct MultiEventPacketOwned<Data: AsRef<[u32]> = Box<[u32]>> {
     data: Data, // assures alignment of u32
@@ -39,8 +39,8 @@ impl<D: AsRef<[u32]>> Borrow<MultiEventPacket> for MultiEventPacketOwned<D> {
 
 impl MultiEventPacketOwned {
     /// Returns a new builder instance for building a owned MEP.
-    pub fn builder<'a>() -> MultiEventPacketBuilder<'a> {
-        MultiEventPacketBuilder::new()
+    pub fn builder<'a>() -> SimpleMepBuilder<'a> {
+        SimpleMepBuilder::new()
     }
 }
 
@@ -82,9 +82,9 @@ pub mod mmap {
     }
 
     impl MultiEventPacketOwned<MemMap> {
-        /// Creates a new `MdfFile` by memory mapping a file at the given path.
+        /// Creates a new [`MepMap`] by memory mapping a file at the given path.
         ///
-        /// The advantage of this over using [`MdfFile::read_file`] is that the file
+        /// The advantage of this over using [`MepMap::read_file`] is that the file
         /// must not be read into memory at once but only as needed.
         pub fn mmap_file(file: impl AsRef<Path>) -> std::io::Result<Self> {
             let file = File::open(file)?;
