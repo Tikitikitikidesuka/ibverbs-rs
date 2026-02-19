@@ -114,10 +114,10 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
         &mut cast_slice_mut(self.buffer)[range]
     }
 
-    pub fn get_mfp_slots<'b>(
-        &'b mut self,
+    pub fn get_mfp_slots(
+        &mut self,
         indices: Range<usize>,
-    ) -> impl Iterator<Item = &'b mut [u8]> {
+    ) -> impl Iterator<Item = &mut [u8]> {
         let buffer = cast_slice_mut(self.buffer) as *mut [u8];
 
         // SAEFTY: mfp ranges for different indices don't overlap,

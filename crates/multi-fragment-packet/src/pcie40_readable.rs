@@ -6,7 +6,6 @@ use circular_buffer::{
 use pcie40::reader::PCIe40Reader;
 use pcie40::stream::stream::PCIe40StreamError;
 use thiserror::Error;
-use tracing::error;
 
 /// Errors that can occur when reading an MFP from the PCIe40 card.
 #[derive(Debug, Error)]
@@ -24,7 +23,7 @@ pub enum PCIe40TypedReadError {
     StreamError(#[from] PCIe40StreamError),
 }
 
-impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
+impl CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
     type ReadResult<'a>
         = Result<ReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
     where
@@ -61,7 +60,7 @@ impl<'r> CircularBufferReadable<PCIe40Reader> for MultiFragmentPacket {
     }
 }
 
-impl<'r> CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
+impl CircularBufferMultiReadable<PCIe40Reader> for MultiFragmentPacket {
     type MultiReadResult<'a>
         = Result<MultiReadGuard<'a, PCIe40Reader, Self>, PCIe40TypedReadError>
     where

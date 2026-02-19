@@ -11,7 +11,7 @@ building, as well as a binary that runs the Event Builder process itself.
 
 The sub-crates represent the major components of the Event Builder:
 
-- [`pcie40`](crates/pcie40/): Rust bindings for the C driver of the PCIe40 data acquisition card.
+- [`pcie40`](crates/pcie40/): Rust bindings for the C driver of the `PCIe40` data acquisition card.
 - [`shared-memory-buffer`](crates/shared-memory-buffer/): Shared memory transport for inter-process data exchange.
   Compatible with LHCb’s established shared memory protocol and designed to serve as a drop-in replacement.
 - [`mock-buffers`](crates/mock-buffers/): TODO: Remove this crate and move each mock buffer to its corresponding crate.

@@ -130,9 +130,7 @@ pub fn main() -> anyhow::Result<()> {
 
             for frag in rec.fragments() {
                 let name = frag
-                    .fragment_type_parsed()
-                    .map(|ty| format!("{:?}", ty))
-                    .unwrap_or_else(|| "Unknown".into());
+                    .fragment_type_parsed().map_or_else(|| "Unknown".into(), |ty| format!("{ty:?}"));
                 writeln!(
                     output,
                     "  {} {} ({:#X}) {} {}{} {}{} {} {}",
@@ -247,7 +245,7 @@ pub fn main() -> anyhow::Result<()> {
                     writeln!(
                         output,
                         "    {}",
-                        config_hex(&frag.payload_bytes(), config).replace("\n", "\n    ")
+                        config_hex(&frag.payload_bytes(), config).replace('\n', "\n    ")
                     )?;
                 }
             }
@@ -261,7 +259,7 @@ pub fn main() -> anyhow::Result<()> {
             writeln!(
                 output,
                 "  {}",
-                config_hex(&rec.body_bytes(), config).replace("\n", "\n  ")
+                config_hex(&rec.body_bytes(), config).replace('\n', "\n  ")
             )?;
         }
     }

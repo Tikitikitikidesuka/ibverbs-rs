@@ -94,7 +94,7 @@ fn shmem_write_mfps(
     for mfp in mfps {
         loop {
             match mfp.write(writer) {
-                Ok(_) => break, // Move to next MFP
+                Ok(()) => break, // Move to next MFP
                 Err(error) => {
                     println!("Temporary error writing MFP: {error:?}, retrying...");
                     std::thread::sleep(poll_interval);

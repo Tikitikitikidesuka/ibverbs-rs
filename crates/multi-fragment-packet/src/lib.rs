@@ -131,11 +131,7 @@ impl MultiFragmentPacket {
     ///
     /// Those MFPs may contain fragments, but they are empty.
     pub fn is_end_of_run(&self) -> bool {
-        if self.event_id() == END_OF_RUN {
-            true
-        } else {
-            false
-        }
+        self.event_id() == END_OF_RUN
     }
 
     /// Returns the Source ID of all of the fragments in this packet.

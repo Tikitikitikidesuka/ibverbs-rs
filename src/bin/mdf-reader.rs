@@ -150,7 +150,7 @@ pub fn main() -> anyhow::Result<()> {
             writeln!(
                 output,
                 "  {}",
-                config_hex(&rec.body_bytes(), config).replace("\n", "\n  ")
+                config_hex(&rec.body_bytes(), config).replace('\n', "\n  ")
             )?;
         }
     }

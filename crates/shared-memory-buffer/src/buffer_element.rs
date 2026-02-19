@@ -21,7 +21,6 @@ use crate::writable_buffer_element::SharedMemoryTypedWriteError;
 /// maintains minimum 2-byte alignment, placing the wrap flag in the first two bytes
 /// guarantees it will be written and readable even when an element crosses the
 /// wraparound boundary.
-
 pub trait SharedMemoryBufferElement {
     /// Returns the element's size in bytes.
     fn length_in_bytes(&self) -> usize;

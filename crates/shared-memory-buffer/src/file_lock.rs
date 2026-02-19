@@ -15,7 +15,7 @@ pub enum LockFileError {
 }
 
 pub struct LockFile {
-    file: Flock<File>,
+    _file: Flock<File>,
 }
 
 impl LockFile {
@@ -37,15 +37,13 @@ impl LockFile {
         debug!("Checking if file exists");
         let file = if path.as_ref().exists() {
             debug!("File exists. Opening file");
-            Self::open(path.as_ref()).map_err(|error| {
+            Self::open(path.as_ref()).inspect_err(|_error| {
                 warn!("Failed to open file");
-                error
             })?
         } else {
             debug!("File does not exist. Creating file");
-            Self::create(path.as_ref()).map_err(|error| {
+            Self::create(path.as_ref()).inspect_err(|_error| {
                 warn!("Failed to create file");
-                error
             })?
         };
 
@@ -53,7 +51,7 @@ impl LockFile {
         match Flock::lock(file, flockarg) {
             Ok(locked_file) => {
                 debug!("File lock acquired");
-                Ok(Self { file: locked_file })
+                Ok(Self { _file: locked_file })
             }
             Err((_, errno)) => {
                 if errno == Errno::EAGAIN {
@@ -76,6 +74,7 @@ impl LockFile {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(path)
     }
 

@@ -28,7 +28,7 @@ pub enum SharedMemoryBufferNewError {
 pub struct SharedMemoryBuffer {
     name: String,
     shared_memory: MappedSharedMemory,
-    file_lock: LockFile,
+    _file_lock: LockFile,
     size: usize,
     alignment_pow2: u8,
     buffer_ptr: *const u8,
@@ -52,15 +52,13 @@ impl SharedMemoryBuffer {
         debug!("Creating read buffer for shared memory");
 
         debug!("Locking reader");
-        let file_lock = Self::try_lock_reader(&name).map_err(|error| {
+        let file_lock = Self::try_lock_reader(name).inspect_err(|_error| {
             warn!("Failed to lock the reader");
-            error
         })?;
 
         debug!("Opening and mapping shared memory");
-        let shared_memory = Self::open_mapped_shared_memory(name).map_err(|error| {
+        let shared_memory = Self::open_mapped_shared_memory(name).inspect_err(|_error| {
             warn!("Failed to open and map shared memory");
-            error
         })?;
 
         debug!("Checking shared memory size is enough for the status structure");
@@ -76,16 +74,14 @@ impl SharedMemoryBuffer {
         debug!("Getting buffer usable size");
         let size = unsafe {
             let status_ptr = shared_memory.as_slice().as_ptr() as *const CircularBufferStatus;
-            let size = (&*status_ptr).size();
-            size
+            (&*status_ptr).size()
         };
         debug!("Buffer usable size: {} Bytes", size);
 
         debug!("Getting buffer alignment");
         let alignment_pow2 = unsafe {
             let status_ptr = shared_memory.as_slice().as_ptr() as *const CircularBufferStatus;
-            let alignment = (&*status_ptr).alignment_pow2();
-            alignment
+            (&*status_ptr).alignment_pow2()
         } as u8;
         debug!("Buffer alignment: 2^{} Bytes", alignment_pow2);
 
@@ -102,7 +98,7 @@ impl SharedMemoryBuffer {
             shmem_buffer: SharedMemoryBuffer {
                 name: name.into(),
                 shared_memory,
-                file_lock,
+                _file_lock: file_lock,
                 size,
                 alignment_pow2,
                 buffer_ptr,
@@ -125,15 +121,13 @@ impl SharedMemoryBuffer {
         debug!("Creating write buffer for shared memory");
 
         debug!("Locking writer");
-        let writer_lock = Self::try_lock_writer(name).map_err(|error| {
+        let writer_lock = Self::try_lock_writer(name).inspect_err(|_error| {
             warn!("Failed to lock the writer");
-            error
         })?;
 
         debug!("Locking reader (until buffer is initialized)");
-        let reader_lock = Self::try_lock_reader(name).map_err(|error| {
+        let reader_lock = Self::try_lock_reader(name).inspect_err(|_error| {
             warn!("Failed to lock the reader");
-            error
         })?;
 
         debug!("Checking if shared memory already exists (in case of unclean shutdown)");
@@ -150,17 +144,15 @@ impl SharedMemoryBuffer {
         }
 
         debug!("Creating and mapping shared memory");
-        let mut shared_memory = Self::create_mapped_shared_memory(&name, size, alignment_pow2)
-            .map_err(|error| {
+        let mut shared_memory = Self::create_mapped_shared_memory(name, size, alignment_pow2)
+            .inspect_err(|_error| {
                 warn!("Failed to create and map shared memory");
-                error
             })?;
 
         debug!("Initializing shared memory");
-        Self::initialize_shared_memory(&mut shared_memory, alignment_pow2, size).map_err(
-            |error| {
+        Self::initialize_shared_memory(&mut shared_memory, alignment_pow2, size).inspect_err(
+            |_error| {
                 warn!("Failed to initialize shared memory");
-                error
             },
         )?;
 
@@ -180,7 +172,7 @@ impl SharedMemoryBuffer {
             shmem_buffer: SharedMemoryBuffer {
                 name: name.into(),
                 shared_memory,
-                file_lock: writer_lock,
+                _file_lock: writer_lock,
                 size,
                 alignment_pow2,
                 buffer_ptr,
@@ -214,7 +206,7 @@ impl Drop for SharedMemoryWriteBuffer {
 
 impl SharedMemoryBuffer {
     pub unsafe fn as_slice(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.buffer_ptr as *const u8, self.size) }
+        unsafe { std::slice::from_raw_parts(self.buffer_ptr, self.size) }
     }
 
     pub unsafe fn as_slice_mut(&mut self) -> &mut [u8] {
@@ -222,13 +214,11 @@ impl SharedMemoryBuffer {
     }
 
     pub fn read_status(&self) -> PtrStatus {
-        let status = self.status_ref().read_status();
-        status
+        self.status_ref().read_status()
     }
 
     pub fn write_status(&self) -> PtrStatus {
-        let status = self.status_ref().write_status();
-        status
+        self.status_ref().write_status()
     }
 
     pub fn set_read_status(&mut self, status: PtrStatus) {
@@ -424,7 +414,7 @@ impl SharedMemoryBuffer {
 
         debug!("Creating shared memory");
         let shared_memory =
-            SharedMemory::create(&name, total_size, PERMISSION_MODE).map_err(|_error| {
+            SharedMemory::create(name, total_size, PERMISSION_MODE).map_err(|_error| {
                 warn!("Failed to create shared memory");
                 SharedMemoryBufferNewError::UnableToAcquireSharedMemory {
                     shared_memory_path: name.into(),
