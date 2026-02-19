@@ -1,9 +1,10 @@
+/// Returns the smallest multiple of `alignment` higher or equal to `n`
 pub fn align_up(n: usize, alignment: usize) -> usize {
     if n == 0 || alignment == 0 {
         return n;
     }
 
-    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+    if let Some(_) = pow2_exponent(alignment) {
         align_up_pow2(
             n,
             alignment
@@ -21,12 +22,13 @@ pub fn align_up(n: usize, alignment: usize) -> usize {
     }
 }
 
+/// Returns the highest multiple of `alignment` lower or equal to `n`
 pub fn align_down(n: usize, alignment: usize) -> usize {
     if n == 0 || alignment == 0 {
         return n;
     }
 
-    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+    if let Some(_) = pow2_exponent(alignment) {
         align_down_pow2(
             n,
             alignment
@@ -40,6 +42,7 @@ pub fn align_down(n: usize, alignment: usize) -> usize {
     }
 }
 
+/// Returns the smallest multiple of 2^`exponent` higher or equal to `n`
 pub fn align_up_pow2(n: usize, exponent: u8) -> usize {
     // Step 1: Calculate alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -69,6 +72,7 @@ pub fn align_up_pow2(n: usize, exponent: u8) -> usize {
     size_plus_mask & inverted_mask
 }
 
+/// Returns the highest multiple of 2^`exponent` lower or equal to `n`
 pub fn align_down_pow2(n: usize, exponent: u8) -> usize {
     // Calculate the alignment value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -91,12 +95,13 @@ pub fn align_down_pow2(n: usize, exponent: u8) -> usize {
     n & inverted_mask
 }
 
+/// Returns true if `n` is a multiple of `alignment`.
 pub fn check_alignment(n: usize, alignment: usize) -> bool {
     if n == 0 || alignment == 0 {
         return true;
     }
 
-    if let IsPow2Result::Yes(_) = is_pow2(alignment) {
+    if let Some(_) = pow2_exponent(alignment) {
         check_alignment_pow2(
             n,
             alignment
@@ -109,6 +114,7 @@ pub fn check_alignment(n: usize, alignment: usize) -> bool {
     }
 }
 
+/// Returns true if `n` is a multiple of 2^`exponent`.
 pub fn check_alignment_pow2(size: usize, exponent: u8) -> bool {
     // Calculate the alignment value (2^exponent)
     let alignment = 1 << exponent;
@@ -122,12 +128,13 @@ pub fn check_alignment_pow2(size: usize, exponent: u8) -> bool {
     (size & mask) == 0
 }
 
+/// Wraps `n` with modulus `wrap`.
 pub fn wrap_around(n: usize, wrap: usize) -> usize {
     if wrap == 0 {
         return n;
     }
 
-    if let IsPow2Result::Yes(_) = is_pow2(wrap) {
+    if let Some(_) = pow2_exponent(wrap) {
         wrap_around_pow2(
             n,
             wrap.trailing_zeros().try_into().expect("bits fit into u8"),
@@ -137,6 +144,7 @@ pub fn wrap_around(n: usize, wrap: usize) -> usize {
     }
 }
 
+/// Wraps `n` with modulus 2^`wrap_pow2`.
 pub fn wrap_around_pow2(n: usize, wrap_pow2: u8) -> usize {
     // Calculate the wrap value (2^exponent)
     // Example: for exponent=3, alignment=8 (binary 1000)
@@ -153,19 +161,27 @@ pub fn wrap_around_pow2(n: usize, wrap_pow2: u8) -> usize {
     n & mask
 }
 
+/// Returns 2^`exponent`
 pub fn pow2(exponent: u8) -> usize {
     1 << exponent
 }
 
+/// Enum representing a result of `is_pow2`
 pub enum IsPow2Result {
+    /// The input is equal to 2^`self.0`
     Yes(u8),
+    /// The input is not a power of 2
     No,
 }
-pub fn is_pow2(n: usize) -> IsPow2Result {
+
+/// Returns `Some(u8)` if input `n` is a power of 2.
+/// The enclosed `u8` is the exponent of 2, p, such that `n = 2^p`.
+/// Otherwise, returns `None`.
+pub fn pow2_exponent(n: usize) -> Option<u8> {
     if n != 0 && (n & (n - 1)) == 0 {
-        IsPow2Result::Yes(n.trailing_zeros().try_into().expect("bits fit into u8"))
+        Some(n.trailing_zeros().try_into().expect("bits fit into u8"))
     } else {
-        IsPow2Result::No
+        None
     }
 }
 
@@ -390,26 +406,26 @@ mod tests {
     #[test]
     fn test_is_pow2() {
         // Test powers of 2 - should return Yes with the correct exponent
-        assert!(matches!(is_pow2(1), IsPow2Result::Yes(0))); // 2^0 = 1
-        assert!(matches!(is_pow2(2), IsPow2Result::Yes(1))); // 2^1 = 2
-        assert!(matches!(is_pow2(4), IsPow2Result::Yes(2))); // 2^2 = 4
-        assert!(matches!(is_pow2(8), IsPow2Result::Yes(3))); // 2^3 = 8
-        assert!(matches!(is_pow2(16), IsPow2Result::Yes(4))); // 2^4 = 16
-        assert!(matches!(is_pow2(32), IsPow2Result::Yes(5))); // 2^5 = 32
-        assert!(matches!(is_pow2(64), IsPow2Result::Yes(6))); // 2^6 = 64
-        assert!(matches!(is_pow2(128), IsPow2Result::Yes(7))); // 2^7 = 128
-        assert!(matches!(is_pow2(256), IsPow2Result::Yes(8))); // 2^8 = 256
-        assert!(matches!(is_pow2(1 << 30), IsPow2Result::Yes(30))); // 2^30
+        assert!(matches!(pow2_exponent(1), Some(0))); // 2^0 = 1
+        assert!(matches!(pow2_exponent(2), Some(1))); // 2^1 = 2
+        assert!(matches!(pow2_exponent(4), Some(2))); // 2^2 = 4
+        assert!(matches!(pow2_exponent(8), Some(3))); // 2^3 = 8
+        assert!(matches!(pow2_exponent(16), Some(4))); // 2^4 = 16
+        assert!(matches!(pow2_exponent(32), Some(5))); // 2^5 = 32
+        assert!(matches!(pow2_exponent(64), Some(6))); // 2^6 = 64
+        assert!(matches!(pow2_exponent(128), Some(7))); // 2^7 = 128
+        assert!(matches!(pow2_exponent(256), Some(8))); // 2^8 = 256
+        assert!(matches!(pow2_exponent(1 << 30), Some(30))); // 2^30
 
         // Test non-powers of 2 - should return No
-        assert!(matches!(is_pow2(0), IsPow2Result::No));
-        assert!(matches!(is_pow2(3), IsPow2Result::No));
-        assert!(matches!(is_pow2(5), IsPow2Result::No));
-        assert!(matches!(is_pow2(6), IsPow2Result::No));
-        assert!(matches!(is_pow2(7), IsPow2Result::No));
-        assert!(matches!(is_pow2(9), IsPow2Result::No));
-        assert!(matches!(is_pow2(10), IsPow2Result::No));
-        assert!(matches!(is_pow2(15), IsPow2Result::No));
-        assert!(matches!(is_pow2(127), IsPow2Result::No));
+        assert!(matches!(pow2_exponent(0), None));
+        assert!(matches!(pow2_exponent(3), None));
+        assert!(matches!(pow2_exponent(5), None));
+        assert!(matches!(pow2_exponent(6), None));
+        assert!(matches!(pow2_exponent(7), None));
+        assert!(matches!(pow2_exponent(9), None));
+        assert!(matches!(pow2_exponent(10), None));
+        assert!(matches!(pow2_exponent(15), None));
+        assert!(matches!(pow2_exponent(127), None));
     }
 }
