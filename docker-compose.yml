@@ -5,7 +5,3 @@ services:
     command: sleep infinity
     volumes:
       - ./:/app
-    # Use privileged mode to access hardware
-    privileged: true
-    shm_size: 32gb
-

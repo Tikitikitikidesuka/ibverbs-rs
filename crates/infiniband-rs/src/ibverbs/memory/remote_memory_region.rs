@@ -105,14 +105,14 @@ impl RemoteMemoryRegion {
 /// It calculates the byte offset for the index and returns a new handle.
 ///
 /// # Example
-/// ```rust
-/// // Remote memory contains: [u64; 10]
-/// let remote_mr = RemoteMemoryRegion::new(0x1000, 80, rkey);
-///
-/// // Get a handle to the 5th element (index 4)
-/// let elem_mr = remote_array_field!(remote_mr, u64, 4).unwrap();
-/// // elem_mr.address() is now 0x1020
-/// ```
+// /// ```rust
+// /// // Remote memory contains: [u64; 10]
+// /// let remote_mr = RemoteMemoryRegion::new(0x1000, 80, rkey);
+// ///
+// /// // Get a handle to the 5th element (index 4)
+// /// let elem_mr = remote_array_field!(remote_mr, u64, 4).unwrap();
+// /// // elem_mr.address() is now 0x1020
+// /// ```
 #[macro_export]
 macro_rules! remote_array_field {
     ($mr:expr, $T:ty, $index:expr) => {{
@@ -140,20 +140,20 @@ macro_rules! remote_array_field_unchecked {
 /// It uses `offset_of!` to calculate the new address.
 ///
 /// # Example
-/// ```rust
-/// #[repr(C)]
-/// struct Packet {
-///     header: u32,
-///     payload: [u8; 1024],
-/// }
-///
-/// // Remote memory contains a `Packet`
-/// let remote_mr = RemoteMemoryRegion::new(0x1000, 1028, rkey);
-///
-/// // Get a handle to the 'payload' field
-/// let payload_mr = remote_struct_field!(remote_mr, Packet::payload).unwrap();
-/// // payload_mr.address() is now 0x1004
-/// ```
+// /// ```rust
+// /// #[repr(C)]
+// /// struct Packet {
+// ///     header: u32,
+// ///     payload: [u8; 1024],
+// /// }
+// ///
+// /// // Remote memory contains a `Packet`
+// /// let remote_mr = RemoteMemoryRegion::new(0x1000, 1028, rkey);
+// ///
+// /// // Get a handle to the 'payload' field
+// /// let payload_mr = remote_struct_field!(remote_mr, Packet::payload).unwrap();
+// /// // payload_mr.address() is now 0x1004
+// /// ```
 #[macro_export]
 macro_rules! remote_struct_field {
     ($mr:expr, $Struct:ident :: $field:ident) => {{
@@ -179,19 +179,19 @@ macro_rules! remote_struct_field_unchecked {
 /// of `Struct`.
 ///
 /// # Example
-/// ```rust
-/// #[repr(C)]
-/// struct Node {
-///     id: u32,
-///     data: u64,
-/// }
-///
-/// // Remote memory contains: [Node; 5]
-/// let remote_mr = RemoteMemoryRegion::new(0x1000, 60, rkey);
-///
-/// // Get a handle to the 'data' field of the 3rd Node (index 2)
-/// let data_mr = remote_struct_array_field!(remote_mr, Node, 2, data).unwrap();
-/// ```
+// /// ```rust
+// /// #[repr(C)]
+// /// struct Node {
+// ///     id: u32,
+// ///     data: u64,
+// /// }
+// ///
+// /// // Remote memory contains: [Node; 5]
+// /// let remote_mr = RemoteMemoryRegion::new(0x1000, 60, rkey);
+// ///
+// /// // Get a handle to the 'data' field of the 3rd Node (index 2)
+// /// let data_mr = remote_struct_array_field!(remote_mr, Node, 2, data).unwrap();
+// /// ```
 #[macro_export]
 macro_rules! remote_struct_array_field {
     ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{

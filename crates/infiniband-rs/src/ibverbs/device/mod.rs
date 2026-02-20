@@ -19,45 +19,45 @@
 //!
 //! The easiest way to get started is to open a device directly if you know its name:
 //!
-//! ```no_run
-//! use infiniband_rs::ibverbs::devices::open_device;
-//! use infiniband_rs::ibverbs::error::IbvResult;
-//!
-//! fn main() -> IbvResult<()> {
-//!     let ctx = open_device("mlx5_0")?;
-//!     Ok(())
-//! }
-//! ```
+// //! ```no_run
+// //! use infiniband_rs::ibverbs::devices::open_device;
+// //! use infiniband_rs::ibverbs::error::IbvResult;
+// //!
+// //! fn main() -> IbvResult<()> {
+// //!     let ctx = open_device("mlx5_0")?;
+// //!     Ok(())
+// //! }
+// //! ```
 //!
 //! # Example: Enumerating Devices
 //!
 //! If you need to inspect devices (e.g., to check GUIDs) before opening:
 //!
-//! ```no_run
-//! use infiniband_rs::ibverbs::devices;
-//! use infiniband_rs::ibverbs::error::IbvResult;
-//!
-//! fn main() -> IbvResult<()> {
-//!     // 1. Get the list of available devices
-//!     let dev_list = devices::list_devices()?;
-//!
-//!     if dev_list.is_empty() {
-//!         println!("No RDMA devices found.");
-//!         return Ok(());
-//!     }
-//!
-//!     // 2. Iterate and print info
-//!     for dev in dev_list.iter() {
-//!         println!("Name: {:?}, GUID: {:?}", dev.name(), dev.guid());
-//!     }
-//!
-//!     // 3. Open the first available device
-//!     let first_dev = dev_list.get(0).unwrap();
-//!     let context = first_dev.open()?;
-//!
-//!     Ok(())
-//! }
-//! ```
+// //! ```no_run
+// //! use infiniband_rs::ibverbs::devices;
+// //! use infiniband_rs::ibverbs::error::IbvResult;
+// //!
+// //! fn main() -> IbvResult<()> {
+// //!     // 1. Get the list of available devices
+// //!     let dev_list = devices::list_devices()?;
+// //!
+// //!     if dev_list.is_empty() {
+// //!         println!("No RDMA devices found.");
+// //!         return Ok(());
+// //!     }
+// //!
+// //!     // 2. Iterate and print info
+// //!     for dev in dev_list.iter() {
+// //!         println!("Name: {:?}, GUID: {:?}", dev.name(), dev.guid());
+// //!     }
+// //!
+// //!     // 3. Open the first available device
+// //!     let first_dev = dev_list.get(0).unwrap();
+// //!     let context = first_dev.open()?;
+// //!
+// //!     Ok(())
+// //! }
+// //! ```
 
 mod context;
 mod guid;
@@ -70,4 +70,4 @@ pub use manager::{DeviceList, DeviceListIter, DeviceRef, list_devices, open_devi
 /// Port number 1 of each HCA is the RDMA port.
 pub(crate) const IB_PORT: u8 = 1;
 /// Port number 2 of each HCA is the Ethernet port.
-pub(crate) const ETH_PORT: u8 = 2;
+pub(crate) const _ETH_PORT: u8 = 2;

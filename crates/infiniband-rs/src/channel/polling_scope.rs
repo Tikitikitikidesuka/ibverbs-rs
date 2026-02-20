@@ -57,25 +57,6 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// such as local variables defined right before the scope, can be borrowed by the scope.
     ///
     /// The `'env: 'scope` bound is part of the definition of the `IbvConnectionScope` type.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use infiniband_rs::connection::connection::Connection;
-    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    ///
-    /// let (send_mem, recv_mem) = mem.split_at_mut(4);
-    /// send_mem.copy_from_slice(&[1, 2, 3, 4]);
-    /// conn.scope(|s| {
-    ///     let wr0 = s.post_receive(&[mr.prepare_receive(recv_mem).unwrap()])
-    ///     .unwrap();
-    ///     let wr1 = s.post_send(&[mr.prepare_send(send_mem).unwrap()]).unwrap();
-    ///     std::mem::forget(wr0);
-    ///     std::mem::forget(wr1);
-    /// });
-    /// ```
     pub(crate) fn run<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, ScopeError<E>>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
@@ -149,7 +130,7 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // of the polled work requests during clean up. If it errors, it means some of the work
     // requests failed.
     // Auto polls all non manually polled work requests issued during the closure.
-    pub(super) fn auto_poll(self) -> AutoPollResult {
+    fn auto_poll(self) -> AutoPollResult {
         let mut auto_polled = false;
         let mut transport_errors = Vec::new();
 

@@ -312,7 +312,6 @@ impl<'a> Iterator for MultiFragmentPacketIter<'a> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        // remaining length!
         let size = self.packet.fragment_count() as usize - self.index;
         (size, Some(size))
     }
@@ -550,11 +549,10 @@ mod tests {
         let iter = mfp.fragment_iter();
         assert_eq!(iter.len(), 5);
 
-        // After consuming some elements, len() should still report total length
         let mut iter = mfp.fragment_iter();
         iter.next();
         iter.next();
-        assert_eq!(iter.len(), 5);
+        assert_eq!(iter.len(), 3);
 
         // Confirm we can iterate through all elements
         let mut count = 0;

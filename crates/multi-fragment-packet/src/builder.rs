@@ -262,7 +262,7 @@ mod tests {
             .with_event_id(42)
             .with_source_id(SourceId::new_odin(1))
             .with_align_log(3)
-            .with_fragment_version(1)
+            .with_fragment_version(7)
             .add_fragment(FragmentType::ODIN, dummy_odin_payload(42))
             .add_fragment(FragmentType::ODIN, dummy_odin_payload(43))
             .build();

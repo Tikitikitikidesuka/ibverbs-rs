@@ -182,7 +182,7 @@ mod test {
                 MultiFragmentPacketOwned::builder()
                     .with_align_log(u32_align)
                     .with_event_id(0)
-                    .with_fragment_version(1)
+                    .with_fragment_version(7)
                     .with_source_id(SourceId::new_odin(0))
                     .add_fragment(FragmentType::ODIN, odin1)
                     .add_fragment(

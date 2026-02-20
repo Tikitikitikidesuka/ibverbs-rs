@@ -1,20 +1,10 @@
 stages:
   - run-jobs
 
-variables:
-  RUST_BACKTRACE: 1
-  RUST_IMAGE: "$CI_REGISTRY_IMAGE:latest"
-  #HARDWARE_TESTS_DEVICE_NAME: "tdtel202_0"
-
-.deps_template:
-  image: ${RUST_IMAGE}
-
-.online_template:
-  extends: .deps_template
-  tags: [online_network, docker]
+default:
+  image: "$CI_REGISTRY_IMAGE:latest"
 
 rust-check:
-  extends: .deps_template
   stage: run-jobs
   script:
     - cargo check --all-features
@@ -23,14 +13,12 @@ rust-check:
   when: always
 
 rust-test:
-  extends: .deps_template
   stage: run-jobs
   script:
-    - cargo test --all --all-features --offline
+    - cargo test --all --all-features
   when: always
 
 pages:
-  extends: .deps_template
   stage: run-jobs
   script:
     - cargo doc --workspace --no-deps --all-features
