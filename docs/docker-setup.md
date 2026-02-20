@@ -18,10 +18,10 @@ On a machine with internet access build and push the image to the project's regi
 
 ```sh
 # Build the image
-docker build -t gitlab-registry.cern.ch/mhermoso/pcie40-rs .
+docker build -t gitlab-registry.cern.ch/lhcb-online/rusteb:latest .
 
 # Push the image to the registry
-docker push gitlab-registry.cern.ch/mhermoso/pcie40-rs
+docker push gitlab-registry.cern.ch/lhcb-online/rusteb:latest
 ```
 
 ### Cross-Platform Building (ARM-based Systems)
@@ -33,8 +33,8 @@ If you are working on an ARM-based system (e.g., Apple Silicon MacBook) and want
 colima start --profile qemu_x86_64 --arch x86_64_v2
 
 # Build and push as normal
-docker build --platform linux/amd64 -t gitlab-registry.cern.ch/mhermoso/pcie40-rs .
-docker push gitlab-registry.cern.ch/mhermoso/pcie40-rs
+docker build --platform linux/amd64 -t gitlab-registry.cern.ch/lhcb-online/rusteb:latest .
+docker push gitlab-registry.cern.ch/lhcb-online/rusteb:latest
 ```
 
 This creates a new Colima profile with the appropriate backend for x86_64 architecture emulation.
