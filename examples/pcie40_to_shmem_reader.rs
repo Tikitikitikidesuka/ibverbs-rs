@@ -1,5 +1,4 @@
 use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
-use ebutils::IsPow2Result;
 use multi_fragment_packet::MultiFragmentPacket;
 use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
 use pcie40::ctrl::PCIe40ControllerManager;

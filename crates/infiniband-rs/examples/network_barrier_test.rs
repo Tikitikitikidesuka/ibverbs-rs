@@ -53,7 +53,7 @@ fn main() {
 
     let mut node = node.handshake(remote_endpoints).unwrap();
 
-    for i in 0..3 {
+    for _ in 0..3 {
         println!("Press enter...");
         let mut buffer = String::new();
         std::io::stdin()

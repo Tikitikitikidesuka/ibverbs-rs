@@ -1,6 +1,5 @@
 #![doc = include_str!("../README.md")]
 
-use core::fmt;
 use std::{fmt::Debug, slice};
 
 use bytemuck::cast_ref;
@@ -191,7 +190,7 @@ pub enum MdfFromDataError {
     TotalLengthMismatch { expected: usize, got: usize },
 }
 
-impl fmt::Debug for MdfRecord<Unknown> {
+impl Debug for MdfRecord<Unknown> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MdfRecordRef")
             .field("generic_header", &self.generic_header)
@@ -200,7 +199,7 @@ impl fmt::Debug for MdfRecord<Unknown> {
     }
 }
 
-impl fmt::Debug for MdfRecord<SingleEvent> {
+impl Debug for MdfRecord<SingleEvent> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MdfRecordRef")
             .field("generic_header", &self.generic_header)

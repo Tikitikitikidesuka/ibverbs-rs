@@ -88,10 +88,6 @@ impl QueuePair {
                 endpoint,
 
                 access,
-                max_send_wr,
-                max_recv_wr,
-                max_send_sge,
-                max_recv_sge,
                 max_rnr_retries,
                 max_ack_retries,
                 min_rnr_timer,
@@ -121,10 +117,6 @@ pub struct PreparedQueuePair {
     endpoint: QueuePairEndpoint,
 
     access: AccessFlags,
-    max_send_wr: u32,
-    max_recv_wr: u32,
-    max_send_sge: u32,
-    max_recv_sge: u32,
     max_rnr_retries: MaxRnrRetries,
     max_ack_retries: MaxAckRetries,
     min_rnr_timer: MinRnrTimer,

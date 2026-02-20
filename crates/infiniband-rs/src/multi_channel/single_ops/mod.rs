@@ -1,7 +1,6 @@
 use crate::channel::Channel;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::multi_channel::MultiChannel;
-use std::io;
 
 pub mod polled;
 pub mod scoped;

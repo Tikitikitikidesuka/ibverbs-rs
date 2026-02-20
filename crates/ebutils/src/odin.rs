@@ -8,7 +8,7 @@ use typed_builder::TypedBuilder;
 use crate::{fragment::Fragment, fragment_type::FragmentType};
 pub use time::UtcDateTime;
 
-/// This struct defines an how the payload of an ODIN fragment looks like.
+/// This struct defines how the payload of an ODIN fragment looks like.
 ///
 /// You can easily construct an odin payload using the [`OdinPayload::builder()`] method.
 /// This is usually only necessary for testing purposes though.
@@ -241,11 +241,11 @@ impl<'a> Fragment<'a> {
     /// ```
     /// # use ebutils::{fragment::{Fragment}, FragmentType, odin::OdinPayload, source_id::{SourceId, SubDetector}};
     /// # let foo = || Fragment::new(
-    /// #       FragmentType::Odin as _,
-    /// #       1,
-    /// #        42,
-    /// #        SourceId::new_odin(1),
-    /// #        &[0u8; std::mem::size_of::<OdinPayload>()][..],
+    /// #       FragmentType::ODIN as _,
+    /// #       7,
+    /// #       42,
+    /// #       SourceId::new_odin(1),
+    /// #       &[0u8; std::mem::size_of::<OdinPayload>()][..],
     /// #    );
     /// let fragment: Fragment<'_> = foo(); // getting a fragment from somewhere
     ///
@@ -515,7 +515,7 @@ mod test {
         let odin_payload = dummy_odin_payload(12345);
         let fragment: Fragment<'_, super::OdinPayload> = Fragment::new(
             FragmentType::ODIN as _,
-            1,
+            7,
             0,
             SourceId::new(SubDetector::Odin, 0),
             &odin_payload,
