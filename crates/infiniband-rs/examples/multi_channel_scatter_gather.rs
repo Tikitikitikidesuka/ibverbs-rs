@@ -34,12 +34,12 @@ fn main() {
 
     let send_sges: Vec<Vec<_>> = send_mem
         .chunks(1)
-        .map(|chunk| vec![mr.gather_element(chunk).unwrap()])
+        .map(|chunk| vec![mr.gather_element(chunk)])
         .collect();
 
     let mut recv_sges: Vec<Vec<_>> = recv_mem
         .chunks_mut(1)
-        .map(|chunk| vec![mr.scatter_element(chunk).unwrap()])
+        .map(|chunk| vec![mr.scatter_element(chunk)])
         .collect();
 
     let result = multi_channel.scope(|s| {

@@ -404,6 +404,17 @@ impl MemoryRegion {
 }
 
 impl MemoryRegion {
+    /// Creates a **Gather Element** (for Sending/Reading) using the "raw" constructor.
+    ///
+    /// # Debug checks
+    ///
+    /// In debug builds, this validates MR containment and the `u32` length limit and may panic if
+    /// they are violated (because it uses `debug_assert!`). In release builds, these checks are
+    /// not executed by default. [web:217]
+    pub fn gather_element<'a>(&'a self, data: &'a [u8]) -> GatherElement<'a> {
+        GatherElement::new(self, data)
+    }
+
     /// Creates a **Gather Element** (for Sending/Reading) from a shared slice.
     ///
     /// # Checks
@@ -418,11 +429,11 @@ impl MemoryRegion {
     ///
     /// This takes a `&'a [u8]`, ensuring the memory is initialized and cannot be mutated
     /// while the operation is pending (Rust borrowing rules).
-    pub fn gather_element<'a>(
+    pub fn gather_element_checked<'a>(
         &'a self,
         data: &'a [u8],
     ) -> Result<GatherElement<'a>, ScatterGatherElementError> {
-        GatherElement::<'a>::new(self, data)
+        GatherElement::new_checked(self, data)
     }
 
     /// Creates a **Gather Element** without immediate bounds checking.
@@ -442,7 +453,19 @@ impl MemoryRegion {
     /// The operation will fail with a **Local Protection Error**,
     /// but it will not cause Undefined Behavior.
     pub fn gather_element_unchecked<'a>(&'a self, data: &'a [u8]) -> GatherElement<'a> {
-        GatherElement::<'a>::new_unchecked(self, data)
+        GatherElement::new_unchecked(self, data)
+    }
+
+    /// Creates a **Scatter Element** (for Receiving/Writing) using the "raw" constructor.
+    ///
+    /// # Debug checks
+    ///
+    /// In debug builds, this validates MR containment and the `u32` length limit and may panic if
+    /// they are violated (because it uses `debug_assert!`). In release builds, these checks are
+    /// not executed by default. [web:217]
+    ///
+    pub fn scatter_element<'a>(&'a self, data: &'a mut [u8]) -> ScatterElement<'a> {
+        ScatterElement::new(self, data)
     }
 
     /// Creates a **Scatter Element** (for Receiving/Writing) from a mutable slice.
@@ -457,11 +480,11 @@ impl MemoryRegion {
     ///
     /// This takes a `&'a mut [u8]`, ensuring you have exclusive access to the buffer
     /// and no other part of your program is reading it while the NIC writes to it.
-    pub fn scatter_element<'a>(
+    pub fn scatter_element_checked<'a>(
         &'a self,
         data: &'a mut [u8],
     ) -> Result<ScatterElement<'a>, ScatterGatherElementError> {
-        ScatterElement::<'a>::new(self, data)
+        ScatterElement::new_checked(self, data)
     }
 
     /// Creates a **Scatter Element** without immediate bounds checking.
@@ -469,8 +492,8 @@ impl MemoryRegion {
     /// # Behavior
     ///
     /// This bypasses the software checks for:
-    /// *   Memory region containment.
-    /// *   Length limits (`u32`).
+    /// - Memory region containment.
+    /// - Length limits (`u32`).
     ///
     /// # Safety
     ///
@@ -481,7 +504,7 @@ impl MemoryRegion {
     /// The operation will fail with a **Local Protection Error**,
     /// but it will not cause Undefined Behavior.
     pub fn scatter_element_unchecked<'a>(&'a self, data: &'a mut [u8]) -> ScatterElement<'a> {
-        ScatterElement::<'a>::new_unchecked(self, data)
+        ScatterElement::new_unchecked(self, data)
     }
 
     /// Checks if the given address range is fully contained within this MR.

@@ -79,6 +79,26 @@ pub enum ScatterGatherElementError {
 }
 
 impl<'a> GatherElement<'a> {
+    /// Creates a new gather element.
+    ///
+    /// In debug builds, this performs additional validation before constructing the element. In
+    /// optimized/release builds, these validations are not executed by default because they are
+    /// implemented using `debug_assert!`.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if any of the following conditions are violated:
+    /// 1. The `data` slice is fully contained within the `mr`'s address range.
+    /// 2. The `data` length fits in a `u32` (hardware limit).
+    ///
+    /// For a version that always validates and returns an error instead of panicking, use
+    /// [`Self::new_checked`].
+    pub fn new(mr: &'a MemoryRegion, data: &'a [u8]) -> Self {
+        debug_assert!(data.len() <= u32::MAX as usize);
+        debug_assert!(mr.encloses_slice(data));
+        Self::new_unchecked(mr, data)
+    }
+
     /// Creates a new Gather Element with bounds checking.
     ///
     /// # Checks
@@ -86,7 +106,10 @@ impl<'a> GatherElement<'a> {
     /// This method validates that:
     /// 1.  The `data` slice is fully contained within the `mr`'s address range.
     /// 2.  The `data` length fits in a `u32` (hardware limit).
-    pub fn new(mr: &'a MemoryRegion, data: &'a [u8]) -> Result<Self, ScatterGatherElementError> {
+    pub fn new_checked(
+        mr: &'a MemoryRegion,
+        data: &'a [u8],
+    ) -> Result<Self, ScatterGatherElementError> {
         if data.len() > u32::MAX as usize {
             return Err(ScatterGatherElementError::SliceTooBig);
         }
@@ -118,6 +141,26 @@ impl<'a> GatherElement<'a> {
 }
 
 impl<'a> ScatterElement<'a> {
+    /// Creates a new gather element.
+    ///
+    /// In debug builds, this performs additional validation before constructing the element. In
+    /// optimized/release builds, these validations are not executed by default because they are
+    /// implemented using `debug_assert!`.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if any of the following conditions are violated:
+    /// 1. The `data` slice is fully contained within the `mr`'s address range.
+    /// 2. The `data` length fits in a `u32` (hardware limit).
+    ///
+    /// For a version that always validates and returns an error instead of panicking, use
+    /// [`Self::new_checked`].
+    pub fn new(mr: &'a MemoryRegion, data: &'a mut [u8]) -> Self {
+        debug_assert!(data.len() <= u32::MAX as usize);
+        debug_assert!(mr.encloses_slice(data));
+        Self::new_unchecked(mr, data)
+    }
+
     /// Creates a new Scatter Element with bounds checking.
     ///
     /// # Checks
@@ -125,7 +168,7 @@ impl<'a> ScatterElement<'a> {
     /// This method validates that:
     /// 1.  The `data` slice is fully contained within the `mr`'s address range.
     /// 2.  The `data` length fits in a `u32`.
-    pub fn new(
+    pub fn new_checked(
         mr: &'a MemoryRegion,
         data: &'a mut [u8],
     ) -> Result<Self, ScatterGatherElementError> {

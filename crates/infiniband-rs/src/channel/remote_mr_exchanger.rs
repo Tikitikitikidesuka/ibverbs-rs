@@ -214,10 +214,7 @@ impl RemoteMrExchanger {
                     remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_ack).unwrap();
 
                 // Get slice of the remote mr ack field's bytes
-                let remote_mr_ack_sge = [self
-                    .mr
-                    .gather_element(self.memory.out_ack.as_bytes())
-                    .unwrap()];
+                let remote_mr_ack_sge = [self.mr.gather_element(self.memory.out_ack.as_bytes())];
 
                 // 4. Prepare RDMA write request of the remote mr ack
                 let wr = WriteWorkRequest::new(&remote_mr_ack_sge, meta_remote_mr_slice);
