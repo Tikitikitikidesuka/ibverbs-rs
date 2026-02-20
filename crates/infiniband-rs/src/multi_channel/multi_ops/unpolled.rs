@@ -5,7 +5,7 @@ use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;
 
 impl MultiChannel {
-    pub fn scatter_send_unpolled<'wr, 'data, I>(
+    pub unsafe fn scatter_send_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -18,7 +18,7 @@ impl MultiChannel {
             .collect()
     }
 
-    pub fn scatter_write_unpolled<'wr, 'data, I>(
+    pub unsafe fn scatter_write_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -31,7 +31,7 @@ impl MultiChannel {
             .collect()
     }
 
-    pub fn gather_receive_unpolled<'wr, 'data, I>(
+    pub unsafe fn gather_receive_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -44,7 +44,7 @@ impl MultiChannel {
             .collect()
     }
 
-    pub fn gather_read_unpolled<'wr, 'data, I>(
+    pub unsafe fn gather_read_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -57,7 +57,7 @@ impl MultiChannel {
             .collect()
     }
 
-    pub fn multicast_send_unpolled<'wr, 'data, I>(
+    pub unsafe fn multicast_send_unpolled<'wr, 'data, I>(
         &mut self,
         peers: I,
         wr: SendWorkRequest<'wr, 'data>,

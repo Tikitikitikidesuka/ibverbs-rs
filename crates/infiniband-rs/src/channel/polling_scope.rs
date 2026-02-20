@@ -20,9 +20,9 @@ use thiserror::Error;
 pub type ScopeResult<T> = Result<T, ScopeError>;
 
 #[derive(Debug, Error)]
-pub enum ScopeError {
+pub enum ScopeError<E = TransportError> {
     #[error("Closure error: {0}")]
-    ClosureError(TransportError),
+    ClosureError(#[from] E),
     #[error("Auto poll error: {0:?}")]
     AutoPollError(Vec<TransportError>),
 }
@@ -76,9 +76,9 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     ///     std::mem::forget(wr1);
     /// });
     /// ```
-    pub(crate) fn run<'env, F, T>(inner: &'env mut C, f: F) -> Result<T, ScopeError>
+    pub(crate) fn run<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, ScopeError<E>>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> TransportResult<T>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
     {
         let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.
@@ -102,9 +102,9 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     /// hast to poll manually any wr, it panics.
     /// If the closure fails, however, the autopoll will be done but not panic and the error of the
     /// closure will be returned.
-    pub(crate) fn run_manual<'env, F, T>(inner: &'env mut C, f: F) -> TransportResult<T>
+    pub(crate) fn run_manual<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> TransportResult<T>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
     {
         let mut scope = PollingScope::new(inner);
         // The user's closure may panic after issuing work requests.

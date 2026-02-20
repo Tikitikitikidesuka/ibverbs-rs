@@ -9,16 +9,25 @@ use crate::network::barrier::BarrierError;
 use std::time::Duration;
 
 impl Node {
-    pub fn scope<'env, F, T>(&'env mut self, f: F) -> Result<T, ScopeError>
+    pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
     where
-        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Node>) -> TransportResult<T>,
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Node>) -> Result<T, E>,
     {
         PollingScope::run(self, f)
+    }
+    pub fn manual_scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, E>
+    where
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Node>) -> Result<T, E>,
+    {
+        PollingScope::run_manual(self, f)
     }
 }
 
 impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
-    pub fn post_scatter_send<'wr, I>(&mut self, wrs: I) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    pub fn post_scatter_send<'wr, I>(
+        &mut self,
+        wrs: I,
+    ) -> TransportResult<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = PeerSendWorkRequest<'wr, 'env>>,
         'env: 'wr,
@@ -29,7 +38,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
     pub fn post_scatter_write<'wr, I>(
         &mut self,
         wrs: I,
-    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    ) -> TransportResult<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = PeerWriteWorkRequest<'wr, 'env>>,
         'env: 'wr,
@@ -40,7 +49,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
     pub fn post_gather_receive<'wr, I>(
         &mut self,
         wrs: I,
-    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    ) -> TransportResult<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = PeerReceiveWorkRequest<'wr, 'env>>,
         'env: 'wr,
@@ -48,7 +57,10 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
         wrs.into_iter().map(|wr| self.post_receive(wr)).collect()
     }
 
-    pub fn post_gather_read<'wr, I>(&mut self, wrs: I) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    pub fn post_gather_read<'wr, I>(
+        &mut self,
+        wrs: I,
+    ) -> TransportResult<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = PeerReadWorkRequest<'wr, 'env>>,
         'env: 'wr,
@@ -60,7 +72,7 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
         &mut self,
         peers: I,
         wr: SendWorkRequest<'wr, 'env>,
-    ) -> IbvResult<Vec<ScopedPendingWork<'scope>>>
+    ) -> TransportResult<Vec<ScopedPendingWork<'scope>>>
     where
         I: IntoIterator<Item = usize>,
         'env: 'wr,
@@ -88,29 +100,29 @@ impl<'scope, 'env> PollingScope<'scope, 'env, Node> {
     pub fn post_send(
         &mut self,
         wr: PeerSendWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>> {
-        self.channel_post_send(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    ) -> TransportResult<ScopedPendingWork<'scope>> {
+        Ok(self.channel_post_send(|n| n.multi_channel.channel(wr.peer), wr.wr)?)
     }
 
     pub fn post_receive(
         &mut self,
         wr: PeerReceiveWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>> {
-        self.channel_post_receive(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    ) -> TransportResult<ScopedPendingWork<'scope>> {
+        Ok(self.channel_post_receive(|n| n.multi_channel.channel(wr.peer), wr.wr)?)
     }
 
     pub fn post_write(
         &mut self,
         wr: PeerWriteWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>> {
-        self.channel_post_write(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    ) -> TransportResult<ScopedPendingWork<'scope>> {
+        Ok(self.channel_post_write(|n| n.multi_channel.channel(wr.peer), wr.wr)?)
     }
 
     pub fn post_read(
         &mut self,
         wr: PeerReadWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>> {
-        self.channel_post_read(|n| n.multi_channel.channel(wr.peer), wr.wr)
+    ) -> TransportResult<ScopedPendingWork<'scope>> {
+        Ok(self.channel_post_read(|n| n.multi_channel.channel(wr.peer), wr.wr)?)
     }
 }
 
@@ -216,7 +228,7 @@ impl Node {
 }
 
 impl Node {
-    pub fn scatter_send_unpolled<'wr, 'data, I>(
+    pub unsafe fn scatter_send_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -224,10 +236,10 @@ impl Node {
         I: IntoIterator<Item = PeerSendWorkRequest<'wr, 'data>>,
         'data: 'wr,
     {
-        self.multi_channel.scatter_send_unpolled(wrs)
+        unsafe { self.multi_channel.scatter_send_unpolled(wrs) }
     }
 
-    pub fn scatter_write_unpolled<'wr, 'data, I>(
+    pub unsafe fn scatter_write_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -235,10 +247,10 @@ impl Node {
         I: IntoIterator<Item = PeerWriteWorkRequest<'wr, 'data>>,
         'data: 'wr,
     {
-        self.multi_channel.scatter_write_unpolled(wrs)
+        unsafe { self.multi_channel.scatter_write_unpolled(wrs) }
     }
 
-    pub fn gather_receive_unpolled<'wr, 'data, I>(
+    pub unsafe fn gather_receive_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -246,10 +258,10 @@ impl Node {
         I: IntoIterator<Item = PeerReceiveWorkRequest<'wr, 'data>>,
         'data: 'wr,
     {
-        self.multi_channel.gather_receive_unpolled(wrs)
+        unsafe { self.multi_channel.gather_receive_unpolled(wrs) }
     }
 
-    pub fn gather_read_unpolled<'wr, 'data, I>(
+    pub unsafe fn gather_read_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
     ) -> IbvResult<Vec<PendingWork<'data>>>
@@ -257,10 +269,10 @@ impl Node {
         I: IntoIterator<Item = PeerReadWorkRequest<'wr, 'data>>,
         'data: 'wr,
     {
-        self.multi_channel.gather_read_unpolled(wrs)
+        unsafe { self.multi_channel.gather_read_unpolled(wrs) }
     }
 
-    pub fn multicast_send_unpolled<'wr, 'data, I>(
+    pub unsafe fn multicast_send_unpolled<'wr, 'data, I>(
         &mut self,
         peers: I,
         wr: SendWorkRequest<'wr, 'data>,
@@ -268,6 +280,6 @@ impl Node {
     where
         I: IntoIterator<Item = usize>,
     {
-        self.multi_channel.multicast_send_unpolled(peers, wr)
+        unsafe { self.multi_channel.multicast_send_unpolled(peers, wr) }
     }
 }

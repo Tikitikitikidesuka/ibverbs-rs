@@ -69,6 +69,13 @@ impl<'wr, 'data> PeerReceiveWorkRequest<'wr, 'data> {
         }
     }
 
+    pub fn only_immediate(peer: usize) -> Self {
+        Self {
+            peer,
+            wr: ReceiveWorkRequest::only_immediate(),
+        }
+    }
+
     pub fn from_wr(peer: usize, wr: ReceiveWorkRequest<'wr, 'data>) -> Self {
         Self { peer, wr }
     }

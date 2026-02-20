@@ -1,4 +1,5 @@
-use infiniband_rs::channel::Channel;
+use infiniband_rs::channel::polling_scope::ScopeError;
+use infiniband_rs::channel::{Channel, TransportError};
 use infiniband_rs::ibverbs;
 use infiniband_rs::ibverbs::work::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
@@ -27,13 +28,13 @@ fn main() {
         .scope(|s| {
             let (send_mem, recv_mem) = mem.split_at_mut(4);
 
-            let send_ge = [mr.gather_element(send_mem).unwrap()];
-            let mut recv_se = [mr.scatter_element(recv_mem).unwrap()];
+            let send_ge = [mr.gather_element_unchecked(send_mem)];
+            let mut recv_se = [mr.scatter_element_unchecked(recv_mem)];
 
             s.post_receive(ReceiveWorkRequest::new(&mut recv_se))?;
             s.post_send(SendWorkRequest::new(&send_ge))?;
 
-            Ok(())
+            Ok::<(), ScopeError<TransportError>>(())
         })
         .unwrap();
 

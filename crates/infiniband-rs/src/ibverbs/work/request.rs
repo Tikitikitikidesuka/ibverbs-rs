@@ -93,6 +93,13 @@ impl<'wr, 'data> ReceiveWorkRequest<'wr, 'data> {
     pub fn new(scatter_elements: &'wr mut [ScatterElement<'data>]) -> Self {
         Self { scatter_elements }
     }
+
+    /// Creates a new Send request containing only immediate data (0-byte payload).
+    pub fn only_immediate() -> Self {
+        Self {
+            scatter_elements: &mut [],
+        }
+    }
 }
 
 impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
