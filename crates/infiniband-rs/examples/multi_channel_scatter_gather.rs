@@ -1,4 +1,7 @@
+use infiniband_rs::channel::TransportError;
+use infiniband_rs::channel::polling_scope::ScopeError;
 use infiniband_rs::ibverbs;
+use infiniband_rs::ibverbs::error::IbvError;
 use infiniband_rs::multi_channel::MultiChannel;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
@@ -53,7 +56,8 @@ fn main() {
         // 3. Post
         s.post_scatter_send(scatter_sends)?;
         s.post_gather_receive(gather_receives)?;
-        Ok(())
+
+        Ok::<(), ScopeError<TransportError>>(())
     });
 
     println!("Recv mem after: {recv_mem:?}");

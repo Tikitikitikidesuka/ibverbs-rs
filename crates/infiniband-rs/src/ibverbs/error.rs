@@ -32,7 +32,7 @@ pub enum IbvError {
     /// Catch-all for underlying OS or Driver failures that don't fit other categories.
     /// This wraps the standard `std::io::Error`.
     #[error("Driver/OS error: {0}")]
-    Driver(#[from] io::Error),
+    Driver(io::Error),
 }
 
 impl IbvError {

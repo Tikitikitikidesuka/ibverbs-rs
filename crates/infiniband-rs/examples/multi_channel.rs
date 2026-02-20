@@ -1,3 +1,5 @@
+use infiniband_rs::channel::TransportError;
+use infiniband_rs::channel::polling_scope::ScopeError;
 use infiniband_rs::ibverbs;
 use infiniband_rs::multi_channel::MultiChannel;
 use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
@@ -30,14 +32,14 @@ fn main() {
     let result = multi_channel.scope(|s| {
         send_mem.copy_from_slice(&[1u8; 4]);
 
-        let send_sge = [mr.gather_element(&send_mem[0..4]).unwrap()];
-        let mut recv_sge = [mr.scatter_element(&mut recv_mem[0..4]).unwrap()];
+        let send_sge = [mr.gather_element_unchecked(&send_mem[0..4])];
+        let mut recv_sge = [mr.scatter_element_unchecked(&mut recv_mem[0..4])];
 
         s.post_receive(PeerReceiveWorkRequest::new(1, &mut recv_sge))?;
 
         s.post_send(PeerSendWorkRequest::new(1, &send_sge))?;
 
-        Ok(())
+        Ok::<(), ScopeError<TransportError>>(())
     });
 
     println!("Recv mem after: {recv_mem:?}");
