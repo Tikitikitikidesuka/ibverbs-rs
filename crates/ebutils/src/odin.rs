@@ -515,7 +515,7 @@ mod test {
         let odin_payload = dummy_odin_payload(12345);
         let fragment: Fragment<'_, super::OdinPayload> = Fragment::new(
             FragmentType::ODIN as _,
-            1,
+            7,
             0,
             SourceId::new(SubDetector::Odin, 0),
             &odin_payload,
