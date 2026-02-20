@@ -31,7 +31,9 @@ RUN dnf update -y && \
       pkgconf-pkg-config \
       libnl3-devel \
       rdma-core-devel \
-    && dnf clean all
+      numactl-libs \
+      numactl-devel \
+      && dnf clean all
 
 # Install EPEL repository
 RUN dnf install -y epel-release && \
