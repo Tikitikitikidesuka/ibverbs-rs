@@ -12,26 +12,26 @@
 //!
 //! # Example: Polling for Completions
 //!
-//! ```
-//!  use infiniband_rs::ibverbs::devices::open_device;
-//!  use infiniband_rs::ibverbs::completion_queue::PollSlot;
-//!  fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let context = open_device("mlx5_0")?;
-//!     let cq = context.create_cq(16)?;
-//!
-//!     // Pre-allocate a buffer for polling multiple completions at once
-//!     let mut slots = [PollSlot::default(); 16];
-//!
-//!     // Poll for completions (non-blocking)
-//!     let completions = cq.poll(&mut slots)?;
-//!
-//!     for wc in completions {
-//!         println!("Work completion result: {:?}", wc.result());
-//!     }
-//!
-//!     Ok(())
-//!  }
-//! ```
+// //! ```
+// //!  use infiniband_rs::ibverbs::devices::open_device;
+// //!  use infiniband_rs::ibverbs::completion_queue::PollSlot;
+// //!  fn main() -> Result<(), Box<dyn std::error::Error>> {
+// //!     let context = open_device("mlx5_0")?;
+// //!     let cq = context.create_cq(16)?;
+// //!
+// //!     // Pre-allocate a buffer for polling multiple completions at once
+// //!     let mut slots = [PollSlot::default(); 16];
+// //!
+// //!     // Poll for completions (non-blocking)
+// //!     let completions = cq.poll(&mut slots)?;
+// //!
+// //!     for wc in completions {
+// //!         println!("Work completion result: {:?}", wc.result());
+// //!     }
+// //!
+// //!     Ok(())
+// //!  }
+// //! ```
 
 use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};

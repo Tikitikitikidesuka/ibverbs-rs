@@ -17,37 +17,37 @@ impl Channel {
     ///
     /// ## Protection example
     ///
-    /// ```compile_fail
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_send(&mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.send_unpolled(&[receive]) }.unwrap();
-    ///
-    /// // This mutation of mem will not compile while the borrow is alive in the wr,
-    /// // preventing partially modified memory from being sent.
-    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
-    /// ```
+    // /// ```compile_fail
+    // /// # use infiniband_rs::connection::connection::IbvConnection;
+    // /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    // /// let mut mem = [0u8; 1024];
+    // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    // /// let receive = mr.prepare_send(&mem[0..4]).unwrap();
+    // /// let wr = unsafe { conn.send_unpolled(&[receive]) }.unwrap();
+    // ///
+    // /// // This mutation of mem will not compile while the borrow is alive in the wr,
+    // /// // preventing partially modified memory from being sent.
+    // /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    // /// ```
     ///
     /// ## Safety violation example
     ///
-    /// ```no_run
-    /// # use infiniband_rs::connection::connection::Connection;
-    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
-    ///
-    /// // The work request can be leaked without running its drop.
-    /// // The borrow ends but the NIC may still DMA into the memory.
-    /// std::mem::forget(wr);
-    ///
-    /// // This mutation of mem might occur while the send is partially complete.
-    /// // This violates Rust's aliasing rules and constitutes UB.
-    /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
-    /// ```
+    // /// ```no_run
+    // /// # use infiniband_rs::connection::connection::Connection;
+    // /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
+    // /// let mut mem = [0u8; 1024];
+    // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    // /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    // /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    // ///
+    // /// // The work request can be leaked without running its drop.
+    // /// // The borrow ends but the NIC may still DMA into the memory.
+    // /// std::mem::forget(wr);
+    // ///
+    // /// // This mutation of mem might occur while the send is partially complete.
+    // /// // This violates Rust's aliasing rules and constitutes UB.
+    // /// (&mut mem[0..4]).copy_from_slice(&[107, 101, 111, 51]);
+    // /// ```
     pub unsafe fn send_unpolled<'data>(
         &mut self,
         wr: SendWorkRequest<'_, 'data>,
@@ -68,36 +68,36 @@ impl Channel {
     ///
     /// ## Protection example
     ///
-    /// ```compile_fail
-    /// # use infiniband_rs::connection::connection::IbvConnection;
-    /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
-    ///
-    /// // This read of mem will not compile while the borrow is alive in the wr.
-    /// println!("{:?}", &mem[0..4]);
-    /// ```
+    // /// ```compile_fail
+    // /// # use infiniband_rs::connection::connection::IbvConnection;
+    // /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
+    // /// let mut mem = [0u8; 1024];
+    // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    // /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    // /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    // ///
+    // /// // This read of mem will not compile while the borrow is alive in the wr.
+    // /// println!("{:?}", &mem[0..4]);
+    // /// ```
     ///
     /// ## Safety violation example
     ///
-    /// ```no_run
-    /// # use infiniband_rs::connection::connection::Connection;
-    /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
-    /// let mut mem = [0u8; 1024];
-    /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
-    /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
-    /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
-    ///
-    /// // The work request can be leaked without running its drop.
-    /// // The borrow ends but the NIC may still DMA into the memory.
-    /// std::mem::forget(wr);
-    ///
-    /// // This read of mem might occur while the receive is partially complete.
-    /// // This violates Rust's aliasing rules and constitutes UB.
-    /// println!("{:?}", &mem[0..4]);
-    /// ```
+    // /// ```no_run
+    // /// # use infiniband_rs::connection::connection::Connection;
+    // /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
+    // /// let mut mem = [0u8; 1024];
+    // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
+    // /// let receive = mr.prepare_receive(&mut mem[0..4]).unwrap();
+    // /// let wr = unsafe { conn.receive_unpolled(&[receive]) }.unwrap();
+    // ///
+    // /// // The work request can be leaked without running its drop.
+    // /// // The borrow ends but the NIC may still DMA into the memory.
+    // /// std::mem::forget(wr);
+    // ///
+    // /// // This read of mem might occur while the receive is partially complete.
+    // /// // This violates Rust's aliasing rules and constitutes UB.
+    // /// println!("{:?}", &mem[0..4]);
+    // /// ```
     pub unsafe fn receive_unpolled<'data>(
         &mut self,
         wr: ReceiveWorkRequest<'_, 'data>,

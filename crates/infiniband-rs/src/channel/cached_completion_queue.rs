@@ -37,11 +37,6 @@ impl CachedCompletionQueue {
         Ok(polled_num)
     }
 
-    /// Returns Some if cached, None if not.
-    pub fn poll(&mut self, wr_id: u64) -> Option<WorkCompletion> {
-        self.cache.get(wr_id).copied()
-    }
-
     /// Consume a cached work completion.
     /// Returns Some if cached, None if not.
     /// Removes the work completion from the cache.

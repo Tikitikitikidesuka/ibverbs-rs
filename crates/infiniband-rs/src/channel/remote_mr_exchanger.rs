@@ -5,7 +5,6 @@ use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::work::WriteWorkRequest;
 use crate::remote_struct_field;
 use std::fmt::Debug;
-use std::mem::offset_of;
 use std::sync::atomic::{Ordering, fence};
 use std::time::Duration;
 use thiserror::Error;
@@ -211,7 +210,6 @@ impl RemoteMrExchanger {
                 self.memory.out_ack.set(new_epoch);
 
                 // Slice the meta remote memory region
-                let ack_offset = offset_of!(RemoteMrExchangerState, in_ack);
                 let meta_remote_mr_slice =
                     remote_struct_field!(self.remote_mr, RemoteMrExchangerState::in_ack).unwrap();
 
