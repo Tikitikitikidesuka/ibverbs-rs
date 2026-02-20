@@ -14,21 +14,24 @@ RUN dnf install -y glibc-all-langpacks && \
 RUN dnf update -y && \
     dnf groupinstall -y "Development Tools" && \
     dnf install -y \
-    curl \
-    wget \
-    git \
-    vim \
-    clang \
-    cmake \
-    make \
-    gcc \
-    gcc-c++ \
-    kernel-devel \
-    kernel-headers \
-    pciutils \
-    usbutils \
-    openssl-devel && \
-    dnf clean all
+      curl \
+      wget \
+      git \
+      vim \
+      clang \
+      cmake \
+      make \
+      gcc \
+      gcc-c++ \
+      kernel-devel \
+      kernel-headers \
+      pciutils \
+      usbutils \
+      openssl-devel \
+      pkgconf-pkg-config \
+      libnl3-devel \
+      rdma-core-devel \
+    && dnf clean all
 
 # Install EPEL repository
 RUN dnf install -y epel-release && \
@@ -59,17 +62,6 @@ RUN rustup install stable && \
 
 # Set working directory to the project dir
 WORKDIR /app
-
-# Make /app a dummy rust project to vendor dependencies
-RUN cargo init
-
-# Copy the entire project
-# Copy project files
-COPY . .
-
-# Vendor dependencies and set config to use them
-RUN mkdir ~/.cargo
-RUN cargo vendor > ~/.cargo/config
 
 # Default command
 CMD ["/bin/bash"]
