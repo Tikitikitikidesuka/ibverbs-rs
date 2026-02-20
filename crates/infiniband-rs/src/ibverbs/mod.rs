@@ -7,5 +7,8 @@ pub mod protection_domain;
 pub mod queue_pair;
 pub mod work;
 
+#[cfg(feature = "numa")]
+pub mod numa;
+
 pub use device::list_devices;
 pub use device::open_device;
