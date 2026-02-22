@@ -1,6 +1,7 @@
 use crate::channel::pending_work::PendingWork;
 use crate::channel::{Channel, TransportError, TransportResult};
 use crate::ibverbs::error::IbvResult;
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::work::{
     ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest,
 };
@@ -9,6 +10,28 @@ use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::rc::Rc;
 use thiserror::Error;
+
+impl Channel {
+    pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
+    where
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
+    {
+        PollingScope::run(self, f)
+    }
+
+    pub fn manual_scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, E>
+    where
+        F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
+    {
+        PollingScope::run_manual(self, f)
+    }
+}
+
+impl<'scope, 'env> PollingScope<'scope, 'env, Channel> {
+    pub fn pd(&self) -> &ProtectionDomain {
+        self.inner.pd()
+    }
+}
 
 /// T is user closure Ok output type
 /// E is user closure Err output type
