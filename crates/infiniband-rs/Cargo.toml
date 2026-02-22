@@ -24,3 +24,6 @@ clap = { version = "4.5", features = ["derive"] }
 [[bin]]
 path = "bin/barrier_benchmark/barrier_benchmark.rs"
 name = "barrier_benchmark"
+
+[features]
+numa = []

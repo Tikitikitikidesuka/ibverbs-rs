@@ -10,7 +10,7 @@
 //!     [`open_device`] to look up a specific device by name (e.g., `"mlx5_0"`).
 //! *   **Device List**: The [`DeviceList`] struct owns the underlying list of devices
 //!     returned by the system. It handles memory management (freeing the list when dropped).
-//! *   **Device Reference**: A [`DeviceRef`] is a transient handle to a specific device.
+//! *   **Device Reference**: A [`Device`] is a transient handle to a specific device.
 //!     It is obtained by iterating a list or querying a context.
 //! *   **Context**: The [`Context`] represents an active session with the hardware.
 //!     It is the root factory for creating all other resources.
@@ -65,7 +65,7 @@ mod manager;
 
 pub use context::Context;
 pub use guid::Guid;
-pub use manager::{DeviceList, DeviceListIter, DeviceRef, list_devices, open_device};
+pub use manager::{Device, DeviceList, DeviceListIter, list_devices, open_device};
 
 /// Port number 1 of each HCA is the RDMA port.
 pub(crate) const IB_PORT: u8 = 1;

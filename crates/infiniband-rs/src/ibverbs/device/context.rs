@@ -1,5 +1,5 @@
 use crate::ibverbs::completion_queue::CompletionQueue;
-use crate::ibverbs::device::{DeviceRef, IB_PORT};
+use crate::ibverbs::device::{Device, IB_PORT};
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use ibverbs_sys::*;
@@ -98,7 +98,7 @@ impl Context {
     /// *   Returns [`IbvError::Permission`] if the process lacks permission to access RDMA devices.
     /// *   Returns [`IbvError::Driver`] if `libibverbs` fails to open the device for OS-specific reasons.
     /// *   Returns [`IbvError::Resource`] if the RDMA port is `DOWN` or `INIT`, indicating the link is not ready.
-    pub fn from_device(dev: &DeviceRef) -> IbvResult<Self> {
+    pub fn from_device(dev: &Device) -> IbvResult<Self> {
         // SAFETY: `dev.device_ptr` is guaranteed valid by the `DeviceRef` lifetime/invariants.
         let ibv_ctx = unsafe { ibv_open_device(dev.device_ptr) };
         if ibv_ctx.is_null() {
@@ -117,6 +117,10 @@ impl Context {
 
         log::debug!("Context opened");
         Ok(context)
+    }
+
+    pub fn device(&self) -> Device {
+        unsafe { Device::from_ptr((&*self.inner.ctx).device) }
     }
 }
 
@@ -149,9 +153,7 @@ impl std::fmt::Debug for ContextInner {
         // SAFETY: The `DeviceRef` produced takes a pointer to a valid `ibv_device`
         // and is used for a shorter lifetime than self.
         f.debug_struct("Context")
-            .field("device", &unsafe {
-                DeviceRef::from_ptr((&*self.ctx).device)
-            })
+            .field("device", &unsafe { Device::from_ptr((&*self.ctx).device) })
             .finish()
     }
 }

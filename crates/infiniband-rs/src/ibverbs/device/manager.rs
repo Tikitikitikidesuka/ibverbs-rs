@@ -102,16 +102,16 @@ impl DeviceList {
 
     /// Returns a reference to the device at the given index.
     ///
-    /// Returns `None` if the index is out of bounds. The returned [`DeviceRef`]
+    /// Returns `None` if the index is out of bounds. The returned [`Device`]
     /// is bound to the lifetime of this list.
-    pub fn get(&self, index: usize) -> Option<DeviceRef<'_>> {
+    pub fn get(&self, index: usize) -> Option<Device<'_>> {
         if index >= self.num_devices {
             return None;
         }
 
         // SAFETY: Verified `index` is within `num_devices` and `devices_ptr`
         // is an array of pointers to `ibv_device` structs.
-        Some(unsafe { DeviceRef::from_ptr(*self.devices_ptr.add(index)) })
+        Some(unsafe { Device::from_ptr(*self.devices_ptr.add(index)) })
     }
 }
 
@@ -126,14 +126,14 @@ impl<'a> IntoIterator for &'a DeviceList {
 /// An iterator over the devices in a [`DeviceList`].
 ///
 /// This struct is created by the [`iter`](DeviceList::iter) method on [`DeviceList`].
-/// Each item yielded is a [`DeviceRef`] that borrows from the parent list.
+/// Each item yielded is a [`Device`] that borrows from the parent list.
 pub struct DeviceListIter<'iter> {
     list: &'iter DeviceList,
     i: usize,
 }
 
 impl<'iter> Iterator for DeviceListIter<'iter> {
-    type Item = DeviceRef<'iter>;
+    type Item = Device<'iter>;
     fn next(&mut self) -> Option<Self::Item> {
         let opt_device = self.list.get(self.i);
         if opt_device.is_some() {
@@ -157,18 +157,18 @@ impl std::fmt::Debug for DeviceList {
 /// The reference is valid only as long as the source object ([`DeviceList`] or [`Context`])
 /// remains alive.
 ///
-/// To perform operations on the device, you must first [`open`](DeviceRef::open) it to obtain a [`Context`].
-pub struct DeviceRef<'a> {
+/// To perform operations on the device, you must first [`open`](Device::open) it to obtain a [`Context`].
+pub struct Device<'a> {
     pub(super) device_ptr: *mut ibv_device,
     _dev_list: PhantomData<&'a DeviceList>,
 }
 
 /// SAFETY: libibverbs components are thread safe.
-unsafe impl Sync for DeviceRef<'_> {}
+unsafe impl Sync for Device<'_> {}
 /// SAFETY: libibverbs components are thread safe.
-unsafe impl Send for DeviceRef<'_> {}
+unsafe impl Send for Device<'_> {}
 
-impl DeviceRef<'_> {
+impl Device<'_> {
     /// Opens a context for this RDMA device.
     ///
     /// The resulting [`Context`] is the primary object used for allocating resources
@@ -215,7 +215,7 @@ impl DeviceRef<'_> {
     }
 }
 
-impl std::fmt::Debug for DeviceRef<'_> {
+impl std::fmt::Debug for Device<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format name
         let name_str = self.name().unwrap_or("<unknown>");
@@ -233,7 +233,7 @@ impl std::fmt::Debug for DeviceRef<'_> {
     }
 }
 
-impl DeviceRef<'_> {
+impl Device<'_> {
     /// Wraps a raw `ibv_device` pointer into a `DeviceRef`.
     ///
     /// # Safety
