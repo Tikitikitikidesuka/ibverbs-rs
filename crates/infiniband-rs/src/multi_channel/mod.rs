@@ -25,7 +25,7 @@ impl MultiChannel {
         &self.pd
     }
 
-    pub fn channel(&mut self, peer: usize) -> IbvResult<&mut Channel> {
+    pub(crate) fn channel(&mut self, peer: usize) -> IbvResult<&mut Channel> {
         self.channels
             .get_mut(peer)
             .ok_or_else(|| IbvError::NotFound(format!("Peer {peer} not found")))

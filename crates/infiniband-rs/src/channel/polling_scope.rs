@@ -1,6 +1,7 @@
 use crate::channel::pending_work::PendingWork;
 use crate::channel::{Channel, TransportError, TransportResult};
 use crate::ibverbs::error::IbvResult;
+use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::work::{
     ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest,
 };
@@ -23,6 +24,12 @@ impl Channel {
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
     {
         PollingScope::run_manual(self, f)
+    }
+}
+
+impl<'scope, 'env> PollingScope<'scope, 'env, Channel> {
+    pub fn pd(&self) -> &ProtectionDomain {
+        self.inner.pd()
     }
 }
 

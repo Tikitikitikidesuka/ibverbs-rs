@@ -23,16 +23,16 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn rank(&self) -> usize {
-        self.rank
+    pub fn pd(&self) -> &ProtectionDomain {
+        self.multi_channel.pd()
     }
 
     pub fn world_size(&self) -> usize {
         self.world_size
     }
 
-    pub fn pd(&self) -> &ProtectionDomain {
-        self.multi_channel.pd()
+    pub fn rank(&self) -> usize {
+        self.rank
     }
 }
 
