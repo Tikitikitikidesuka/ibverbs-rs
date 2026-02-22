@@ -1,7 +1,8 @@
 pub mod barrier;
 pub mod builder;
 pub mod config;
-pub mod multi_channel_ops;
+pub mod ops;
+pub mod polling_scope;
 pub mod tcp_exchanger;
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
@@ -32,20 +33,6 @@ impl Node {
 
     pub fn pd(&self) -> &ProtectionDomain {
         self.multi_channel.pd()
-    }
-
-    pub fn barrier(&mut self, peers: &[usize], timeout: Duration) -> Result<(), BarrierError> {
-        self.barrier
-            .barrier(&mut self.multi_channel, peers, timeout)
-    }
-
-    pub fn barrier_unchecked(
-        &mut self,
-        peers: &[usize],
-        timeout: Duration,
-    ) -> Result<(), BarrierError> {
-        self.barrier
-            .barrier_unchecked(&mut self.multi_channel, peers, timeout)
     }
 }
 
