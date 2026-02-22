@@ -58,12 +58,12 @@ fn main() {
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 1,
-                &mut [mr.scatter_element(&mut mem[0..4]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[0..4])],
             ))
             .unwrap();
             node.receive(PeerReceiveWorkRequest::new(
                 2,
-                &mut [mr.scatter_element(&mut mem[4..8]).unwrap()],
+                &mut [mr.scatter_element(&mut mem[4..8])],
             ))
             .unwrap();
             println!("Mem after: {mem:?}");
@@ -71,20 +71,14 @@ fn main() {
         1 => {
             let mem = [1u8; 4];
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
-            node.send(PeerSendWorkRequest::new(
-                0,
-                &[mr.gather_element(&mem).unwrap()],
-            ))
-            .unwrap_or_else(|e| panic!("Error: {e}"));
+            node.send(PeerSendWorkRequest::new(0, &[mr.gather_element(&mem)]))
+                .unwrap_or_else(|e| panic!("Error: {e}"));
         }
         2 => {
             let mem = [2u8; 4];
             let mr = node.pd().register_local_mr_slice(&mem).unwrap();
-            node.send(PeerSendWorkRequest::new(
-                0,
-                &[mr.gather_element(&mem).unwrap()],
-            ))
-            .unwrap_or_else(|e| panic!("Error: {e}"));
+            node.send(PeerSendWorkRequest::new(0, &[mr.gather_element(&mem)]))
+                .unwrap_or_else(|e| panic!("Error: {e}"));
         }
         _ => {
             println!("Invalid rank: {rank}");

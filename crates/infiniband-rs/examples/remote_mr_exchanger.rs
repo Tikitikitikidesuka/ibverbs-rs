@@ -35,7 +35,7 @@ fn main() {
 
     channel
         .write(WriteWorkRequest::new(
-            &[mr.gather_element(&mem[0..4]).unwrap()],
+            &[mr.gather_element(&mem[0..4])],
             remote_mr.sub_region(4).unwrap(),
         ))
         .unwrap();
