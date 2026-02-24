@@ -11,7 +11,7 @@ fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
     let ctx = ibverbs::open_device(DEVICE).unwrap();
-    ctx.device().bind_process_to_numa().unwrap();
+    ctx.device().bind_thread_to_numa().unwrap();
     let pd = ctx.allocate_pd().unwrap();
     let channel = Channel::builder().pd(&pd).build().unwrap();
 
