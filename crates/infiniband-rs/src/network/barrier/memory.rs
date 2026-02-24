@@ -157,7 +157,7 @@ impl BarrierMr {
     }
 
     pub fn is_peer_epoch_expected(&mut self, peer: usize) -> bool {
-        unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
-            >= self.memory[peer].expected_in_epoch
+        //unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
+        self.memory[peer].in_epoch.get() >= self.memory[peer].expected_in_epoch
     }
 }
