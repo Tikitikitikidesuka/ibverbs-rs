@@ -8,7 +8,7 @@ use crate::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::network::barrier::BarrierError;
 use crate::remote_struct_array_field_unchecked;
 use std::time::{Duration, Instant};
-use zerocopy::network_endian::U64;
+use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[derive(Debug)]
