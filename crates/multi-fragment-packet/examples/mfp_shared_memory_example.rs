@@ -1,7 +1,7 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use ebutils::{fragment_type::FragmentType, source_id::SourceId};
+use ebutils::{fragment_type::FragmentType, source_id::SourceId, SubDetector};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use nix::sys::stat::Mode;
 use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};
@@ -21,7 +21,7 @@ fn main() {
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(0)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::CaloSpecial, (0..190).collect::<Vec<_>>())
         .build();
@@ -47,7 +47,7 @@ fn main() {
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(2)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::FTNZS, (40..255).collect::<Vec<_>>())
         .build();
@@ -76,7 +76,7 @@ fn main() {
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(3)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::DAQ, (0..255).collect::<Vec<_>>())
         .build();

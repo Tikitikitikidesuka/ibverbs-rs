@@ -140,7 +140,7 @@ impl SharedMemoryBuffer {
         self.buffer_address
     }
 
-    pub fn buffer_address_mut(&self) -> *mut u8 {
+    pub fn buffer_address_mut(&mut self) -> *mut u8 {
         self.buffer_address
     }
 }

@@ -60,6 +60,18 @@ impl SharedMemoryBufferReader {
         })
     }
 
+    pub fn buffer_size(&self) -> usize {
+        self.backend.size()
+    }
+
+    pub fn buffer_address(&self) -> *const u8 {
+        self.backend.buffer_address()
+    }
+
+    pub fn buffer_address_mut(&mut self) -> *mut u8 {
+        self.backend.buffer_address_mut()
+    }
+
     pub fn alignment_pow2(&self) -> u8 {
         self.backend.alignment_pow2()
     }
