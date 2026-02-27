@@ -85,7 +85,7 @@ impl SharedMemoryBufferWriter {
         Ok(())
     }
 
-    pub fn writable_region(&self) -> (&mut [u8], &mut [u8]) {
+    pub fn writable_region(&mut self) -> (&mut [u8], &mut [u8]) {
         let read_status = self.backend.read_status();
         let same_wrap = read_status.wrap_flag() == self.write_status.wrap_flag();
         let buffer_address = self.backend.buffer_address_mut();
