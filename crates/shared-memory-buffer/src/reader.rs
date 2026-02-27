@@ -2,6 +2,7 @@ use crate::backend::{SharedMemoryBuffer, SharedMemoryBufferError};
 use crate::header::PtrStatus;
 use crate::posix_advisory_file_lock::AdvisoryFileLock;
 use crate::writer::SharedMemoryBufferWriter;
+use circular_buffer::CircularBufferReader;
 use nix::sys::stat::Mode;
 use std::fs::OpenOptions;
 use std::io;
@@ -57,6 +58,10 @@ impl SharedMemoryBufferReader {
             backend,
             _file_lock,
         })
+    }
+
+    pub fn alignment_pow2(&self) -> u8 {
+        self.backend.alignment_pow2()
     }
 
     pub(super) fn lock_path(name: &str) -> PathBuf {
@@ -122,5 +127,18 @@ impl SharedMemoryBufferReader {
     pub fn readable_length(&self) -> usize {
         let readable_region = self.readable_region();
         readable_region.0.len() + readable_region.1.len()
+    }
+}
+
+impl CircularBufferReader for SharedMemoryBufferReader {
+    type AdvanceResult = Result<(), SharedMemoryBufferError>;
+    type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
+
+    fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
+        SharedMemoryBufferReader::advance_read_pointer(self, bytes)
+    }
+
+    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
+        SharedMemoryBufferReader::readable_region(self)
     }
 }

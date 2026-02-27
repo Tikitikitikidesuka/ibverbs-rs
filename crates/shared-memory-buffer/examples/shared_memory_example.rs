@@ -1,7 +1,5 @@
-use circular_buffer::{CircularBufferReader, CircularBufferWriter};
 use nix::sys::stat::Mode;
-use shared_memory_buffer::reader::SharedMemoryBufferReader;
-use shared_memory_buffer::writer::SharedMemoryBufferWriter;
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};
 
 const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 

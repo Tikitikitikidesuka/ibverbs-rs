@@ -3,18 +3,16 @@ use circular_buffer::{
 };
 use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
-use shared_memory_buffer::{
-    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
-};
+use nix::sys::stat::Mode;
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};
+
+const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 
 fn main() {
     // Create the buffer with size 1024 bytes, alignment 8 (2^8 = 256 bytes) (max 4 elements of 256 bytes)
-    let write_buffer = SharedMemoryBuffer::new_write_buffer("maredshemory33", 1024, 8).unwrap();
-    let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
-
-    // Create reader and writer
-    let mut reader = SharedMemoryBufferReader::new(read_buffer);
-    let mut writer = SharedMemoryBufferWriter::new(write_buffer);
+    let mut writer =
+        SharedMemoryBufferWriter::create("maredshemory33", 1024, 8, PERMISSION_MODE).unwrap();
+    let mut reader = SharedMemoryBufferReader::open("maredshemory33").unwrap();
 
     println!("Ready!!!");
 

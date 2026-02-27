@@ -120,11 +120,23 @@
 //! the first two bytes (magic field), ensuring it's always available to readers even
 //! during wraparound scenarios.
 
-pub mod reader;
-pub mod writer;
+mod buffer_element;
+mod readable_buffer_element;
+mod reader;
+mod writable_buffer_element;
+mod writer;
 
+mod backend;
+mod header;
 mod posix_advisory_file_lock;
 mod posix_shared_memory;
 mod structure;
-mod header;
-mod backend;
+
+pub use buffer_element::{
+    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, WritableSharedMemoryBufferElement,
+};
+pub use circular_buffer::*;
+pub use readable_buffer_element::SharedMemoryTypedReadError;
+pub use reader::SharedMemoryBufferReader;
+pub use writable_buffer_element::SharedMemoryTypedWriteError;
+pub use writer::SharedMemoryBufferWriter;

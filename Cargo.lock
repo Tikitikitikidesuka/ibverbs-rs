@@ -638,6 +638,7 @@ dependencies = [
  "bytemuck",
  "circular-buffer",
  "ebutils",
+ "nix",
  "pcie40",
  "shared-memory-buffer",
  "strum",
