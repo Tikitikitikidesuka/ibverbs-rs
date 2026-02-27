@@ -1,8 +1,6 @@
 use circular_buffer::CircularBufferMultiReadable;
 use multi_fragment_packet::MultiFragmentPacket;
-use shared_memory_buffer::{
-    SharedMemoryBufferReader, SharedMemoryTypedReadError,
-};
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryTypedReadError};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;

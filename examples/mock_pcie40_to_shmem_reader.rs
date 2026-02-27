@@ -2,11 +2,11 @@ use circular_buffer::CircularBufferWritable;
 use ebutils::fragment_type::FragmentType;
 use ebutils::source_id::SourceId;
 use multi_fragment_packet::{MultiFragmentPacketOwned, builder::MultiFragmentPacketBuilder};
-use shared_memory_buffer::{SharedMemoryBufferWriter};
+use nix::sys::stat::Mode;
+use shared_memory_buffer::SharedMemoryBufferWriter;
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
-use nix::sys::stat::Mode;
 
 fn main() {
     const BUFFER_SIZE: u64 = 1 << 32; // 4Gb
@@ -29,7 +29,8 @@ fn main() {
 
     let shmem_name = &args[1];
     let mut shmem_writer =
-        SharedMemoryBufferWriter::create(shmem_name, BUFFER_SIZE, ALIGNMENT_POW2, PERMISSION_MODE).unwrap();
+        SharedMemoryBufferWriter::create(shmem_name, BUFFER_SIZE, ALIGNMENT_POW2, PERMISSION_MODE)
+            .unwrap();
     let shmem_buffer_size = shmem_writer.buffer_size();
 
     // -------------------------- //

@@ -158,9 +158,7 @@ impl SharedMemoryBufferStructure {
     ///   fit into `u8` or if the layout checks in `validate_params` fail.
     /// - `Err(NotEnoughSpace(..))` if `slice.len()` does not match the size
     ///   implied by the header’s `capacity` and `alignment_pow2`.
-    pub unsafe fn from_mut_slice(
-        slice: &mut [u8],
-    ) -> io::Result<&mut SharedMemoryBufferStructure> {
+    pub unsafe fn from_mut_slice(slice: &mut [u8]) -> io::Result<&mut SharedMemoryBufferStructure> {
         // Check that the slice is large enough to contain a header
         let available = slice.len();
         let required = size_of::<Header>();

@@ -1,6 +1,10 @@
 use crate::{MultiFragmentPacket, MultiFragmentPacketOwned};
 use circular_buffer::CircularBufferWriter;
-use shared_memory_buffer::{impl_circular_buffer_readable, impl_circular_buffer_writable, ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError, SharedMemoryTypedWriteError, WritableSharedMemoryBufferElement};
+use shared_memory_buffer::{
+    ReadableSharedMemoryBufferElement, SharedMemoryBufferElement, SharedMemoryTypedReadError,
+    SharedMemoryTypedWriteError, WritableSharedMemoryBufferElement, impl_circular_buffer_readable,
+    impl_circular_buffer_writable,
+};
 
 const WRAP_MAGIC: u16 = 0xBF31;
 

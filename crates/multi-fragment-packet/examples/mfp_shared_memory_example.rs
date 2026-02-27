@@ -1,7 +1,7 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use ebutils::{fragment_type::FragmentType, source_id::SourceId, SubDetector};
+use ebutils::{SubDetector, fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
 use nix::sys::stat::Mode;
 use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};

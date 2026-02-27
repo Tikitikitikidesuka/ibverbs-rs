@@ -1,3 +1,4 @@
+use log::warn;
 use nix::errno::Errno;
 use nix::libc;
 use nix::libc::{F_TLOCK, F_ULOCK};
@@ -6,7 +7,6 @@ use std::io;
 use std::io::Seek;
 use std::os::fd::AsRawFd;
 use std::path::Path;
-use log::warn;
 
 /// POSIX advisory whole-file lock.
 ///
