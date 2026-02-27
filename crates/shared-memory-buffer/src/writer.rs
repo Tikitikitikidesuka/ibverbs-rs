@@ -64,6 +64,18 @@ impl SharedMemoryBufferWriter {
         self.backend.alignment_pow2()
     }
 
+    pub fn buffer_size(&self) -> usize {
+        self.backend.size()
+    }
+
+    pub fn buffer_address(&self) -> *const u8 {
+        self.backend.buffer_address()
+    }
+
+    pub fn buffer_address_mut(&mut self) -> *mut u8 {
+        self.backend.buffer_address_mut()
+    }
+
     pub(super) fn lock_path(name: &str) -> PathBuf {
         format!("/tmp/{}_writer.lock", name).into()
     }

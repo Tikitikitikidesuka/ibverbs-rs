@@ -1,7 +1,7 @@
 use circular_buffer::CircularBufferMultiReadable;
 use multi_fragment_packet::MultiFragmentPacket;
 use shared_memory_buffer::{
-    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryTypedReadError,
+    SharedMemoryBufferReader, SharedMemoryTypedReadError,
 };
 use std::env;
 use std::io::{Read, stdin};
@@ -23,10 +23,8 @@ fn main() {
     }
 
     let shmem_name = &args[1];
-    let read_buffer = SharedMemoryBuffer::new_read_buffer(shmem_name).unwrap();
-    let shmem_buffer_size = read_buffer.size();
-
-    let mut reader = SharedMemoryBufferReader::new(read_buffer);
+    let mut reader = SharedMemoryBufferReader::open(shmem_name).unwrap();
+    let shmem_buffer_size = reader.buffer_size();
 
     println!("\n\nGot shared memory buffer of size: {shmem_buffer_size}");
     println!("Stream configured... Press any key to proceed\n");

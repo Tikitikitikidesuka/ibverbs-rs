@@ -893,10 +893,10 @@ dependencies = [
  "master-data-file",
  "multi-event-packet",
  "multi-fragment-packet",
+ "nix",
  "pcie40",
  "pretty-hex",
  "shared-memory-buffer",
- "thiserror",
  "tracing",
  "tracing-subscriber",
 ]
