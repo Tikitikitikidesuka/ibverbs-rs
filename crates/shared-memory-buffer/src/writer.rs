@@ -126,7 +126,7 @@ impl SharedMemoryBufferWriter {
         }
     }
 
-    pub fn writable_length(&self) -> usize {
+    pub fn writable_length(&mut self) -> usize {
         let readable_region = self.writable_region();
         readable_region.0.len() + readable_region.1.len()
     }
