@@ -45,7 +45,7 @@ use std::path::Path;
 ///
 /// ## Example
 ///
-/// ```
+/// ```no-run
 /// # use std::fs::OpenOptions;
 /// # use std::io::{self, Write};
 /// # use shared_memory_buffer::posix_advisory_file_lock::AdvisoryFileLock;

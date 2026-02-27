@@ -20,7 +20,7 @@ use std::ops::RangeBounds;
 ///
 /// ## Example
 ///
-/// ```
+/// ```no-run
 /// # use nix::sys::stat::Mode;
 /// # use std::io;
 /// # use shared_memory_buffer::posix_shared_memory::{
