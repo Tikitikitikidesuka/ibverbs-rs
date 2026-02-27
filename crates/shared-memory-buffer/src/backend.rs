@@ -28,8 +28,6 @@ impl SharedMemoryBuffer {
             SharedMemory::open(name.as_str(), AccessMode::ReadWrite)?.map(AccessMode::ReadWrite)?
         };
 
-        println!("Shared memory len: {}", shared_memory.len());
-
         if shared_memory.len() < size_of::<Header>() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
