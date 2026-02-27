@@ -2,14 +2,16 @@ use circular_buffer::CircularBufferWritable;
 use ebutils::fragment_type::FragmentType;
 use ebutils::source_id::SourceId;
 use multi_fragment_packet::{MultiFragmentPacketOwned, builder::MultiFragmentPacketBuilder};
-use shared_memory_buffer::{SharedMemoryBuffer, SharedMemoryBufferWriter};
+use nix::sys::stat::Mode;
+use shared_memory_buffer::SharedMemoryBufferWriter;
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
 
 fn main() {
-    const BUFFER_SIZE: usize = 1 << 32; // 4Gb
+    const BUFFER_SIZE: u64 = 1 << 32; // 4Gb
     const ALIGNMENT_POW2: u8 = 12;
+    const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -26,11 +28,10 @@ fn main() {
     }
 
     let shmem_name = &args[1];
-    let shmem_write_buffer =
-        SharedMemoryBuffer::new_write_buffer(shmem_name, BUFFER_SIZE, ALIGNMENT_POW2).unwrap();
-    let shmem_buffer_size = shmem_write_buffer.size();
-
-    let mut shmem_writer = SharedMemoryBufferWriter::new(shmem_write_buffer);
+    let mut shmem_writer =
+        SharedMemoryBufferWriter::create(shmem_name, BUFFER_SIZE, ALIGNMENT_POW2, PERMISSION_MODE)
+            .unwrap();
+    let shmem_buffer_size = shmem_writer.buffer_size();
 
     // -------------------------- //
     //        READY TO GO!        //

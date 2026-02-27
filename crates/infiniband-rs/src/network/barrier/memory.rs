@@ -8,7 +8,7 @@ use crate::multi_channel::work_request::PeerWriteWorkRequest;
 use crate::network::barrier::BarrierError;
 use crate::remote_struct_array_field_unchecked;
 use std::time::{Duration, Instant};
-use zerocopy::network_endian::U64;
+use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[derive(Debug)]
@@ -157,7 +157,7 @@ impl BarrierMr {
     }
 
     pub fn is_peer_epoch_expected(&mut self, peer: usize) -> bool {
-        unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
-            >= self.memory[peer].expected_in_epoch
+        //unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
+        self.memory[peer].in_epoch.get() >= self.memory[peer].expected_in_epoch
     }
 }

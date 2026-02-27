@@ -1,4 +1,4 @@
-use crate::reader::SharedMemoryBufferAdvanceError;
+use crate::backend::SharedMemoryBufferError;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -8,7 +8,7 @@ pub enum SharedMemoryTypedWriteError {
     NotEnoughSpace,
 
     #[error("Unable to advance the write pointer: {0}")]
-    AdvanceWritePointerError(#[from] SharedMemoryBufferAdvanceError),
+    AdvanceWritePointerError(#[from] SharedMemoryBufferError),
 }
 
 /// Macro to implement `CircularBufferWritable<SharedMemoryBufferWriter>` for types

@@ -1,104 +1,157 @@
-use crate::buffer_backend::SharedMemoryWriteBuffer;
-use crate::buffer_status::PtrStatus;
-use crate::reader::SharedMemoryBufferAdvanceError;
-use circular_buffer::CircularBufferWriter;
-use tracing::{debug, instrument, warn};
+use crate::backend::{SharedMemoryBuffer, SharedMemoryBufferError};
+use crate::header::PtrStatus;
+use crate::posix_advisory_file_lock::AdvisoryFileLock;
+use crate::reader::SharedMemoryBufferReader;
+use circular_buffer::{CircularBufferReader, CircularBufferWriter};
+use nix::sys::stat::Mode;
+use std::fs::OpenOptions;
+use std::io;
+use std::path::PathBuf;
+use std::ptr::slice_from_raw_parts_mut;
 
 pub struct SharedMemoryBufferWriter {
-    buffer: SharedMemoryWriteBuffer,
     write_status: PtrStatus,
+    backend: SharedMemoryBuffer,
+    _file_lock: AdvisoryFileLock,
 }
 
 impl SharedMemoryBufferWriter {
-    pub fn new(buffer: SharedMemoryWriteBuffer) -> Self {
-        debug!("Creating new shared memory buffer writer");
-        let write_status = buffer.write_status();
+    pub fn open(name: impl Into<String>) -> io::Result<Self> {
+        let name = name.into();
 
-        Self {
-            buffer,
-            write_status,
-        }
+        let _file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferWriter::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let backend = SharedMemoryBuffer::open(name)?;
+
+        Ok(Self {
+            write_status: backend.write_status(),
+            backend,
+            _file_lock,
+        })
+    }
+
+    pub fn create(
+        name: impl Into<String>,
+        size: u64,
+        alignment_pow2: u8,
+        permissions: Mode,
+    ) -> io::Result<Self> {
+        let name = name.into();
+
+        let _file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferReader::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let _reader_file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferWriter::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let backend = SharedMemoryBuffer::create(name, size, alignment_pow2, permissions)?;
+
+        Ok(Self {
+            write_status: backend.write_status(),
+            backend,
+            _file_lock,
+        })
     }
 
     pub fn alignment_pow2(&self) -> u8 {
-        self.buffer.alignment_pow2()
+        self.backend.alignment_pow2()
     }
 
-    pub fn buffer_name(&self) -> &str {
-        self.buffer.name()
+    pub fn buffer_size(&self) -> usize {
+        self.backend.size()
+    }
+
+    pub fn buffer_address(&self) -> *const u8 {
+        self.backend.buffer_address()
+    }
+
+    pub fn buffer_address_mut(&mut self) -> *mut u8 {
+        self.backend.buffer_address_mut()
+    }
+
+    pub(super) fn lock_path(name: &str) -> PathBuf {
+        format!("/tmp/{}_writer.lock", name).into()
     }
 }
 
-impl CircularBufferWriter for SharedMemoryBufferWriter {
-    type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
-    type WriteableRegionResult<'a> = (&'a mut [u8], &'a mut [u8]);
-
-    #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
-    fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
-        debug!("Attempting to advance the buffer's write pointer by {bytes} bytes");
-
-        debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !ebutils::check_alignment_pow2(bytes, 1) {
-            warn!("Aborting write pointer advance due to failed 2 byte alignment violation");
-            return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
+impl SharedMemoryBufferWriter {
+    pub fn advance_write_pointer(&mut self, bytes: usize) -> Result<(), SharedMemoryBufferError> {
+        if !ebutils::check_alignment_pow2(bytes, self.backend.alignment_pow2()) {
+            return Err(SharedMemoryBufferError::AlignmentViolation);
         }
 
-        debug!("Checking buffer's alignment");
-        if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
-            warn!("Aborting write pointer advance due to buffer's alignment violation");
-            return Err(SharedMemoryBufferAdvanceError::NotAligned);
+        if self.writable_length() < bytes {
+            return Err(SharedMemoryBufferError::OutOfBounds);
         }
 
-        debug!("Checking buffer's available space on writable region");
-        let (primary_region, secondary_region) = self.writable_region();
-        let available = primary_region.len() + secondary_region.len();
-        if bytes > available {
-            warn!(
-                "Aborting write pointer advance due to insufficient buffer writable region space"
-            );
-            return Err(SharedMemoryBufferAdvanceError::OutOfBounds);
-        }
-
-        debug!(
-            "All necessary checks passed for write pointer advance passed! Updating write pointer"
-        );
-        self.write_status = self.write_status.plus(bytes, self.buffer.size());
-        self.buffer.set_write_status(self.write_status);
+        self.write_status = self.write_status.wrapped_offset(bytes, self.backend.size());
+        self.backend.set_write_status(self.write_status);
 
         Ok(())
     }
 
-    #[instrument(skip_all, fields(shmem = self.buffer.name()))]
-    fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
-        debug!("Attempting to get the buffer's writable region");
+    pub fn writable_region(&mut self) -> (&mut [u8], &mut [u8]) {
+        let read_status = self.backend.read_status();
+        let same_wrap = read_status.wrap_flag() == self.write_status.wrap_flag();
+        let buffer_address = self.backend.buffer_address_mut();
 
-        debug!("Getting the buffer's read pointer and complete byte slice");
-        let read_status = self.buffer.read_status();
-        let buffer_slice = unsafe { self.buffer.as_slice_mut() };
-
-        debug!("Checking if the read and write pointer are on the same page");
-        // Being on different pages means only one of the two has wrapped around
-        let same_page = self.write_status.wrap() == read_status.wrap();
-
-        if same_page {
-            debug!("Writable region wraps around");
+        if same_wrap {
             // Primary region: from write_ptr to end
             // Secondary region: from start to read_ptr
-            let (before_read, after_read) = buffer_slice.split_at_mut(read_status.ptr() as usize);
-            let primary_region =
-                &mut after_read[(self.write_status.ptr() as usize - read_status.ptr() as usize)..];
 
-            debug!("Got the two regions successfully");
-            (primary_region, before_read)
+            let primary_region_address =
+                unsafe { buffer_address.add(self.write_status.address() as usize) };
+            let primary_region_length = self.backend.size() - self.write_status.address() as usize;
+            let primary_region = unsafe {
+                &mut *slice_from_raw_parts_mut(primary_region_address, primary_region_length)
+            };
+
+            let secondary_region_address = buffer_address;
+            let secondary_region_length = read_status.address() as usize;
+            let secondary_region = unsafe {
+                &mut *slice_from_raw_parts_mut(secondary_region_address, secondary_region_length)
+            };
+
+            (primary_region, secondary_region)
         } else {
-            debug!("Writable region does no wrap around");
             // Primary region: from write_ptr to read_ptr
             // Secondary region: empty
-            let primary_region =
-                &mut buffer_slice[self.write_status.ptr() as usize..read_status.ptr() as usize];
 
-            debug!("Got the primary region and put an empty slice on secondary successfully");
-            (primary_region, &mut [])
+            let primary_region_address =
+                unsafe { buffer_address.add(self.write_status.address() as usize) };
+            let primary_region_length =
+                read_status.address() as usize - self.write_status.address() as usize;
+            let primary_region = unsafe {
+                &mut *slice_from_raw_parts_mut(primary_region_address, primary_region_length)
+            };
+
+            let secondary_region = &mut [];
+
+            (primary_region, secondary_region)
         }
+    }
+
+    pub fn writable_length(&mut self) -> usize {
+        let readable_region = self.writable_region();
+        readable_region.0.len() + readable_region.1.len()
+    }
+}
+
+impl CircularBufferWriter for SharedMemoryBufferWriter {
+    type AdvanceResult = Result<(), SharedMemoryBufferError>;
+    type WriteableRegionResult<'a> = (&'a mut [u8], &'a mut [u8]);
+
+    fn advance_write_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
+        SharedMemoryBufferWriter::advance_write_pointer(self, bytes)
+    }
+    fn writable_region(&mut self) -> Self::WriteableRegionResult<'_> {
+        SharedMemoryBufferWriter::writable_region(self)
     }
 }

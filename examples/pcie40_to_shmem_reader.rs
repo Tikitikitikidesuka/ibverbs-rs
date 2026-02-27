@@ -1,15 +1,14 @@
 use circular_buffer::{CircularBufferMultiReadable, CircularBufferWritable};
 use multi_fragment_packet::MultiFragmentPacket;
 use multi_fragment_packet::pcie40_readable::PCIe40TypedReadError;
+use nix::sys::stat::Mode;
 use pcie40::ctrl::PCIe40ControllerManager;
 use pcie40::reader::PCIe40Reader;
 use pcie40::stream::stream::PCIe40DAQStreamFormat::MetaFormat;
 use pcie40::stream::stream::PCIe40DAQStreamType::MainStream;
 use pcie40::stream::stream::PCIe40StreamHandleEnableStateCloseMode::PreserveEnableState;
 use pcie40::stream::stream::PCIe40StreamManager;
-use shared_memory_buffer::{
-    SharedMemoryBuffer, SharedMemoryBufferWriter, SharedMemoryTypedWriteError,
-};
+use shared_memory_buffer::{SharedMemoryBufferWriter, SharedMemoryTypedWriteError};
 use std::env;
 use std::io::{Read, stdin};
 use std::time::Duration;
@@ -59,11 +58,13 @@ fn main() {
     // Shared Memory Buffer Setup //
     // -------------------------- //
 
-    let shmem_write_buffer =
-        SharedMemoryBuffer::new_write_buffer("maredshemory33", buffer_size, buffer_alignment_pow2)
-            .unwrap();
-
-    let mut shmem_writer = SharedMemoryBufferWriter::new(shmem_write_buffer);
+    let mut shmem_writer = SharedMemoryBufferWriter::create(
+        "maredshemory33",
+        buffer_size as u64,
+        buffer_alignment_pow2,
+        Mode::from_bits_truncate(0o666),
+    )
+    .unwrap();
 
     // -------------------------- //
     //        READY TO GO!        //

@@ -1,17 +1,13 @@
-use circular_buffer::{CircularBufferReader, CircularBufferWriter};
-use shared_memory_buffer::{
-    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
-};
+use nix::sys::stat::Mode;
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};
+
+const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 
 fn main() {
     // Create the buffer with size 16 bytes, alignment 1 (2^1 = 2 bytes)
-    let write_buffer = SharedMemoryBuffer::new_write_buffer("maredshemory33", 16, 1).unwrap();
-    let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
-
-    // Create reader and writer
-    let mut reader = SharedMemoryBufferReader::new(read_buffer);
-    let mut writer = SharedMemoryBufferWriter::new(write_buffer);
-
+    let mut writer =
+        SharedMemoryBufferWriter::create("maredshemory33", 16, 1, PERMISSION_MODE).unwrap();
+    let mut reader = SharedMemoryBufferReader::open("maredshemory33").unwrap();
     write_to_buffer(&mut writer, b"0123456789ABCD").unwrap();
     print_non_contiguous_buffer(&reader);
 

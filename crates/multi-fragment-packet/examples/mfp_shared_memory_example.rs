@@ -1,20 +1,18 @@
 use circular_buffer::{
     CircularBufferMultiReadable, CircularBufferReadable, CircularBufferWritable,
 };
-use ebutils::{fragment_type::FragmentType, source_id::SourceId};
+use ebutils::{SubDetector, fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketBuilder};
-use shared_memory_buffer::{
-    SharedMemoryBuffer, SharedMemoryBufferReader, SharedMemoryBufferWriter,
-};
+use nix::sys::stat::Mode;
+use shared_memory_buffer::{SharedMemoryBufferReader, SharedMemoryBufferWriter};
+
+const PERMISSION_MODE: Mode = Mode::from_bits_truncate(0o666);
 
 fn main() {
     // Create the buffer with size 1024 bytes, alignment 8 (2^8 = 256 bytes) (max 4 elements of 256 bytes)
-    let write_buffer = SharedMemoryBuffer::new_write_buffer("maredshemory33", 1024, 8).unwrap();
-    let read_buffer = SharedMemoryBuffer::new_read_buffer("maredshemory33").unwrap();
-
-    // Create reader and writer
-    let mut reader = SharedMemoryBufferReader::new(read_buffer);
-    let mut writer = SharedMemoryBufferWriter::new(write_buffer);
+    let mut writer =
+        SharedMemoryBufferWriter::create("maredshemory33", 1024, 8, PERMISSION_MODE).unwrap();
+    let mut reader = SharedMemoryBufferReader::open("maredshemory33").unwrap();
 
     println!("Ready!!!");
 
@@ -23,7 +21,7 @@ fn main() {
     let mfp_0_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(0)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::CaloSpecial, (0..190).collect::<Vec<_>>())
         .build();
@@ -49,7 +47,7 @@ fn main() {
     let mfp_2_256 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(2)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::FTNZS, (40..255).collect::<Vec<_>>())
         .build();
@@ -78,7 +76,7 @@ fn main() {
     let mfp_3_512 = MultiFragmentPacketBuilder::new()
         .with_align_log(4)
         .with_event_id(3)
-        .with_source_id(SourceId(1))
+        .with_source_id(SourceId::new(SubDetector::MuonA, 0))
         .with_fragment_version(1)
         .add_fragment(FragmentType::DAQ, (0..255).collect::<Vec<_>>())
         .build();

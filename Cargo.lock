@@ -638,6 +638,7 @@ dependencies = [
  "bytemuck",
  "circular-buffer",
  "ebutils",
+ "nix",
  "pcie40",
  "shared-memory-buffer",
  "strum",
@@ -892,10 +893,10 @@ dependencies = [
  "master-data-file",
  "multi-event-packet",
  "multi-fragment-packet",
+ "nix",
  "pcie40",
  "pretty-hex",
  "shared-memory-buffer",
- "thiserror",
  "tracing",
  "tracing-subscriber",
 ]
@@ -971,9 +972,10 @@ dependencies = [
  "circular-buffer",
  "ebutils",
  "libc",
+ "log",
  "nix",
  "thiserror",
- "tracing",
+ "zerocopy",
 ]
 
 [[package]]

@@ -54,7 +54,7 @@ name = "rusteb"
 path = "src/lib.rs"
 
 [dev-dependencies]
-thiserror.workspace = true
+nix = { version = "0.30.1", features = ["fs"] }
 pcie40 = { path = "crates/pcie40" }
 ebutils = { path = "crates/ebutils" }
 circular-buffer = { path = "crates/circular-buffer" }
