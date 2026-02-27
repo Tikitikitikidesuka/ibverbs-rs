@@ -1,116 +1,126 @@
-use crate::buffer_backend::SharedMemoryReadBuffer;
-use crate::buffer_status::PtrStatus;
-use circular_buffer::CircularBufferReader;
-use thiserror::Error;
-use tracing::{debug, instrument, warn};
+use crate::backend::{SharedMemoryBuffer, SharedMemoryBufferError};
+use crate::header::PtrStatus;
+use crate::posix_advisory_file_lock::AdvisoryFileLock;
+use crate::writer::SharedMemoryBufferWriter;
+use nix::sys::stat::Mode;
+use std::fs::OpenOptions;
+use std::io;
+use std::path::PathBuf;
+use std::ptr::slice_from_raw_parts;
 
 pub struct SharedMemoryBufferReader {
-    buffer: SharedMemoryReadBuffer,
     read_status: PtrStatus,
-}
-
-#[derive(Debug, Error)]
-pub enum SharedMemoryBufferAdvanceError {
-    #[error("Not enough data available")]
-    OutOfBounds,
-
-    #[error("Result address not aligned")]
-    NotAligned,
-
-    #[error("Result address is not minimum 2 Byte aligned")]
-    Not2ByteAligned,
+    backend: SharedMemoryBuffer,
+    _file_lock: AdvisoryFileLock,
 }
 
 impl SharedMemoryBufferReader {
-    pub fn new(read_buffer: SharedMemoryReadBuffer) -> Self {
-        debug!("Creating new shared memory buffer reader");
-        let read_status = read_buffer.read_status();
+    pub fn open(name: impl Into<String>) -> io::Result<Self> {
+        let name = name.into();
 
-        Self {
-            buffer: read_buffer,
-            read_status,
-        }
+        let _file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferReader::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let backend = SharedMemoryBuffer::open(name)?;
+
+        Ok(Self {
+            read_status: backend.read_status(),
+            backend,
+            _file_lock,
+        })
     }
 
-    pub fn alignment_pow2(&self) -> u8 {
-        self.buffer.alignment_pow2()
+    pub fn create(
+        name: impl Into<String>,
+        size: u64,
+        alignment_pow2: u8,
+        permissions: Mode,
+    ) -> io::Result<Self> {
+        let name = name.into();
+
+        let _writer_file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferWriter::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let _file_lock = AdvisoryFileLock::try_lock(
+            SharedMemoryBufferReader::lock_path(name.as_str()),
+            &OpenOptions::new().create(true).read(true).write(true),
+        )?;
+
+        let backend = SharedMemoryBuffer::create(name, size, alignment_pow2, permissions)?;
+
+        Ok(Self {
+            read_status: backend.read_status(),
+            backend,
+            _file_lock,
+        })
     }
 
-    pub fn buffer_name(&self) -> &str {
-        self.buffer.name()
-    }
-
-    pub unsafe fn get_raw_buffer(&self) -> &[u8] {
-        unsafe { self.buffer.as_slice() }
+    pub(super) fn lock_path(name: &str) -> PathBuf {
+        format!("/tmp/{}_reader.lock", name).into()
     }
 }
 
-impl CircularBufferReader for SharedMemoryBufferReader {
-    type AdvanceResult = Result<(), SharedMemoryBufferAdvanceError>;
-    type ReadableRegionResult<'a> = (&'a [u8], &'a [u8]);
-
-    #[instrument(skip_all, fields(shmem = self.buffer.name(), bytes = bytes))]
-    fn advance_read_pointer(&mut self, bytes: usize) -> Self::AdvanceResult {
-        debug!("Attempting to advance the buffer's read pointer by {bytes} bytes");
-
-        debug!("Checking minimum 2 byte alignment due to pointer representation");
-        if !ebutils::check_alignment_pow2(bytes, 1) {
-            warn!("Aborting read pointer advance due to failed 2 byte alignment violation");
-            return Err(SharedMemoryBufferAdvanceError::Not2ByteAligned);
+impl SharedMemoryBufferReader {
+    pub fn advance_read_pointer(&mut self, bytes: usize) -> Result<(), SharedMemoryBufferError> {
+        if !ebutils::check_alignment_pow2(bytes, self.backend.alignment_pow2()) {
+            return Err(SharedMemoryBufferError::AlignmentViolation);
         }
 
-        debug!("Checking buffer's alignment");
-        if !ebutils::check_alignment_pow2(bytes, self.buffer.alignment_pow2()) {
-            warn!("Aborting write pointer advance due to buffer's alignment violation");
-            return Err(SharedMemoryBufferAdvanceError::NotAligned);
+        if self.readable_length() < bytes {
+            return Err(SharedMemoryBufferError::OutOfBounds);
         }
 
-        debug!("Checking buffer's available space on readable region");
-        let (primary_region, secondary_region) = self.readable_region();
-        let available = primary_region.len() + secondary_region.len();
-        if bytes > available {
-            warn!("Aborting read pointer advance due to insufficient buffer readable region space");
-            return Err(SharedMemoryBufferAdvanceError::OutOfBounds);
-        }
-
-        debug!("All necessary checks for read pointer advance passed! Updating read pointer");
-        self.read_status = self.read_status.plus(bytes, self.buffer.size());
-        self.buffer.set_read_status(self.read_status);
+        self.read_status = self.read_status.wrapped_offset(bytes, self.backend.size());
+        self.backend.set_read_status(self.read_status);
 
         Ok(())
     }
 
-    #[instrument(skip_all, fields(shmem = self.buffer.name()))]
-    fn readable_region(&self) -> Self::ReadableRegionResult<'_> {
-        debug!("Attempting to get the buffer's readable region");
+    pub fn readable_region(&self) -> (&[u8], &[u8]) {
+        let write_status = self.backend.write_status();
+        let same_wrap = write_status.wrap_flag() == self.read_status.wrap_flag();
+        let buffer_address = self.backend.buffer_address();
 
-        debug!("Getting the buffer's write pointer and complete byte slice");
-        let write_status = self.buffer.write_status();
-        let buffer_slice = unsafe { self.buffer.as_slice() };
-
-        debug!("Checking if the read and write pointer are on the same page");
-        // Being on different pages means only one of the two has wrapped around
-        let same_page = write_status.wrap() == self.read_status.wrap();
-
-        if same_page {
-            debug!("Readable region does no wrap around");
+        if same_wrap {
             // Primary region: from read_ptr to write_ptr
             // Secondary region: empty
+
+            let primary_region_address =
+                unsafe { buffer_address.add(self.read_status.address() as usize) };
+            let primary_region_length =
+                write_status.address() as usize - self.read_status.address() as usize;
             let primary_region =
-                &buffer_slice[self.read_status.ptr() as usize..write_status.ptr() as usize];
+                unsafe { &*slice_from_raw_parts(primary_region_address, primary_region_length) };
+
             let secondary_region = &[];
 
-            debug!("Got the primary region and put an empty slice on secondary successfully");
             (primary_region, secondary_region)
         } else {
-            debug!("Readable region wraps around");
             // Primary region: from read_ptr to end
             // Secondary region: from start to write_ptr
-            let primary_region = &buffer_slice[self.read_status.ptr() as usize..];
-            let secondary_region = &buffer_slice[..write_status.ptr() as usize];
 
-            debug!("Got the two regions successfully");
+            let primary_region_address =
+                unsafe { buffer_address.add(self.read_status.address() as usize) };
+            let primary_region_length = self.backend.size() - self.read_status.address() as usize;
+            let primary_region =
+                unsafe { &*slice_from_raw_parts(primary_region_address, primary_region_length) };
+
+            let secondary_region_address = buffer_address;
+            let secondary_region_length = write_status.address() as usize;
+            let secondary_region = unsafe {
+                &*slice_from_raw_parts(secondary_region_address, secondary_region_length)
+            };
+
             (primary_region, secondary_region)
         }
+    }
+
+    pub fn readable_length(&self) -> usize {
+        let readable_region = self.readable_region();
+        readable_region.0.len() + readable_region.1.len()
     }
 }
