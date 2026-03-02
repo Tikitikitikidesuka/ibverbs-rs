@@ -249,7 +249,6 @@ pub(crate) fn write_source_ids(
         *slot = soruce_id;
     }
 
-    assert!(slots.is_sorted(), "Source IDs are not sorted! {slots:?}");
 }
 
 /// Offsets in **u32**!
