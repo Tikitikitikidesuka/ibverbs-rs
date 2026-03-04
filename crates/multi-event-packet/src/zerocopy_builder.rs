@@ -219,7 +219,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
     /// You need to insure that all MFPs have the same event id and number of fragments to produce a valid MEP.
     pub fn finish(self) -> Result<&'a MultiEventPacket, FromRawBytesError> {
         let num_mfps = self.num_mfps();
-        let header_size_u32 = total_header_size(num_mfps) / size_of::<u32>();
+        let header_size_u32 = total_header_size(num_mfps, self.mfp_align) / size_of::<u32>();
         let (header, rest) = self.buffer.split_at_mut(header_size_u32);
 
         write_source_ids(

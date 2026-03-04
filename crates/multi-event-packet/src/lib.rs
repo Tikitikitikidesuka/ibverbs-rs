@@ -281,8 +281,9 @@ pub(crate) fn offsets_size(num_mfps: usize) -> usize {
 }
 
 // Header size in bytes
-pub(crate) fn total_header_size(num_mfps: usize) -> usize {
-    size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
+pub(crate) fn total_header_size(num_mfps: usize, align: usize) -> usize {
+    (size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps))
+        .next_multiple_of(align)
 }
 
 /// An iterator over (some of) the MFPs inside an MEP.

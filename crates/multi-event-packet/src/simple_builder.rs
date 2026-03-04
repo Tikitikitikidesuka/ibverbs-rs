@@ -221,7 +221,7 @@ pub(crate) fn offsets_iter(
     mfp_align: usize,
     total_size: &mut usize,
 ) -> impl Iterator<Item = usize> {
-    *total_size = total_header_size(mfp_sizes_bytes.len());
+    *total_size = total_header_size(mfp_sizes_bytes.len(), mfp_align);
 
     mfp_sizes_bytes
         .map(move |size| size.next_multiple_of(mfp_align))
@@ -248,7 +248,6 @@ pub(crate) fn write_source_ids(
     for (slot, soruce_id) in slots.iter_mut().zip(source_ids) {
         *slot = soruce_id;
     }
-
 }
 
 /// Offsets in **u32**!
