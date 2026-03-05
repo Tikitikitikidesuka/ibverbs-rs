@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, ops::Deref};
+use std::{borrow::Borrow, fmt::Debug, ops::Deref};
 
 use multi_fragment_packet::FromRawBytesError;
 
@@ -59,6 +59,12 @@ impl<D: AsRef<[u32]>> MultiEventPacketOwned<D> {
         // assure converting from data is successful
         MultiEventPacket::from_raw_bytes(data.as_ref())?;
         Ok(Self { data })
+    }
+}
+
+impl<T: AsRef<[u32]>> Debug for MultiEventPacketOwned<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.deref().fmt(f)
     }
 }
 

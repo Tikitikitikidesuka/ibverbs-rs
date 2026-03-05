@@ -4,8 +4,9 @@
 //!
 //! This builder is mostly intended for testing purpouses.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Debug};
 
+use aligned_vec::avec_rt;
 use bytemuck::cast_slice_mut;
 use ebutils::{fragment_type::FragmentType, source_id::SourceId};
 use multi_fragment_packet::{MultiFragmentPacket, MultiFragmentPacketOwned};
@@ -134,12 +135,13 @@ impl<'a> SimpleMepBuilder<'a> {
     /// Builds an MEP from the provided MFPs.
     ///
     /// Resets the builder afterwards, so it can be reused without reallocating the internal buffer.
+    ///
     /// # Errors
     /// If no ODIN MFP has been added.
     ///
     /// In case of `Err`, the builder is not reset!
     #[instrument(skip(self))]
-    pub fn build(&mut self) -> Result<MultiEventPacketOwned> {
+    pub fn build(&mut self) -> Result<MultiEventPacketOwned<impl AsRef<[u32]> + 'static>> {
         if !self.odin_added {
             return Err(EventBuilderError::NoOdinFragment);
         }
@@ -151,7 +153,8 @@ impl<'a> SimpleMepBuilder<'a> {
         // alloc data
         let mut total_size = 0;
         let _ = self.offsets_iter(&mut total_size).count(); // just iterate thorugh to get total size
-        let mut data = vec![0u32; total_size / size_of::<u32>()].into_boxed_slice();
+        let mut data =
+            avec_rt!([self.mfp_align()] | 0u32; total_size / size_of::<u32>()).into_boxed_slice();
 
         write_const_header(
             &mut data,
@@ -206,16 +209,18 @@ impl<'a> SimpleMepBuilder<'a> {
     fn offsets_iter(&self, total_size: &mut usize) -> impl Iterator<Item = usize> {
         offsets_iter(
             self.mfps.iter().map(|m| m.packet_size() as usize),
-            self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN),
+            self.mfp_align(),
             total_size,
         )
+    }
+
+    fn mfp_align(&self) -> usize {
+        self.mfp_align.unwrap_or(Self::DEFAULT_MFP_ALIGN)
     }
 }
 
 /// Generates the MFP offsets in bytes from the start of the header.
 /// Also stores the total size in the out parameter.
-///
-///
 pub(crate) fn offsets_iter(
     mfp_sizes_bytes: impl ExactSizeIterator<Item = usize>,
     mfp_align: usize,
@@ -357,12 +362,12 @@ mod test {
 
         assert_eq!(mep.magic(), MultiEventPacket::MAGIC);
         assert_eq!(mep.num_mfps(), 3);
-        assert_eq!(mep.packet_size_u32(), 99);
+        assert_eq!(mep.packet_size_u32(), 100);
         assert_eq!(
             mep.mfp_source_ids(),
             &[SourceId(0), SourceId(8247), SourceId(8247)]
         );
-        assert_eq!(mep.mfp_offsets_u32(), &[7, 35, 67]);
+        assert_eq!(mep.mfp_offsets_u32(), &[8, 36, 68]);
         println!("{mep:?}");
         println!("size: {}", size_of_val(mep.data()) / size_of::<u32>());
 

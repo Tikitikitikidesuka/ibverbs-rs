@@ -98,7 +98,14 @@ impl<'a> ZeroCopyMepBuilder<'a, RegisterSizes> {
     /// Length of mfp_size_cache must match the number of MFPs to construct mep for.
     ///
     /// The MFPs inside the constructed MEP will be aligned to `mfp_align` bytes.
+    /// Further, the passed buffer must be aligned to `mfp_align` as well (yet at least u32 aligned).
     pub fn new(buffer: &'a mut [u32], mfp_size_cache: &'a mut [usize], mfp_align: usize) -> Self {
+        assert_eq!(
+            buffer.as_ptr().align_offset(mfp_align),
+            0,
+            "Buffer must be `mfp_aligned` as well"
+        );
+
         let mfp_sizes_bytes = bytemuck::cast_slice_mut(mfp_size_cache);
         mfp_sizes_bytes.fill(None);
 
@@ -142,14 +149,18 @@ impl<'a> ZeroCopyMepBuilder<'a, RegisterSizes> {
             ),
         );
 
+        let size_u32 = total_size / size_of::<u32>();
+        assert!(
+            size_u32 <= self.buffer.len(),
+            "buffer not large enough to fit all registered MFPs"
+        );
+
         write_const_header(
             self.buffer,
             MultiEventPacketConstHeader {
                 magic: MultiEventPacket::MAGIC,
                 num_mfps: num_mfps.try_into().expect("number of mfps fits into u16"),
-                packet_size: (total_size / size_of::<u32>())
-                    .try_into()
-                    .expect("packet size fits into u32"),
+                packet_size: size_u32.try_into().expect("packet size fits into u32"),
             },
         );
 
@@ -252,6 +263,7 @@ impl<'a> ZeroCopyMepBuilder<'a, StoreMfps> {
 mod test {
     use std::ptr::slice_from_raw_parts_mut;
 
+    use aligned_vec::avec_rt;
     use ebutils::{FragmentType, SourceId};
     use multi_fragment_packet::MultiFragmentPacketOwned;
 
@@ -302,5 +314,52 @@ mod test {
                 mfp1.fragment(0).unwrap().payload_bytes()
             );
         }
+    }
+
+    #[test]
+    fn test_aligned() {
+        let alignment = 1 << 8;
+        let mut buffer = avec_rt![[alignment] |0u32; 1 << 20].into_boxed_slice();
+        let mut cache = [0; 2];
+        let mut builder = ZeroCopyMepBuilder::new(&mut buffer, &mut cache, alignment);
+
+        let mfp0 = MultiFragmentPacketOwned::builder()
+            .with_event_id(11)
+            .with_source_id(SourceId::new_odin(0))
+            .with_align_log(2)
+            .with_fragment_version(1)
+            .add_fragments([(FragmentType::ODIN, ebutils::odin::dummy_odin_payload(11))])
+            .build();
+        let mfp1 = MultiFragmentPacketOwned::builder()
+            .with_event_id(11)
+            .with_source_id(SourceId::new(ebutils::SubDetector::UtA, 456))
+            .with_align_log(2)
+            .with_fragment_version(1)
+            .add_fragments([(FragmentType::DAQ, b"hello world!")])
+            .build();
+        builder.register_mfp(1, mfp1.packet_size() as _);
+        builder.register_mfp(0, mfp0.packet_size() as _);
+        let mut builder = builder.start_assembling();
+
+        for s in builder.get_mfp_slots(0..2) {
+            println!("{:?}", s.as_ptr());
+            assert_eq!(s.as_ptr().align_offset(alignment), 0);
+        }
+
+        builder
+            .get_mfp_slot(0)
+            .copy_from_slice(mfp0.raw_packet_data());
+        builder
+            .get_mfp_slot(1)
+            .copy_from_slice(mfp1.raw_packet_data());
+
+        let mep = builder.finish().expect("valid mep");
+
+        assert_eq!(mep.num_mfps(), 2);
+        assert!(mep.get_mfp(0).unwrap().source_id().is_odin());
+        assert_eq!(
+            mep.get_mfp(1).unwrap().fragment(0).unwrap().payload_bytes(),
+            mfp1.fragment(0).unwrap().payload_bytes()
+        );
     }
 }

@@ -14,6 +14,7 @@ thiserror.workspace = true
 tracing.workspace = true
 bytemuck.workspace = true
 memmap2 = { workspace = true, optional = true }
+aligned-vec = "0.6.4"
 
 [features]
 bincode = ["dep:bincode"]
