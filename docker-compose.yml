@@ -1,7 +1,0 @@
-services:
-  rust-dev:
-    platform: linux/amd64
-    image: gitlab-registry.cern.ch/lhcb-online/rusteb:latest
-    command: sleep infinity
-    volumes:
-      - ./:/app

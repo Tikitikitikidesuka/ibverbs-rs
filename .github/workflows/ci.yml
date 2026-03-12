@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 permissions:
   contents: read
@@ -14,43 +14,80 @@ permissions:
 jobs:
   run-jobs:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Cache Rust dependencies and build artifacts
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      # Enable advanced Docker builder
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Build Docker image with persistent cache
       - name: Build Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           load: true
           tags: rusteb-env:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=rusteb
+          cache-to: type=gha,mode=max,scope=rusteb
 
+      # Shared docker run command
       - name: Cargo Check
-        run: docker run --rm -v ${{ github.workspace }}:/app rusteb-env bash -c "cargo check --all-features"
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ~/.cargo:/root/.cargo \
+            -v ${{ github.workspace }}/target:/app/target \
+            rusteb-env \
+            bash -c "cargo check --all-features"
 
       - name: Cargo Clippy
-        run: docker run --rm -v ${{ github.workspace }}:/app rusteb-env bash -c "cargo clippy --all-features --no-deps"
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ~/.cargo:/root/.cargo \
+            -v ${{ github.workspace }}/target:/app/target \
+            rusteb-env \
+            bash -c "cargo clippy --all-features --no-deps -- -D warnings"
 
       - name: Cargo Fmt
-        run: docker run --rm -v ${{ github.workspace }}:/app rusteb-env bash -c "cargo fmt -- --check"
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ~/.cargo:/root/.cargo \
+            -v ${{ github.workspace }}/target:/app/target \
+            rusteb-env \
+            bash -c "cargo fmt -- --check"
 
       - name: Cargo Test
-        run: docker run --rm -v ${{ github.workspace }}:/app rusteb-env bash -c "cargo test --all --all-features"
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ~/.cargo:/root/.cargo \
+            -v ${{ github.workspace }}/target:/app/target \
+            rusteb-env \
+            bash -c "cargo test --workspace --all-features"
 
       - name: Build Docs
         if: github.ref == 'refs/heads/master'
         run: |
-          docker run --rm -v ${{ github.workspace }}:/app rusteb-env bash -c "\
-            cargo doc --workspace --no-deps --all-features && \
-            mkdir -p public && \
-            cp -r target/doc/* public/ && \
-            echo '<meta http-equiv=\"refresh\" content=\"0; url=rusteb\">' > public/index.html && \
-            chown -R $(id -u):$(id -g) public target"
+          docker run --rm \
+            -v ${{ github.workspace }}:/app \
+            -v ~/.cargo:/root/.cargo \
+            -v ${{ github.workspace }}/target:/app/target \
+            rusteb-env \
+            bash -c "
+              cargo doc --workspace --no-deps --all-features &&
+              mkdir -p public &&
+              cp -r target/doc/* public/ &&
+              echo '<meta http-equiv=\"refresh\" content=\"0; url=rusteb\">' > public/index.html
+            "
 
       - name: Upload Pages artifact
         if: github.ref == 'refs/heads/master'
@@ -62,9 +99,11 @@ jobs:
     needs: run-jobs
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
