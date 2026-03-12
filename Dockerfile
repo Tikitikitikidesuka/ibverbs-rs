@@ -13,7 +13,7 @@ RUN dnf install -y glibc-all-langpacks && \
 # Install development tools and dependencies
 RUN dnf update -y && \
     dnf groupinstall -y "Development Tools" && \
-    dnf install -y \
+    dnf install -y --allowerasing \
     curl \
     wget \
     git \
