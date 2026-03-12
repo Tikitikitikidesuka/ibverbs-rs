@@ -3,6 +3,7 @@ name = "infiniband-rs"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
+license.workspace = true
 
 [dependencies]
 ibverbs-sys = "0.3.2"

@@ -3,6 +3,7 @@ name = "multi-event-packet"
 description = "Crate for building and reading MEPs."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 repository.workspace = true
 
 [dependencies]
