@@ -1,4 +1,4 @@
-FROM gitlab-registry.cern.ch/linuxsupport/alma9-base:latest
+FROM almalinux:9
 
 # Set up environment variables
 ENV HOME=/root
@@ -14,26 +14,26 @@ RUN dnf install -y glibc-all-langpacks && \
 RUN dnf update -y && \
     dnf groupinstall -y "Development Tools" && \
     dnf install -y \
-      curl \
-      wget \
-      git \
-      vim \
-      clang \
-      cmake \
-      make \
-      gcc \
-      gcc-c++ \
-      kernel-devel \
-      kernel-headers \
-      pciutils \
-      usbutils \
-      openssl-devel \
-      pkgconf-pkg-config \
-      libnl3-devel \
-      rdma-core-devel \
-      numactl-libs \
-      numactl-devel \
-      && dnf clean all
+    curl \
+    wget \
+    git \
+    vim \
+    clang \
+    cmake \
+    make \
+    gcc \
+    gcc-c++ \
+    kernel-devel \
+    kernel-headers \
+    pciutils \
+    usbutils \
+    openssl-devel \
+    pkgconf-pkg-config \
+    libnl3-devel \
+    rdma-core-devel \
+    numactl-libs \
+    numactl-devel \
+    && dnf clean all
 
 # Install EPEL repository
 RUN dnf install -y epel-release && \
