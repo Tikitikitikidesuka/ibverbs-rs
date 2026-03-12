@@ -3,6 +3,7 @@ name = "multi-fragment-packet"
 description = "Multi Fragment Packet structure for the LHCb Event Builder"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 repository.workspace = true
 
 [dependencies]

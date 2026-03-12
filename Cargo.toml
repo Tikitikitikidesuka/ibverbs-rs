@@ -7,6 +7,7 @@ members = ["crates/*"]
 version = "0.2.0"
 description = "A collection of crates for an LHCb event builder at CERN."
 repository = "https://gitlab.cern.ch/lhcb-online/rusteb"
+license = "MIT OR Apache-2.0"
 edition = "2024"
 
 

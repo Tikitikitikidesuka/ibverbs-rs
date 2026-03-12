@@ -3,6 +3,7 @@ name = "shared-memory-buffer"
 description = "Safe Rust shared memory buffer implementation for interprocess communication for the LHCb Event Builder"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 repository.workspace = true
 
 [dependencies]
