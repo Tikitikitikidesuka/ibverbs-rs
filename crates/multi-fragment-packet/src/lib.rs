@@ -10,6 +10,7 @@ pub mod shared_memory_element;
 pub mod odin_mock;
 
 pub use builder::MultiFragmentPacketBuilder;
+use bytemuck::{Pod, Zeroable};
 use ebutils::fragment::Fragment;
 use ebutils::source_id::SourceId;
 use ebutils::{END_OF_RUN, EventId, Uninstantiatable};
@@ -27,7 +28,7 @@ use thiserror::Error;
 compile_error!("Only little endian supported!");
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 struct MultiFragmentPacketHeader {
     magic: u16,
     fragment_count: u16,
@@ -75,23 +76,25 @@ impl MultiFragmentPacket {
             })?;
         }
 
-        let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
+        let header: &MultiFragmentPacketHeader = bytemuck::from_bytes(&data[..Self::HEADER_SIZE]);
 
         // Check the magic bytes are not corrupt
-        if mfp.magic() != Self::VALID_MAGIC {
+        if header.magic != Self::VALID_MAGIC {
             Err(FromRawBytesError::CorruptedMagic {
-                read_magic: mfp.magic(),
+                read_magic: header.magic,
                 expected_magic: Self::VALID_MAGIC,
             })?
         }
 
-        if mfp.packet_size() as usize > data.len() {
+        if header.packet_size as usize > data.len() {
             Err(FromRawBytesError::NotEnoughDataAvailable {
-                required_data: mfp.packet_size() as usize,
+                required_data: header.packet_size as usize,
                 available_data: data.len(),
             })?;
         }
 
+        //  SAFETY: data slice is large enough
+        let mfp = unsafe { Self::unchecked_ref_from_raw_bytes(data) };
         Ok(mfp)
     }
 

@@ -1,10 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::{
-    fmt::Debug,
-    ops::{Deref, Range},
-    slice,
-};
+use std::{fmt::Debug, ops::Range, slice};
 
 use bytemuck::{AnyBitPattern, NoUninit, cast_slice};
 use multi_fragment_packet::{FromRawBytesError, MultiFragmentPacket};
@@ -227,6 +223,7 @@ impl MultiEventPacket {
             });
         }
 
+        // SAFETY: data is large enough for the size specified in the header.
         Ok(unsafe { Self::unchecked_from_raw_bytes(data) })
     }
 
@@ -260,12 +257,6 @@ impl Debug for MultiEventPacket {
     }
 }
 
-impl Debug for MultiEventPacketOwned {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.deref().fmt(f)
-    }
-}
-
 /// Type of MFP offsets as in the MEP header.
 ///
 /// In units of **u32**!
@@ -280,9 +271,10 @@ pub(crate) fn offsets_size(num_mfps: usize) -> usize {
     num_mfps * size_of::<u32>()
 }
 
-// Header size in bytes
-pub(crate) fn total_header_size(num_mfps: usize) -> usize {
-    size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps)
+/// Header size in bytes, including padding for alignment.
+pub(crate) fn total_header_size(num_mfps: usize, align: usize) -> usize {
+    (size_of::<MultiEventPacketConstHeader>() + src_ids_size(num_mfps) + offsets_size(num_mfps))
+        .next_multiple_of(align)
 }
 
 /// An iterator over (some of) the MFPs inside an MEP.
