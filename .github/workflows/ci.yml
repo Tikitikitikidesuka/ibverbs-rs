@@ -43,7 +43,8 @@ jobs:
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            -v ~/.cargo:/root/.cargo \
+            -e CARGO_HOME=/usr/local/cargo \
+            -v ~/.cargo:/usr/local/cargo \
             -v ${{ github.workspace }}/target:/app/target \
             rusteb-env \
             bash -c "cargo check --all-features"
@@ -53,7 +54,8 @@ jobs:
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            -v ~/.cargo:/root/.cargo \
+            -e CARGO_HOME=/usr/local/cargo \
+            -v ~/.cargo:/usr/local/cargo \
             -v ${{ github.workspace }}/target:/app/target \
             rusteb-env \
             bash -c "cargo clippy --all-features --no-deps -- -D warnings"
@@ -63,7 +65,8 @@ jobs:
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            -v ~/.cargo:/root/.cargo \
+            -e CARGO_HOME=/usr/local/cargo \
+            -v ~/.cargo:/usr/local/cargo \
             -v ${{ github.workspace }}/target:/app/target \
             rusteb-env \
             bash -c "cargo fmt -- --check"
@@ -73,7 +76,8 @@ jobs:
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            -v ~/.cargo:/root/.cargo \
+            -e CARGO_HOME=/usr/local/cargo \
+            -v ~/.cargo:/usr/local/cargo \
             -v ${{ github.workspace }}/target:/app/target \
             rusteb-env \
             bash -c "cargo test --workspace --all-features"
@@ -84,7 +88,8 @@ jobs:
           docker run --rm \
             --user $(id -u):$(id -g) \
             -v ${{ github.workspace }}:/app \
-            -v ~/.cargo:/root/.cargo \
+            -e CARGO_HOME=/usr/local/cargo \
+            -v ~/.cargo:/usr/local/cargo \
             -v ${{ github.workspace }}/target:/app/target \
             rusteb-env \
             bash -c "
