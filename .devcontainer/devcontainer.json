@@ -1,0 +1,6 @@
+{
+  "name": "ibverbs-rs",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  }
+}
