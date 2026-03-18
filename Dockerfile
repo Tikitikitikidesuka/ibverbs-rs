@@ -8,6 +8,7 @@ RUN dnf update -y && \
     git \
     clang \
     make \
+    cmake \
     gcc \
     pkgconf-pkg-config \
     libnl3-devel \
@@ -20,6 +21,7 @@ RUN dnf update -y && \
 ENV RUSTUP_HOME=/opt/rustup
 ENV CARGO_HOME=/opt/cargo
 ENV PATH="/opt/cargo/bin:${PATH}"
+ENV CARGO_TARGET_DIR=/opt/cargo-target
 
 # Install Rust with rustup
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
