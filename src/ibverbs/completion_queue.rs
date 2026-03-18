@@ -13,8 +13,8 @@
 //! # Example: Polling for Completions
 //!
 // //! ```
-// //!  use infiniband_rs::ibverbs::devices::open_device;
-// //!  use infiniband_rs::ibverbs::completion_queue::PollSlot;
+// //!  use ibverbs_rs::ibverbs::devices::open_device;
+// //!  use ibverbs_rs::ibverbs::completion_queue::PollSlot;
 // //!  fn main() -> Result<(), Box<dyn std::error::Error>> {
 // //!     let context = open_device("mlx5_0")?;
 // //!     let cq = context.create_cq(16)?;

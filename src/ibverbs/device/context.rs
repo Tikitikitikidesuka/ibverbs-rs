@@ -27,8 +27,8 @@ use std::sync::Arc;
 /// # Example: The Resource Lifecycle
 ///
 // /// ```no_run
-// /// # use infiniband_rs::ibverbs::devices::open_device;
-// /// # use infiniband_rs::ibverbs::error::IbvResult;
+// /// # use ibverbs_rs::ibverbs::devices::open_device;
+// /// # use ibverbs_rs::ibverbs::error::IbvResult;
 // /// # fn main() -> IbvResult<()> {
 // /// // 1. Open the context
 // /// let context = open_device("mlx5_0")?;

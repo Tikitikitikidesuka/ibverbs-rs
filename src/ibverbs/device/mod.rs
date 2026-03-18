@@ -20,8 +20,8 @@
 //! The easiest way to get started is to open a device directly if you know its name:
 //!
 // //! ```no_run
-// //! use infiniband_rs::ibverbs::devices::open_device;
-// //! use infiniband_rs::ibverbs::error::IbvResult;
+// //! use ibverbs_rs::ibverbs::devices::open_device;
+// //! use ibverbs_rs::ibverbs::error::IbvResult;
 // //!
 // //! fn main() -> IbvResult<()> {
 // //!     let ctx = open_device("mlx5_0")?;
@@ -34,8 +34,8 @@
 //! If you need to inspect devices (e.g., to check GUIDs) before opening:
 //!
 // //! ```no_run
-// //! use infiniband_rs::ibverbs::devices;
-// //! use infiniband_rs::ibverbs::error::IbvResult;
+// //! use ibverbs_rs::ibverbs::devices;
+// //! use ibverbs_rs::ibverbs::error::IbvResult;
 // //!
 // //! fn main() -> IbvResult<()> {
 // //!     // 1. Get the list of available devices

@@ -1,9 +1,9 @@
 use clap::{Parser, ValueEnum};
-use infiniband_rs::ibverbs::open_device;
-use infiniband_rs::network::Node;
-use infiniband_rs::network::barrier::BarrierAlgorithm;
-use infiniband_rs::network::config::RawNetworkConfig;
-use infiniband_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
+use ibverbs_rs::ibverbs::open_device;
+use ibverbs_rs::network::Node;
+use ibverbs_rs::network::barrier::BarrierAlgorithm;
+use ibverbs_rs::network::config::RawNetworkConfig;
+use ibverbs_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
 use rand::Rng;
 use std::fs;
 use std::time::{Duration, Instant};

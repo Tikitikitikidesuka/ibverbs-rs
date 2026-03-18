@@ -18,7 +18,7 @@ impl Channel {
     /// ## Protection example
     ///
     // /// ```compile_fail
-    // /// # use infiniband_rs::connection::connection::IbvConnection;
+    // /// # use ibverbs_rs::connection::connection::IbvConnection;
     // /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
     // /// let mut mem = [0u8; 1024];
     // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
@@ -33,7 +33,7 @@ impl Channel {
     /// ## Safety violation example
     ///
     // /// ```no_run
-    // /// # use infiniband_rs::connection::connection::Connection;
+    // /// # use ibverbs_rs::connection::connection::Connection;
     // /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     // /// let mut mem = [0u8; 1024];
     // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
@@ -69,7 +69,7 @@ impl Channel {
     /// ## Protection example
     ///
     // /// ```compile_fail
-    // /// # use infiniband_rs::connection::connection::IbvConnection;
+    // /// # use ibverbs_rs::connection::connection::IbvConnection;
     // /// # let mut conn: IbvConnection = unsafe { std::mem::zeroed() };
     // /// let mut mem = [0u8; 1024];
     // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();
@@ -83,7 +83,7 @@ impl Channel {
     /// ## Safety violation example
     ///
     // /// ```no_run
-    // /// # use infiniband_rs::connection::connection::Connection;
+    // /// # use ibverbs_rs::connection::connection::Connection;
     // /// # let mut conn: Connection = unsafe { std::mem::zeroed() };
     // /// let mut mem = [0u8; 1024];
     // /// let mr = conn.register_mr("foo_mr", mem.as_mut_ptr(), mem.len()).unwrap();

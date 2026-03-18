@@ -1,7 +1,7 @@
-use infiniband_rs::channel::polling_scope::ScopeError;
-use infiniband_rs::channel::{Channel, TransportError};
-use infiniband_rs::ibverbs;
-use infiniband_rs::ibverbs::work::{ReceiveWorkRequest, SendWorkRequest};
+use ibverbs_rs::channel::polling_scope::ScopeError;
+use ibverbs_rs::channel::{Channel, TransportError};
+use ibverbs_rs::ibverbs;
+use ibverbs_rs::ibverbs::work::{ReceiveWorkRequest, SendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 

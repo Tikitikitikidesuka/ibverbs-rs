@@ -1,8 +1,8 @@
-use infiniband_rs::channel::TransportError;
-use infiniband_rs::channel::polling_scope::ScopeError;
-use infiniband_rs::ibverbs;
-use infiniband_rs::multi_channel::MultiChannel;
-use infiniband_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
+use ibverbs_rs::channel::TransportError;
+use ibverbs_rs::channel::polling_scope::ScopeError;
+use ibverbs_rs::ibverbs;
+use ibverbs_rs::multi_channel::MultiChannel;
+use ibverbs_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 

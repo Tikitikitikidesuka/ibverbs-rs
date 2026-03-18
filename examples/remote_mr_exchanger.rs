@@ -1,7 +1,7 @@
-use infiniband_rs::channel::Channel;
-use infiniband_rs::channel::remote_mr_exchanger::RemoteMrExchanger;
-use infiniband_rs::ibverbs;
-use infiniband_rs::ibverbs::work::WriteWorkRequest;
+use ibverbs_rs::channel::Channel;
+use ibverbs_rs::channel::remote_mr_exchanger::RemoteMrExchanger;
+use ibverbs_rs::ibverbs;
+use ibverbs_rs::ibverbs::work::WriteWorkRequest;
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::time::Duration;
