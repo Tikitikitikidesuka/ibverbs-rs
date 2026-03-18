@@ -32,5 +32,12 @@ RUN rustup install stable && \
 # Set working directory to the project dir
 WORKDIR /app
 
+# Pre-compile dependencies
+COPY Cargo.toml Cargo.lock build.rs ./
+RUN mkdir src && echo "" > src/lib.rs && \
+    cargo build --lib --all-features 2>/dev/null; \
+    cargo build --lib --all-features --release 2>/dev/null; \
+    rm -rf src
+
 # Default command
 CMD ["/bin/bash"]
