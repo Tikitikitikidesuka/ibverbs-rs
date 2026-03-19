@@ -1,6 +1,12 @@
 {
   "name": "ibverbs-rs",
   "build": {
-    "dockerfile": "../Dockerfile"
+    "dockerfile": "../Dockerfile",
+    "context": ".."
+  },
+  "remoteEnv": {
+    "RUSTUP_HOME": "/opt/rustup",
+    "CARGO_HOME": "/opt/cargo",
+    "PATH": "/opt/cargo/bin:${containerEnv:PATH}"
   }
 }
