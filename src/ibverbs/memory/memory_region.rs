@@ -166,6 +166,8 @@ impl MemoryRegion {
         length: usize,
         access_flags: AccessFlags,
     ) -> IbvResult<MemoryRegion> {
+        // ibv_access_flags values are small bitmasks (max 31), always fit in i32
+        #[allow(clippy::cast_possible_wrap)]
         let mr = unsafe {
             ibv_reg_mr(
                 pd.inner.pd,
@@ -201,6 +203,8 @@ impl MemoryRegion {
     /// 1.  It does not allow Remote access (no aliasing risk).
     /// 2.  To use this MR locally (Send/Recv/Write-Source), you must create an SGE.
     ///     The SGE creation requires a valid reference to the memory, proving it is still alive.
+    // address is passed to libibverbs for registration, not locally dereferenced; hardware enforces validity
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn register_local_mr(
         pd: &ProtectionDomain,
         address: *mut u8,
@@ -275,6 +279,8 @@ impl MemoryRegion {
         iova: u64,
         access_flags: AccessFlags,
     ) -> IbvResult<MemoryRegion> {
+        // ibv_access_flags values are small bitmasks (max 31), always fit in i32
+        #[allow(clippy::cast_possible_wrap)]
         let mr = unsafe {
             ibv_reg_dmabuf_mr(
                 pd.inner.pd,
@@ -372,8 +378,8 @@ impl MemoryRegion {
     }
 
     /// Returns the starting virtual address of the registered memory buffer.
-    pub fn address(&self) -> u64 {
-        unsafe { (*self.mr).addr as u64 }
+    pub fn address(&self) -> usize {
+        unsafe { (*self.mr).addr as usize }
     }
 
     /// Returns the length of the registered memory region in bytes.
@@ -399,7 +405,7 @@ impl MemoryRegion {
     /// If the peer attempts an operation (e.g., RDMA Write) that was not enabled during
     /// registration, their operation will fail with a **Remote Access Error**.
     pub fn remote(&self) -> RemoteMemoryRegion {
-        RemoteMemoryRegion::new(self.address(), self.length(), self.rkey())
+        RemoteMemoryRegion::new(self.address() as u64, self.length(), self.rkey())
     }
 }
 
@@ -509,7 +515,7 @@ impl MemoryRegion {
 
     /// Checks if the given address range is fully contained within this MR.
     pub fn encloses(&self, address: *const u8, length: usize) -> bool {
-        let mr_start = self.address() as usize;
+        let mr_start = self.address();
         let mr_end = mr_start + self.length();
         let data_start = address as usize;
         let data_end = data_start + length;

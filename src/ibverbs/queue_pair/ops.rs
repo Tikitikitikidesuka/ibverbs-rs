@@ -27,11 +27,13 @@ impl QueuePair {
             ),
         };
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        // length validated at WorkRequest construction
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
             sg_list: wr.gather_elements.as_ref().as_ptr() as *mut ibv_sge,
-            num_sge: wr.gather_elements.as_ref().len() as i32, // todo: fix possible error on overflow
+            num_sge: wr.gather_elements.as_ref().len() as i32,
             opcode,
             send_flags: ibv_send_flags::IBV_SEND_SIGNALED.0,
             wr: Default::default(),
@@ -56,11 +58,13 @@ impl QueuePair {
     ///
     /// Accessing these buffers before completion results in a data race (Undefined Behavior).
     pub unsafe fn post_receive(&mut self, wr: ReceiveWorkRequest, wr_id: u64) -> IbvResult<()> {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        // length validated at WorkRequest construction
         let mut wr = ibv_recv_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
             sg_list: wr.scatter_elements.as_mut().as_mut_ptr() as *mut ibv_sge,
-            num_sge: wr.scatter_elements.as_mut().len() as i32, // todo: fix possible error on overflow
+            num_sge: wr.scatter_elements.as_mut().len() as i32,
         };
 
         unsafe {
@@ -90,6 +94,8 @@ impl QueuePair {
             ),
         };
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        // length validated at WorkRequest construction
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,
@@ -122,6 +128,8 @@ impl QueuePair {
     /// The buffers referenced by the `scatter_elements` must remain **valid** and **exclusive**
     /// (mutable) until the work is finished by the hardware.
     pub unsafe fn post_read(&mut self, wr: ReadWorkRequest, wr_id: u64) -> IbvResult<()> {
+        // length validated at WorkRequest construction
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
         let mut wr = ibv_send_wr {
             wr_id,
             next: ptr::null::<ibv_send_wr>() as *mut _,

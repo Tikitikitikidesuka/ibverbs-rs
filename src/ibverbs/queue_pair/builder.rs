@@ -156,6 +156,8 @@ impl PreparedQueuePair {
     ///
     /// *   [`IbvError::InvalidInput`]: Invalid state transition parameters (e.g., invalid port or access flags).
     /// *   [`IbvError::Resource`]: Hardware resource exhaustion during state transition.
+    // ibv_qp_attr_mask flag ORs are small bitmasks, well within i32 range
+    #[allow(clippy::cast_possible_wrap)]
     pub fn handshake(self, remote: QueuePairEndpoint) -> IbvResult<QueuePair> {
         // Initialize queue pair
         let mut attr = ibv_qp_attr {

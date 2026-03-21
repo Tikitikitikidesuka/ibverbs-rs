@@ -109,6 +109,8 @@ impl MinRnrTimer {
     }
 
     /// Finds the smallest RNR timer code that represents a duration greater than `timeout`.
+    // binary_search on a 31-element table yields idx ≤ 30, so idx+1 ≤ 31, fits in u8
+    #[allow(clippy::cast_possible_truncation)]
     pub fn min_duration_greater_than(timeout: Duration) -> Self {
         MinRnrTimer(match Self::DURATION_TABLE.binary_search(&timeout) {
             Ok(idx) => (idx + 1) as u8, // Exact match found
@@ -220,6 +222,8 @@ impl AckTimeout {
     }
 
     /// Calculates the smallest timeout code that covers the given `timeout` duration.
+    // code is checked to be in 1..31 before the cast
+    #[allow(clippy::cast_possible_truncation)]
     pub const fn min_duration_greater_than(timeout: Duration) -> Option<Self> {
         let code = (timeout.as_micros() / 4096).next_power_of_two().ilog2();
         if code > 0 && code < 32 {

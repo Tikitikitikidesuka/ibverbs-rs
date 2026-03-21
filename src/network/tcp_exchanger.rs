@@ -23,6 +23,8 @@ pub enum ExchangeError {
     EncodeError(#[from] bincode::error::EncodeError),
     #[error("Error during IO operation ({0})")]
     IoError(#[from] std::io::Error),
+    #[error("Encoded message size {0} exceeds u32::MAX and cannot be framed")]
+    MessageTooLarge(usize),
     #[error("")]
     Timeout,
 }
@@ -298,8 +300,9 @@ impl Exchanger {
         stream: &mut (impl AsyncWriteExt + Unpin),
     ) -> Result<(), ExchangeError> {
         let encoded = encode_to_vec(ExchangeMessage { rank, data }, Self::bincode_config())?;
+        let len = u32::try_from(encoded.len()).map_err(|_| MessageTooLarge(encoded.len()))?;
         stream
-            .write_all((encoded.len() as u32).to_be_bytes().as_ref())
+            .write_all(len.to_be_bytes().as_ref())
             .await?;
         stream.write_all(encoded.as_slice()).await?;
         Ok(())

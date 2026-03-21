@@ -127,6 +127,13 @@ impl<'a> GatherElement<'a> {
     /// This method is safe to call from a Rust memory-safety perspective.
     /// If the slice is outside the MR, the hardware will detect this
     /// during RDMA operations and fail with a **Local Protection Error**.
+    ///
+    /// # Warning
+    ///
+    /// If `data.len()` exceeds `u32::MAX`, the length stored in the SGE will **silently wrap**.
+    /// Only the wrapped (truncated) number of bytes will be posted to the hardware.
+    /// Use [`new_checked`](Self::new_checked) to catch this at the cost of a bounds check.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn new_unchecked(mr: &'a MemoryRegion, data: &'a [u8]) -> Self {
         Self {
             sge: ibv_sge {
@@ -189,6 +196,13 @@ impl<'a> ScatterElement<'a> {
     /// This method is safe to call from a Rust memory-safety perspective.
     /// If the slice is outside the MR, the hardware will detect this
     /// during RDMA operations and fail with a **Local Protection Error**.
+    ///
+    /// # Warning
+    ///
+    /// If `data.len()` exceeds `u32::MAX`, the length stored in the SGE will **silently wrap**.
+    /// Only the wrapped (truncated) number of bytes will be posted to the hardware.
+    /// Use [`new_checked`](Self::new_checked) to catch this at the cost of a bounds check.
+    #[allow(clippy::cast_possible_truncation)]
     pub fn new_unchecked(mr: &'a MemoryRegion, data: &'a mut [u8]) -> Self {
         Self {
             sge: ibv_sge {

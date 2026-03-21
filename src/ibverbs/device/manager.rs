@@ -49,6 +49,8 @@ pub fn list_devices() -> IbvResult<DeviceList> {
     }
 
     log::debug!("DeviceList created");
+    // ibv_get_device_list guarantees a non-negative count when the pointer is non-null
+    #[allow(clippy::cast_sign_loss)]
     Ok(DeviceList {
         devices_ptr,
         num_devices: num_devices as usize,

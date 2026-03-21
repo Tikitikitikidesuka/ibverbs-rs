@@ -12,7 +12,6 @@ use thiserror::Error;
 pub mod builder;
 pub mod pending_work;
 pub mod polling_scope;
-pub mod remote_mr_exchanger;
 
 mod cached_completion_queue;
 mod ops;

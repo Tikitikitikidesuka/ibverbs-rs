@@ -91,7 +91,7 @@ impl CompletionQueue {
             inner: Arc::new(CompletionQueueInner {
                 context: context.clone(),
                 cq,
-                min_capacity: min_cq_entries as u32,
+                min_capacity,
             }),
         })
     }
@@ -106,6 +106,8 @@ impl CompletionQueue {
     /// *   `completions`: A mutable slice of [`PollSlot`]s. This buffer serves as the destination
     ///     where the NIC/driver will write the completion data. By requiring the caller to provide
     ///     this buffer, the library avoids internal heap allocations during the hot polling loop.
+    ///     If the buffer length exceeds `i32::MAX`, only `i32::MAX` entries will be polled and
+    ///     the remaining slots will be unused; a warning is logged in that case.
     ///
     /// # Returns
     ///
@@ -115,12 +117,21 @@ impl CompletionQueue {
         &self,
         completions: &'poll_buff mut [PollSlot],
     ) -> IbvResult<PolledCompletions<'poll_buff>> {
+        let ne = i32::try_from(completions.len()).unwrap_or_else(|_| {
+            log::warn!(
+                "poll buffer length {} exceeds i32::MAX; only {} entries will be polled",
+                completions.len(),
+                i32::MAX
+            );
+            i32::MAX
+        });
+
         let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
         let ops = &mut unsafe { &mut *ctx }.ops;
         let num_polled = unsafe {
             ops.poll_cq.as_mut().unwrap()(
                 self.inner.cq,
-                completions.len() as i32,
+                ne,
                 completions.as_mut_ptr() as *mut ibv_wc,
             )
         };
@@ -131,6 +142,8 @@ impl CompletionQueue {
                 "Failed to poll completion queue",
             ))
         } else {
+            // num_polled is non-negative after the check above
+            #[allow(clippy::cast_sign_loss)]
             Ok(PolledCompletions {
                 wcs: &mut completions[0..num_polled as usize],
             })

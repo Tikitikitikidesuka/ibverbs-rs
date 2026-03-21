@@ -67,6 +67,11 @@ pub struct ReadWorkRequest<'wr, 'data> {
 impl<'wr, 'data> SendWorkRequest<'wr, 'data> {
     /// Creates a new Send request using the provided list of gather elements.
     pub fn new(gather_elements: &'wr [GatherElement<'data>]) -> Self {
+        assert!(
+            i32::try_from(gather_elements.len()).is_ok(),
+            "SGE list length {} exceeds i32::MAX",
+            gather_elements.len()
+        );
         Self {
             gather_elements,
             imm_data: None,
@@ -91,6 +96,11 @@ impl<'wr, 'data> SendWorkRequest<'wr, 'data> {
 impl<'wr, 'data> ReceiveWorkRequest<'wr, 'data> {
     /// Creates a new Receive request using the provided list of scatter elements.
     pub fn new(scatter_elements: &'wr mut [ScatterElement<'data>]) -> Self {
+        assert!(
+            i32::try_from(scatter_elements.len()).is_ok(),
+            "SGE list length {} exceeds i32::MAX",
+            scatter_elements.len()
+        );
         Self { scatter_elements }
     }
 
@@ -111,6 +121,11 @@ impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
         gather_elements: &'wr [GatherElement<'data>],
         remote_slice: RemoteMemoryRegion,
     ) -> Self {
+        assert!(
+            i32::try_from(gather_elements.len()).is_ok(),
+            "SGE list length {} exceeds i32::MAX",
+            gather_elements.len()
+        );
         Self {
             gather_elements,
             remote_mr: remote_slice,
@@ -137,6 +152,11 @@ impl<'wr, 'data> ReadWorkRequest<'wr, 'data> {
         scatter_elements: &'wr mut [ScatterElement<'data>],
         remote_mr: RemoteMemoryRegion,
     ) -> Self {
+        assert!(
+            i32::try_from(scatter_elements.len()).is_ok(),
+            "SGE list length {} exceeds i32::MAX",
+            scatter_elements.len()
+        );
         Self {
             scatter_elements,
             remote_mr,
