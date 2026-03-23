@@ -68,6 +68,12 @@ impl Node {
     }
 }
 
+/// A [`Node`] that has been configured but not yet connected to its peers.
+///
+/// Created by [`Node::builder`]. Call [`endpoint`](Self::endpoint) to obtain the local
+/// connection information, exchange endpoints with all peers, then call
+/// [`gather_endpoints`](Self::gather_endpoints) followed by [`handshake`](Self::handshake)
+/// to finish the connections.
 pub struct PreparedNode {
     rank: usize,
     world_size: usize,
@@ -75,21 +81,27 @@ pub struct PreparedNode {
     barrier: PreparedBarrier,
 }
 
+/// The per-peer endpoint information exchanged during setup, containing both
+/// the queue pair endpoint and the barrier memory region handle.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct NetworkChannelEndpoint {
     pub(crate) single_channel_endpoint: QueuePairEndpoint,
     pub(crate) barrier_mr_remote: PeerRemoteMemoryRegion,
 }
 
+/// This node's endpoint information, ready to be sent to all peers.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LocalEndpoint {
     rank: usize,
     endpoints: Box<[NetworkChannelEndpoint]>,
 }
 
+/// Validated collection of remote endpoints, one per peer. Produced by
+/// [`PreparedNode::gather_endpoints`].
 pub struct RemoteEndpoints(Box<[NetworkChannelEndpoint]>);
 
 impl PreparedNode {
+    /// Returns this node's local endpoint information to be exchanged with all peers.
     pub fn endpoint(&self) -> LocalEndpoint {
         LocalEndpoint {
             rank: self.rank,
@@ -105,6 +117,10 @@ impl PreparedNode {
         }
     }
 
+    /// Collects and validates endpoints received from all peers.
+    ///
+    /// Each peer's [`LocalEndpoint`] must appear exactly once. Returns an error if
+    /// any rank is out of bounds, duplicated, or missing.
     pub fn gather_endpoints(
         &self,
         endpoints: impl IntoIterator<Item = LocalEndpoint>,
@@ -164,6 +180,7 @@ impl PreparedNode {
         Ok(RemoteEndpoints(in_endpoints.into_boxed_slice()))
     }
 
+    /// Connects all channels and the barrier, returning a ready-to-use [`Node`].
     pub fn handshake(self, endpoints: RemoteEndpoints) -> IbvResult<Node> {
         let multi_channel = self
             .multi_channel
