@@ -25,7 +25,7 @@ use std::sync::Arc;
 /// ```no_run
 /// # use ibverbs_rs::ibverbs;
 /// let devices = ibverbs::list_devices()?;
-/// let context = devices[0].open()?;
+/// let context = devices.get(0).unwrap().open()?;
 /// let pd = context.allocate_pd()?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
