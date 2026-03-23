@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 /// Unlike local operations which support Scatter/Gather (stitching fragmented memory together),
 /// **remote operations are strictly contiguous**.
 ///
-/// *   **Targeting**: You specify a single starting address and a total length.
-/// *   **Behavior**: The RDMA hardware reads or writes a continuous stream of bytes starting
-///     at that virtual address.
+/// * **Targeting** — You specify a single starting address and a total length.
+/// * **Behavior** — The RDMA hardware reads or writes a continuous stream of bytes starting
+///   at that virtual address.
 ///
 /// If you need to write to multiple non-contiguous buffers on a remote peer, you must issue
 /// multiple distinct RDMA Write operations.
@@ -22,12 +22,12 @@ use serde::{Deserialize, Serialize};
 /// As discussed in the [memory module](crate::ibverbs::memory), remote memory safety cannot
 /// be enforced by the Rust compiler.
 ///
-/// *   **Local Safety**: **Safe**. Even if this handle points to invalid memory, issuing an
-///     operation using it will only result in an error (or success), but will never corrupt
-///     *local* process memory.
-/// *   **Remote Safety**: **Unsafe**. If you write to a `RemoteMemoryRegion` that has been
-///     deallocated on the remote peer, the remote NIC will unknowingly overwrite that memory.
-///     **This causes Undefined Behavior on the remote peer.**
+/// * **Local Safety** — **Safe**. Even if this handle points to invalid memory, issuing an
+///   operation using it will only result in an error (or success), but will never corrupt
+///   *local* process memory.
+/// * **Remote Safety** — **Unsafe**. If you write to a `RemoteMemoryRegion` that has been
+///   deallocated on the remote peer, the remote NIC will unknowingly overwrite that memory.
+///   **This causes Undefined Behavior on the remote peer.**
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub struct RemoteMemoryRegion {
     addr: u64,
@@ -69,8 +69,8 @@ impl RemoteMemoryRegion {
     ///
     /// # Returns
     ///
-    /// *   `Some(RemoteMemoryRegion)`: If `offset <= self.length`. The new length is `self.length - offset`.
-    /// *   `None`: If `offset > self.length`.
+    /// * `Some(RemoteMemoryRegion)` — If `offset <= self.length`. The new length is `self.length - offset`.
+    /// * `None` — If `offset > self.length`.
     pub fn sub_region(&self, offset: usize) -> Option<RemoteMemoryRegion> {
         if offset > self.length {
             return None;

@@ -32,18 +32,18 @@
 //!
 //! Both communicating nodes actively participate by posting Work Requests.
 //!
-//! *   **Send**: The sender uses [`GatherElement`]s to specify local memory to read from (`&[u8]`)
-//! *   **Receive**: The receiver uses [`ScatterElement`]s to specify local memory to write into (`&mut [u8]`)
-//! *   **Safety**: Guaranteed by Rust's borrow checker. SGE creation requires valid references,
-//!     ensuring memory remains alive and respects aliasing rules for the operation's duration.
+//! * **Send** — The sender uses [`GatherElement`]s to specify local memory to read from (`&[u8]`).
+//! * **Receive** — The receiver uses [`ScatterElement`]s to specify local memory to write into (`&mut [u8]`).
+//! * **Safety** — Guaranteed by Rust's borrow checker. SGE creation requires valid references,
+//!   ensuring memory remains alive and respects aliasing rules for the operation's duration.
 //!
 //! ## One-Sided Operations (RDMA Read/Write)
 //!
 //! Only one node actively initiates the operation; the peer's memory is accessed without its involvement.
 //!
-//! *   **Active Side (Initiator)**: Safe. Uses local SGEs with the same guarantees as two-sided operations.
-//! *   **Passive Side (Target)**: **Unsafe**. The target doesn't post Work Requests, it simply registers
-//!     memory with remote access permissions and waits. This breaks safety guarantees:
+//! * **Active Side (Initiator)** — Safe. Uses local SGEs with the same guarantees as two-sided operations.
+//! * **Passive Side (Target)** — **Unsafe**. The target doesn't post Work Requests, it simply registers
+//!   memory with remote access permissions and waits. This breaks safety guarantees:
 //!     - **No lifetime enforcement**: Remote peers can access memory that may have been deallocated
 //!     - **Aliasing violations**: Remote writes can occur at any time, violating Rust's borrowing rules
 //!
@@ -55,9 +55,9 @@
 //! ## Registration vs. Usage
 //!
 //! **Registration** (creating a [`MemoryRegion`]) does not require owning the buffer. This allows:
-//! *   Registering the same buffer in multiple [`ProtectionDomain`]s.
-//! *   Registering memory owned by other structures
-//! *   Flexible memory management patterns
+//! * Registering the same buffer in multiple [`ProtectionDomain`]s.
+//! * Registering memory owned by other structures.
+//! * Flexible memory management patterns.
 //!
 //! **Usage** (creating SGEs and posting Work Requests) is where safety is enforced:
 //! *   [`GatherElement::new`] requires `&[u8]` → proves data is alive and immutable
@@ -70,19 +70,19 @@
 //!
 //! ### Safe Registration
 //!
-//! *   [`MemoryRegion::register_local_mr`]: **Safe**. Sets only local write access.
-//!     - Allows: Send, Receive, and acting as initiator in RDMA Read/Write
-//!     - Safety: All operations require SGE creation, enforcing Rust's borrowing rules
+//! * [`MemoryRegion::register_local_mr`] — **Safe**. Sets only local write access.
+//!   - Allows: Send, Receive, and acting as initiator in RDMA Read/Write.
+//!   - Safety: All operations require SGE creation, enforcing Rust's borrowing rules.
 //!
 //! ### Unsafe Registration
 //!
-//! *   [`MemoryRegion::register_shared_mr`]: **Unsafe**. Adds remote read and remote write access.
-//!     - Allows: Being the target of remote RDMA operations
-//!     - Risk: Remote peers can access memory at any time, breaking aliasing guarantees
-//!     - Responsibility: You must manually ensure memory stays alive and is not aliased
-//!       locally while remote operations are executed
+//! * [`MemoryRegion::register_shared_mr`] — **Unsafe**. Adds remote read and remote write access.
+//!   - Allows: Being the target of remote RDMA operations.
+//!   - Risk: Remote peers can access memory at any time, breaking aliasing guarantees.
+//!   - Responsibility: You must manually ensure memory stays alive and is not aliased
+//!     locally while remote operations are executed.
 //!
-//! *   [`MemoryRegion::register_mr_with_access`]: **Unsafe**. Full manual control.
+//! * [`MemoryRegion::register_mr_with_access`] — **Unsafe**. Full manual control.
 //!
 //! # Data Layout: Scatter and Gather
 //!
@@ -155,14 +155,14 @@
 //!
 //! In local operations, we enforce safety by tying buffer lifetimes to SGEs. **This is impossible
 //! for remote memory** because:
-//! *   The memory resides on a different machine
-//! *   No local knowledge of remote buffer lifecycle exists
-//! *   No mechanism to verify remote memory validity
+//! * The memory resides on a different machine.
+//! * No local knowledge of remote buffer lifecycle exists.
+//! * No mechanism to verify remote memory validity.
 //!
 //! ## Safety Boundaries
 //!
-//! *   **Local Safety**: Safe. Invalid remote addresses cause operation failures, not local memory corruption
-//! *   **Remote Safety**: Unsafe. Writing to deallocated remote memory causes use-after-free on the remote peer
+//! * **Local Safety** — Safe. Invalid remote addresses cause operation failures, not local memory corruption.
+//! * **Remote Safety** — Unsafe. Writing to deallocated remote memory causes use-after-free on the remote peer.
 //!
 //! ## Responsibility Model
 //!
@@ -175,10 +175,10 @@
 //!
 //! Helper macros for working with structured remote data:
 //!
-//! *   [`remote_array_field!`]: Access N-th element of remote array
-//! *   [`remote_struct_field!`]: Access specific field of remote struct
-//! *   [`remote_struct_array_field!`]: Access field within array element
-//! *   `*_unchecked` variants: Skip client-side bounds checking
+//! * [`remote_array_field!`] — Access N-th element of remote array.
+//! * [`remote_struct_field!`] — Access specific field of remote struct.
+//! * [`remote_struct_array_field!`] — Access field within array element.
+//! * `*_unchecked` variants — Skip client-side bounds checking.
 
 mod memory_region;
 mod remote_memory_region;

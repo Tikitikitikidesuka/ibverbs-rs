@@ -14,17 +14,17 @@ use thiserror::Error;
 /// # Usage
 ///
 /// Use this for operations where the local node sends data:
-/// *   **Send Requests**: The payload to send.
-/// *   **RDMA Write**: The local source buffer.
+/// * **Send Requests** — The payload to send.
+/// * **RDMA Write** — The local source buffer.
 ///
 /// # Safety and Lifetimes
 ///
 /// This struct enforces Rust's borrowing rules at the hardware level:
 ///
-/// *   **Immutable Access**: It holds a `&'a [u8]` to the data, allowing shared access but preventing mutation
-///     while the operation is pending.
-/// *   **Liveness**: It holds a reference to the [`MemoryRegion`], ensuring the registration
-///     remains valid.
+/// * **Immutable Access** — It holds a `&'a [u8]` to the data, allowing shared access but preventing mutation
+///   while the operation is pending.
+/// * **Liveness** — It holds a reference to the [`MemoryRegion`], ensuring the registration
+///   remains valid.
 ///
 /// See the [memory module](crate::ibverbs::memory) for a detailed explanation of the safety architecture.
 #[derive(Copy, Clone, Debug)]
@@ -47,17 +47,17 @@ pub struct GatherElement<'a> {
 /// # Usage
 ///
 /// Use this for operations where the local node receives data:
-/// *   **Receive Requests**: The buffer to fill with incoming data.
-/// *   **RDMA Read**: The local destination buffer.
+/// * **Receive Requests** — The buffer to fill with incoming data.
+/// * **RDMA Read** — The local destination buffer.
 ///
 /// # Safety and Lifetimes
 ///
 /// This struct enforces Rust's borrowing rules at the hardware level:
 ///
-/// *   **Exclusive Access**: It holds a `&'a mut [u8]` to the data, ensuring no other part of the program
-///     can read or write this memory while the NIC is writing to it.
-/// *   **Liveness**: It holds a reference to the [`MemoryRegion`], ensuring the registration
-///     remains valid.
+/// * **Exclusive Access** — It holds a `&'a mut [u8]` to the data, ensuring no other part of the program
+///   can read or write this memory while the NIC is writing to it.
+/// * **Liveness** — It holds a reference to the [`MemoryRegion`], ensuring the registration
+///   remains valid.
 ///
 /// See the [memory module](crate::ibverbs::memory) for a detailed explanation of the safety architecture.
 #[derive(Debug)]
@@ -148,7 +148,7 @@ impl<'a> GatherElement<'a> {
 }
 
 impl<'a> ScatterElement<'a> {
-    /// Creates a new gather element.
+    /// Creates a new scatter element.
     ///
     /// In debug builds, this performs additional validation before constructing the element. In
     /// optimized/release builds, these validations are not executed by default because they are

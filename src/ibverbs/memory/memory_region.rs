@@ -1,69 +1,3 @@
-/*
-//! My Rant on Memory Region safety:
-//!
-//! There are two types of operations in RDMA:
-//! - Multiparticipant: Both nodes involved in the communication have to participate in the exchange.
-//!     These are send and receive operations. The sender must send some regions of memory and the
-//!     receiver must receive some regions of memory. The length of the added regions of memory and
-//!     that of the received ones must match.
-//! - Monoparticipant: Only one node is involved in the communication. That is write and read operations.
-//!     The participant decides which local memory he is going to write into which remote region (for writes);
-//!     Or which remote region he is going to read into which local memory (for reads).
-//!
-//! Multiparticpant operations guarantee some protocol invariants which the monoparticpant operatinos cannot
-//! due to a lack of information.
-//! When a send is issued, the only information required is local. That is, the node selects which local memory
-//! region is going to be sent, but does not need to know anything about the remote peer's memory configuration.
-//! Therefore, all the information to check whether the memory involved in the operation respects aliasing rules
-//! and is alive. The same happens with a receive operation.
-//!
-//! How is memory registration safe in regards to multiparticipant operations?
-//! The main problem with memory regions is ensuring the memory they reference is valid as long
-//! as the memory region is. That is, that a memory region exists implies the buffer backing it up
-//! also does.
-//!
-//! The simplest way of keeping this invariant is making a memory region own its memory.
-//! But this is a very inflexible solution. A same buffer might be necessary to register into multiple
-//! protection domains; or it might be owned by some other structure.
-//!
-//! Another solution, the one proposed having only multiparticipant operations in mind, is tying
-//! the memory to the memory region as long as it is used. Whenever a send or receive operation is to
-//! be issued, the registered memory region and its memory have to be tied in a structure that lives
-//! for as long as the work request, that is, from when the operation is issued to when its polled to completion.
-//! This solution ensures that when you issue a send, for example, the memory of the buffer involved in that send
-//! remains allocated and valid until the send is finished.
-//!
-//! With this solution, registering a piece of memory into a memory region and then deallocating that memory
-//! is still allowed, but what is not allowed is issuing an rdma operation that uses that memory region
-//! and its memory locally (send /recv). This is safe because the NIC cannot be ordered to access
-//! a memory region whose buffer has been deallocated.
-//!
-//! This measure however only works with multiparticipant operations. Because no information of the
-//! liveliness of a remote memory region is necessary. On a write or read operation, remote memory regions
-//! are involved and the lifetime of their backing buffer cannot be tied to the remote mr because that information
-//! is not available locally.
-//!
-//! The measure can be applied partially to the local part of the operation, that is, when issuing a write operation,
-//! the local memory region from which to copy the data can be tied to its local buffer, ensuring its still alive.
-//! But the remote memory region could be pointing to a buffer that has been deallocated in the remote peer.
-//! The same happens with read operations for the local memory region which the data will be copied into.
-//!
-//! So how is memory region registration safe?
-//! As long as a memory region is registered with only local write permissions, it only allows multiparticipant
-//! operations on it and therefore, all the safety prommised for them works while the unsafety of the monoparticpant
-//! operations is dissallowed. This makes the registration of this kind of memory regino completely safe.
-//!
-//! For other kinds of access parameters, safety cannot be guaranteed due to the monoparticipant unsafetyness
-//! being allowed.
-//!
-//! A secondary problem with memory regions is aliasing rules. These are already solved with the solution proposed above
-//! for multiparticipant operations. Since a slice of the memory has to be tied to the memory regino before an operatino is issued
-//! and is tied until complete, rust aliasing rules are guaranteed.
-//! However, when a remote memory region is registered with remote write permissions, the
-//! memory might change value at any point by a remote write operation. If there exists for example a reference to it
-//! locally, its aliasing guarantees will be broken.
-*/
-
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::memory::{
@@ -87,9 +21,9 @@ use std::io;
 /// # Ownership Model
 ///
 /// `MemoryRegion` does **not** own the underlying buffer. This design allows:
-/// *   Registering the same buffer in multiple Protection Domains
-/// *   Registering memory owned by other structures
-/// *   Flexible memory management strategies
+/// * Registering the same buffer in multiple Protection Domains.
+/// * Registering memory owned by other structures.
+/// * Flexible memory management strategies.
 ///
 /// Safety is enforced at **usage time** when creating [`GatherElement`] or [`ScatterElement`]
 /// instances (see the [memory module](crate::ibverbs::memory) for details).
@@ -98,15 +32,15 @@ use std::io;
 ///
 /// ## Safe Registration
 ///
-/// *   [`register_local_mr`](MemoryRegion::register_local_mr): Local write access only.
-///     Safe because all operations require creating SGEs with valid Rust references.
+/// * [`register_local_mr`](MemoryRegion::register_local_mr) — Local write access only.
+///   Safe because all operations require creating SGEs with valid Rust references.
 ///
 /// ## Unsafe Registration
 ///
-/// *   [`register_shared_mr`](MemoryRegion::register_shared_mr): Adds remote read/write access.
-///     Unsafe because remote peers can access memory asynchronously, breaking aliasing guarantees.
-/// *   [`register_mr_with_access`](MemoryRegion::register_mr_with_access): Full manual control.
-///     Unsafe when remote access flags are enabled.
+/// * [`register_shared_mr`](MemoryRegion::register_shared_mr) — Adds remote read/write access.
+///   Unsafe because remote peers can access memory asynchronously, breaking aliasing guarantees.
+/// * [`register_mr_with_access`](MemoryRegion::register_mr_with_access) — Full manual control.
+///   Unsafe when remote access flags are enabled.
 pub struct MemoryRegion {
     pd: ProtectionDomain,
     mr: *mut ibv_mr,
@@ -147,10 +81,10 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain to register this memory region in.
-    /// *   `address`: Pointer to the start of the memory buffer to register.
-    /// *   `length`: The size of the buffer in bytes.
-    /// *   `access_flags`: The permissions to grant to the NIC for this memory region.
+    /// * `pd` — The Protection Domain to register this memory region in.
+    /// * `address` — Pointer to the start of the memory buffer to register.
+    /// * `length` — The size of the buffer in bytes.
+    /// * `access_flags` — The permissions to grant to the NIC for this memory region.
     ///
     /// # Safety
     ///
@@ -193,9 +127,9 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain.
-    /// *   `address`: Pointer to the start of the memory buffer.
-    /// *   `length`: The size of the buffer in bytes.
+    /// * `pd` — The Protection Domain.
+    /// * `address` — Pointer to the start of the memory buffer.
+    /// * `length` — The size of the buffer in bytes.
     ///
     /// # Why is this Safe?
     ///
@@ -224,18 +158,18 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain.
-    /// *   `address`: Pointer to the start of the memory buffer.
-    /// *   `length`: The size of the buffer in bytes.
+    /// * `pd` — The Protection Domain.
+    /// * `address` — Pointer to the start of the memory buffer.
+    /// * `length` — The size of the buffer in bytes.
     ///
     /// # Safety
     ///
     /// This is `unsafe` because it allows remote peers to access the memory.
-    /// *   **Aliasing**: The memory effectively becomes shared mutable state. It is your
-    ///     responsibility to ensure aliasing rules are respected while remote peers perform
-    ///     RDMA operations on it.
-    /// *   **Lifetime**: You must manually ensure the memory remains allocated as long as
-    ///     remote peers are actively performing RDMA operations on it.
+    /// * **Aliasing** — The memory effectively becomes shared mutable state. It is your
+    ///   responsibility to ensure aliasing rules are respected while remote peers perform
+    ///   RDMA operations on it.
+    /// * **Lifetime** — You must manually ensure the memory remains allocated as long as
+    ///   remote peers are actively performing RDMA operations on it.
     pub unsafe fn register_shared_mr(
         pd: &ProtectionDomain,
         address: *mut u8,
@@ -258,14 +192,14 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain to register this memory region in.
-    /// *   `fd`: The file descriptor of the DMA-BUF to be registered.
-    /// *   `offset`: The start offset within the DMA-BUF file. The MR begins at this offset.
-    /// *   `length`: The size of the region to register (in bytes).
-    /// *   `iova`: The Input/Output Virtual Address. This is the virtual base address the NIC
-    ///     will use when accessing this MR via lkey/rkey.
-    ///     **Important**: `iova` must have the same page offset as `offset`.
-    /// *   `access_flags`: The permissions for this memory region.
+    /// * `pd` — The Protection Domain to register this memory region in.
+    /// * `fd` — The file descriptor of the DMA-BUF to be registered.
+    /// * `offset` — The start offset within the DMA-BUF file. The MR begins at this offset.
+    /// * `length` — The size of the region to register (in bytes).
+    /// * `iova` — The Input/Output Virtual Address. This is the virtual base address the NIC
+    ///   will use when accessing this MR via lkey/rkey.
+    ///   **Important**: `iova` must have the same page offset as `offset`.
+    /// * `access_flags` — The permissions for this memory region.
     ///
     /// # Safety
     ///
@@ -307,11 +241,11 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain.
-    /// *   `fd`: The file descriptor of the DMA-BUF.
-    /// *   `offset`: The start offset within the DMA-BUF file.
-    /// *   `length`: The size of the region to register (in bytes).
-    /// *   `iova`: The virtual base address. Must have the same page offset as `offset`.
+    /// * `pd` — The Protection Domain.
+    /// * `fd` — The file descriptor of the DMA-BUF.
+    /// * `offset` — The start offset within the DMA-BUF file.
+    /// * `length` — The size of the region to register (in bytes).
+    /// * `iova` — The virtual base address. Must have the same page offset as `offset`.
     ///
     /// Safe for the same reasons as [`register_local_mr`](Self::register_local_mr): usages are gated by SGE creation.
     pub fn register_local_dmabuf_mr(
@@ -337,11 +271,11 @@ impl MemoryRegion {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain.
-    /// *   `fd`: The file descriptor of the DMA-BUF.
-    /// *   `offset`: The start offset within the DMA-BUF file.
-    /// *   `length`: The size of the region to register (in bytes).
-    /// *   `iova`: The virtual base address. Must have the same page offset as `offset`.
+    /// * `pd` — The Protection Domain.
+    /// * `fd` — The file descriptor of the DMA-BUF.
+    /// * `offset` — The start offset within the DMA-BUF file.
+    /// * `length` — The size of the region to register (in bytes).
+    /// * `iova` — The virtual base address. Must have the same page offset as `offset`.
     ///
     /// # Safety
     ///
@@ -416,7 +350,7 @@ impl MemoryRegion {
     ///
     /// In debug builds, this validates MR containment and the `u32` length limit and may panic if
     /// they are violated (because it uses `debug_assert!`). In release builds, these checks are
-    /// not executed by default. [web:217]
+    /// not executed by default.
     pub fn gather_element<'a>(&'a self, data: &'a [u8]) -> GatherElement<'a> {
         GatherElement::new(self, data)
     }
@@ -447,8 +381,8 @@ impl MemoryRegion {
     /// # Behavior
     ///
     /// This bypasses the software checks for:
-    /// *   Memory region containment.
-    /// *   Length limits (`u32`).
+    /// * Memory region containment.
+    /// * Length limits (`u32`).
     ///
     /// # Safety
     ///
@@ -468,7 +402,7 @@ impl MemoryRegion {
     ///
     /// In debug builds, this validates MR containment and the `u32` length limit and may panic if
     /// they are violated (because it uses `debug_assert!`). In release builds, these checks are
-    /// not executed by default. [web:217]
+    /// not executed by default.
     ///
     pub fn scatter_element<'a>(&'a self, data: &'a mut [u8]) -> ScatterElement<'a> {
         ScatterElement::new(self, data)
