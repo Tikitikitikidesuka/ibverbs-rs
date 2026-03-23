@@ -16,16 +16,14 @@ pub mod polling_scope;
 mod cached_completion_queue;
 mod ops;
 
-/// A rechannel is like the old connection but takes a shared protection domain.
-/// This allows for creating a connection like the one that previously existed but
-/// for optimizing the dessign of the network node.
-/// If a network node is made with multiple connections, each with their own protection domain
-/// the same memory has to ber registered to each one and be kept track of for operations.
-/// By using channels, it is allowed to register only once to the shared protection domain and then
-/// share the same MemoryRegion struct with all of them.
+/// A safe RDMA communication endpoint built on top of a [`QueuePair`].
 ///
-/// As of now, this is safe because the queue pair created does not allow for
-/// remote writing of the memory. Otherwise, the memory aliasing rules would not be guaranteed.
+/// `Channel` wraps a queue pair with lifetime-safe operation posting through
+/// [`scope`](Self::scope) and [`manual_scope`](Self::manual_scope).
+///
+/// A channel belongs to a [`ProtectionDomain`] and can share memory regions with
+/// other channels under the same domain.
+/// Use [`ProtectionDomain::create_channel`] or [`Channel::builder`] to construct one.
 #[derive(Debug)]
 pub struct Channel {
     qp: QueuePair,
@@ -35,17 +33,22 @@ pub struct Channel {
 }
 
 impl Channel {
+    /// Returns a reference to the channel's [`ProtectionDomain`].
     pub fn pd(&self) -> &ProtectionDomain {
         &self.pd
     }
 }
 
 impl ProtectionDomain {
+    /// Returns a [`ChannelBuilder`] with this protection domain already set.
     pub fn create_channel(&self) -> ChannelBuilder<'_, SetPd> {
         Channel::builder().pd(self)
     }
 }
 
+/// An error from an RDMA transport operation.
+///
+/// Wraps both low-level ibverbs errors and work completion errors into a single type.
 #[derive(Debug, Error)]
 pub enum TransportError {
     #[error(transparent)]
@@ -54,4 +57,5 @@ pub enum TransportError {
     WorkError(#[from] WorkError),
 }
 
+/// Convenience alias for a [`Result`] with [`TransportError`].
 pub type TransportResult<T> = Result<T, TransportError>;
