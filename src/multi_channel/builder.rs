@@ -65,16 +65,23 @@ impl MultiChannel {
     }
 }
 
+/// A [`MultiChannel`] that has been configured but not yet connected to a remote peer.
+///
+/// Created by [`MultiChannel::builder`]. Call [`endpoints`](Self::endpoints) to obtain the
+/// local connection information for each channel, exchange them with the remote side, then
+/// call [`handshake`](Self::handshake) with the remote's endpoints to finish the connections.
 pub struct PreparedMultiChannel {
     channels: Box<[PreparedChannel]>,
     pd: ProtectionDomain,
 }
 
 impl PreparedMultiChannel {
+    /// Returns the local endpoint information for each channel, needed by the remote peer.
     pub fn endpoints(&self) -> Box<[QueuePairEndpoint]> {
         self.channels.iter().map(|c| c.endpoint()).collect()
     }
 
+    /// Connects each channel to the remote endpoint at the same index and returns a ready-to-use [`MultiChannel`].
     pub fn handshake<I>(self, endpoints: I) -> IbvResult<MultiChannel>
     where
         I: IntoIterator<Item = QueuePairEndpoint>,
