@@ -1,3 +1,21 @@
+//! Safe, lifetime-checked RDMA operations.
+//!
+//! This module provides [`Channel`], a safe wrapper over a [`QueuePair`](crate::ibverbs::queue_pair::QueuePair)
+//! that uses Rust's borrow checker to prevent data races between the CPU and NIC.
+//!
+//! # Posting operations
+//!
+//! Operations can be posted at three levels of control:
+//!
+//! * **Blocking** — [`Channel::send`], [`Channel::receive`], [`Channel::write`], [`Channel::read`]
+//!   post a single operation and block until it completes.
+//! * **Scoped** — [`Channel::scope`] and [`Channel::manual_scope`] open a
+//!   [`PollingScope`](polling_scope::PollingScope) where multiple operations can be posted and
+//!   polled independently. The scope guarantees all work is completed before it returns.
+//! * **Unpolled** — [`Channel::send_unpolled`], [`Channel::receive_unpolled`], etc. are `unsafe`
+//!   and return raw [`PendingWork`](pending_work::PendingWork) handles. These are the building
+//!   blocks used by the higher-level APIs.
+
 use crate::channel::builder::ChannelBuilder;
 use crate::channel::builder::channel_builder::SetPd;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
