@@ -12,26 +12,24 @@
 //!
 //! # Example: Polling for Completions
 //!
-// //! ```
-// //!  use ibverbs_rs::ibverbs::devices::open_device;
-// //!  use ibverbs_rs::ibverbs::completion_queue::PollSlot;
-// //!  fn main() -> Result<(), Box<dyn std::error::Error>> {
-// //!     let context = open_device("mlx5_0")?;
-// //!     let cq = context.create_cq(16)?;
-// //!
-// //!     // Pre-allocate a buffer for polling multiple completions at once
-// //!     let mut slots = [PollSlot::default(); 16];
-// //!
-// //!     // Poll for completions (non-blocking)
-// //!     let completions = cq.poll(&mut slots)?;
-// //!
-// //!     for wc in completions {
-// //!         println!("Work completion result: {:?}", wc.result());
-// //!     }
-// //!
-// //!     Ok(())
-// //!  }
-// //! ```
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::ibverbs::completion_queue::PollSlot;
+//!
+//! let context = ibverbs::open_device("mlx5_0")?;
+//! let cq = context.create_cq(16)?;
+//!
+//! // Pre-allocate a buffer for polling multiple completions at once
+//! let mut slots = [PollSlot::default(); 16];
+//!
+//! // Poll for completions (non-blocking)
+//! let completions = cq.poll(&mut slots)?;
+//!
+//! for wc in completions {
+//!     println!("Work completion result: {:?}", wc.result());
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
@@ -55,15 +53,15 @@ impl CompletionQueue {
     ///
     /// # Arguments
     ///
-    /// *   `context`: The device context on which to create the CQ.
-    /// *   `min_capacity`: The minimum number of completion entries this CQ must hold.
-    ///     The hardware may allocate a larger queue.
+    /// * `context` — The device context on which to create the CQ.
+    /// * `min_capacity` — The minimum number of completion entries this CQ must hold.
+    ///   The hardware may allocate a larger queue.
     ///
     /// # Errors
     ///
-    /// *   Returns [`IbvError::InvalidInput`] if `min_capacity` is too large (exceeds device limits)
-    ///     or cannot fit in an `i32`.
-    /// *   Returns [`IbvError::Resource`] if the system cannot allocate the necessary resources.
+    /// * Returns [`IbvError::InvalidInput`] if `min_capacity` is too large (exceeds device limits)
+    ///   or cannot fit in an `i32`.
+    /// * Returns [`IbvError::Resource`] if the system cannot allocate the necessary resources.
     pub fn create(context: &Context, min_capacity: u32) -> IbvResult<CompletionQueue> {
         let min_cq_entries = min_capacity.try_into().map_err(|_| {
             IbvError::InvalidInput("Completion queue min_cq_entries must fit in an i32".to_string())
@@ -103,11 +101,11 @@ impl CompletionQueue {
     ///
     /// # Arguments
     ///
-    /// *   `completions`: A mutable slice of [`PollSlot`]s. This buffer serves as the destination
-    ///     where the NIC/driver will write the completion data. By requiring the caller to provide
-    ///     this buffer, the library avoids internal heap allocations during the hot polling loop.
-    ///     If the buffer length exceeds `i32::MAX`, only `i32::MAX` entries will be polled and
-    ///     the remaining slots will be unused; a warning is logged in that case.
+    /// * `completions` — A mutable slice of [`PollSlot`]s. This buffer serves as the destination
+    ///   where the NIC/driver will write the completion data. By requiring the caller to provide
+    ///   this buffer, the library avoids internal heap allocations during the hot polling loop.
+    ///   If the buffer length exceeds `i32::MAX`, only `i32::MAX` entries will be polled and
+    ///   the remaining slots will be unused; a warning is logged in that case.
     ///
     /// # Returns
     ///
