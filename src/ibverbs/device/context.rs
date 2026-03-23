@@ -26,26 +26,22 @@ use std::sync::Arc;
 ///
 /// # Example: The Resource Lifecycle
 ///
-// /// ```no_run
-// /// # use ibverbs_rs::ibverbs::devices::open_device;
-// /// # use ibverbs_rs::ibverbs::error::IbvResult;
-// /// # fn main() -> IbvResult<()> {
-// /// // 1. Open the context
-// /// let context = open_device("mlx5_0")?;
-// ///
-// /// // 2. Create resources (PD and CQ)
-// /// // These resources now hold a reference to the context internally.
-// /// let pd = context.allocate_pd()?;
-// /// let cq = context.create_cq(0, 16)?;
-// ///
-// /// // 3. Drop the context explicitly (optional)
-// /// // The device connection remains OPEN because 'pd' and 'cq' are still alive.
-// /// drop(context);
-// ///
-// /// // 4. End of main: 'pd' and 'cq' are dropped, ref count hits zero, context closes.
-// /// # Ok(())
-// /// # }
-// /// ```
+/// ```no_run
+/// use ibverbs_rs::ibverbs;
+///
+/// let context = ibverbs::open_device("mlx5_0")?;
+///
+/// // Create resources — they hold a reference to the context internally.
+/// let pd = context.allocate_pd()?;
+/// let cq = context.create_cq(16)?;
+///
+/// // Drop the context explicitly (optional).
+/// // The device connection remains OPEN because 'pd' and 'cq' are still alive.
+/// drop(context);
+///
+/// // End of scope: 'pd' and 'cq' are dropped, ref count hits zero, context closes.
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct Context {
     pub(crate) inner: Arc<ContextInner>,
@@ -60,13 +56,13 @@ impl Context {
     ///
     /// # Arguments
     ///
-    /// *   `min_cq_entries`: The *minimum* number of entries the CQ must support.
-    ///     The hardware may allocate a larger queue.
+    /// * `min_cq_entries` — The *minimum* number of entries the CQ must support.
+    ///   The hardware may allocate a larger queue.
     ///
     /// # Errors
     ///
-    /// *   Returns [`IbvError::InvalidInput`] if `min_cq_entries` exceeds the device's capabilities.
-    /// *   Returns [`IbvError::Resource`] if the system cannot allocate the queue resources (e.g., out of memory).
+    /// * Returns [`IbvError::InvalidInput`] if `min_cq_entries` exceeds the device's capabilities.
+    /// * Returns [`IbvError::Resource`] if the system cannot allocate the queue resources (e.g., out of memory).
     pub fn create_cq(&self, min_cq_entries: u32) -> IbvResult<CompletionQueue> {
         CompletionQueue::create(self, min_cq_entries)
     }
@@ -80,7 +76,7 @@ impl Context {
     ///
     /// # Errors
     ///
-    /// *   Returns [`IbvError::Resource`] if the PD limit for the device has been reached or if memory allocation fails.
+    /// * Returns [`IbvError::Resource`] if the PD limit for the device has been reached or if memory allocation fails.
     pub fn allocate_pd(&self) -> IbvResult<ProtectionDomain> {
         ProtectionDomain::allocate(self)
     }
@@ -95,9 +91,9 @@ impl Context {
     ///
     /// # Errors
     ///
-    /// *   Returns [`IbvError::Permission`] if the process lacks permission to access RDMA devices.
-    /// *   Returns [`IbvError::Driver`] if `libibverbs` fails to open the device for OS-specific reasons.
-    /// *   Returns [`IbvError::Resource`] if the RDMA port is `DOWN` or `INIT`, indicating the link is not ready.
+    /// * Returns [`IbvError::Permission`] if the process lacks permission to access RDMA devices.
+    /// * Returns [`IbvError::Driver`] if `libibverbs` fails to open the device for OS-specific reasons.
+    /// * Returns [`IbvError::Resource`] if the RDMA port is `DOWN` or `INIT`, indicating the link is not ready.
     pub fn from_device(dev: &Device) -> IbvResult<Self> {
         // SAFETY: `dev.device_ptr` is guaranteed valid by the `DeviceRef` lifetime/invariants.
         let ibv_ctx = unsafe { ibv_open_device(dev.device_ptr) };
@@ -119,6 +115,7 @@ impl Context {
         Ok(context)
     }
 
+    /// Returns a [`Device`] handle for the hardware backing this context.
     pub fn device(&self) -> Device<'_> {
         unsafe { Device::from_ptr((&*self.inner.ctx).device) }
     }
