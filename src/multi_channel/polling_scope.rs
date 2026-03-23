@@ -1,4 +1,3 @@
-use crate::channel::Channel;
 use crate::channel::polling_scope::{PollingScope, ScopeError};
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;

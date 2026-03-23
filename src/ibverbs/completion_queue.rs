@@ -82,7 +82,7 @@ impl CompletionQueue {
         if cq.is_null() {
             return Err(IbvError::from_errno_with_msg(
                 io::Error::last_os_error().raw_os_error().unwrap_or(0),
-                &format!("Failed to create completion queue with size {min_cq_entries}"),
+                format!("Failed to create completion queue with size {min_cq_entries}"),
             ));
         }
 

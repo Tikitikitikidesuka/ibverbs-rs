@@ -119,7 +119,7 @@ impl Context {
         Ok(context)
     }
 
-    pub fn device(&self) -> Device {
+    pub fn device(&self) -> Device<'_> {
         unsafe { Device::from_ptr((&*self.inner.ctx).device) }
     }
 }

@@ -57,7 +57,7 @@ impl Node {
             .send_psn(send_psn)
             .recv_psn(recv_psn)
             .build()?;
-        let barrier = barrier.instance(&pd, rank, world_size)?;
+        let barrier = barrier.instance(pd, rank, world_size)?;
 
         Ok(PreparedNode {
             rank,

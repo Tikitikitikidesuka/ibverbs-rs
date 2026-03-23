@@ -7,10 +7,9 @@ pub mod tcp_exchanger;
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
-use crate::network::barrier::{Barrier, BarrierError};
+use crate::network::barrier::Barrier;
 use crate::network::builder::NodeBuilder;
 use crate::network::builder::node_builder::SetPd;
-use std::time::Duration;
 
 /// A network node is a MultiChannel with an id (rank) connected to all other nodes
 /// of the network.

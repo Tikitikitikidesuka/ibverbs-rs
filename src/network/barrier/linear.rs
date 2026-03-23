@@ -103,31 +103,27 @@ impl LinearBarrier {
                 self.barrier_mr.increase_peer_expected_epoch(peer);
                 self.barrier_mr
                     .spin_poll_peer_epoch_expected(peer, start_time, timeout)
-                    .map_err(|error| {
+                    .inspect_err(|error| {
                         self.poisoned = true;
-                        error
                     })?;
             }
             self.barrier_mr
                 .scatter_notify_peers(multi_channel, &peers[1..])
-                .map_err(|error| {
+                .inspect_err(|error| {
                     self.poisoned = true;
-                    error
                 })?;
         } else {
             // If notify leader fails the resulting state is
             self.barrier_mr
                 .notify_peer(multi_channel, leader)
-                .map_err(|error| {
+                .inspect_err(|error| {
                     self.poisoned = true;
-                    error
                 })?;
             self.barrier_mr.increase_peer_expected_epoch(leader);
             self.barrier_mr
                 .spin_poll_peer_epoch_expected(leader, start_time, timeout)
-                .map_err(|error| {
+                .inspect_err(|error| {
                     self.poisoned = true;
-                    error
                 })?;
         }
 

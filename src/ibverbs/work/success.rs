@@ -26,7 +26,7 @@ impl WorkSuccess {
     /// Present if the sender used [`SendWorkRequest::with_immediate`](crate::ibverbs::work_request::SendWorkRequest::with_immediate)
     /// or [`WriteWorkRequest::with_immediate`](crate::ibverbs::work_request::WriteWorkRequest::with_immediate).
     pub fn immediate_data(&self) -> Option<u32> {
-        self.imm_data.map(|imm_data| u32::from_be(imm_data))
+        self.imm_data.map(u32::from_be)
     }
 
     /// Returns the number of local bytes modified by this operation.

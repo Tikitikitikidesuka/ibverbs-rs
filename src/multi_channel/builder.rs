@@ -38,7 +38,6 @@ impl MultiChannel {
         #[builder(default)] recv_psn: PacketSequenceNumber,
     ) -> IbvResult<PreparedMultiChannel> {
         let channels = (0..num_channels)
-            .into_iter()
             .map(|_| {
                 Channel::builder()
                     .pd(pd)

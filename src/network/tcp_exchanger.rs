@@ -149,7 +149,7 @@ impl Exchanger {
         // Exchange connect to greater nodes
         debug!("Connecting exchange...");
         let greater_nodes_data =
-            Self::exchange_all_connect(data, self_node, greater_ranks, &network, &config).await?;
+            Self::exchange_all_connect(data, self_node, greater_ranks, network, config).await?;
         debug!("Done connecting");
 
         Ok(lower_nodes_data
