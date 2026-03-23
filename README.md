@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/ibverbs-rs)](https://crates.io/crates/ibverbs-rs)
 [![Docs](https://docs.rs/ibverbs-rs/badge.svg)](https://docs.rs/ibverbs-rs)
-[![License](https://img.shields.io/crates/l/ibverbs-rs)](LICENSE-MIT)
+[![License](https://img.shields.io/crates/l/ibverbs-rs)](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/master/LICENSE-MIT)
 
 Safe, ergonomic Rust bindings for the InfiniBand **libibverbs** API.
 
@@ -14,7 +14,6 @@ Built on top of [`ibverbs-sys`](https://crates.io/crates/ibverbs-sys).
 
 - **Device discovery** — enumerate InfiniBand devices and open contexts
 - **Memory registration** — safe local memory regions; explicit `unsafe` for remotely-accessible regions
-- **Queue pairs & completion queues** — builder-based setup with lifetime-enforced safety
 - **Channel** — a single point-to-point RDMA connection with scope-based completion polling
 - **MultiChannel** — multiple parallel connections sharing a protection domain, with scatter/gather support
 - **Network coordination** — TCP-based endpoint exchange, distributed barriers (linear, binary tree, dissemination)
@@ -60,8 +59,8 @@ point-to-point channels, multi-channel scatter/gather, and distributed network b
 
 ## Optional features
 
-| Feature | Description |
-|---------|-------------|
+| Feature | Description                                         |
+|---------|-----------------------------------------------------|
 | `numa`  | Enables NUMA-aware thread pinning (links `libnuma`) |
 
 ## License
