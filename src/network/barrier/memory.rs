@@ -11,16 +11,22 @@ use std::time::{Duration, Instant};
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
+/// RDMA memory region used for barrier synchronization.
+///
+/// Each peer has a slot with epoch counters. A node signals it has reached the barrier
+/// by RDMA-writing its outgoing epoch into the remote peer's incoming epoch slot.
+/// Completion is detected by polling the local incoming epoch via volatile reads.
 #[derive(Debug)]
-pub struct BarrierMr {
+pub(super) struct BarrierMr {
     rank: usize,
     memory: Box<[BarrierPeerFlags]>,
     mr: MemoryRegion,
     remote_mrs: Box<[PeerRemoteMemoryRegion]>,
 }
 
+/// A [`BarrierMr`] that has been allocated but not yet linked to remote peers.
 #[derive(Debug)]
-pub struct PreparedBarrierMr {
+pub(super) struct PreparedBarrierMr {
     rank: usize,
     memory: Box<[BarrierPeerFlags]>,
     mr: MemoryRegion,
@@ -29,13 +35,14 @@ pub struct PreparedBarrierMr {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, FromBytes, IntoBytes, Immutable, KnownLayout)]
 struct BarrierPeerFlags {
-    expected_in_epoch: u64, // Only written and read locally
+    /// Expected epoch value — only written and read locally.
+    expected_in_epoch: u64,
     out_epoch: U64,
     in_epoch: U64,
 }
 
 impl BarrierPeerFlags {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             expected_in_epoch: 0,
             in_epoch: U64::new(0),
@@ -45,11 +52,13 @@ impl BarrierPeerFlags {
 }
 
 impl PreparedBarrierMr {
-    pub fn remote(&self) -> PeerRemoteMemoryRegion {
+    /// Returns this node's barrier memory region handle for exchange with peers.
+    pub(super) fn remote(&self) -> PeerRemoteMemoryRegion {
         PeerRemoteMemoryRegion::new(self.rank, self.mr.remote())
     }
 
-    pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BarrierMr {
+    /// Links remote peer memory regions and returns a ready-to-use [`BarrierMr`].
+    pub(super) fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BarrierMr {
         BarrierMr {
             rank: self.rank,
             memory: self.memory,
@@ -60,7 +69,8 @@ impl PreparedBarrierMr {
 }
 
 impl BarrierMr {
-    pub fn new(
+    /// Allocates and registers the barrier memory region.
+    pub(super) fn new(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
@@ -73,8 +83,8 @@ impl BarrierMr {
 }
 
 impl BarrierMr {
-    // Increases local epoch and writes it to peer
-    pub fn notify_peer(
+    /// Increments the outgoing epoch for `peer` and RDMA-writes it into the peer's incoming slot.
+    pub(super) fn notify_peer(
         &mut self,
         multi_channel: &mut MultiChannel,
         peer: usize,
@@ -95,7 +105,8 @@ impl BarrierMr {
         Ok(())
     }
 
-    pub fn scatter_notify_peers(
+    /// Like [`notify_peer`](Self::notify_peer), but notifies multiple peers in a single scatter write.
+    pub(super) fn scatter_notify_peers(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],
@@ -129,7 +140,8 @@ impl BarrierMr {
 
     const TIMEOUT_CHECK_ITERS: u32 = 1 << 16;
 
-    pub fn spin_poll_peer_epoch_expected(
+    /// Busy-waits until the peer's incoming epoch reaches the expected value, or timeout.
+    pub(super) fn spin_poll_peer_epoch_expected(
         &mut self,
         peer: usize,
         start_time: Instant,
@@ -152,11 +164,17 @@ impl BarrierMr {
         }
     }
 
-    pub fn increase_peer_expected_epoch(&mut self, peer: usize) {
+    /// Increments the expected incoming epoch for the given peer.
+    pub(super) fn increase_peer_expected_epoch(&mut self, peer: usize) {
         self.memory[peer].expected_in_epoch += 1;
     }
 
-    pub fn is_peer_epoch_expected(&mut self, peer: usize) -> bool {
+    /// Returns `true` if the peer's incoming epoch has reached the expected value.
+    ///
+    /// Uses `>=` rather than `==` because chaining multiple barriers can cause the
+    /// incoming epoch to advance past the expected value before it is read.
+    pub(super) fn is_peer_epoch_expected(&mut self, peer: usize) -> bool {
+        // IMPORTANT: do not change to `==` — see doc comment above.
         unsafe { std::ptr::read_volatile(&self.memory[peer].in_epoch) }.get()
             >= self.memory[peer].expected_in_epoch
     }

@@ -6,6 +6,11 @@ use crate::network::barrier::BarrierError;
 use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
 
+/// Binary tree barrier implementation.
+///
+/// Nodes are arranged in a binary tree. The reduce phase propagates notifications
+/// upward from leaves to root, then the broadcast phase propagates back down.
+/// O(log n) messages.
 #[derive(Debug)]
 pub struct BinaryTreeBarrier {
     rank: usize,
@@ -13,6 +18,7 @@ pub struct BinaryTreeBarrier {
     poisoned: bool,
 }
 
+/// A [`BinaryTreeBarrier`] that has been allocated but not yet linked to remote peers.
 #[derive(Debug)]
 pub struct PreparedBinaryTreeBarrier {
     rank: usize,
@@ -20,10 +26,12 @@ pub struct PreparedBinaryTreeBarrier {
 }
 
 impl PreparedBinaryTreeBarrier {
+    /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
     }
 
+    /// Links remote peer memory regions and returns a ready-to-use [`BinaryTreeBarrier`].
     pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> BinaryTreeBarrier {
         BinaryTreeBarrier {
             rank: self.rank,
@@ -34,6 +42,7 @@ impl PreparedBinaryTreeBarrier {
 }
 
 impl BinaryTreeBarrier {
+    /// Allocates a new binary tree barrier.
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
@@ -47,6 +56,9 @@ impl BinaryTreeBarrier {
 }
 
 impl BinaryTreeBarrier {
+    /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
+    ///
+    /// Validates that peers are sorted, unique, and include this node's rank.
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -64,6 +76,7 @@ impl BinaryTreeBarrier {
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
+    /// Like [`barrier`](Self::barrier), but skips validation of the peer list.
     pub fn barrier_unchecked(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -81,8 +94,7 @@ impl BinaryTreeBarrier {
         result
     }
 
-    /// Assumes peers are ordered, non repeating and self is in the group
-    pub fn run_barrier(
+    fn run_barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],

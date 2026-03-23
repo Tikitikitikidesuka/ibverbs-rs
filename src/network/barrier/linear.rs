@@ -6,6 +6,10 @@ use crate::network::barrier::BarrierError;
 use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
 
+/// Centralized (leader-based) barrier implementation.
+///
+/// The first peer in the group acts as leader. All other peers notify the leader,
+/// then wait for the leader to notify them back. O(n) messages.
 #[derive(Debug)]
 pub struct LinearBarrier {
     rank: usize,
@@ -13,6 +17,7 @@ pub struct LinearBarrier {
     poisoned: bool,
 }
 
+/// A [`LinearBarrier`] that has been allocated but not yet linked to remote peers.
 #[derive(Debug)]
 pub struct PreparedLinearBarrier {
     rank: usize,
@@ -20,10 +25,12 @@ pub struct PreparedLinearBarrier {
 }
 
 impl PreparedLinearBarrier {
+    /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
     }
 
+    /// Links remote peer memory regions and returns a ready-to-use [`LinearBarrier`].
     pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> LinearBarrier {
         LinearBarrier {
             rank: self.rank,
@@ -34,6 +41,7 @@ impl PreparedLinearBarrier {
 }
 
 impl LinearBarrier {
+    /// Allocates a new linear barrier.
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
@@ -45,6 +53,9 @@ impl LinearBarrier {
         })
     }
 
+    /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
+    ///
+    /// Validates that peers are sorted, unique, and include this node's rank.
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -66,7 +77,7 @@ impl LinearBarrier {
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
-    /// Assumes peers are ordered, non repeating and self is in the group
+    /// Like [`barrier`](Self::barrier), but skips validation of the peer list.
     pub fn barrier_unchecked(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -84,7 +95,7 @@ impl LinearBarrier {
         result
     }
 
-    pub fn run_barrier(
+    fn run_barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],

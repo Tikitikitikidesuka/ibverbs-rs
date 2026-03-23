@@ -9,11 +9,12 @@ use crate::network::barrier::linear::{LinearBarrier, PreparedLinearBarrier};
 use std::time::Duration;
 use thiserror::Error;
 
-pub mod binary_tree;
-pub mod dissemination;
-pub mod linear;
+mod binary_tree;
+mod dissemination;
+mod linear;
 mod memory;
 
+/// An error that can occur during a barrier synchronization.
 #[derive(Debug, Error)]
 pub enum BarrierError {
     #[error("Barrier is poisoned from a previous error")]
@@ -30,6 +31,11 @@ pub enum BarrierError {
     TransportError(#[from] TransportError),
 }
 
+/// Selects which barrier algorithm to use.
+///
+/// * `Centralized` — Leader-based linear barrier. Simple but O(n).
+/// * `BinaryTree` — Tree reduction and broadcast. O(log n).
+/// * `Dissemination` — Pairwise exchange at exponential distances. O(log n), no designated leader.
 #[derive(Debug, Copy, Clone)]
 pub enum BarrierAlgorithm {
     Centralized,
@@ -38,6 +44,7 @@ pub enum BarrierAlgorithm {
 }
 
 impl BarrierAlgorithm {
+    /// Creates a [`PreparedBarrier`] using this algorithm.
     pub fn instance(
         &self,
         pd: &ProtectionDomain,
@@ -52,6 +59,9 @@ impl BarrierAlgorithm {
     }
 }
 
+/// A connected barrier, ready to synchronize with peers.
+///
+/// Dispatches to the concrete algorithm selected at construction time.
 #[derive(Debug)]
 pub enum Barrier {
     Centralized(LinearBarrier),
@@ -60,7 +70,7 @@ pub enum Barrier {
 }
 
 impl Barrier {
-    pub fn new_centralized(
+    fn new_centralized(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
@@ -70,7 +80,7 @@ impl Barrier {
         )?))
     }
 
-    pub fn new_binary_tree(
+    fn new_binary_tree(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
@@ -80,7 +90,7 @@ impl Barrier {
         )?))
     }
 
-    pub fn new_dissemination(
+    fn new_dissemination(
         pd: &ProtectionDomain,
         rank: usize,
         world_size: usize,
@@ -90,6 +100,7 @@ impl Barrier {
         )?))
     }
 
+    /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -103,7 +114,7 @@ impl Barrier {
         }
     }
 
-    /// Assumes peers are ordered, non repeating and self is in the group
+    /// Like [`barrier`](Self::barrier), but skips validation of the peer list.
     pub fn barrier_unchecked(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -118,6 +129,10 @@ impl Barrier {
     }
 }
 
+/// A barrier that has been allocated but not yet linked to remote peers.
+///
+/// Call [`link_remote`](Self::link_remote) with the remote memory region handles
+/// after the endpoint exchange to produce a [`Barrier`].
 #[derive(Debug)]
 pub enum PreparedBarrier {
     Centralized(PreparedLinearBarrier),
@@ -126,6 +141,7 @@ pub enum PreparedBarrier {
 }
 
 impl PreparedBarrier {
+    /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote_mr(&self) -> PeerRemoteMemoryRegion {
         match self {
             PreparedBarrier::Centralized(p) => p.remote(),
@@ -134,6 +150,7 @@ impl PreparedBarrier {
         }
     }
 
+    /// Links remote peer memory regions and returns a ready-to-use [`Barrier`].
     pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> Barrier {
         match self {
             PreparedBarrier::Centralized(p) => Barrier::Centralized(p.link_remote(remote_mrs)),

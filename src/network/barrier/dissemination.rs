@@ -6,6 +6,11 @@ use crate::network::barrier::BarrierError;
 use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};
 
+/// Dissemination barrier implementation.
+///
+/// In each round, every node notifies a peer at exponentially increasing distance
+/// and waits for a notification from the symmetric peer. O(log n) rounds with no
+/// designated leader.
 #[derive(Debug)]
 pub struct DisseminationBarrier {
     rank: usize,
@@ -13,6 +18,7 @@ pub struct DisseminationBarrier {
     poisoned: bool,
 }
 
+/// A [`DisseminationBarrier`] that has been allocated but not yet linked to remote peers.
 #[derive(Debug)]
 pub struct PreparedDisseminationBarrier {
     rank: usize,
@@ -20,10 +26,12 @@ pub struct PreparedDisseminationBarrier {
 }
 
 impl PreparedDisseminationBarrier {
+    /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
     }
 
+    /// Links remote peer memory regions and returns a ready-to-use [`DisseminationBarrier`].
     pub fn link_remote(self, remote_mrs: Box<[PeerRemoteMemoryRegion]>) -> DisseminationBarrier {
         DisseminationBarrier {
             rank: self.rank,
@@ -34,6 +42,7 @@ impl PreparedDisseminationBarrier {
 }
 
 impl DisseminationBarrier {
+    /// Allocates a new dissemination barrier.
     pub fn new(
         pd: &ProtectionDomain,
         rank: usize,
@@ -45,6 +54,9 @@ impl DisseminationBarrier {
         })
     }
 
+    /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
+    ///
+    /// Validates that peers are sorted, unique, and include this node's rank.
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -62,7 +74,7 @@ impl DisseminationBarrier {
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
-    /// Assumes peers are ordered, non repeating and self is in the group
+    /// Like [`barrier`](Self::barrier), but skips validation of the peer list.
     pub fn barrier_unchecked(
         &mut self,
         multi_channel: &mut MultiChannel,
@@ -80,7 +92,7 @@ impl DisseminationBarrier {
         result
     }
 
-    pub fn run_barrier(
+    fn run_barrier(
         &mut self,
         multi_channel: &mut MultiChannel,
         peers: &[usize],
