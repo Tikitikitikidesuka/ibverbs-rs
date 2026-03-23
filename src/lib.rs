@@ -12,7 +12,7 @@
 //!   memory registration, completion queues, and work requests.
 //! - [`channel`] — A single point-to-point RDMA connection with a builder API and
 //!   scope-based completion polling.
-//! - [`multi_channel`] — Multiple parallel RDMA connections sharing a protection domain,
+//! - [`multi_channel`] — Multiple indexed RDMA channels sharing memory regions,
 //!   with support for scatter/gather and one-sided operations.
 //! - [`network`] — Distributed coordination: TCP-based endpoint exchange, network
 //!   configuration, and barrier synchronization (linear, binary tree, and dissemination
