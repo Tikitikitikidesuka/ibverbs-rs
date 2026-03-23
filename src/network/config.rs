@@ -3,29 +3,41 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use thiserror::Error;
 
+/// A validated network topology describing all nodes that participate in RDMA communication.
+///
+/// Nodes are sorted by rank and indexed via [`Deref<Target = [NodeConfig]>`](std::ops::Deref).
+/// Build one with [`NetworkConfig::builder`].
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
     hosts: Vec<NodeConfig>,
 }
 
+/// Configuration for a single node in the network.
 #[derive(Debug, Clone, Builder, Serialize, Deserialize)]
 #[builder(on(String, into))]
 pub struct NodeConfig {
+    /// Network hostname or IP address.
     pub hostname: String,
+    /// TCP port used for the initial endpoint exchange.
     pub port: u16,
+    /// Name of the RDMA device to use (e.g. `"mlx5_0"`).
     pub ibdev: String,
+    /// Unique rank identifier, must be sequential starting from 0.
     pub rankid: usize,
+    /// Optional human-readable label.
     #[builder(default)]
     #[serde(skip_serializing_if = "String::is_empty", default)]
     pub comment: String,
 }
 
 impl NetworkConfig {
+    /// Returns a [`RawNetworkConfig`] builder for constructing a network topology.
     pub fn builder() -> RawNetworkConfig {
         RawNetworkConfig { hosts: vec![] }
     }
 }
 
+/// Validation errors when building a [`NetworkConfig`].
 #[derive(Debug, Copy, Clone, Error)]
 pub enum NetworkConfigError {
     #[error("Empty network")]
@@ -38,22 +50,29 @@ pub enum NetworkConfigError {
     DuplicatedRank { dup_rank: usize },
 }
 
+/// An unvalidated network configuration. Add nodes with [`add_node`](Self::add_node),
+/// then call [`build`](Self::build) to validate and produce a [`NetworkConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RawNetworkConfig {
     hosts: Vec<NodeConfig>,
 }
 
 impl RawNetworkConfig {
+    /// Appends a node to the configuration.
     pub fn add_node(mut self, node: NodeConfig) -> Self {
         self.hosts.push(node);
         self
     }
 
+    /// Truncates the node list to at most `num_nodes` entries.
     pub fn truncate(mut self, num_nodes: usize) -> Self {
         self.hosts.truncate(num_nodes);
         self
     }
 
+    /// Validates and builds the [`NetworkConfig`].
+    ///
+    /// Ranks must be unique, sequential, and start at 0. Nodes are sorted by rank.
     pub fn build(mut self) -> Result<NetworkConfig, NetworkConfigError> {
         self.hosts.sort_by_key(|n| n.rankid);
 
@@ -105,6 +124,7 @@ impl<'a> IntoIterator for &'a NetworkConfig {
 }
 
 impl NetworkConfig {
+    /// Returns the total number of nodes in the network.
     pub fn world_size(&self) -> usize {
         self.hosts.len()
     }
