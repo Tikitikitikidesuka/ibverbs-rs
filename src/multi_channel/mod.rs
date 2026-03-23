@@ -1,4 +1,4 @@
-//! Multiple parallel RDMA channels to different peers sharing a single [`ProtectionDomain`].
+//! Multiple indexed RDMA channels sharing memory regions.
 //!
 //! A [`MultiChannel`] holds one [`Channel`] per peer and routes operations by peer index.
 //! It supports the same three levels of control as [`Channel`](crate::channel):
