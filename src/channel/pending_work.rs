@@ -6,6 +6,14 @@ use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::rc::Rc;
 
+/// A handle to a posted work request that has not yet been polled to completion.
+///
+/// `PendingWork` ties the lifetime of the data buffers (`'a`) to the operation,
+/// preventing the user from accessing or dropping the memory while the NIC may still
+/// be performing DMA on it.
+///
+/// On drop, any unpolled work is automatically polled to completion via [`spin_poll`](Self::spin_poll).
+/// This ensures the hardware is done with the buffers before they are released.
 #[must_use = "PendingWork must be dropped to ensure completion"]
 pub struct PendingWork<'a> {
     wr_id: u64,
@@ -46,16 +54,15 @@ impl<'a> Debug for PendingWork<'a> {
 }
 
 impl PendingWork<'_> {
+    /// Returns the work request ID assigned to this operation.
     pub fn wr_id(&self) -> u64 {
         self.wr_id
     }
 
-    /// Returns `io::Error` if an error occurs while polling.
-    /// If no error occurs, `Ok` contains:
-    /// `None` if the work request is not yet complete.
-    /// `IbvWorkRequestStatus` with the status of the work request.
-    /// The work request status can be `Ok(WorkCompletion)` or `Err(io::Error)`
-    /// if an error occurred during the work request's operation was run.
+    /// Checks if the operation has completed.
+    ///
+    /// Returns `None` if the operation is still in progress, or `Some(result)` once complete.
+    /// Subsequent calls after completion return the cached result.
     pub fn poll(&mut self) -> Option<TransportResult<WorkSuccess>> {
         // Check if previously completed
         if self.status.is_some() {
@@ -86,10 +93,7 @@ impl PendingWork<'_> {
         None
     }
 
-    /// Polls the work request in a busy loop until it is complete.
-    /// It consumes the work completion from the cache. This method
-    /// must be used to guarantee a work completion is finished and
-    /// to free space on the completion queue.
+    /// Busy-waits until the operation completes and returns the result.
     pub fn spin_poll(&mut self) -> TransportResult<WorkSuccess> {
         loop {
             match self.poll() {
