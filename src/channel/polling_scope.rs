@@ -12,6 +12,24 @@ use std::rc::Rc;
 use thiserror::Error;
 
 impl Channel {
+    /// Opens a polling scope that automatically polls all outstanding work requests when it ends.
+    ///
+    /// This is the primary safe way to perform RDMA operations. The closure receives a
+    /// [`PollingScope`] through which operations can be posted. When the closure returns,
+    /// any work requests that were not manually polled are automatically polled to completion
+    /// before this method returns.
+    ///
+    /// See [`manual_scope`](Self::manual_scope) for a variant that enforces manual polling
+    /// and returns the user's error type directly.
+    ///
+    /// # Error handling
+    ///
+    /// * If the closure returns `Err(E)`, the scope still auto-polls all outstanding work,
+    ///   then returns `ScopeError::ClosureError(E)`.
+    /// * If the closure returns `Ok(T)` but auto-polling encounters transport errors,
+    ///   returns `ScopeError::AutoPollError(...)`.
+    /// * If the closure panics, outstanding work is still polled for cleanup before
+    ///   the panic is resumed.
     pub fn scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, ScopeError<E>>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
@@ -19,6 +37,15 @@ impl Channel {
         PollingScope::run(self, f)
     }
 
+    /// Opens a polling scope that enforces manual polling of all work requests.
+    ///
+    /// Both [`scope`](Self::scope) and `manual_scope` allow the user to poll work manually.
+    /// The difference is that `manual_scope` makes this the **contract**: it returns
+    /// `Result<T, E>` directly instead of wrapping it in [`ScopeError`], avoiding
+    /// unnecessary error handling. If the closure succeeds but leaves work unpolled,
+    /// this method panics as a safety net.
+    ///
+    /// If the closure returns an error, outstanding work is still cleaned up without panicking.
     pub fn manual_scope<'env, F, T, E>(&'env mut self, f: F) -> Result<T, E>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, Channel>) -> Result<T, E>,
@@ -28,58 +55,44 @@ impl Channel {
 }
 
 impl<'scope, 'env> PollingScope<'scope, 'env, Channel> {
+    /// Returns a reference to the [`ProtectionDomain`] of the underlying channel.
     pub fn pd(&self) -> &ProtectionDomain {
         self.inner.pd()
     }
 }
 
-/// T is user closure Ok output type
-/// E is user closure Err output type
-/// If user closure returns Err(E) -> auto poll -> return E
-/// If user closure returns Ok(T)
-///     If auto poll returns io err -> return io err
-///     If auto poll returns work err -> return work err
-///     If auto poll returns Ok -> return user closure's Ok(T)
+/// Convenience alias for a [`Result`] with [`ScopeError`] as the default error type.
 pub type ScopeResult<T> = Result<T, ScopeError>;
 
+/// Error returned by [`Channel::scope`].
+///
+/// Distinguishes between errors originating from the user's closure and errors
+/// discovered during automatic polling of outstanding work requests.
 #[derive(Debug, Error)]
 pub enum ScopeError<E = TransportError> {
+    /// The user's closure returned an error.
     #[error("Closure error: {0}")]
     ClosureError(#[from] E),
+    /// The closure succeeded, but one or more auto-polled work requests failed.
     #[error("Auto poll error: {0:?}")]
     AutoPollError(Vec<TransportError>),
 }
 
 impl<'a, 'b, C> PollingScope<'a, 'b, C> {
-    /// This method allows to safely send and receive data in a subscope, similar to [`std::thread::scope`].
+    /// Runs a closure inside an auto-polling scope, similar to [`std::thread::scope`].
     ///
-    /// Scoping solves the problem of users being able to access memory regions scheduled for
-    /// an RDMA operation before it is complete. If the methods to send, receive, read, write, etc,
-    /// were in this class, the returned work requests could be dropped before the operation finished.
-    /// If the work requests implemented a Drop trait to poll before being dropped, the user could
-    /// forget them beforehand safely anyway, and so access the memory before the operation finished.
-    /// The solution for this, as proposed by Jonatan, is to use the same scoping method as the one used
-    /// for scoped treads. In this way, the created work requests have a well defined lifetime —that of
-    /// the scope— and are stored in a private structure such that the user cannot forget them to avoid polling.
-    /// If they have not been polled at the end of the scope, they will be polled automatically.
+    /// Work requests created inside the closure are tracked internally. When the closure
+    /// returns, any that were not manually polled are automatically polled to completion.
+    /// The user cannot leak work requests to escape the lifetime, because the handles are
+    /// stored in a private structure owned by the scope.
     ///
     /// # Lifetimes
     ///
-    /// Scoped rdma involves two lifetimes: `'scope` and `'env`.
-    ///
-    /// The `'scope` lifetime represents the lifetime of the scope itself.
-    /// That is: the time during which new rdma operations may be issued,
-    /// and also the time during which they might still be running.
-    /// Once this lifetime ends, all operations are polled to completion.
-    /// This lifetime starts within the `scope` function, before `f` (the argument to `scope`) starts.
-    /// It ends after `f` returns and all scoped rdma operations have been completed, but before `scope` returns.
-    ///
-    /// The `'env` lifetime represents the lifetime of whatever is borrowed by the scoped threads.
-    /// This lifetime must outlast the call to `scope`, and thus cannot be smaller than `'scope`.
-    /// It can be as small as the call to `scope`, meaning that anything that outlives this call,
-    /// such as local variables defined right before the scope, can be borrowed by the scope.
-    ///
-    /// The `'env: 'scope` bound is part of the definition of the `IbvConnectionScope` type.
+    /// * `'scope` — The lifetime of the scope itself. New operations may be posted and may
+    ///   still be running during this period. It begins before the closure runs and ends
+    ///   after all outstanding work has been polled, but before this method returns.
+    /// * `'env` — The lifetime of data borrowed by the operations. Must outlive `'scope`,
+    ///   meaning anything alive at the call site (e.g. local variables) can be borrowed.
     pub(crate) fn run<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, ScopeError<E>>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
@@ -102,10 +115,10 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
         }
     }
 
-    /// Still safe by cleaning up. But if the closure succeeds (returns Ok(...)) but the autopoll
-    /// hast to poll manually any wr, it panics.
-    /// If the closure fails, however, the autopoll will be done but not panic and the error of the
-    /// closure will be returned.
+    /// Runs a closure inside a strict polling scope.
+    ///
+    /// If the closure succeeds but any work requests were left unpolled, this method panics.
+    /// If the closure fails, outstanding work is still cleaned up without panicking.
     pub(crate) fn run_manual<'env, F, T, E>(inner: &'env mut C, f: F) -> Result<T, E>
     where
         F: for<'scope> FnOnce(&mut PollingScope<'scope, 'env, C>) -> Result<T, E>,
@@ -131,6 +144,17 @@ impl<'a, 'b, C> PollingScope<'a, 'b, C> {
     }
 }
 
+/// A scoped context for posting RDMA operations with automatic lifetime safety.
+///
+/// Created by [`Channel::scope`] or [`Channel::manual_scope`]. Operations posted through
+/// a `PollingScope` return [`ScopedPendingWork`] handles that borrow the data buffers for
+/// `'scope`, preventing aliasing while the hardware is accessing them.
+///
+/// When the scope ends, all unpolled work is automatically polled to completion, ensuring
+/// that buffers are not released while the NIC may still be performing DMA.
+///
+/// This design mirrors [`std::thread::scope`] — the scope owns the work request handles
+/// internally, so the user cannot leak them via [`std::mem::forget`].
 pub struct PollingScope<'scope, 'env: 'scope, C> {
     pub(crate) inner: &'env mut C,
     wrs: Vec<ScopedPendingWork<'scope>>,
@@ -250,6 +274,10 @@ impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     }
 }
 
+/// A handle to a pending RDMA operation within a [`PollingScope`].
+///
+/// This handle can be used to manually poll for completion. If not polled by the time
+/// the scope ends, the operation will be auto-polled.
 #[derive(Debug, Clone)]
 pub struct ScopedPendingWork<'scope> {
     inner: Rc<RefCell<ScopedPendingWorkInner<'scope>>>,
@@ -273,6 +301,9 @@ impl<'scope> ScopedPendingWork<'scope> {
         }
     }
 
+    /// Checks if the operation has completed.
+    ///
+    /// Returns `None` if the operation is still in progress, or `Some(result)` once complete.
     pub fn poll(&self) -> Option<TransportResult<WorkSuccess>> {
         let mut wr = self.inner.borrow_mut();
         let poll = wr.wr.poll()?;
@@ -280,6 +311,7 @@ impl<'scope> ScopedPendingWork<'scope> {
         Some(poll)
     }
 
+    /// Busy-waits until the operation completes and returns the result.
     pub fn spin_poll(&self) -> TransportResult<WorkSuccess> {
         let mut wr = self.inner.borrow_mut();
         let poll = wr.wr.spin_poll();
