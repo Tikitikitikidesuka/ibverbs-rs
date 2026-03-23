@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/ibverbs-rs)](https://crates.io/crates/ibverbs-rs)
 [![Docs](https://docs.rs/ibverbs-rs/badge.svg)](https://docs.rs/ibverbs-rs)
-[![License](https://img.shields.io/crates/l/ibverbs-rs)](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/master/LICENSE-MIT)
+[![License](https://img.shields.io/crates/l/ibverbs-rs)](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/main/LICENSE-MIT)
 
 Safe, ergonomic Rust bindings for the InfiniBand **libibverbs** API.
 
