@@ -13,6 +13,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
+/// An error that can occur during a TCP-based data exchange.
 #[derive(Debug, Error)]
 pub enum ExchangeError {
     #[error("Rank {rank} not in network")]
@@ -29,9 +30,12 @@ pub enum ExchangeError {
     Timeout,
 }
 
+/// Configuration for a TCP exchange operation.
 pub struct ExchangeConfig {
-    pub exchange_timeout: Duration, // Timeout for whole exchange
-    pub retry_delay: Duration,      // Time during operation retries
+    /// Maximum time to wait for the entire exchange to complete.
+    pub exchange_timeout: Duration,
+    /// Delay between connection retries when a remote peer is not yet listening.
+    pub retry_delay: Duration,
 }
 
 impl Default for ExchangeConfig {
@@ -43,6 +47,10 @@ impl Default for ExchangeConfig {
     }
 }
 
+/// TCP-based all-to-all data exchange between nodes in a network.
+///
+/// Used during setup to exchange RDMA endpoint information (e.g. [`QueuePairEndpoint`](crate::ibverbs::queue_pair::builder::QueuePairEndpoint))
+/// between peers over TCP before RDMA channels are established.
 pub struct Exchanger {}
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -52,6 +60,10 @@ struct ExchangeMessage<T> {
 }
 
 impl Exchanger {
+    /// Exchanges `data` with all other nodes in the network, blocking until complete or timeout.
+    ///
+    /// Returns a `Vec<T>` indexed by rank, where the entry at this node's rank is a clone
+    /// of the local `data` and all other entries come from the corresponding remote nodes.
     pub fn await_exchange_all<T: Serialize + DeserializeOwned + Clone>(
         rank: usize,
         network: &NetworkConfig,
