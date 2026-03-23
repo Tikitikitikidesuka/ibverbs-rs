@@ -61,6 +61,11 @@ impl Channel {
     }
 }
 
+/// A [`Channel`] that has been configured but not yet connected to a remote peer.
+///
+/// Created by [`Channel::builder`]. Call [`endpoint`](Self::endpoint) to obtain the
+/// local connection information, exchange it with the remote side, then call
+/// [`handshake`](Self::handshake) with the remote's endpoint to finish the connection.
 pub struct PreparedChannel {
     cq: CachedCompletionQueue,
     pd: ProtectionDomain,
@@ -68,10 +73,12 @@ pub struct PreparedChannel {
 }
 
 impl PreparedChannel {
+    /// Returns the local endpoint information needed by the remote peer to complete the handshake.
     pub fn endpoint(&self) -> QueuePairEndpoint {
         self.qp.endpoint()
     }
 
+    /// Connects to the remote peer and returns a ready-to-use [`Channel`].
     pub fn handshake(self, endpoint: QueuePairEndpoint) -> IbvResult<Channel> {
         let qp = self.qp.handshake(endpoint)?;
         Ok(Channel {
