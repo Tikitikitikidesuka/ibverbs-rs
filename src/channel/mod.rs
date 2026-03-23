@@ -1,6 +1,6 @@
 //! Safe, lifetime-checked RDMA operations.
 //!
-//! This module provides [`Channel`], a safe wrapper over a [`QueuePair`](crate::ibverbs::queue_pair::QueuePair)
+//! This module provides [`Channel`], a safe wrapper over a [`QueuePair`]
 //! that uses Rust's borrow checker to prevent data races between the CPU and NIC.
 //!
 //! # Posting operations

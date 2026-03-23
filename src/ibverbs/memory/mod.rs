@@ -55,7 +55,7 @@
 //! ## Registration vs. Usage
 //!
 //! **Registration** (creating a [`MemoryRegion`]) does not require owning the buffer. This allows:
-//! * Registering the same buffer in multiple [`ProtectionDomain`]s.
+//! * Registering the same buffer in multiple [`ProtectionDomain`](crate::ibverbs::protection_domain::ProtectionDomain)s.
 //! * Registering memory owned by other structures.
 //! * Flexible memory management patterns.
 //!
