@@ -28,6 +28,13 @@ impl<'a> Device<'a> {
         Ok(())
     }
 
+    /// Like [`bind_thread_to_numa`](Self::bind_thread_to_numa), but also sets a strict bind
+    /// policy — memory allocations will only be served from the local NUMA node, with no
+    /// fallback to other nodes.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`bind_thread_to_numa`](Self::bind_thread_to_numa).
     pub fn bind_thread_to_numa_strict(&self) -> io::Result<()> {
         let dev = self
             .name()
@@ -61,13 +68,8 @@ fn set_numa_node(node: i32) -> io::Result<()> {
     Ok(())
 }
 
-/// Pins the current task (OS thread) to the specified NUMA node.
-///
-/// This is a thin wrapper around `numa_run_on_node()`. On success, it returns `Ok(())`; on failure
-/// it returns the OS error reported via `errno`.
-///
-/// Passing `-1` to `numa_run_on_node()` permits the kernel to schedule the task on all nodes again,
-/// effectively resetting the affinity.
+/// Like [`set_numa_node`], but also enables strict bind policy via `numa_set_bind_policy(1)`,
+/// so memory allocations will not fall back to other NUMA nodes.
 fn set_numa_node_strict(node: i32) -> io::Result<()> {
     let res = unsafe { numa_run_on_node(node) };
     if res != 0 {
