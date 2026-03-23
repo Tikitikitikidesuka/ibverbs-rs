@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 /// A 24-bit Packet Sequence Number (PSN).
-#[derive(Debug, Copy, Clone)]
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct PacketSequenceNumber(u32);
 
 impl PacketSequenceNumber {
@@ -21,10 +20,8 @@ impl PacketSequenceNumber {
     }
 }
 
-
 /// The Maximum Transfer Unit (MTU) for the path.
-#[derive(Debug, Copy, Clone)]
-#[derive(Default)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum MaximumTransferUnit {
     MTU256 = 1,
     MTU512 = 2,
@@ -40,7 +37,6 @@ impl MaximumTransferUnit {
         *self as u8
     }
 }
-
 
 /// Minimum RNR NAK Timer Field Value.
 ///
