@@ -158,7 +158,7 @@ impl MaxRnrRetries {
         MaxRnrRetries::Unlimited
     }
 
-    /// Returns the number of retries
+    /// Returns the number of retries.
     pub const fn retries(&self) -> Option<u8> {
         match self {
             MaxRnrRetries::Limited(retries) => Some(*retries),
@@ -166,7 +166,7 @@ impl MaxRnrRetries {
         }
     }
 
-    /// Returns the ibverbs code for this `MaxRnrRetries`
+    /// Returns the ibverbs code for this `MaxRnrRetries`.
     pub const fn code(&self) -> u8 {
         match self {
             MaxRnrRetries::Limited(retries) => *retries,
@@ -230,7 +230,7 @@ impl AckTimeout {
         }
     }
 
-    /// Returns the ibverbs code for this `AckTimeout`
+    /// Returns the ibverbs code for this `AckTimeout`.
     pub const fn code(&self) -> u8 {
         match self {
             AckTimeout::Limited(code) => *code,
@@ -262,12 +262,12 @@ impl MaxAckRetries {
         }
     }
 
-    /// Returns the number of retries
+    /// Returns the number of retries.
     pub const fn retries(&self) -> u8 {
         self.0
     }
 
-    /// Returns the ibverbs code for this `MaxAckRetries`
+    /// Returns the ibverbs code for this `MaxAckRetries`.
     pub const fn code(&self) -> u8 {
         self.retries()
     }

@@ -6,15 +6,15 @@
 //!
 //! # Key Relationships
 //!
-//! *   **Protection Domain (PD)**: A QP is created within a specific [`ProtectionDomain`].
-//!     **Crucial Rule**: You can only use [`MemoryRegion`](crate::ibverbs::memory::MemoryRegion)s
-//!     that were registered in the *same* PD. Mixing PDs will cause immediate errors.
+//! * **Protection Domain (PD)** — A QP is created within a specific [`ProtectionDomain`].
+//!   **Crucial Rule**: You can only use [`MemoryRegion`](crate::ibverbs::memory::MemoryRegion)s
+//!   that were registered in the *same* PD. Mixing PDs will cause immediate errors.
 //!
-//! *   **Completion Queues (CQ)**: A QP is associated with two Completion Queues (which can be the same object):
-//!     *   **Send CQ**: Receives completions for outgoing operations (Send, Write, Read).
-//!     *   **Recv CQ**: Receives completions for incoming operations (Receive).
-//!     *   *Note*: When an operation finishes, the hardware places a [`WorkCompletion`](crate::ibverbs::work::WorkCompletion)
-//!         into the corresponding CQ. You must poll that CQ to see the result.
+//! * **Completion Queues (CQ)** — A QP is associated with two Completion Queues (which can be the same object):
+//!   * **Send CQ** — Receives completions for outgoing operations (Send, Write, Read).
+//!   * **Recv CQ** — Receives completions for incoming operations (Receive).
+//!   * *Note*: When an operation finishes, the hardware places a [`WorkCompletion`](crate::ibverbs::work::WorkCompletion)
+//!     into the corresponding CQ. You must poll that CQ to see the result.
 //!
 //! # Usage: The Post-and-Poll Model
 //!
@@ -47,7 +47,7 @@
 //!
 //! ## Safe Abstractions
 //!
-//! A higher-level abstraction [`Channel`] wraps these `unsafe` methods and enforces
+//! A higher-level abstraction [`Channel`](crate::channel::Channel) wraps these `unsafe` methods and enforces
 //! the lifetime contract by returning a future or handle that must be awaited/polled before the
 //! buffers are released.
 

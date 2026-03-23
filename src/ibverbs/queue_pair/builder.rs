@@ -20,18 +20,18 @@ impl QueuePair {
     ///
     /// # Arguments
     ///
-    /// *   `pd`: The Protection Domain this QP belongs to.
-    /// *   `send_cq` / `recv_cq`: The completion queues for operation results.
-    /// *   `access`: The operations allowed on this QP (e.g., Remote Write).
-    /// *   `max_*`: Hardware limits for the Work Queues.
+    /// * `pd` — The Protection Domain this QP belongs to.
+    /// * `send_cq` / `recv_cq` — The completion queues for operation results.
+    /// * `access` — The operations allowed on this QP (e.g., Remote Write).
+    /// * `max_*` — Hardware limits for the Work Queues.
     ///
     /// # Errors
     ///
-    /// *   [`IbvError::InvalidInput`]: Invalid `ProtectionDomain`, invalid Context, or invalid configuration
-    ///     values (e.g., `max_send_wr` exceeds hardware limits).
-    /// *   [`IbvError::Resource`]: Insufficient memory or hardware resources to create the QP.
-    /// *   [`IbvError::Permission`]: Not enough permissions to create this type of QP.
-    /// *   [`IbvError::Driver`]: Underlying driver failure (e.g., `ENOSYS` if the transport type isn't supported).
+    /// * [`IbvError::InvalidInput`] — Invalid `ProtectionDomain`, invalid Context, or invalid
+    ///   configuration values (e.g., `max_send_wr` exceeds hardware limits).
+    /// * [`IbvError::Resource`] — Insufficient memory or hardware resources to create the QP.
+    /// * [`IbvError::Permission`] — Not enough permissions to create this type of QP.
+    /// * [`IbvError::Driver`] — Underlying driver failure (e.g., `ENOSYS` if the transport type isn't supported).
     #[builder(state_mod(vis = "pub(crate)"))]
     pub fn builder(
         pd: &ProtectionDomain,
@@ -150,12 +150,12 @@ impl PreparedQueuePair {
     ///
     /// # Arguments
     ///
-    /// *   `remote`: The endpoint information received from the remote peer.
+    /// * `remote` — The endpoint information received from the remote peer.
     ///
     /// # Errors
     ///
-    /// *   [`IbvError::InvalidInput`]: Invalid state transition parameters (e.g., invalid port or access flags).
-    /// *   [`IbvError::Resource`]: Hardware resource exhaustion during state transition.
+    /// * [`IbvError::InvalidInput`] — Invalid state transition parameters (e.g., invalid port or access flags).
+    /// * [`IbvError::Resource`] — Hardware resource exhaustion during state transition.
     // ibv_qp_attr_mask flag ORs are small bitmasks, well within i32 range
     #[allow(clippy::cast_possible_wrap)]
     pub fn handshake(self, remote: QueuePairEndpoint) -> IbvResult<QueuePair> {
