@@ -7,9 +7,9 @@ use crate::ibverbs::memory::{GatherElement, RemoteMemoryRegion, ScatterElement};
 ///
 /// # Lifetimes
 ///
-/// *   `'wr`: The lifetime of this struct. It must live until the request is posted to the Queue Pair.
-/// *   `'data`: The lifetime of the local data buffer. It is tied to the [`GatherElement`]
-///     and must remain valid until the operation completes.
+/// * `'wr` — The lifetime of this struct. It must live until the request is posted to the Queue Pair.
+/// * `'data` — The lifetime of the local data buffer. It is tied to the [`GatherElement`]
+///   and must remain valid until the operation completes.
 #[derive(Debug, Clone)]
 pub struct SendWorkRequest<'wr, 'data> {
     pub(crate) gather_elements: &'wr [GatherElement<'data>],
@@ -23,9 +23,9 @@ pub struct SendWorkRequest<'wr, 'data> {
 ///
 /// # Lifetimes
 ///
-/// *   `'wr`: The lifetime of this struct. It must live until the request is posted to the Queue Pair.
-/// *   `'data`: The lifetime of the local data buffer. It is tied to the [`ScatterElement`]
-///     and must remain valid until the operation completes.
+/// * `'wr` — The lifetime of this struct. It must live until the request is posted to the Queue Pair.
+/// * `'data` — The lifetime of the local data buffer. It is tied to the [`ScatterElement`]
+///   and must remain valid until the operation completes.
 #[derive(Debug)]
 pub struct ReceiveWorkRequest<'wr, 'data> {
     pub(crate) scatter_elements: &'wr mut [ScatterElement<'data>],
@@ -38,9 +38,9 @@ pub struct ReceiveWorkRequest<'wr, 'data> {
 ///
 /// # Lifetimes
 ///
-/// *   `'wr`: The lifetime of this struct. It must live until the request is posted to the Queue Pair.
-/// *   `'data`: The lifetime of the local data buffer. It is tied to the [`GatherElement`]
-///     and must remain valid until the operation completes.
+/// * `'wr` — The lifetime of this struct. It must live until the request is posted to the Queue Pair.
+/// * `'data` — The lifetime of the local data buffer. It is tied to the [`GatherElement`]
+///   and must remain valid until the operation completes.
 #[derive(Debug, Clone)]
 pub struct WriteWorkRequest<'wr, 'data> {
     pub(crate) gather_elements: &'wr [GatherElement<'data>],
@@ -55,9 +55,9 @@ pub struct WriteWorkRequest<'wr, 'data> {
 ///
 /// # Lifetimes
 ///
-/// *   `'wr`: The lifetime of this struct. It must live until the request is posted to the Queue Pair.
-/// *   `'data`: The lifetime of the local data buffer. It is tied to the [`ScatterElement`]
-///     and must remain valid until the operation completes.
+/// * `'wr` — The lifetime of this struct. It must live until the request is posted to the Queue Pair.
+/// * `'data` — The lifetime of the local data buffer. It is tied to the [`ScatterElement`]
+///   and must remain valid until the operation completes.
 #[derive(Debug)]
 pub struct ReadWorkRequest<'wr, 'data> {
     pub(crate) scatter_elements: &'wr mut [ScatterElement<'data>],
@@ -104,7 +104,7 @@ impl<'wr, 'data> ReceiveWorkRequest<'wr, 'data> {
         Self { scatter_elements }
     }
 
-    /// Creates a new Send request containing only immediate data (0-byte payload).
+    /// Creates a new Receive request with an empty buffer, for receiving only immediate data.
     pub fn only_immediate() -> Self {
         Self {
             scatter_elements: &mut [],
@@ -115,8 +115,8 @@ impl<'wr, 'data> ReceiveWorkRequest<'wr, 'data> {
 impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
     /// Creates a new RDMA Write request.
     ///
-    /// *   `gather_elements`: The local source data to write.
-    /// *   `remote_slice`: The remote destination memory region.
+    /// * `gather_elements` — The local source data to write.
+    /// * `remote_slice` — The remote destination memory region.
     pub fn new(
         gather_elements: &'wr [GatherElement<'data>],
         remote_slice: RemoteMemoryRegion,
@@ -146,8 +146,8 @@ impl<'wr, 'data> WriteWorkRequest<'wr, 'data> {
 impl<'wr, 'data> ReadWorkRequest<'wr, 'data> {
     /// Creates a new RDMA Read request.
     ///
-    /// *   `scatter_elements`: The local destination buffer for the read data.
-    /// *   `remote_mr`: The remote source memory region.
+    /// * `scatter_elements` — The local destination buffer for the read data.
+    /// * `remote_mr` — The remote source memory region.
     pub fn new(
         scatter_elements: &'wr mut [ScatterElement<'data>],
         remote_mr: RemoteMemoryRegion,

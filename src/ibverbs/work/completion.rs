@@ -12,8 +12,8 @@ pub type WorkResult = Result<WorkSuccess, WorkError>;
 ///
 /// # Structure
 ///
-/// *   **ID**: The `wr_id` allows you to map this completion back to the specific request posted.
-/// *   **Result**: Indicates whether the operation succeeded or failed.
+/// * **ID** — The `wr_id` allows you to map this completion back to the specific request posted.
+/// * **Result** — Indicates whether the operation succeeded or failed.
 #[derive(Copy, Clone, Debug)]
 pub struct WorkCompletion {
     wr_id: u64,
@@ -42,8 +42,8 @@ impl WorkCompletion {
 
     /// Returns the outcome of the operation.
     ///
-    /// *   `Ok(WorkSuccess)`: The operation completed successfully. Contains bytes transferred and immediate data.
-    /// *   `Err(WorkError)`: The operation failed. Contains the error status and vendor syndrome.
+    /// * `Ok(WorkSuccess)` — The operation completed successfully. Contains bytes transferred and immediate data.
+    /// * `Err(WorkError)` — The operation failed. Contains the error status and vendor syndrome.
     pub fn result(&self) -> Result<WorkSuccess, WorkError> {
         self.result
     }
