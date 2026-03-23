@@ -38,6 +38,7 @@ impl PeerRemoteMemoryRegion {
         })
     }
 
+    /// Like [`sub_region`](Self::sub_region), but without bounds checking.
     pub fn sub_region_unchecked(&self, offset: usize) -> PeerRemoteMemoryRegion {
         PeerRemoteMemoryRegion {
             peer: self.peer,
