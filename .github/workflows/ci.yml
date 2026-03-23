@@ -93,10 +93,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo doc --no-deps --all-features
-      - run: echo '<meta http-equiv="refresh" content="0; url=ibverbs_rs/index.html">' > target/doc/index.html
+      - run: echo '<meta http-equiv="refresh" content="0; url=ibverbs_rs/index.html">' > /opt/cargo-target/doc/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: target/doc
+          path: /opt/cargo-target/doc
 
   docs-deploy:
     name: Deploy docs
