@@ -71,61 +71,6 @@ impl Exchanger {
             })
     }
 
-    // todo no longer needed?
-    pub fn await_exchange_pair<T: Serialize + DeserializeOwned + Clone + Debug>(
-        primary: bool,
-        addr: (&str, u16),
-        data: &T,
-        config: &ExchangeConfig,
-    ) -> Result<T, ExchangeError> {
-        let rank = primary as usize;
-        let peer = 1 - rank;
-
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?
-            .block_on(async {
-                timeout(config.exchange_timeout, async {
-                    if primary {
-                        let listener = TcpListener::bind(addr).await?;
-                        let (mut stream, _) = listener.accept().await?;
-                        let mut results = HashMap::new();
-                        Self::exchange_serve(
-                            data,
-                            rank,
-                            peer..(peer + 1),
-                            &mut stream,
-                            &mut results,
-                        )
-                        .await?;
-                        Ok(results.into_values().next().expect("one inserted"))
-                    } else {
-                        let mut stream;
-                        loop {
-                            if let Ok(s) = TcpStream::connect(addr).await {
-                                stream = s;
-                                break;
-                            }
-                            tokio::time::sleep(config.retry_delay).await;
-                        }
-                        let mut results = HashMap::new();
-
-                        Self::exchange_connect(
-                            data,
-                            rank,
-                            peer..(peer + 1),
-                            &mut stream,
-                            &mut results,
-                        )
-                        .await?;
-                        Ok(results.into_values().next().expect("one inserted"))
-                    }
-                })
-                .await
-                .unwrap_or(Err(Timeout))
-            })
-    }
-
     async fn exchange_all<T: Serialize + DeserializeOwned + Clone>(
         rank: usize,
         network: &NetworkConfig,
