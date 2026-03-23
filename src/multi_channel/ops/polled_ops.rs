@@ -4,6 +4,7 @@ use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;
 
 impl MultiChannel {
+    /// Posts sends to multiple peers and blocks until all complete.
     pub fn scatter_send<'op, I>(&'op mut self, wrs: I) -> TransportResult<Vec<WorkSuccess>>
     where
         I: IntoIterator<Item = PeerSendWorkRequest<'op, 'op>>,
@@ -14,6 +15,7 @@ impl MultiChannel {
         })
     }
 
+    /// Posts RDMA writes to multiple peers and blocks until all complete.
     pub fn scatter_write<'op, I>(&'op mut self, wrs: I) -> TransportResult<Vec<WorkSuccess>>
     where
         I: IntoIterator<Item = PeerWriteWorkRequest<'op, 'op>>,
@@ -24,6 +26,7 @@ impl MultiChannel {
         })
     }
 
+    /// Posts receives from multiple peers and blocks until all complete.
     pub fn gather_receive<'op, I>(&'op mut self, wrs: I) -> TransportResult<Vec<WorkSuccess>>
     where
         I: IntoIterator<Item = PeerReceiveWorkRequest<'op, 'op>>,
@@ -34,6 +37,7 @@ impl MultiChannel {
         })
     }
 
+    /// Posts RDMA reads from multiple peers and blocks until all complete.
     pub fn gather_read<'op, I>(&'op mut self, wrs: I) -> TransportResult<Vec<WorkSuccess>>
     where
         I: IntoIterator<Item = PeerReadWorkRequest<'op, 'op>>,
@@ -44,6 +48,7 @@ impl MultiChannel {
         })
     }
 
+    /// Posts the same send to multiple peers and blocks until all complete.
     pub fn multicast_send<'op, I>(
         &'op mut self,
         peers: I,

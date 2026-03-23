@@ -5,6 +5,10 @@ use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;
 
 impl MultiChannel {
+    /// Posts sends to multiple peers without polling for completion.
+    ///
+    /// # Safety
+    /// See [`Channel::send_unpolled`](crate::channel::Channel::send_unpolled).
     pub unsafe fn scatter_send_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
@@ -18,6 +22,10 @@ impl MultiChannel {
             .collect()
     }
 
+    /// Posts RDMA writes to multiple peers without polling for completion.
+    ///
+    /// # Safety
+    /// See [`Channel::write_unpolled`](crate::channel::Channel::write_unpolled).
     pub unsafe fn scatter_write_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
@@ -31,6 +39,10 @@ impl MultiChannel {
             .collect()
     }
 
+    /// Posts receives from multiple peers without polling for completion.
+    ///
+    /// # Safety
+    /// See [`Channel::receive_unpolled`](crate::channel::Channel::receive_unpolled).
     pub unsafe fn gather_receive_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
@@ -44,6 +56,10 @@ impl MultiChannel {
             .collect()
     }
 
+    /// Posts RDMA reads from multiple peers without polling for completion.
+    ///
+    /// # Safety
+    /// See [`Channel::read_unpolled`](crate::channel::Channel::read_unpolled).
     pub unsafe fn gather_read_unpolled<'wr, 'data, I>(
         &mut self,
         wrs: I,
@@ -57,6 +73,10 @@ impl MultiChannel {
             .collect()
     }
 
+    /// Posts the same send to multiple peers without polling for completion.
+    ///
+    /// # Safety
+    /// See [`Channel::send_unpolled`](crate::channel::Channel::send_unpolled).
     pub unsafe fn multicast_send_unpolled<'wr, 'data, I>(
         &mut self,
         peers: I,
