@@ -1,3 +1,15 @@
+//! NUMA affinity helpers for RDMA devices.
+//!
+//! Enabling the `"numa"` Cargo feature provides two ways to apply NUMA affinity:
+//!
+//! - **Device-relative** — [`Device::bind_thread_to_numa`] and
+//!   [`Device::bind_thread_to_numa_strict`] look up the NUMA node of an InfiniBand device
+//!   via sysfs and call the free functions below on your behalf.
+//!
+//! - **Node-relative** — [`set_numa_node`] and [`set_numa_node_strict`] accept a NUMA node
+//!   number directly, for cases where you already know the node or want to pin independently
+//!   of a specific device.
+
 use crate::ibverbs::device::Device;
 use std::io;
 
@@ -60,7 +72,11 @@ impl<'a> Device<'a> {
 /// Passing `-1` to `numa_run_on_node()` permits the kernel to schedule the task on all nodes again,
 /// effectively resetting the CPU affinity (but the local-alloc policy set by `numa_set_localalloc()`
 /// remains in effect).
-fn set_numa_node(node: i32) -> io::Result<()> {
+///
+/// # Errors
+///
+/// Returns the OS error from `numa_run_on_node()` if it fails.
+pub fn set_numa_node(node: i32) -> io::Result<()> {
     let res = unsafe { numa_run_on_node(node) };
     if res != 0 {
         return Err(io::Error::last_os_error());
@@ -74,7 +90,11 @@ fn set_numa_node(node: i32) -> io::Result<()> {
 
 /// Like [`set_numa_node`], but also enables strict bind policy via `numa_set_bind_policy(1)`,
 /// so memory allocations will not fall back to other NUMA nodes.
-fn set_numa_node_strict(node: i32) -> io::Result<()> {
+///
+/// # Errors
+///
+/// Returns the OS error from `numa_run_on_node()` if it fails.
+pub fn set_numa_node_strict(node: i32) -> io::Result<()> {
     let res = unsafe { numa_run_on_node(node) };
     if res != 0 {
         return Err(io::Error::last_os_error());
