@@ -15,31 +15,58 @@ mod linear;
 mod memory;
 
 /// An error that can occur during a barrier synchronization.
+///
+/// Barriers are **poisoned** after any error: once a `Barrier` returns an `Err`,
+/// every subsequent call will immediately return [`Poisoned`](BarrierError::Poisoned)
+/// without attempting any RDMA operations. This prevents use of a barrier whose
+/// internal epoch state may be inconsistent with remote peers.
 #[derive(Debug, Error)]
 pub enum BarrierError {
+    /// The barrier was poisoned by a previous error and can no longer be used.
     #[error("Barrier is poisoned from a previous error")]
     Poisoned,
+    /// This node's own rank is not present in the supplied peer list.
     #[error("Self not in the barrier group")]
     SelfNotInGroup,
+    /// The peer list is not sorted in strictly ascending order.
     #[error("Peers not in ascending order in barrier group")]
     UnorderedPeers,
+    /// The peer list contains the same rank more than once.
     #[error("Duplicate peers in barrier group")]
     DuplicatePeers,
+    /// Not all peers reached the barrier within the allotted time.
     #[error("Barrier timeout")]
     Timeout,
+    /// An RDMA transport error occurred while exchanging barrier notifications.
     #[error("Transport error: {0}")]
     TransportError(#[from] TransportError),
 }
 
-/// Selects which barrier algorithm to use.
+/// Selects which barrier algorithm a [`Node`](crate::network::Node) uses.
 ///
-/// * `Centralized` — Leader-based linear barrier. Simple but O(n).
-/// * `BinaryTree` — Tree reduction and broadcast. O(log n).
-/// * `Dissemination` — Pairwise exchange at exponential distances. O(log n), no designated leader.
+/// All algorithms are implemented over one-sided RDMA writes and spin-poll on
+/// a local memory region, so no CPU involvement is required on the remote side
+/// during the synchronization itself.
+///
+/// The algorithm is chosen once at node construction and cannot be changed
+/// afterwards. The default used by [`Node::builder`](crate::network::Node::builder)
+/// is [`BinaryTree`](BarrierAlgorithm::BinaryTree).
 #[derive(Debug, Copy, Clone)]
 pub enum BarrierAlgorithm {
+    /// Leader-based barrier. The lowest-ranked participant collects a notification
+    /// from every other peer, then broadcasts back. O(n) messages; simple and
+    /// correct but does not scale with large groups.
     Centralized,
+    /// Tree-structured barrier. Peers are arranged in a binary tree by their
+    /// position in the sorted peer list. A reduce phase propagates notifications
+    /// from leaves up to the root, followed by a broadcast phase back down.
+    /// O(log n) rounds; balanced and generally a good default.
     BinaryTree,
+    /// Dissemination barrier. In each round every peer notifies the peer at
+    /// distance `d` to its right (circularly) and waits for the peer at
+    /// distance `d` to its left. The distance doubles each round: 1, 2, 4, …
+    /// Completes in ⌈log₂ n⌉ rounds with no designated leader and no single
+    /// point of contention.
     Dissemination,
 }
 
@@ -59,13 +86,33 @@ impl BarrierAlgorithm {
     }
 }
 
-/// A connected barrier, ready to synchronize with peers.
+/// A connected barrier ready to synchronize with peers.
 ///
-/// Dispatches to the concrete algorithm selected at construction time.
+/// Normally accessed through [`Node::barrier`](crate::network::Node::barrier) rather
+/// than directly.
+///
+/// # Peer list contract
+///
+/// Both [`barrier`](Barrier::barrier) and [`barrier_unchecked`](Barrier::barrier_unchecked)
+/// require the peer list to obey the following rules (only [`barrier`](Barrier::barrier)
+/// validates them):
+///
+/// * **Sorted** — ranks must appear in strictly ascending order.
+/// * **No duplicates** — each rank may appear at most once.
+/// * **Self included** — this node's own rank must be present.
+///
+/// # Poisoning
+///
+/// If any call returns an error, the barrier is permanently poisoned and all
+/// subsequent calls return [`BarrierError::Poisoned`] immediately. Recreate the
+/// [`Node`](crate::network::Node) to recover.
 #[derive(Debug)]
 pub enum Barrier {
+    /// Leader-based barrier. See [`BarrierAlgorithm::Centralized`].
     Centralized(LinearBarrier),
+    /// Binary-tree barrier. See [`BarrierAlgorithm::BinaryTree`].
     BinaryTree(BinaryTreeBarrier),
+    /// Dissemination barrier. See [`BarrierAlgorithm::Dissemination`].
     Dissemination(DisseminationBarrier),
 }
 
@@ -135,8 +182,11 @@ impl Barrier {
 /// after the endpoint exchange to produce a [`Barrier`].
 #[derive(Debug)]
 pub enum PreparedBarrier {
+    /// Leader-based barrier. See [`BarrierAlgorithm::Centralized`].
     Centralized(PreparedLinearBarrier),
+    /// Binary-tree barrier. See [`BarrierAlgorithm::BinaryTree`].
     BinaryTree(PreparedBinaryTreeBarrier),
+    /// Dissemination barrier. See [`BarrierAlgorithm::Dissemination`].
     Dissemination(PreparedDisseminationBarrier),
 }
 
