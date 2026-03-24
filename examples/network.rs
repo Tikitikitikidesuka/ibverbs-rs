@@ -1,8 +1,6 @@
 use ibverbs_rs::ibverbs;
-use ibverbs_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
-use ibverbs_rs::network::Node;
-use ibverbs_rs::network::config::{NodeConfig, RawNetworkConfig};
-use ibverbs_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
+use ibverbs_rs::multi_channel::{PeerReceiveWorkRequest, PeerSendWorkRequest};
+use ibverbs_rs::network::{ExchangeConfig, Exchanger, Node, NodeConfig, RawNetworkConfig};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 use std::{env, fs, process};

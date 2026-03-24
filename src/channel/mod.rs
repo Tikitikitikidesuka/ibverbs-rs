@@ -16,8 +16,6 @@
 //!   and return raw [`PendingWork`] handles. These are the building
 //!   blocks used by the higher-level APIs.
 
-use crate::channel::builder::ChannelBuilder;
-use crate::channel::builder::channel_builder::SetPd;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::error::IbvError;
 use crate::ibverbs::protection_domain::ProtectionDomain;
@@ -33,7 +31,13 @@ mod ops;
 mod pending_work;
 mod polling_scope;
 
-pub use builder::PreparedChannel;
+#[doc(hidden)]
+pub use builder::channel_builder::{
+    Empty, SetAccess, SetAckTimeout, SetMaxAckRetries, SetMaxRecvSge, SetMaxRecvWr,
+    SetMaxRnrRetries, SetMaxSendSge, SetMaxSendWr, SetMinCqEntries, SetMinRnrTimer, SetMtu, SetPd,
+    SetRecvPsn, SetSendPsn,
+};
+pub use builder::{ChannelBuilder, PreparedChannel};
 pub use pending_work::PendingWork;
 pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork};
 

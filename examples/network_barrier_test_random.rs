@@ -1,8 +1,7 @@
 use ibverbs_rs::ibverbs;
-use ibverbs_rs::network::Node;
-use ibverbs_rs::network::barrier::BarrierAlgorithm;
-use ibverbs_rs::network::config::{NodeConfig, RawNetworkConfig};
-use ibverbs_rs::network::tcp_exchanger::{ExchangeConfig, Exchanger};
+use ibverbs_rs::network::{
+    BarrierAlgorithm, ExchangeConfig, Exchanger, Node, NodeConfig, RawNetworkConfig,
+};
 use log::LevelFilter::Debug;
 use rand::Rng;
 use simple_logger::SimpleLogger;

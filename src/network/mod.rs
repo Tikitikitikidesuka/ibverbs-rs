@@ -11,14 +11,20 @@ mod polling_scope;
 mod tcp_exchanger;
 
 pub use barrier::{Barrier, BarrierAlgorithm, BarrierError, PreparedBarrier};
-pub use builder::{LocalEndpoint, NetworkChannelEndpoint, PreparedNode, RemoteEndpoints};
+#[doc(hidden)]
+pub use builder::node_builder::{
+    Empty, SetAccess, SetAckTimeout, SetBarrier, SetMaxAckRetries, SetMaxRecvSge, SetMaxRecvWr,
+    SetMaxRnrRetries, SetMaxSendSge, SetMaxSendWr, SetMinCqEntries, SetMinRnrTimer, SetMtu, SetPd,
+    SetRank, SetRecvPsn, SetSendPsn, SetWorldSize,
+};
+pub use builder::{
+    LocalEndpoint, NetworkChannelEndpoint, NodeBuilder, PreparedNode, RemoteEndpoints,
+};
 pub use config::{NetworkConfig, NetworkConfigError, NodeConfig, RawNetworkConfig};
 pub use tcp_exchanger::{ExchangeConfig, ExchangeError, Exchanger};
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
-use crate::network::builder::NodeBuilder;
-use crate::network::builder::node_builder::SetPd;
 
 /// A ranked RDMA network node with barrier synchronization.
 ///

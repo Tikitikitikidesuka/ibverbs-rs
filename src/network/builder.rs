@@ -13,7 +13,7 @@ use std::io;
 
 #[bon]
 impl Node {
-    #[builder(state_mod(vis = "pub(crate)"))]
+    #[builder(state_mod(vis = "pub"))]
     pub fn builder(
         rank: usize,
         world_size: usize,

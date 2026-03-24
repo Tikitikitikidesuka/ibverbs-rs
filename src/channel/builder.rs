@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 #[bon]
 impl Channel {
-    #[builder(state_mod(vis = "pub(crate)"))]
+    #[builder(state_mod(vis = "pub"))]
     pub fn builder(
         pd: &ProtectionDomain,
         #[builder(default =

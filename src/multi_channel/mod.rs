@@ -17,7 +17,13 @@ mod polling_scope;
 mod remote_memory_region;
 mod work_request;
 
-pub use builder::PreparedMultiChannel;
+#[doc(hidden)]
+pub use builder::multi_channel_builder::{
+    Empty, SetAccess, SetAckTimeout, SetMaxAckRetries, SetMaxRecvSge, SetMaxRecvWr,
+    SetMaxRnrRetries, SetMaxSendSge, SetMaxSendWr, SetMinCqEntries, SetMinRnrTimer, SetMtu,
+    SetNumChannels, SetPd, SetRecvPsn, SetSendPsn,
+};
+pub use builder::{MultiChannelBuilder, PreparedMultiChannel};
 pub use remote_memory_region::PeerRemoteMemoryRegion;
 pub use work_request::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
@@ -26,8 +32,6 @@ pub use work_request::{
 use crate::channel::Channel;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::multi_channel::builder::MultiChannelBuilder;
-use crate::multi_channel::builder::multi_channel_builder::SetPd;
 
 /// A set of [`Channel`]s to different peers, sharing a single [`ProtectionDomain`].
 ///

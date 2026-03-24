@@ -1,4 +1,4 @@
-use ibverbs_rs::channel::polling_scope::ScopeError;
+use ibverbs_rs::channel::ScopeError;
 use ibverbs_rs::channel::{Channel, TransportError};
 use ibverbs_rs::ibverbs;
 use ibverbs_rs::ibverbs::work::{ReceiveWorkRequest, SendWorkRequest};
@@ -11,7 +11,6 @@ fn main() {
     SimpleLogger::new().with_level(Debug).init().unwrap();
 
     let ctx = ibverbs::open_device(DEVICE).unwrap();
-    ctx.device().bind_thread_to_numa().unwrap();
     let pd = ctx.allocate_pd().unwrap();
     let channel = Channel::builder().pd(&pd).build().unwrap();
 

@@ -13,7 +13,7 @@ use bon::bon;
 
 #[bon]
 impl MultiChannel {
-    #[builder(state_mod(vis = "pub(crate)"))]
+    #[builder(state_mod(vis = "pub"))]
     pub fn builder(
         num_channels: usize,
         pd: &ProtectionDomain,

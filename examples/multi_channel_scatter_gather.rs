@@ -1,9 +1,7 @@
-use ibverbs_rs::channel::TransportError;
-use ibverbs_rs::channel::polling_scope::ScopeError;
+use ibverbs_rs::channel::{ScopeError, TransportError};
 use ibverbs_rs::ibverbs;
-use ibverbs_rs::ibverbs::error::IbvError;
 use ibverbs_rs::multi_channel::MultiChannel;
-use ibverbs_rs::multi_channel::work_request::{PeerReceiveWorkRequest, PeerSendWorkRequest};
+use ibverbs_rs::multi_channel::{PeerReceiveWorkRequest, PeerSendWorkRequest};
 use log::LevelFilter::Debug;
 use simple_logger::SimpleLogger;
 
