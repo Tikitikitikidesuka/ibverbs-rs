@@ -1,3 +1,19 @@
+//! Queue pair tuning parameters.
+//!
+//! This module provides typed wrappers for the hardware knobs that control queue pair
+//! behaviour during connection setup:
+//!
+//! | Type | Controls |
+//! |------|----------|
+//! | [`PacketSequenceNumber`] | Initial PSN for send and receive queues |
+//! | [`MaximumTransferUnit`] | Per-packet payload size for the path |
+//! | [`MinRnrTimer`] | How long the sender waits after an RNR NAK before retrying |
+//! | [`MaxRnrRetries`] | How many RNR retries before the QP raises an error |
+//! | [`AckTimeout`] | How long to wait for an ACK before retransmitting |
+//! | [`MaxAckRetries`] | How many ACK-timeout retransmissions before the QP raises an error |
+//!
+//! All types implement [`Default`] with conservative values suitable for most workloads.
+
 use std::time::Duration;
 
 /// A 24-bit Packet Sequence Number (PSN).

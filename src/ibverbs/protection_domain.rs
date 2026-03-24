@@ -1,3 +1,31 @@
+//! Protection domain — resource isolation for RDMA objects.
+//!
+//! A [`ProtectionDomain`] groups RDMA resources (memory regions, queue pairs, address handles)
+//! that are allowed to reference one another in work requests. The hardware prevents objects from
+//! different protection domains from being mixed, providing isolation between unrelated
+//! connections or tenants.
+//!
+//! # Typical usage
+//!
+//! Allocate a protection domain from an open device [`Context`], then use it to register memory
+//! and create queue pairs:
+//!
+//! ```no_run
+//! # use ibverbs_rs::ibverbs;
+//! let devices = ibverbs::list_devices()?;
+//! let context = devices.get(0).unwrap().open()?;
+//! let pd = context.allocate_pd()?;
+//!
+//! // Register memory under this protection domain
+//! let mut buf = vec![0u8; 4096];
+//! let mr = pd.register_local_mr_slice(&buf)?;
+//!
+//! // Create a queue pair under the same protection domain
+//! let cq = context.create_cq(16, ())?;
+//! let qp_builder = pd.create_qp().send_cq(&cq).recv_cq(&cq);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};

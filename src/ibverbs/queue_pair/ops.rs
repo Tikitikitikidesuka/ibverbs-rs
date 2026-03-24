@@ -1,3 +1,16 @@
+//! Work request posting operations for a connected queue pair.
+//!
+//! This module adds the four core RDMA operations to [`QueuePair`] as `unsafe` methods.
+//! All four follow the same pattern: build a typed work request, post it with an
+//! application-chosen `wr_id`, and poll the corresponding completion queue for the result.
+//!
+//! | Method | Operation | Queue |
+//! |--------|-----------|-------|
+//! | [`post_send`](QueuePair::post_send) | Two-sided Send | Send CQ |
+//! | [`post_receive`](QueuePair::post_receive) | Two-sided Receive | Recv CQ |
+//! | [`post_write`](QueuePair::post_write) | One-sided RDMA Write | Send CQ |
+//! | [`post_read`](QueuePair::post_read) | One-sided RDMA Read | Send CQ |
+
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::queue_pair::QueuePair;
 use crate::ibverbs::work::{

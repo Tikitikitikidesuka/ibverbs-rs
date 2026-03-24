@@ -1,3 +1,15 @@
+//! Queue pair construction and connection handshake.
+//!
+//! This module provides [`PreparedQueuePair`] and [`QueuePairEndpoint`], which together
+//! handle the two-phase setup required to bring a queue pair to the Ready-to-Send state:
+//!
+//! 1. **Allocate** — call [`QueuePair::builder`](crate::ibverbs::queue_pair::QueuePair::builder)
+//!    to create a [`PreparedQueuePair`] and obtain its [`QueuePairEndpoint`].
+//! 2. **Exchange** — send your [`QueuePairEndpoint`] to the remote peer out-of-band (e.g., over
+//!    TCP) and receive theirs.
+//! 3. **Connect** — call [`PreparedQueuePair::handshake`] with the remote endpoint to drive the
+//!    QP through the INIT → RTR → RTS state transitions and get back a usable [`QueuePair`].
+
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::completion_queue::CompletionQueue;
 use crate::ibverbs::device::IB_PORT;
