@@ -49,8 +49,8 @@ impl MaximumTransferUnit {
 pub struct MinRnrTimer(u8);
 
 impl MinRnrTimer {
-    /// Value 0 encodes the maximum duration (approx 655 ms).
-    const DURATION_ZERO: Duration = Duration::from_secs(655360);
+    /// Value 0 encodes the maximum duration (approx 655.36 ms).
+    const DURATION_ZERO: Duration = Duration::from_micros(655360);
 
     /// Lookup table for codes 1..31 mapping to durations in microseconds.
     /// Derived from InfiniBand Architecture Specification Vol 1.
@@ -158,7 +158,7 @@ impl MaxRnrRetries {
         MaxRnrRetries::Unlimited
     }
 
-    /// Returns the number of retries.
+    /// Returns the number of retries, or `None` if `Unlimited`.
     pub const fn retries(&self) -> Option<u8> {
         match self {
             MaxRnrRetries::Limited(retries) => Some(*retries),
@@ -214,7 +214,7 @@ impl AckTimeout {
     // code is checked to be in 1..31 before the cast
     #[allow(clippy::cast_possible_truncation)]
     pub const fn min_duration_greater_than(timeout: Duration) -> Option<Self> {
-        let code = (timeout.as_micros() / 4096).next_power_of_two().ilog2();
+        let code = (timeout.as_nanos() / 4096).next_power_of_two().ilog2();
         if code > 0 && code < 32 {
             Some(AckTimeout::Limited(code as u8))
         } else {
@@ -225,7 +225,7 @@ impl AckTimeout {
     /// Returns the approximate duration for this timeout.
     pub fn duration(&self) -> Option<Duration> {
         match self {
-            AckTimeout::Limited(code) => Some(Duration::from_micros(4096u64 << code)),
+            AckTimeout::Limited(code) => Some(Duration::from_nanos(4096u64 << code)),
             AckTimeout::Unlimited => None,
         }
     }
