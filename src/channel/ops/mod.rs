@@ -1,3 +1,3 @@
-pub mod polled_ops;
-pub mod scoped_ops;
-pub mod unpolled_ops;
+mod polled_ops;
+mod scoped_ops;
+mod unpolled_ops;
