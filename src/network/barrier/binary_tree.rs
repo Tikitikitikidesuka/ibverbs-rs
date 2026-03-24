@@ -58,7 +58,8 @@ impl BinaryTreeBarrier {
 impl BinaryTreeBarrier {
     /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
     ///
-    /// Validates that peers are sorted, unique, and include this node's rank.
+    /// Validates that peers are sorted and unique. Self-inclusion is verified inside the
+    /// synchronization itself and returns [`BarrierError::SelfNotInGroup`] if absent.
     pub fn barrier(
         &mut self,
         multi_channel: &mut MultiChannel,

@@ -344,7 +344,7 @@ impl MemoryRegion {
 }
 
 impl MemoryRegion {
-    /// Creates a **Gather Element** (for Sending/Reading) using the "raw" constructor.
+    /// Creates a **Gather Element** (for Sending/Writing) using the "raw" constructor.
     ///
     /// # Debug checks
     ///
@@ -355,7 +355,7 @@ impl MemoryRegion {
         GatherElement::new(self, data)
     }
 
-    /// Creates a **Gather Element** (for Sending/Reading) from a shared slice.
+    /// Creates a **Gather Element** (for Sending/Writing) from a shared slice.
     ///
     /// # Checks
     ///
@@ -396,7 +396,7 @@ impl MemoryRegion {
         GatherElement::new_unchecked(self, data)
     }
 
-    /// Creates a **Scatter Element** (for Receiving/Writing) using the "raw" constructor.
+    /// Creates a **Scatter Element** (for Receiving/Reading) using the "raw" constructor.
     ///
     /// # Debug checks
     ///
@@ -408,7 +408,7 @@ impl MemoryRegion {
         ScatterElement::new(self, data)
     }
 
-    /// Creates a **Scatter Element** (for Receiving/Writing) from a mutable slice.
+    /// Creates a **Scatter Element** (for Receiving/Reading) from a mutable slice.
     ///
     /// # Checks
     ///
