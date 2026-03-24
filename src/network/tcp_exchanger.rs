@@ -19,8 +19,7 @@ pub enum ExchangeError {
     /// A rank referenced during the exchange is not present in the [`NetworkConfig`].
     #[error("Rank {rank} not in network")]
     InvalidRank { rank: usize },
-    /// An incoming message could not be decoded. This typically indicates a
-    /// protocol mismatch between peers (e.g. mismatched library versions).
+    /// An incoming message could not be decoded.
     #[error("Error decoding data ({0})")]
     DecodeError(#[from] bincode::error::DecodeError),
     /// A message could not be serialized before sending.
