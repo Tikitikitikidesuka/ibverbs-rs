@@ -37,15 +37,20 @@ impl NetworkConfig {
     }
 }
 
-/// Validation errors when building a [`NetworkConfig`].
+/// An error returned by [`RawNetworkConfig::build`] when the configuration is invalid.
 #[derive(Debug, Copy, Clone, Error)]
 pub enum NetworkConfigError {
+    /// No nodes were added to the configuration.
     #[error("Empty network")]
     EmptyNetwork,
+    /// The lowest rank present is not `0`. Ranks must be a contiguous sequence
+    /// starting at zero.
     #[error("First rank id is not zero")]
     FirstRankNotZero,
+    /// There is a gap in the rank sequence. `gap_rank` is the first missing rank.
     #[error("Ranks are non sequential, {gap_rank} is missing")]
     NonSequentialRanks { gap_rank: usize },
+    /// The same rank appears more than once. `dup_rank` is the repeated rank.
     #[error("Rank {dup_rank} appears multiple times")]
     DuplicatedRank { dup_rank: usize },
 }

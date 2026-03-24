@@ -13,20 +13,29 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::time::timeout;
 
-/// An error that can occur during a TCP-based data exchange.
+/// An error that can occur during a TCP-based endpoint exchange.
 #[derive(Debug, Error)]
 pub enum ExchangeError {
+    /// A rank referenced during the exchange is not present in the [`NetworkConfig`].
     #[error("Rank {rank} not in network")]
     InvalidRank { rank: usize },
+    /// An incoming message could not be decoded. This typically indicates a
+    /// protocol mismatch between peers (e.g. mismatched library versions).
     #[error("Error decoding data ({0})")]
     DecodeError(#[from] bincode::error::DecodeError),
+    /// A message could not be serialized before sending.
     #[error("Error encoding data ({0})")]
     EncodeError(#[from] bincode::error::EncodeError),
+    /// An underlying TCP I/O operation failed.
     #[error("Error during IO operation ({0})")]
     IoError(#[from] std::io::Error),
+    /// The serialized message exceeds `u32::MAX` bytes and cannot be framed
+    /// with the 4-byte length prefix used by the wire protocol. The field
+    /// contains the actual encoded size in bytes.
     #[error("Encoded message size {0} exceeds u32::MAX and cannot be framed")]
     MessageTooLarge(usize),
-    #[error("")]
+    /// The exchange did not complete within [`ExchangeConfig::exchange_timeout`].
+    #[error("Exchange timed out")]
     Timeout,
 }
 
