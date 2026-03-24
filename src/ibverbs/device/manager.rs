@@ -209,7 +209,7 @@ impl Device<'_> {
         if guid.is_reserved() {
             Err(IbvError::from_errno_with_msg(
                 io::Error::last_os_error().raw_os_error().unwrap(),
-                "GID is reserved or invalid",
+                "GUID is reserved or invalid",
             ))
         } else {
             Ok(guid)

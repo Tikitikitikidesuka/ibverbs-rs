@@ -93,7 +93,7 @@ impl Context {
     ///
     /// * Returns [`IbvError::Permission`] if the process lacks permission to access RDMA devices.
     /// * Returns [`IbvError::Driver`] if `libibverbs` fails to open the device for OS-specific reasons.
-    /// * Returns [`IbvError::Resource`] if the RDMA port is `DOWN` or `INIT`, indicating the link is not ready.
+    /// * Returns [`IbvError::Resource`] if the RDMA port is in any state other than `ACTIVE` or `ARMED`.
     pub fn from_device(dev: &Device) -> IbvResult<Self> {
         // SAFETY: `dev.device_ptr` is guaranteed valid by the `DeviceRef` lifetime/invariants.
         let ibv_ctx = unsafe { ibv_open_device(dev.device_ptr) };

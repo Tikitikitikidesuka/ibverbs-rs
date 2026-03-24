@@ -91,8 +91,9 @@ impl ProtectionDomain {
     /// Registers a local memory region for RDMA operations.
     ///
     /// The registered region has local write access only — remote peers cannot read from or
-    /// write to it directly. This means it can only be used in two-sided operations
-    /// (send/receive).
+    /// write to it directly. It can be used as the local data buffer in two-sided operations
+    /// (send/receive) and as the initiator-side buffer in one-sided RDMA Read and RDMA Write
+    /// operations.
     ///
     /// # Safety
     /// The caller is responsible for ensuring the memory at `address` remains allocated and
@@ -169,9 +170,10 @@ impl ProtectionDomain {
 
     /// Registers a DMA-BUF as a local memory region for RDMA operations.
     ///
-    /// The registered region has local write access only — it can only be used in two-sided
-    /// operations (send/receive). See [`register_dmabuf`](Self::register_dmabuf) for the
-    /// argument descriptions.
+    /// The registered region has local write access only — remote peers cannot read from or
+    /// write to it directly. It can be used as the local data buffer in two-sided operations
+    /// (send/receive) and as the initiator-side buffer in one-sided RDMA Read and RDMA Write
+    /// operations. See [`register_dmabuf`](Self::register_dmabuf) for the argument descriptions.
     pub fn register_local_dmabuf(
         &self,
         fd: i32,
