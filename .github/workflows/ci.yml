@@ -61,12 +61,67 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .cargo-target-cache
+          key: cargo-check-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-check-${{ runner.os }}-
+      - name: Restore cargo cache
+        run: |
+          if [ -d .cargo-target-cache ]; then
+            cp -r .cargo-target-cache/. /opt/cargo-target/
+          fi
       - run: cargo fmt -- --check
       - run: cargo check --all-features
       - run: cargo clippy --all-features --no-deps
+      - name: Update cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cargo-target-cache/debug
+          [ -d /opt/cargo-target/debug/.fingerprint ] && cp -r /opt/cargo-target/debug/.fingerprint .cargo-target-cache/debug/
+          [ -d /opt/cargo-target/debug/incremental ] && cp -r /opt/cargo-target/debug/incremental .cargo-target-cache/debug/
+          find /opt/cargo-target/debug -maxdepth 1 \( -name "ibverbs_rs*" -o -name "libibverbs_rs*" \) \
+            | xargs -r cp -t .cargo-target-cache/debug/
 
   rust-test:
     name: Test
+    runs-on: ubuntu-latest
+    needs: [ci-build, rust-check]
+
+    container:
+      image: ghcr.io/tikitikitikidesuka/ibverbs-rs:${{ needs.ci-build.outputs.image_tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .cargo-target-cache
+          key: cargo-test-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-test-${{ runner.os }}-
+            cargo-check-${{ runner.os }}-
+      - name: Restore cargo cache
+        run: |
+          if [ -d .cargo-target-cache ]; then
+            cp -r .cargo-target-cache/. /opt/cargo-target/
+          fi
+      - run: cargo test --all-features
+      - name: Update cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cargo-target-cache/debug
+          [ -d /opt/cargo-target/debug/.fingerprint ] && cp -r /opt/cargo-target/debug/.fingerprint .cargo-target-cache/debug/
+          [ -d /opt/cargo-target/debug/incremental ] && cp -r /opt/cargo-target/debug/incremental .cargo-target-cache/debug/
+          find /opt/cargo-target/debug -maxdepth 1 \( -name "ibverbs_rs*" -o -name "libibverbs_rs*" \) \
+            | xargs -r cp -t .cargo-target-cache/debug/
+
+  docs-build:
+    name: Build docs
     runs-on: ubuntu-latest
     needs: ci-build
 
@@ -75,24 +130,32 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: cargo test --all-features
-
-  docs-build:
-    name: Build docs
-    runs-on: ubuntu-latest
-    needs: [rust-test, ci-build]
-
-    container:
-      image: ghcr.io/tikitikitikidesuka/ibverbs-rs:${{ needs.ci-build.outputs.image_tag }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        id: cache
+        with:
+          path: .cargo-target-cache
+          key: cargo-doc-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-doc-${{ runner.os }}-
+            cargo-test-${{ runner.os }}-
+            cargo-check-${{ runner.os }}-
+      - name: Restore cargo cache
+        run: |
+          if [ -d .cargo-target-cache ]; then
+            cp -r .cargo-target-cache/. /opt/cargo-target/
+          fi
       - run: cargo doc --no-deps --all-features
+      - name: Update cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cargo-target-cache/debug
+          [ -d /opt/cargo-target/debug/.fingerprint ] && cp -r /opt/cargo-target/debug/.fingerprint .cargo-target-cache/debug/
+          [ -d /opt/cargo-target/debug/incremental ] && cp -r /opt/cargo-target/debug/incremental .cargo-target-cache/debug/
+          find /opt/cargo-target/debug -maxdepth 1 \( -name "ibverbs_rs*" -o -name "libibverbs_rs*" \) \
+            | xargs -r cp -t .cargo-target-cache/debug/
       - run: echo '<meta http-equiv="refresh" content="0; url=ibverbs_rs/index.html">' > /opt/cargo-target/doc/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -101,7 +164,7 @@ jobs:
   docs-deploy:
     name: Deploy docs
     runs-on: ubuntu-latest
-    needs: docs-build
+    needs: [docs-build, rust-test]
     permissions:
       pages: write
       id-token: write
