@@ -130,7 +130,7 @@ macro_rules! remote_array_field_unchecked {
     ($mr:expr, $T:ty, $index:expr) => {{
         let type_size = std::mem::size_of::<$T>();
         let offset = $index * type_size;
-        $mr.sub_region(offset)
+        $mr.sub_region_unchecked(offset)
     }};
 }
 
