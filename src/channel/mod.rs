@@ -10,10 +10,10 @@
 //! * **Blocking** — [`Channel::send`], [`Channel::receive`], [`Channel::write`], [`Channel::read`]
 //!   post a single operation and block until it completes.
 //! * **Scoped** — [`Channel::scope`] and [`Channel::manual_scope`] open a
-//!   [`PollingScope`](polling_scope::PollingScope) where multiple operations can be posted and
+//!   [`PollingScope`] where multiple operations can be posted and
 //!   polled independently. The scope guarantees all work is completed before it returns.
 //! * **Unpolled** — [`Channel::send_unpolled`], [`Channel::receive_unpolled`], etc. are `unsafe`
-//!   and return raw [`PendingWork`](pending_work::PendingWork) handles. These are the building
+//!   and return raw [`PendingWork`] handles. These are the building
 //!   blocks used by the higher-level APIs.
 
 use crate::channel::builder::ChannelBuilder;
@@ -27,12 +27,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use thiserror::Error;
 
-pub mod builder;
-pub mod pending_work;
-pub mod polling_scope;
-
+mod builder;
 mod cached_completion_queue;
 mod ops;
+mod pending_work;
+mod polling_scope;
+
+pub use builder::PreparedChannel;
+pub use pending_work::PendingWork;
+pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork};
 
 /// A safe RDMA communication endpoint built on top of a [`QueuePair`].
 ///
@@ -58,7 +61,7 @@ impl Channel {
 }
 
 impl ProtectionDomain {
-    /// Returns a [`ChannelBuilder`] with this protection domain already set.
+    /// Returns a builder with this protection domain already set.
     pub fn create_channel(&self) -> ChannelBuilder<'_, SetPd> {
         Channel::builder().pd(self)
     }

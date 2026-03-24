@@ -1,6 +1,5 @@
 use crate::channel::TransportResult;
-use crate::channel::pending_work::PendingWork;
-use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::channel::{PendingWork, PollingScope, ScopedPendingWork};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work::*;
 use crate::multi_channel::MultiChannel;

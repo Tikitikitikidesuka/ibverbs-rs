@@ -8,14 +8,20 @@
 //! * **Scoped** — [`MultiChannel::scope`] and [`MultiChannel::manual_scope`].
 //! * **Unpolled** — `unsafe` variants for manual lifetime management.
 //!
-//! Work requests are wrapped in peer-aware types ([`PeerSendWorkRequest`](work_request::PeerSendWorkRequest), etc.)
+//! Work requests are wrapped in peer-aware types ([`PeerSendWorkRequest`], etc.)
 //! that carry the target peer index.
 
-pub mod builder;
-pub mod ops;
-pub mod polling_scope;
-pub mod remote_memory_region;
-pub mod work_request;
+mod builder;
+mod ops;
+mod polling_scope;
+mod remote_memory_region;
+mod work_request;
+
+pub use builder::PreparedMultiChannel;
+pub use remote_memory_region::PeerRemoteMemoryRegion;
+pub use work_request::{
+    PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
+};
 
 use crate::channel::Channel;
 use crate::ibverbs::error::{IbvError, IbvResult};
@@ -54,7 +60,7 @@ impl MultiChannel {
 }
 
 impl ProtectionDomain {
-    /// Returns a [`MultiChannelBuilder`] with this protection domain already set.
+    /// Returns a builder with this protection domain already set.
     pub fn create_multi_channel(&self) -> MultiChannelBuilder<'_, SetPd> {
         MultiChannel::builder().pd(self)
     }

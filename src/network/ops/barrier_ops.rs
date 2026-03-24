@@ -1,4 +1,4 @@
-use crate::channel::polling_scope::PollingScope;
+use crate::channel::PollingScope;
 use crate::network::Node;
 use crate::network::barrier::BarrierError;
 use std::time::Duration;

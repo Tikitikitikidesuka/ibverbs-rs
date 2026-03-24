@@ -1,9 +1,8 @@
 use crate::channel::TransportResult;
-use crate::channel::pending_work::PendingWork;
-use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::channel::{PendingWork, PollingScope, ScopedPendingWork};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work::WorkSuccess;
-use crate::multi_channel::work_request::{
+use crate::multi_channel::{
     PeerReadWorkRequest, PeerReceiveWorkRequest, PeerSendWorkRequest, PeerWriteWorkRequest,
 };
 use crate::network::Node;

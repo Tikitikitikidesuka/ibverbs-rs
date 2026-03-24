@@ -1,5 +1,5 @@
 use crate::channel::TransportResult;
-use crate::channel::polling_scope::{PollingScope, ScopedPendingWork};
+use crate::channel::{PollingScope, ScopedPendingWork};
 use crate::ibverbs::work::SendWorkRequest;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::work_request::*;

@@ -1,4 +1,4 @@
-use crate::channel::pending_work::PendingWork;
+use crate::channel::PendingWork;
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::work::SendWorkRequest;
 use crate::multi_channel::MultiChannel;

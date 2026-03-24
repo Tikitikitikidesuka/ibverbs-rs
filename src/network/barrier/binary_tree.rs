@@ -1,7 +1,7 @@
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
-use crate::multi_channel::remote_memory_region::PeerRemoteMemoryRegion;
+use crate::multi_channel::PeerRemoteMemoryRegion;
 use crate::network::barrier::BarrierError;
 use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
 use std::time::{Duration, Instant};

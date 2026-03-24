@@ -1,17 +1,22 @@
-/// A ranked network node with barrier synchronization.
-///
-/// Combines a [`MultiChannel`] with a rank, world size, and a [`Barrier`] for
-/// collective synchronization across all nodes.
-pub mod barrier;
-pub mod builder;
-pub mod config;
-pub mod ops;
-pub mod polling_scope;
-pub mod tcp_exchanger;
+//! A ranked network node with barrier synchronization.
+//!
+//! Combines a [`MultiChannel`] with a rank, world size,
+//! and a [`Barrier`] for collective synchronization across all nodes.
+
+mod barrier;
+mod builder;
+mod config;
+mod ops;
+mod polling_scope;
+mod tcp_exchanger;
+
+pub use barrier::{Barrier, BarrierAlgorithm, BarrierError, PreparedBarrier};
+pub use builder::{LocalEndpoint, NetworkChannelEndpoint, PreparedNode, RemoteEndpoints};
+pub use config::{NetworkConfig, NetworkConfigError, NodeConfig, RawNetworkConfig};
+pub use tcp_exchanger::{ExchangeConfig, ExchangeError, Exchanger};
 
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
-use crate::network::barrier::Barrier;
 use crate::network::builder::NodeBuilder;
 use crate::network::builder::node_builder::SetPd;
 
@@ -45,7 +50,7 @@ impl Node {
 }
 
 impl ProtectionDomain {
-    /// Creates a [`NodeBuilder`] under this protection domain.
+    /// Creates a builder under this protection domain.
     pub fn create_node(&self) -> NodeBuilder<'_, SetPd> {
         Node::builder().pd(self)
     }

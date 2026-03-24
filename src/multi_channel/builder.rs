@@ -1,5 +1,5 @@
 use crate::channel::Channel;
-use crate::channel::builder::PreparedChannel;
+use crate::channel::PreparedChannel;
 use crate::ibverbs::access_config::AccessFlags;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::protection_domain::ProtectionDomain;
