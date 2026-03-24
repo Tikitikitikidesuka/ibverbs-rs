@@ -96,7 +96,9 @@ pub struct LocalEndpoint {
 }
 
 /// Validated collection of remote endpoints, one per peer. Produced by
-/// [`PreparedNode::gather_endpoints`].
+/// [`PreparedNode::gather_endpoints`] and consumed by [`PreparedNode::handshake`].
+///
+/// Contains one [`NetworkChannelEndpoint`] per rank, indexed in rank order.
 pub struct RemoteEndpoints(Box<[NetworkChannelEndpoint]>);
 
 impl PreparedNode {

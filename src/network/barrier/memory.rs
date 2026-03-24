@@ -36,7 +36,9 @@ pub(super) struct PreparedBarrierMr {
 struct BarrierPeerFlags {
     /// Expected epoch value — only written and read locally.
     expected_in_epoch: u64,
+    /// Outgoing epoch counter, RDMA-written into the remote peer's `in_epoch` slot.
     out_epoch: U64,
+    /// Incoming epoch counter, written by remote peers via RDMA to signal arrival.
     in_epoch: U64,
 }
 

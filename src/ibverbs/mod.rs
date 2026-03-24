@@ -15,6 +15,7 @@
 //! * [`work`] — Work request types (Send, Receive, Write, Read) and completion results.
 //! * [`access_config`] — Access permission flags for memory regions and queue pairs.
 //! * [`error`] — Error types for ibverbs operations.
+//! * [`numa`] — NUMA affinity helpers (requires the `"numa"` Cargo feature).
 //!
 //! # Typical Workflow
 //!

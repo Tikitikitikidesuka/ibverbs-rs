@@ -132,7 +132,9 @@ pub struct PreparedQueuePair {
 /// You must send this information to the remote peer so they can connect their QP to this one.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct QueuePairEndpoint {
+    /// Queue Pair Number (QPN) — the 24-bit hardware identifier for this queue pair.
     pub num: u32,
+    /// Local Identifier (LID) — the 16-bit subnet address of the port this QP is on.
     pub lid: u16,
 }
 

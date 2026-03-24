@@ -5,7 +5,8 @@ impl<'a> Device<'a> {
     /// Bind the calling task (OS thread) to the NUMA node local to this InfiniBand device.
     ///
     /// This reads the device’s NUMA node from sysfs (`/sys/class/infiniband/<dev>/device/numa_node`)
-    /// and then applies the affinity using `numa_run_on_node()`.
+    /// and then applies the affinity using [`set_numa_node`], which calls both `numa_run_on_node()`
+    /// and `numa_set_localalloc()`.
     ///
     /// # Errors
     ///
@@ -49,13 +50,16 @@ impl<'a> Device<'a> {
     }
 }
 
-/// Pins the current task (OS thread) to the specified NUMA node.
+/// Pins the current task (OS thread) to the specified NUMA node and sets the memory allocation
+/// policy to local allocation via `numa_set_localalloc()`.
 ///
-/// This is a thin wrapper around `numa_run_on_node()`. On success, it returns `Ok(())`; on failure
-/// it returns the OS error reported via `errno`.
+/// Calls `numa_run_on_node()` to restrict CPU scheduling, then `numa_set_localalloc()` so that
+/// subsequent memory allocations are served from the local node. On success, returns `Ok(())`; on
+/// failure returns the OS error reported via `errno`.
 ///
 /// Passing `-1` to `numa_run_on_node()` permits the kernel to schedule the task on all nodes again,
-/// effectively resetting the affinity.
+/// effectively resetting the CPU affinity (but the local-alloc policy set by `numa_set_localalloc()`
+/// remains in effect).
 fn set_numa_node(node: i32) -> io::Result<()> {
     let res = unsafe { numa_run_on_node(node) };
     if res != 0 {
