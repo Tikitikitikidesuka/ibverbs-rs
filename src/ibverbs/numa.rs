@@ -1,5 +1,7 @@
 //! NUMA affinity — thread and memory binding for RDMA devices.
 //!
+//! This module requires the **`numa`** Cargo feature and the `libnuma` system library.
+//!
 //! Enabling the `"numa"` Cargo feature provides two ways to apply NUMA affinity:
 //!
 //! - **Device-relative** — [`Device::bind_thread_to_numa`] and
