@@ -101,8 +101,15 @@ impl RemoteMemoryRegion {
 
 /// Creates a [`RemoteMemoryRegion`] pointing to the N-th element of a remote array.
 ///
-/// This macro assumes the original `mr` points to the start of an array of type `T`.
-/// It calculates the byte offset for the index and returns a new handle.
+/// Assumes `mr` points to the start of a remote array of type `T`. Returns
+/// `Some(RemoteMemoryRegion)` for the element at `index`, or `None` if the
+/// byte offset overflows or falls outside the region's bounds.
+///
+/// # Returns
+///
+/// * `Some(RemoteMemoryRegion)` — A handle to the `index`-th element.
+/// * `None` — If the byte offset overflows, exceeds the region length,
+///   or the resulting address overflows.
 ///
 /// # Example
 ///
@@ -121,14 +128,17 @@ impl RemoteMemoryRegion {
 macro_rules! remote_array_field {
     ($mr:expr, $T:ty, $index:expr) => {{
         let type_size = std::mem::size_of::<$T>();
-        let offset = $index * type_size;
-        $mr.sub_region(offset)
+        match ($index).checked_mul(type_size) {
+            Some(offset) => $mr.sub_region(offset),
+            None => None,
+        }
     }};
 }
 
 /// Unchecked version of [`remote_array_field!`].
 ///
-/// Does not check if the resulting offset is within the client-known bounds of the MR.
+/// Skips bounds checking against the region length, but the RDMA hardware will
+/// reject out-of-bounds operations with a Remote Access Error.
 #[macro_export]
 macro_rules! remote_array_field_unchecked {
     ($mr:expr, $T:ty, $index:expr) => {{
@@ -140,8 +150,14 @@ macro_rules! remote_array_field_unchecked {
 
 /// Creates a [`RemoteMemoryRegion`] pointing to a specific field of a remote struct.
 ///
-/// This macro assumes the original `mr` points to the start of a struct `Struct`.
-/// It uses `offset_of!` to calculate the new address.
+/// Assumes `mr` points to the start of a remote `Struct`. Uses `offset_of!` to
+/// compute the field's byte offset and returns a sub-region handle.
+///
+/// # Returns
+///
+/// * `Some(RemoteMemoryRegion)` — A handle to the specified field.
+/// * `None` — If the field offset exceeds the region length or the resulting
+///   address overflows.
 ///
 /// # Example
 ///
@@ -172,7 +188,8 @@ macro_rules! remote_struct_field {
 
 /// Unchecked version of [`remote_struct_field!`].
 ///
-/// Does not check if the resulting offset is within the client-known bounds of the MR.
+/// Skips bounds checking against the region length, but the RDMA hardware will
+/// reject out-of-bounds operations with a Remote Access Error.
 #[macro_export]
 macro_rules! remote_struct_field_unchecked {
     ($mr:expr, $Struct:ident :: $field:ident) => {{
@@ -183,8 +200,14 @@ macro_rules! remote_struct_field_unchecked {
 
 /// Creates a [`RemoteMemoryRegion`] pointing to a specific field within an element of a remote array.
 ///
-/// This combines array indexing and field access. It assumes the `mr` points to an array
-/// of `Struct`.
+/// Assumes `mr` points to a remote array of `Struct`. Combines array indexing with
+/// field access: computes `index * size_of::<Struct>() + offset_of!(Struct, field)`.
+///
+/// # Returns
+///
+/// * `Some(RemoteMemoryRegion)` — A handle to the specified field within the `index`-th element.
+/// * `None` — If the byte offset computation overflows, exceeds the region length,
+///   or the resulting address overflows.
 ///
 /// # Example
 ///
@@ -209,14 +232,20 @@ macro_rules! remote_struct_array_field {
     ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{
         let struct_size = std::mem::size_of::<$Struct>();
         let field_offset = std::mem::offset_of!($Struct, $field);
-        let total_offset = ($index * struct_size) + field_offset;
-        $mr.sub_region(total_offset)
+        match ($index)
+            .checked_mul(struct_size)
+            .and_then(|o| o.checked_add(field_offset))
+        {
+            Some(total_offset) => $mr.sub_region(total_offset),
+            None => None,
+        }
     }};
 }
 
 /// Unchecked version of [`remote_struct_array_field!`].
 ///
-/// Does not check if the resulting offset is within the client-known bounds of the MR.
+/// Skips bounds checking against the region length, but the RDMA hardware will
+/// reject out-of-bounds operations with a Remote Access Error.
 #[macro_export]
 macro_rules! remote_struct_array_field_unchecked {
     ($mr:expr, $Struct:ident, $index:expr, $field:ident) => {{
