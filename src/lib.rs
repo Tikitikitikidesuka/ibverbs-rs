@@ -14,8 +14,9 @@
 //!   lifetime-safe operation posting and scope-based completion polling.
 //! * **Multiple peers** — use [`multi_channel::MultiChannel`] to manage indexed connections
 //!   that share a single protection domain and memory region set.
-//! * **Distributed coordination** — use [`network::Node`] for TCP-based endpoint exchange,
-//!   rank/world-size management, and barrier synchronization across a cluster.
+//! * **Distributed network** — use [`network::Node`] to set up a ranked RDMA network
+//!   with barrier synchronization. Includes an out-of-band TCP exchanger for easy
+//!   endpoint discovery and cluster bootstrapping.
 //! * **Low-level control** — the [`ibverbs`] module exposes the raw primitives (devices,
 //!   protection domains, queue pairs, completion queues, memory regions, and work requests)
 //!   for when you need full control over the RDMA stack.
