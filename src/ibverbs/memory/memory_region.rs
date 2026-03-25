@@ -456,10 +456,13 @@ impl MemoryRegion {
     /// Checks if the given address range is fully contained within this MR.
     pub fn encloses(&self, address: *const u8, length: usize) -> bool {
         let mr_start = self.address();
-        let mr_end = mr_start + self.length();
         let data_start = address as usize;
-        let data_end = data_start + length;
-        data_start >= mr_start && data_end <= mr_end
+        if data_start < mr_start {
+            return false;
+        }
+        let offset = data_start - mr_start;
+        let remaining = self.length().saturating_sub(offset);
+        length <= remaining
     }
 
     /// Checks if the given slice is fully contained within this MR.
