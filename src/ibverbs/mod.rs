@@ -1,21 +1,8 @@
-//! Core RDMA primitives.
+//! Core RDMA primitives — device discovery, protection domains, queue pairs, memory registration, completion queues, and work requests.
 //!
 //! This module provides the low-level building blocks for RDMA programming. Higher-level
 //! abstractions like [`Channel`](crate::channel::Channel) and [`Node`](crate::network::Node)
 //! are built on top of these primitives.
-//!
-//! # Submodules
-//!
-//! * [`device`] — Device discovery, context management, and GUID handling.
-//! * [`protection_domain`] — Resource isolation — groups MRs, QPs, and other objects that can
-//!   interact with each other.
-//! * [`memory`] — Memory registration, scatter/gather elements, and remote memory handles.
-//! * [`queue_pair`] — The communication endpoint for posting RDMA operations.
-//! * [`completion_queue`] — Polling for completed work requests.
-//! * [`work`] — Work request types (Send, Receive, Write, Read) and completion results.
-//! * [`access_config`] — Access permission flags for memory regions and queue pairs.
-//! * [`error`] — Error types for ibverbs operations.
-//! * [`numa`] — NUMA affinity helpers (requires the `"numa"` Cargo feature).
 //!
 //! # Typical Workflow
 //!
