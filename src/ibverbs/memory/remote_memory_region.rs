@@ -255,3 +255,197 @@ macro_rules! remote_struct_array_field_unchecked {
         $mr.sub_region_unchecked(total_offset)
     }};
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_stores_fields() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 4096, 0xABCD);
+        assert_eq!(rmr.address(), 0x1000);
+        assert_eq!(rmr.length(), 4096);
+        assert_eq!(rmr.rkey(), 0xABCD);
+    }
+
+    #[test]
+    fn zero_length_region() {
+        let rmr = RemoteMemoryRegion::new(0x2000, 0, 1);
+        assert_eq!(rmr.length(), 0);
+    }
+
+    #[test]
+    fn sub_region_at_zero_offset() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 100, 42);
+        let sub = rmr.sub_region(0).unwrap();
+        assert_eq!(sub.address(), 0x1000);
+        assert_eq!(sub.length(), 100);
+        assert_eq!(sub.rkey(), 42);
+    }
+
+    #[test]
+    fn sub_region_at_middle() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 100, 42);
+        let sub = rmr.sub_region(40).unwrap();
+        assert_eq!(sub.address(), 0x1028);
+        assert_eq!(sub.length(), 60);
+    }
+
+    #[test]
+    fn sub_region_at_exact_end() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 100, 42);
+        let sub = rmr.sub_region(100).unwrap();
+        assert_eq!(sub.address(), 0x1064);
+        assert_eq!(sub.length(), 0);
+    }
+
+    #[test]
+    fn sub_region_beyond_end_returns_none() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 100, 42);
+        assert!(rmr.sub_region(101).is_none());
+    }
+
+    #[test]
+    fn sub_region_address_overflow_returns_none() {
+        let rmr = RemoteMemoryRegion::new(u64::MAX, 100, 42);
+        // offset 1 would overflow the u64 address
+        assert!(rmr.sub_region(1).is_none());
+    }
+
+    #[test]
+    fn sub_region_large_offset_returns_none() {
+        let rmr = RemoteMemoryRegion::new(0x1000, usize::MAX, 42);
+        // address addition will overflow
+        assert!(rmr.sub_region(usize::MAX).is_none());
+    }
+
+    #[test]
+    fn sub_region_unchecked_at_middle() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 100, 42);
+        let sub = rmr.sub_region_unchecked(40);
+        assert_eq!(sub.address(), 0x1028);
+        assert_eq!(sub.length(), 60);
+        assert_eq!(sub.rkey(), 42);
+    }
+
+    #[test]
+    fn remote_array_field_index_zero() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 80, 0xABCD);
+        let elem = remote_array_field!(rmr, u64, 0_usize).unwrap();
+        assert_eq!(elem.address(), 0x1000);
+        assert_eq!(elem.length(), 80);
+    }
+
+    #[test]
+    fn remote_array_field_index_mid() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 80, 0xABCD);
+        let elem = remote_array_field!(rmr, u64, 4_usize).unwrap();
+        assert_eq!(elem.address(), 0x1020); // 0x1000 + 4*8
+        assert_eq!(elem.length(), 80 - 32);
+    }
+
+    #[test]
+    fn remote_array_field_out_of_bounds() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 16, 0xABCD);
+        // 3 * 8 = 24 > 16
+        assert!(remote_array_field!(rmr, u64, 3_usize).is_none());
+    }
+
+    #[test]
+    fn remote_array_field_index_overflow() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 1024, 0xABCD);
+        // usize::MAX * 8 overflows in checked_mul
+        assert!(remote_array_field!(rmr, u64, usize::MAX).is_none());
+    }
+
+    #[test]
+    fn remote_array_field_unchecked_index_mid() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 80, 0xABCD);
+        let elem = remote_array_field_unchecked!(rmr, u64, 4_usize);
+        assert_eq!(elem.address(), 0x1020);
+    }
+
+    #[repr(C)]
+    struct TestPacket {
+        header: u32,
+        payload: [u8; 1024],
+    }
+
+    #[test]
+    fn remote_struct_field_header() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 1028, 0xABCD);
+        let field = remote_struct_field!(rmr, TestPacket::header).unwrap();
+        assert_eq!(field.address(), 0x1000);
+    }
+
+    #[test]
+    fn remote_struct_field_payload() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 1028, 0xABCD);
+        let field = remote_struct_field!(rmr, TestPacket::payload).unwrap();
+        assert_eq!(field.address(), 0x1004);
+    }
+
+    #[test]
+    fn remote_struct_field_out_of_bounds() {
+        // Region too small to contain the struct
+        let rmr = RemoteMemoryRegion::new(0x1000, 2, 0xABCD);
+        assert!(remote_struct_field!(rmr, TestPacket::payload).is_none());
+    }
+
+    #[test]
+    fn remote_struct_field_unchecked_payload() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 1028, 0xABCD);
+        let field = remote_struct_field_unchecked!(rmr, TestPacket::payload);
+        assert_eq!(field.address(), 0x1004);
+    }
+
+    #[repr(C)]
+    struct TestNode {
+        id: u32,
+        data: u64,
+    }
+
+    #[test]
+    fn remote_struct_array_field_first_element() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 240, 0xABCD);
+        let field = remote_struct_array_field!(rmr, TestNode, 0_usize, data).unwrap();
+        let expected_offset = std::mem::offset_of!(TestNode, data);
+        assert_eq!(field.address(), 0x1000 + expected_offset as u64);
+    }
+
+    #[test]
+    fn remote_struct_array_field_nth_element() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 240, 0xABCD);
+        let field = remote_struct_array_field!(rmr, TestNode, 2_usize, data).unwrap();
+        let node_size = std::mem::size_of::<TestNode>();
+        let field_offset = std::mem::offset_of!(TestNode, data);
+        let expected = 0x1000u64 + (2 * node_size + field_offset) as u64;
+        assert_eq!(field.address(), expected);
+    }
+
+    #[test]
+    fn remote_struct_array_field_overflow() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 240, 0xABCD);
+        assert!(remote_struct_array_field!(rmr, TestNode, usize::MAX, data).is_none());
+    }
+
+    #[test]
+    fn remote_struct_array_field_unchecked_nth_element() {
+        let rmr = RemoteMemoryRegion::new(0x1000, 240, 0xABCD);
+        let field = remote_struct_array_field_unchecked!(rmr, TestNode, 2_usize, data);
+        let node_size = std::mem::size_of::<TestNode>();
+        let field_offset = std::mem::offset_of!(TestNode, data);
+        let expected = 0x1000u64 + (2 * node_size + field_offset) as u64;
+        assert_eq!(field.address(), expected);
+    }
+
+    #[test]
+    fn serde_round_trip() {
+        let rmr = RemoteMemoryRegion::new(0xDEAD_BEEF, 9999, 0x42);
+        let json = serde_json::to_string(&rmr).unwrap();
+        let restored: RemoteMemoryRegion = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.address(), rmr.address());
+        assert_eq!(restored.length(), rmr.length());
+        assert_eq!(restored.rkey(), rmr.rkey());
+    }
+}

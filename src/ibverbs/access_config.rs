@@ -101,3 +101,68 @@ impl Default for AccessFlags {
         AccessFlags::new().with_local_write()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_starts_empty() {
+        assert_eq!(AccessFlags::new().code(), 0);
+    }
+
+    #[test]
+    fn local_write_flag() {
+        let flags = AccessFlags::new().with_local_write();
+        assert_eq!(flags.code(), 1);
+    }
+
+    #[test]
+    fn remote_write_flag() {
+        let flags = AccessFlags::new().with_remote_write();
+        assert_eq!(flags.code(), 2);
+    }
+
+    #[test]
+    fn remote_read_flag() {
+        let flags = AccessFlags::new().with_remote_read();
+        assert_eq!(flags.code(), 4);
+    }
+
+    #[test]
+    fn all_flags_combined() {
+        let flags = AccessFlags::new()
+            .with_local_write()
+            .with_remote_write()
+            .with_remote_read();
+        assert_eq!(flags.code(), 1 | 2 | 4);
+    }
+
+    #[test]
+    fn default_is_local_write() {
+        assert_eq!(
+            AccessFlags::default().code(),
+            AccessFlags::new().with_local_write().code()
+        );
+    }
+
+    #[test]
+    fn applying_same_flag_twice_is_idempotent() {
+        let once = AccessFlags::new().with_local_write();
+        let twice = AccessFlags::new().with_local_write().with_local_write();
+        assert_eq!(once.code(), twice.code());
+    }
+
+    #[test]
+    fn order_does_not_matter() {
+        let a = AccessFlags::new()
+            .with_local_write()
+            .with_remote_read()
+            .with_remote_write();
+        let b = AccessFlags::new()
+            .with_remote_write()
+            .with_local_write()
+            .with_remote_read();
+        assert_eq!(a.code(), b.code());
+    }
+}

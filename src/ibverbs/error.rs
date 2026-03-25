@@ -55,3 +55,64 @@ impl IbvError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn einval_maps_to_invalid_input() {
+        assert!(matches!(
+            IbvError::from_errno_with_msg(libc::EINVAL, "test"),
+            IbvError::InvalidInput(_)
+        ));
+    }
+
+    #[test]
+    fn enomem_maps_to_resource() {
+        assert!(matches!(
+            IbvError::from_errno_with_msg(libc::ENOMEM, "test"),
+            IbvError::Resource(_)
+        ));
+    }
+
+    #[test]
+    fn emfile_maps_to_resource() {
+        assert!(matches!(
+            IbvError::from_errno_with_msg(libc::EMFILE, "test"),
+            IbvError::Resource(_)
+        ));
+    }
+
+    #[test]
+    fn eagain_maps_to_resource() {
+        assert!(matches!(
+            IbvError::from_errno_with_msg(libc::EAGAIN, "test"),
+            IbvError::Resource(_)
+        ));
+    }
+
+    #[test]
+    fn eacces_maps_to_permission() {
+        let err = IbvError::from_errno_with_msg(libc::EACCES, "test");
+        assert!(matches!(err, IbvError::Permission(_)));
+    }
+
+    #[test]
+    fn eperm_maps_to_permission() {
+        let err = IbvError::from_errno_with_msg(libc::EPERM, "test");
+        assert!(matches!(err, IbvError::Permission(_)));
+    }
+
+    #[test]
+    fn enoent_maps_to_not_found() {
+        let err = IbvError::from_errno_with_msg(libc::ENOENT, "test");
+        assert!(matches!(err, IbvError::NotFound(_)));
+    }
+
+    #[test]
+    fn unknown_errno_maps_to_driver() {
+        let err = IbvError::from_errno_with_msg(libc::EIO, "test");
+        assert!(matches!(err, IbvError::Driver(_)));
+    }
+}
