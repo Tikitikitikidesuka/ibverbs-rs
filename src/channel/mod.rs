@@ -43,12 +43,85 @@
 //! It is therefore impossible in safe code to free or reuse a buffer that the NIC is
 //! still reading from or writing to.
 //!
+//! # Choosing `scope` vs `manual_scope`
+//!
+//! * Use [`scope`](Channel::scope) when you want automatic cleanup: any work not
+//!   manually polled is polled to completion when the scope exits, even on panic.
+//!   Errors are wrapped in [`ScopeError`] to distinguish closure errors from
+//!   auto-poll errors.
+//! * Use [`manual_scope`](Channel::manual_scope) when you want to poll everything
+//!   yourself and get `Result<T, E>` directly. It panics if you leave work unpolled
+//!   on the success path, acting as a safety net against forgotten completions.
+//!
 //! # Error handling
 //!
 //! Transport-layer errors are reported as [`TransportError`], which covers both
 //! low-level ibverbs call failures and work completion errors.
 //! [`Channel::scope`] wraps errors further in [`ScopeError`] to distinguish between
 //! closure errors and errors discovered during automatic polling at scope exit.
+//!
+//! # Examples
+//!
+//! ## Blocking send and receive
+//!
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::channel::Channel;
+//! use ibverbs_rs::ibverbs::work::{SendWorkRequest, ReceiveWorkRequest};
+//!
+//! let ctx = ibverbs::open_device("mlx5_0")?;
+//! let pd = ctx.allocate_pd()?;
+//! let prepared = Channel::builder().pd(&pd).build()?;
+//!
+//! // Exchange endpoints out-of-band (loopback for illustration)
+//! let endpoint = prepared.endpoint();
+//! let mut channel = prepared.handshake(endpoint)?;
+//!
+//! let mut buf = [0u8; 64];
+//! let mr = pd.register_local_mr_slice(&buf)?;
+//!
+//! // Blocking receive (posts one WR and spins until complete)
+//! channel.receive(ReceiveWorkRequest::new(&mut [mr.scatter_element(&mut buf)]))?;
+//!
+//! // Blocking send
+//! channel.send(SendWorkRequest::new(&[mr.gather_element(&buf)]))?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Scoped operations
+//!
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::channel::{Channel, ScopeError, TransportError};
+//! use ibverbs_rs::ibverbs::work::{SendWorkRequest, ReceiveWorkRequest};
+//!
+//! let ctx = ibverbs::open_device("mlx5_0")?;
+//! let pd = ctx.allocate_pd()?;
+//! let prepared = Channel::builder().pd(&pd).build()?;
+//! let endpoint = prepared.endpoint();
+//! let mut channel = prepared.handshake(endpoint)?;
+//!
+//! let mut buf = [0u8; 64];
+//! let mr = pd.register_local_mr_slice(&buf)?;
+//!
+//! channel.scope(|s| {
+//!     let (tx, rx) = buf.split_at_mut(32);
+//!
+//!     // Post both operations — they execute concurrently on the NIC
+//!     let send = s.post_send(SendWorkRequest::new(&[mr.gather_element(tx)]))?;
+//!     let recv = s.post_receive(ReceiveWorkRequest::new(&mut [mr.scatter_element(rx)]))?;
+//!
+//!     // Optionally poll individual handles for fine-grained control
+//!     while send.poll().is_none() {}   // spin until complete
+//!     while recv.poll().is_none() {}   // spin until complete
+//!
+//!     Ok::<(), ScopeError<TransportError>>(())
+//! })?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! See also the [`examples/channel.rs`](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/main/examples/channel.rs) file
+//! for a complete runnable example.
 //!
 //! [`QueuePair`]: crate::ibverbs::queue_pair::QueuePair
 //! [`QueuePairEndpoint`]: crate::ibverbs::queue_pair::builder::QueuePairEndpoint
