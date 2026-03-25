@@ -48,6 +48,50 @@
 //!   return raw [`PendingWork`](crate::channel::PendingWork) handles for maximum
 //!   control. Prefer the scoped API unless you need direct access to these primitives.
 //!
+//! # Example: scatter/gather across peers
+//!
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::channel::{ScopeError, TransportError};
+//! use ibverbs_rs::multi_channel::{MultiChannel, PeerSendWorkRequest, PeerReceiveWorkRequest};
+//!
+//! let ctx = ibverbs::open_device("mlx5_0")?;
+//! let pd = ctx.allocate_pd()?;
+//!
+//! let prepared = MultiChannel::builder().pd(&pd).num_channels(2).build()?;
+//! let endpoints = prepared.endpoints();
+//! let mut mc = prepared.handshake(endpoints)?;
+//!
+//! let mut buf = [0u8; 4];
+//! let mr = pd.register_local_mr_slice(&buf)?;
+//!
+//! let (tx, rx) = buf.split_at_mut(2);
+//!
+//! // Pre-build SGE lists (they must outlive the work requests)
+//! let send_sges: Vec<Vec<_>> = tx.chunks(1)
+//!     .map(|chunk| vec![mr.gather_element(chunk)])
+//!     .collect();
+//! let mut recv_sges: Vec<Vec<_>> = rx.chunks_mut(1)
+//!     .map(|chunk| vec![mr.scatter_element(chunk)])
+//!     .collect();
+//!
+//! mc.scope(|s| {
+//!     let sends = send_sges.iter().enumerate()
+//!         .map(|(peer, sges)| PeerSendWorkRequest::new(peer, sges));
+//!     s.post_scatter_send(sends)?;
+//!
+//!     let recvs = recv_sges.iter_mut().enumerate()
+//!         .map(|(peer, sges)| PeerReceiveWorkRequest::new(peer, sges));
+//!     s.post_gather_receive(recvs)?;
+//!
+//!     Ok::<(), ScopeError<TransportError>>(())
+//! })?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! See also [`examples/multi_channel_scatter_gather.rs`](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/main/examples/multi_channel_scatter_gather.rs)
+//! for a complete runnable example.
+//!
 //! [`ProtectionDomain`]: crate::ibverbs::protection_domain::ProtectionDomain
 
 mod builder;
