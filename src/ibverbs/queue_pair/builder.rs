@@ -79,38 +79,36 @@ impl QueuePair {
         };
 
         let qp = unsafe { ibv_create_qp(pd.inner.pd, &mut attr as *mut _) };
-        let endpoint = QueuePairEndpoint {
-            num: unsafe { *qp }.qp_num,
-            lid: pd.inner.context.inner.query_port()?.lid,
-        };
         if qp.is_null() {
-            Err(IbvError::from_errno_with_msg(
+            return Err(IbvError::from_errno_with_msg(
                 io::Error::last_os_error()
                     .raw_os_error()
                     .expect("ibv_create_qp should set errno on error"),
                 "Failed to create queue pair",
-            ))
-        } else {
-            log::debug!("QueuePair created");
-            Ok(PreparedQueuePair {
-                qp: QueuePair {
-                    pd: pd.clone(),
-                    _send_cq: send_cq.clone(),
-                    _recv_cq: recv_cq.clone(),
-                    qp,
-                },
-                endpoint,
-
-                access,
-                max_rnr_retries,
-                max_ack_retries,
-                min_rnr_timer,
-                ack_timeout,
-                mtu,
-                send_psn,
-                recv_psn,
-            })
+            ));
         }
+        let endpoint = QueuePairEndpoint {
+            num: unsafe { *qp }.qp_num,
+            lid: pd.inner.context.inner.query_port()?.lid,
+        };
+        log::debug!("QueuePair created");
+        Ok(PreparedQueuePair {
+            qp: QueuePair {
+                pd: pd.clone(),
+                _send_cq: send_cq.clone(),
+                _recv_cq: recv_cq.clone(),
+                qp,
+            },
+            endpoint,
+            access,
+            max_rnr_retries,
+            max_ack_retries,
+            min_rnr_timer,
+            ack_timeout,
+            mtu,
+            send_psn,
+            recv_psn,
+        })
     }
 }
 
