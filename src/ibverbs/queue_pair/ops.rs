@@ -172,7 +172,13 @@ impl QueuePair {
         let ctx = unsafe { *self.qp }.context;
         let ops = &mut unsafe { *ctx }.ops;
         let errno = unsafe {
-            ops.post_send.as_mut().unwrap()(self.qp, wr as *mut _, &mut bad_wr as *mut _)
+            ops.post_send
+                .as_mut()
+                .expect("post_send function pointer should be set by driver")(
+                self.qp,
+                wr as *mut _,
+                &mut bad_wr as *mut _,
+            )
         };
         if errno != 0 { Err(errno) } else { Ok(()) }
     }
@@ -183,7 +189,13 @@ impl QueuePair {
         let ctx = unsafe { *self.qp }.context;
         let ops = &mut unsafe { *ctx }.ops;
         let errno = unsafe {
-            ops.post_recv.as_mut().unwrap()(self.qp, wr as *mut _, &mut bad_wr as *mut _)
+            ops.post_recv
+                .as_mut()
+                .expect("post_recv function pointer should be set by driver")(
+                self.qp,
+                wr as *mut _,
+                &mut bad_wr as *mut _,
+            )
         };
         if errno != 0 { Err(errno) } else { Ok(()) }
     }

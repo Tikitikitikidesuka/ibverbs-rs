@@ -130,7 +130,9 @@ impl CompletionQueue {
         let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
         let ops = &mut unsafe { &mut *ctx }.ops;
         let num_polled = unsafe {
-            ops.poll_cq.as_mut().unwrap()(
+            ops.poll_cq
+                .as_mut()
+                .expect("poll_cq function pointer should be set by driver")(
                 self.inner.cq,
                 ne,
                 completions.as_mut_ptr() as *mut ibv_wc,
