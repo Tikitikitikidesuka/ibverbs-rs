@@ -146,7 +146,11 @@ impl Exchanger {
 
         // Iterating on a map directly is O(capacity) so iterate with indices instead
         Ok(remote_ranks
-            .map(|rank| received.remove(&rank).unwrap())
+            .map(|rank| {
+                received
+                    .remove(&rank)
+                    .expect("rank should have been inserted by the exchange loop above")
+            })
             .collect())
     }
 
@@ -187,7 +191,11 @@ impl Exchanger {
 
         // Iterating on a map directly is O(capacity) so iterate with indices instead
         Ok(remote_ranks
-            .map(|rank| received.remove(&rank).unwrap())
+            .map(|rank| {
+                received
+                    .remove(&rank)
+                    .expect("rank should have been inserted by the exchange loop above")
+            })
             .collect())
     }
 
