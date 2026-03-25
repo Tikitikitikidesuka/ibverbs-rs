@@ -21,7 +21,7 @@
 //! let mr = pd.register_local_mr_slice(&buf)?;
 //!
 //! // Create a queue pair under the same protection domain
-//! let cq = context.create_cq(16, ())?;
+//! let cq = context.create_cq(16)?;
 //! let qp_builder = pd.create_qp().send_cq(&cq).recv_cq(&cq);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
