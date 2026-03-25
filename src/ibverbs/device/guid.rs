@@ -1,5 +1,3 @@
-use ibverbs_sys::*;
-
 /// A Global unique identifier for ibv.
 ///
 /// This struct acts as a rust wrapper for GUID value represented as `__be64` in
@@ -37,12 +35,6 @@ impl From<u64> for Guid {
 impl From<Guid> for u64 {
     fn from(guid: Guid) -> Self {
         u64::from_be_bytes(guid.raw)
-    }
-}
-
-impl AsRef<__be64> for Guid {
-    fn as_ref(&self) -> &__be64 {
-        unsafe { &*self.raw.as_ptr().cast::<__be64>() }
     }
 }
 
