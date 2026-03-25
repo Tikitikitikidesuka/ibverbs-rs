@@ -112,7 +112,7 @@ impl CompletionQueue {
     /// # Returns
     ///
     /// Returns a [`PolledCompletions`] iterator wrapper. This iterator yields owned
-    /// [`WorkCompletion`](crate::ibverbs::work::WorkCompletion) values constructed from the
+    /// [`WorkCompletion`] values constructed from the
     /// data copied by the NIC into the provided `completions` buffer.
     pub fn poll<'poll_buff>(
         &self,
