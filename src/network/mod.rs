@@ -56,6 +56,48 @@
 //! JSON. [`RawNetworkConfig::build`] validates it and produces a [`NetworkConfig`]
 //! ready for use with [`Exchanger`].
 //!
+//! # Example: building a node and exchanging data
+//!
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::network::{Node, ExchangeConfig, Exchanger, RawNetworkConfig};
+//! use ibverbs_rs::multi_channel::PeerSendWorkRequest;
+//!
+//! // Load network config (see RawNetworkConfig for the JSON format)
+//! let json = std::fs::read_to_string("network.json")?;
+//! let config = serde_json::from_str::<RawNetworkConfig>(&json)?.build()?;
+//! let rank = 0;
+//!
+//! let ctx = ibverbs::open_device("mlx5_0")?;
+//! let pd = ctx.allocate_pd()?;
+//!
+//! // 1. Build
+//! let prepared = Node::builder()
+//!     .pd(&pd)
+//!     .rank(rank)
+//!     .world_size(config.world_size())
+//!     .build()?;
+//!
+//! // 2. Exchange endpoints over TCP
+//! let local_ep = prepared.endpoint();
+//! let remote_eps = Exchanger::await_exchange_all(
+//!     rank, &config, &local_ep, &ExchangeConfig::default(),
+//! )?;
+//! let remote_eps = prepared.gather_endpoints(remote_eps)?;
+//!
+//! // 3. Handshake
+//! let mut node = prepared.handshake(remote_eps)?;
+//!
+//! // Send data to peer 1
+//! let buf = [42u8; 64];
+//! let mr = node.pd().register_local_mr_slice(&buf)?;
+//! node.send(PeerSendWorkRequest::new(1, &[mr.gather_element(&buf)]))?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! See also [`examples/network.rs`](https://github.com/Tikitikitikidesuka/ibverbs-rs/blob/main/examples/network.rs)
+//! for a complete multi-node runnable example.
+//!
 //! [`MultiChannel`]: crate::multi_channel::MultiChannel
 
 mod barrier;

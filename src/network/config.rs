@@ -57,6 +57,21 @@ pub enum NetworkConfigError {
 
 /// An unvalidated network configuration. Add nodes with [`add_node`](Self::add_node),
 /// then call [`build`](Self::build) to validate and produce a [`NetworkConfig`].
+///
+/// # JSON format
+///
+/// `RawNetworkConfig` implements `Serialize`/`Deserialize` and can be loaded from JSON:
+///
+/// ```json
+/// {
+///   "hosts": [
+///     { "hostname": "node1", "port": 10000, "ibdev": "mlx5_0", "rankid": 0 },
+///     { "hostname": "node2", "port": 10000, "ibdev": "mlx5_0", "rankid": 1 }
+///   ]
+/// }
+/// ```
+///
+/// The optional `comment` field is omitted from serialization when empty.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RawNetworkConfig {
     hosts: Vec<NodeConfig>,
