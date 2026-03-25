@@ -49,10 +49,16 @@ let pd = ctx.allocate_pd().unwrap();
 // Register memory and create a channel
 let mut buf = [0u8; 64];
 let mr = pd.register_local_mr_slice(&buf).unwrap();
-let channel = ibverbs_rs::channel::Channel::builder()
+
+// 1. Build a prepared channel (allocates resources but not connected)
+let prepared = ibverbs_rs::channel::Channel::builder()
     .pd(&pd)
     .build()
     .unwrap();
+
+// 2. Exchange endpoints and handshake (loopback example)
+let endpoint = prepared.endpoint();
+let mut channel = prepared.handshake(endpoint).unwrap();
 ```
 
 See the [`examples/`](examples/) directory for complete working programs including
