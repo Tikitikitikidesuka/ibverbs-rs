@@ -171,6 +171,29 @@
 //! 2.  **Coordination**: Establish protocols to invalidate/revoke remote access before deallocation
 //! 3.  **Aliasing**: Avoid local access patterns that conflict with concurrent remote writes
 //!
+//! # Example: registering memory and creating SGEs
+//!
+//! ```no_run
+//! use ibverbs_rs::ibverbs;
+//! use ibverbs_rs::ibverbs::work::{SendWorkRequest, ReceiveWorkRequest};
+//!
+//! let ctx = ibverbs::open_device("mlx5_0")?;
+//! let pd = ctx.allocate_pd()?;
+//!
+//! // Register a buffer as a local memory region
+//! let mut buf = vec![0u8; 4096];
+//! let mr = pd.register_local_mr_slice(&buf)?;
+//!
+//! // Create a GatherElement for sending (borrows &[u8])
+//! let gather = mr.gather_element(&buf[..512]);
+//! let _send_wr = SendWorkRequest::new(&[gather]);
+//!
+//! // Create a ScatterElement for receiving (borrows &mut [u8])
+//! let scatter = mr.scatter_element(&mut buf[512..1024]);
+//! let _recv_wr = ReceiveWorkRequest::new(&mut [scatter]);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
 //! # Remote Memory Navigation
 //!
 //! Helper macros for working with structured remote data:
