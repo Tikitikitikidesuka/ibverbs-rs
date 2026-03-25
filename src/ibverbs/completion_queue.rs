@@ -35,7 +35,6 @@ use crate::ibverbs::device::Context;
 use crate::ibverbs::error::{IbvError, IbvResult};
 use crate::ibverbs::work::WorkCompletion;
 use ibverbs_sys::*;
-use std::ffi::c_void;
 use std::sync::Arc;
 use std::{io, ptr};
 
@@ -73,7 +72,7 @@ impl CompletionQueue {
             ibv_create_cq(
                 context.inner.ctx,
                 min_cq_entries,
-                ptr::null::<c_void>().offset(0) as *mut _, // cq_context (user data), unused
+                ptr::null_mut(), // cq_context (user data), unused
                 ptr::null::<ibv_comp_channel>() as *mut _, // comp_channel (NULL = polling only)
                 0, // comp_vector (CPU affinity, unused w/o channel)
             )
