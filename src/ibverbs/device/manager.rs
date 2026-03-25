@@ -38,7 +38,9 @@ pub fn list_devices() -> IbvResult<DeviceList> {
     let devices_ptr = unsafe { ibv_get_device_list(&mut num_devices as *mut _) };
 
     if devices_ptr.is_null() {
-        let errno = io::Error::last_os_error().raw_os_error().unwrap();
+        let errno = io::Error::last_os_error()
+            .raw_os_error()
+            .expect("ibv_get_device_list should set errno on error");
         // If errno is not zero, error fetching
         if errno != 0 {
             return Err(IbvError::from_errno_with_msg(
@@ -210,7 +212,9 @@ impl Device<'_> {
         let guid: Guid = guid_int.into();
         if guid.is_reserved() {
             Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_get_device_guid should set errno on error"),
                 "GUID is reserved or invalid",
             ))
         } else {

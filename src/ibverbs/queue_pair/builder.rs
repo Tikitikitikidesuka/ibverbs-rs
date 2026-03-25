@@ -85,7 +85,9 @@ impl QueuePair {
         };
         if qp.is_null() {
             Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_create_qp should set errno on error"),
                 "Failed to create queue pair",
             ))
         } else {

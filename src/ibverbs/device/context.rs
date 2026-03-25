@@ -101,7 +101,9 @@ impl Context {
         let ibv_ctx = unsafe { ibv_open_device(dev.device_ptr) };
         if ibv_ctx.is_null() {
             return Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_open_device should set errno on error"),
                 "Failed to open device context",
             ));
         }
@@ -139,7 +141,9 @@ impl Drop for ContextInner {
         // SAFETY: `self.ctx` is guaranteed valid and open.
         if unsafe { ibv_close_device(self.ctx) } != 0 {
             let error = IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_close_device should set errno on error"),
                 "Failed to close context",
             );
             log::error!("{error}");

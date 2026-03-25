@@ -114,7 +114,9 @@ impl MemoryRegion {
         };
         if mr.is_null() {
             Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_reg_mr should set errno on error"),
                 "Failed to register memory region",
             ))
         } else {
@@ -230,7 +232,9 @@ impl MemoryRegion {
 
         if mr.is_null() {
             Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().unwrap(),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_reg_dmabuf_mr should set errno on error"),
                 "Failed to register memory region",
             ))
         } else {
