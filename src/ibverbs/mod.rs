@@ -22,11 +22,13 @@
 //! ```text
 //! list_devices() / open_device()
 //!     └─▶ Context
-//!          ├─▶ allocate_pd()  →  ProtectionDomain
-//!          │    ├─▶ register_local_mr()  →  MemoryRegion
-//!          │    └─▶ create_qp()  →  QueuePairBuilder  →  PreparedQueuePair
-//!          │                                                  └─▶ handshake()  →  QueuePair
-//!          └─▶ create_cq()  →  CompletionQueue
+//!          ├─▶ create_cq()   →  CompletionQueue ──────────────────┐
+//!          └─▶ allocate_pd() →  ProtectionDomain                  │
+//!               ├─▶ register_local_mr()  →  MemoryRegion          │
+//!               └─▶ create_qp()                                   │
+//!                    └─▶ .send_cq(&cq).recv_cq(&cq) ◀─────────────┘
+//!                         └─▶ PreparedQueuePair
+//!                                  └─▶ handshake()  →  QueuePair
 //! ```
 //!
 //! For most use cases, prefer the [`Channel`](crate::channel::Channel) abstraction which wraps
