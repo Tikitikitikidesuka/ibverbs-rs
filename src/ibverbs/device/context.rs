@@ -42,6 +42,8 @@ use std::sync::Arc;
 /// // End of scope: 'pd' and 'cq' are dropped, ref count hits zero, context closes.
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+#[doc(alias = "ibv_context")]
+#[doc(alias = "ibv_open_device")]
 #[derive(Debug, Clone)]
 pub struct Context {
     pub(crate) inner: Arc<ContextInner>,

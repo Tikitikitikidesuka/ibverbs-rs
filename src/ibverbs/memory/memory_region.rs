@@ -41,6 +41,8 @@ use std::io;
 ///   Unsafe because remote peers can access memory asynchronously, breaking aliasing guarantees.
 /// * [`register_mr_with_access`](MemoryRegion::register_mr_with_access) — Full manual control.
 ///   Unsafe when remote access flags are enabled.
+#[doc(alias = "ibv_mr")]
+#[doc(alias = "ibv_reg_mr")]
 pub struct MemoryRegion {
     pd: ProtectionDomain,
     mr: *mut ibv_mr,

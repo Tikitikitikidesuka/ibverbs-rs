@@ -59,6 +59,8 @@ use std::sync::Arc;
 /// ```
 ///
 /// [`Arc`]: std::sync::Arc
+#[doc(alias = "ibv_pd")]
+#[doc(alias = "ibv_alloc_pd")]
 #[derive(Debug, Clone)]
 pub struct ProtectionDomain {
     pub(super) inner: Arc<ProtectionDomainInner>,

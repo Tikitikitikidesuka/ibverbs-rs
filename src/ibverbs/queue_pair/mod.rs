@@ -66,6 +66,8 @@ use std::fmt::Debug;
 /// This struct manages the lifecycle of the QP resource. It holds strong references to its
 /// dependencies ([`ProtectionDomain`] and [`CompletionQueue`]) to ensure they remain
 /// allocated as long as this QP exists.
+#[doc(alias = "ibv_qp")]
+#[doc(alias = "ibv_create_qp")]
 pub struct QueuePair {
     pd: ProtectionDomain,
     // Kept to ensure CQs are not dropped before the QP

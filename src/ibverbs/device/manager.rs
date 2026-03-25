@@ -65,6 +65,8 @@ pub fn list_devices() -> IbvResult<DeviceList> {
 ///
 /// Individual devices can be accessed via iteration or indexing using
 /// [`DeviceList::iter`] or [`DeviceList::get`].
+#[doc(alias = "ibv_device")]
+#[doc(alias = "ibv_get_device_list")]
 pub struct DeviceList {
     devices_ptr: *mut *mut ibv_device,
     num_devices: usize,

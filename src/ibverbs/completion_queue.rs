@@ -44,6 +44,8 @@ use std::{io, ptr};
 /// This struct is thread-safe ([`Sync`]) and reference-counted ([`Arc`]). It holds a strong reference
 /// to the [`Context`] that created it, ensuring the device remains open.
 #[derive(Debug, Clone)]
+#[doc(alias = "ibv_cq")]
+#[doc(alias = "ibv_create_cq")]
 pub struct CompletionQueue {
     pub(super) inner: Arc<CompletionQueueInner>,
 }
