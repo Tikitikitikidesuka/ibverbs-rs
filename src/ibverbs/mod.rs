@@ -19,7 +19,9 @@
 //! ```
 //!
 //! For most use cases, prefer the [`Channel`](crate::channel::Channel) abstraction which wraps
-//! this workflow and adds lifetime-safe operation posting.
+//! this workflow and adds lifetime-safe operation posting. Use the primitives directly when
+//! you need fine-grained control over resource lifetimes, custom completion queue topologies,
+//! or integration with an existing event loop that the higher-level API cannot accommodate.
 
 pub mod access_config;
 pub mod completion_queue;
