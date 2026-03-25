@@ -121,7 +121,7 @@ impl RemoteMemoryRegion {
 /// let remote_mr = RemoteMemoryRegion::new(0x1000, 80, 0xABCD);
 ///
 /// // Get a handle to the 5th element (index 4)
-/// let elem_mr = remote_array_field!(remote_mr, u64, 4).unwrap();
+/// let elem_mr = remote_array_field!(remote_mr, u64, 4_usize).unwrap();
 /// assert_eq!(elem_mr.address(), 0x1020);
 /// ```
 #[macro_export]
@@ -225,7 +225,7 @@ macro_rules! remote_struct_field_unchecked {
 /// let remote_mr = RemoteMemoryRegion::new(0x1000, 60, 0xABCD);
 ///
 /// // Get a handle to the 'data' field of the 3rd Node (index 2)
-/// let data_mr = remote_struct_array_field!(remote_mr, Node, 2, data).unwrap();
+/// let data_mr = remote_struct_array_field!(remote_mr, Node, 2_usize, data).unwrap();
 /// ```
 #[macro_export]
 macro_rules! remote_struct_array_field {
