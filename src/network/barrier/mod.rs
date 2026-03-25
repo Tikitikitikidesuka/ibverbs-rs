@@ -190,6 +190,19 @@ pub enum PreparedBarrier {
     Dissemination(PreparedDisseminationBarrier),
 }
 
+/// Validates that a peer list is sorted and contains no duplicates.
+///
+/// Used by barrier implementations before dispatching to the algorithm-specific logic.
+pub(super) fn validate_peer_list(peers: &[usize]) -> Result<(), BarrierError> {
+    if !peers.is_sorted() {
+        return Err(BarrierError::UnorderedPeers);
+    }
+    if peers.windows(2).any(|w| w[0] == w[1]) {
+        return Err(BarrierError::DuplicatePeers);
+    }
+    Ok(())
+}
+
 impl PreparedBarrier {
     /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote_mr(&self) -> PeerRemoteMemoryRegion {
@@ -207,5 +220,56 @@ impl PreparedBarrier {
             PreparedBarrier::BinaryTree(p) => Barrier::BinaryTree(p.link_remote(remote_mrs)),
             PreparedBarrier::Dissemination(p) => Barrier::Dissemination(p.link_remote(remote_mrs)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_sorted_unique_peers() {
+        assert!(validate_peer_list(&[0, 1, 2, 3]).is_ok());
+    }
+
+    #[test]
+    fn empty_peer_list_is_valid() {
+        assert!(validate_peer_list(&[]).is_ok());
+    }
+
+    #[test]
+    fn single_peer_is_valid() {
+        assert!(validate_peer_list(&[5]).is_ok());
+    }
+
+    #[test]
+    fn non_contiguous_ranks_are_valid() {
+        assert!(validate_peer_list(&[0, 3, 7, 100]).is_ok());
+    }
+
+    #[test]
+    fn unsorted_peers_rejected() {
+        let err = validate_peer_list(&[2, 1, 3]).unwrap_err();
+        assert!(matches!(err, BarrierError::UnorderedPeers));
+    }
+
+    #[test]
+    fn duplicate_peers_rejected() {
+        let err = validate_peer_list(&[0, 1, 1, 2]).unwrap_err();
+        assert!(matches!(err, BarrierError::DuplicatePeers));
+    }
+
+    #[test]
+    fn unsorted_takes_precedence_over_duplicate() {
+        // [2, 1, 1] — unsorted check triggers first
+        let err = validate_peer_list(&[2, 1, 1]).unwrap_err();
+        assert!(matches!(err, BarrierError::UnorderedPeers));
+    }
+
+    #[test]
+    fn all_same_ranks_detected_as_unsorted_or_duplicate() {
+        // [3, 3, 3] — is_sorted() returns true for equal elements, so duplicates detected
+        let err = validate_peer_list(&[3, 3, 3]).unwrap_err();
+        assert!(matches!(err, BarrierError::DuplicatePeers));
     }
 }

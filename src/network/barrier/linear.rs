@@ -2,8 +2,8 @@ use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::multi_channel::MultiChannel;
 use crate::multi_channel::PeerRemoteMemoryRegion;
-use crate::network::barrier::BarrierError;
 use crate::network::barrier::memory::{BarrierMr, PreparedBarrierMr};
+use crate::network::barrier::{BarrierError, validate_peer_list};
 use std::time::{Duration, Instant};
 
 /// Centralized (leader-based) barrier implementation.
@@ -62,18 +62,10 @@ impl LinearBarrier {
         peers: &[usize],
         timeout: Duration,
     ) -> Result<(), BarrierError> {
-        if !peers.is_sorted() {
-            return Err(BarrierError::UnorderedPeers);
-        }
-
-        if peers.windows(2).any(|w| w[0] == w[1]) {
-            return Err(BarrierError::DuplicatePeers);
-        }
-
+        validate_peer_list(peers)?;
         peers
             .binary_search(&self.rank)
             .map_err(|_| BarrierError::SelfNotInGroup)?;
-
         self.barrier_unchecked(multi_channel, peers, timeout)
     }
 
