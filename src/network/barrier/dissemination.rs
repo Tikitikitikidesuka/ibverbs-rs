@@ -26,6 +26,18 @@ pub struct PreparedDisseminationBarrier {
 }
 
 impl PreparedDisseminationBarrier {
+    /// Allocates a new dissemination barrier.
+    pub fn new(
+        pd: &ProtectionDomain,
+        rank: usize,
+        world_size: usize,
+    ) -> IbvResult<PreparedDisseminationBarrier> {
+        Ok(PreparedDisseminationBarrier {
+            rank,
+            barrier_mr: PreparedBarrierMr::new(pd, rank, world_size)?,
+        })
+    }
+
     /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
@@ -42,18 +54,6 @@ impl PreparedDisseminationBarrier {
 }
 
 impl DisseminationBarrier {
-    /// Allocates a new dissemination barrier.
-    pub fn new(
-        pd: &ProtectionDomain,
-        rank: usize,
-        world_size: usize,
-    ) -> IbvResult<PreparedDisseminationBarrier> {
-        Ok(PreparedDisseminationBarrier {
-            rank,
-            barrier_mr: BarrierMr::new(pd, rank, world_size)?,
-        })
-    }
-
     /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
     ///
     /// Validates that peers are sorted and unique. Self-inclusion is verified inside the

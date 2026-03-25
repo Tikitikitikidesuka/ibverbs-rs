@@ -74,7 +74,9 @@ impl ProtectionDomain {
         let pd = unsafe { ibv_alloc_pd(context.inner.ctx) };
         if pd.is_null() {
             Err(IbvError::from_errno_with_msg(
-                io::Error::last_os_error().raw_os_error().expect("ibv_alloc_pd should set errno on error"),
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .expect("ibv_alloc_pd should set errno on error"),
                 "Failed to allocate protection domain",
             ))
         } else {

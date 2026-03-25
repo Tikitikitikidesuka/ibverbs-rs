@@ -26,6 +26,18 @@ pub struct PreparedBinaryTreeBarrier {
 }
 
 impl PreparedBinaryTreeBarrier {
+    /// Allocates a new binary tree barrier.
+    pub fn new(
+        pd: &ProtectionDomain,
+        rank: usize,
+        world_size: usize,
+    ) -> IbvResult<PreparedBinaryTreeBarrier> {
+        Ok(PreparedBinaryTreeBarrier {
+            rank,
+            barrier_mr: PreparedBarrierMr::new(pd, rank, world_size)?,
+        })
+    }
+
     /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
@@ -38,20 +50,6 @@ impl PreparedBinaryTreeBarrier {
             barrier_mr: self.barrier_mr.link_remote(remote_mrs),
             poisoned: false,
         }
-    }
-}
-
-impl BinaryTreeBarrier {
-    /// Allocates a new binary tree barrier.
-    pub fn new(
-        pd: &ProtectionDomain,
-        rank: usize,
-        world_size: usize,
-    ) -> IbvResult<PreparedBinaryTreeBarrier> {
-        Ok(PreparedBinaryTreeBarrier {
-            rank,
-            barrier_mr: BarrierMr::new(pd, rank, world_size)?,
-        })
     }
 }
 

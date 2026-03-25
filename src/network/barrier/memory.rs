@@ -69,7 +69,7 @@ impl PreparedBarrierMr {
     }
 }
 
-impl BarrierMr {
+impl PreparedBarrierMr {
     /// Allocates and registers the barrier memory region.
     pub(super) fn new(
         pd: &ProtectionDomain,

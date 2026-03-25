@@ -122,7 +122,7 @@ impl Barrier {
         rank: usize,
         world_size: usize,
     ) -> IbvResult<PreparedBarrier> {
-        Ok(PreparedBarrier::Centralized(LinearBarrier::new(
+        Ok(PreparedBarrier::Centralized(PreparedLinearBarrier::new(
             pd, rank, world_size,
         )?))
     }
@@ -132,7 +132,7 @@ impl Barrier {
         rank: usize,
         world_size: usize,
     ) -> IbvResult<PreparedBarrier> {
-        Ok(PreparedBarrier::BinaryTree(BinaryTreeBarrier::new(
+        Ok(PreparedBarrier::BinaryTree(PreparedBinaryTreeBarrier::new(
             pd, rank, world_size,
         )?))
     }
@@ -142,9 +142,9 @@ impl Barrier {
         rank: usize,
         world_size: usize,
     ) -> IbvResult<PreparedBarrier> {
-        Ok(PreparedBarrier::Dissemination(DisseminationBarrier::new(
-            pd, rank, world_size,
-        )?))
+        Ok(PreparedBarrier::Dissemination(
+            PreparedDisseminationBarrier::new(pd, rank, world_size)?,
+        ))
     }
 
     /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.

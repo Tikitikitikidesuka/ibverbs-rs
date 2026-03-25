@@ -25,6 +25,18 @@ pub struct PreparedLinearBarrier {
 }
 
 impl PreparedLinearBarrier {
+    /// Allocates a new linear barrier.
+    pub fn new(
+        pd: &ProtectionDomain,
+        rank: usize,
+        world_size: usize,
+    ) -> IbvResult<PreparedLinearBarrier> {
+        Ok(PreparedLinearBarrier {
+            rank,
+            barrier_mr: PreparedBarrierMr::new(pd, rank, world_size)?,
+        })
+    }
+
     /// Returns this node's barrier memory region handle for exchange with peers.
     pub fn remote(&self) -> PeerRemoteMemoryRegion {
         self.barrier_mr.remote()
@@ -41,18 +53,6 @@ impl PreparedLinearBarrier {
 }
 
 impl LinearBarrier {
-    /// Allocates a new linear barrier.
-    pub fn new(
-        pd: &ProtectionDomain,
-        rank: usize,
-        world_size: usize,
-    ) -> IbvResult<PreparedLinearBarrier> {
-        Ok(PreparedLinearBarrier {
-            rank,
-            barrier_mr: BarrierMr::new(pd, rank, world_size)?,
-        })
-    }
-
     /// Synchronizes with the given peers, blocking until all have reached the barrier or timeout.
     ///
     /// Validates that peers are sorted, unique, and include this node's rank.
