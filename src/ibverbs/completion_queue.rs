@@ -127,17 +127,14 @@ impl CompletionQueue {
             i32::MAX
         });
 
-        let ctx: *mut ibv_context = unsafe { &*self.inner.cq }.context;
-        let ops = &mut unsafe { &mut *ctx }.ops;
-        let num_polled = unsafe {
-            ops.poll_cq
-                .as_mut()
-                .expect("poll_cq function pointer should be set by driver")(
-                self.inner.cq,
-                ne,
-                completions.as_mut_ptr() as *mut ibv_wc,
-            )
+        let ctx: *mut ibv_context = unsafe { (*self.inner.cq).context };
+        let poll_cq = unsafe {
+            (*ctx)
+                .ops
+                .poll_cq
+                .expect("poll_cq function pointer should be set by driver")
         };
+        let num_polled = unsafe { poll_cq(self.inner.cq, ne, completions.as_mut_ptr() as *mut ibv_wc) };
 
         if num_polled < 0 {
             Err(IbvError::from_errno_with_msg(

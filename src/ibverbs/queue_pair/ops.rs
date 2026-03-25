@@ -169,34 +169,28 @@ impl QueuePair {
     #[inline(always)]
     unsafe fn post_send_wr(&mut self, wr: &mut ibv_send_wr) -> Result<(), i32> {
         let mut bad_wr: *mut ibv_send_wr = ptr::null::<ibv_send_wr>() as *mut _;
-        let ctx = unsafe { *self.qp }.context;
-        let ops = &mut unsafe { *ctx }.ops;
-        let errno = unsafe {
-            ops.post_send
-                .as_mut()
-                .expect("post_send function pointer should be set by driver")(
-                self.qp,
-                wr as *mut _,
-                &mut bad_wr as *mut _,
-            )
+        let ctx = unsafe { (*self.qp).context };
+        let post_send = unsafe {
+            (*ctx)
+                .ops
+                .post_send
+                .expect("post_send function pointer should be set by driver")
         };
+        let errno = unsafe { post_send(self.qp, wr as *mut _, &mut bad_wr as *mut _) };
         if errno != 0 { Err(errno) } else { Ok(()) }
     }
 
     #[inline(always)]
     unsafe fn post_receive_wr(&mut self, wr: &mut ibv_recv_wr) -> Result<(), i32> {
         let mut bad_wr: *mut ibv_recv_wr = ptr::null::<ibv_recv_wr>() as *mut _;
-        let ctx = unsafe { *self.qp }.context;
-        let ops = &mut unsafe { *ctx }.ops;
-        let errno = unsafe {
-            ops.post_recv
-                .as_mut()
-                .expect("post_recv function pointer should be set by driver")(
-                self.qp,
-                wr as *mut _,
-                &mut bad_wr as *mut _,
-            )
+        let ctx = unsafe { (*self.qp).context };
+        let post_recv = unsafe {
+            (*ctx)
+                .ops
+                .post_recv
+                .expect("post_recv function pointer should be set by driver")
         };
+        let errno = unsafe { post_recv(self.qp, wr as *mut _, &mut bad_wr as *mut _) };
         if errno != 0 { Err(errno) } else { Ok(()) }
     }
 }
