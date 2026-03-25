@@ -24,6 +24,21 @@
 //! * If a QP is created without `REMOTE_WRITE`, all incoming RDMA Write requests will be rejected,
 //!   even if the target Memory Region has `REMOTE_WRITE` enabled.
 //!
+//! # Example
+//!
+//! ```
+//! use ibverbs_rs::ibverbs::access_config::AccessFlags;
+//!
+//! // Local write only (the default for safe MR registration)
+//! let local = AccessFlags::new().with_local_write();
+//!
+//! // Full remote access (required for one-sided RDMA targets)
+//! let shared = AccessFlags::new()
+//!     .with_local_write()
+//!     .with_remote_read()
+//!     .with_remote_write();
+//! ```
+//!
 //! # Safety
 //!
 //! Enabling remote access flags (`REMOTE_WRITE`, `REMOTE_READ`) on a Memory Region introduces
