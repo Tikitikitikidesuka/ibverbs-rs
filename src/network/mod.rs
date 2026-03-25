@@ -1,4 +1,4 @@
-//! A ranked RDMA network node with collective barrier synchronization.
+//! Distributed RDMA network node — TCP-based endpoint exchange, rank/world-size coordination, and barrier synchronization (linear, binary tree, and dissemination).
 //!
 //! A [`Node`] combines a [`MultiChannel`] with a rank, a world size, and a
 //! [`Barrier`] to form a complete building block for distributed RDMA programs.

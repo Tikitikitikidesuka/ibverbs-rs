@@ -1,4 +1,4 @@
-//! A safe, lifetime-checked RDMA channel between two peers.
+//! Point-to-point RDMA channel — builder API with lifetime-safe operation posting and scope-based completion polling.
 //!
 //! A [`Channel`] wraps an InfiniBand [`QueuePair`] and uses Rust's borrow checker
 //! to statically prevent data races between the CPU and the NIC: memory passed to a

@@ -1,4 +1,4 @@
-//! A set of RDMA channels to multiple peers sharing a single protection domain.
+//! Multi-peer RDMA channels — indexed connections sharing a protection domain, with scatter/gather and one-sided operation support.
 //!
 //! A [`MultiChannel`] holds one [`Channel`] per peer and routes each operation to the
 //! correct channel based on the peer index embedded in the work request. All channels

@@ -6,18 +6,6 @@
 //! programming, built on top of the [`ibverbs-sys`](https://crates.io/crates/ibverbs-sys)
 //! FFI bindings.
 //!
-//! ## Modules
-//!
-//! - [`ibverbs`] — Core RDMA primitives: device discovery, protection domains, queue pairs,
-//!   memory registration, completion queues, and work requests.
-//! - [`channel`] — A single point-to-point RDMA connection with a builder API and
-//!   scope-based completion polling.
-//! - [`multi_channel`] — Multiple indexed RDMA channels sharing memory regions,
-//!   with support for scatter/gather and one-sided operations.
-//! - [`network`] — Distributed coordination: TCP-based endpoint exchange, network
-//!   configuration, and barrier synchronization (linear, binary tree, and dissemination
-//!   algorithms).
-//!
 //! ## Safety model
 //!
 //! Two-sided operations (send/receive) are lifetime-safe through Rust's borrow checker.
