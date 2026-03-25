@@ -110,8 +110,7 @@ impl LinearBarrier {
             self.barrier_mr
                 .scatter_notify_peers(multi_channel, &peers[1..])?;
         } else {
-            self.barrier_mr
-                .notify_peer(multi_channel, leader)?;
+            self.barrier_mr.notify_peer(multi_channel, leader)?;
             self.barrier_mr.increase_peer_expected_epoch(leader);
             self.barrier_mr
                 .spin_poll_peer_epoch_expected(leader, start_time, timeout)?;

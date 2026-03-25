@@ -74,7 +74,7 @@ impl CompletionQueue {
                 min_cq_entries,
                 ptr::null_mut(), // cq_context (user data), unused
                 ptr::null::<ibv_comp_channel>() as *mut _, // comp_channel (NULL = polling only)
-                0, // comp_vector (CPU affinity, unused w/o channel)
+                0,               // comp_vector (CPU affinity, unused w/o channel)
             )
         };
 
@@ -133,7 +133,8 @@ impl CompletionQueue {
                 .poll_cq
                 .expect("poll_cq function pointer should be set by driver")
         };
-        let num_polled = unsafe { poll_cq(self.inner.cq, ne, completions.as_mut_ptr() as *mut ibv_wc) };
+        let num_polled =
+            unsafe { poll_cq(self.inner.cq, ne, completions.as_mut_ptr() as *mut ibv_wc) };
 
         if num_polled < 0 {
             Err(IbvError::from_errno_with_msg(
