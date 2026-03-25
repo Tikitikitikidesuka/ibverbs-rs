@@ -119,8 +119,8 @@ impl Exchanger {
 
         Ok(lower_nodes_data
             .into_iter()
-            .chain(vec![data.to_owned()].into_iter())
-            .chain(greater_nodes_data.into_iter())
+            .chain(std::iter::once(data.to_owned()))
+            .chain(greater_nodes_data)
             .collect())
     }
 
