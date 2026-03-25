@@ -1,4 +1,4 @@
-//! NUMA affinity helpers for RDMA devices.
+//! NUMA affinity — thread and memory binding for RDMA devices.
 //!
 //! Enabling the `"numa"` Cargo feature provides two ways to apply NUMA affinity:
 //!

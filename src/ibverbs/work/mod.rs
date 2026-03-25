@@ -1,4 +1,4 @@
-//! Work Request and Completion types.
+//! Work requests and completions — Send, Receive, Write, and Read operations.
 //!
 //! This module defines the data structures used to represent RDMA operations and their results.
 //!

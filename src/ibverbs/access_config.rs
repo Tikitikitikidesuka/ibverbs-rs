@@ -1,4 +1,4 @@
-//! Access permissions for Memory Regions and Queue Pairs.
+//! Access flags — permission bits for memory regions and queue pairs.
 //!
 //! This module defines the [`AccessFlags`] struct, which controls the allowed operations
 //! on RDMA resources.

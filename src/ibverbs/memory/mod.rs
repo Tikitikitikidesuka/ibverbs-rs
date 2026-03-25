@@ -1,4 +1,4 @@
-//! Memory management for RDMA operations.
+//! Memory — registration, scatter/gather elements, and remote memory handles.
 //!
 //! This module provides safe abstractions for registering, accessing, and transferring data
 //! through RDMA (Remote Direct Memory Access). It consists of three core components that work

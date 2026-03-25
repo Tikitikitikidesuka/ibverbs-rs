@@ -1,4 +1,4 @@
-//! Error types for RDMA operations.
+//! Error types — ibverbs operation failure variants.
 
 use nix::libc;
 use std::io;

@@ -1,4 +1,4 @@
-//! Queue Pair (QP) management.
+//! Queue pair — the communication endpoint for RDMA operations.
 //!
 //! # The Communication Endpoint
 //!

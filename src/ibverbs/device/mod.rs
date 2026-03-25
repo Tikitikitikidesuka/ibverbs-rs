@@ -1,4 +1,4 @@
-//! Device discovery and management.
+//! Device — discovery, context management, and GUID handling.
 //!
 //! This module provides the entry point for working with RDMA devices.
 //! Before allocating resources (Protection Domains, Queue Pairs, etc.), you must

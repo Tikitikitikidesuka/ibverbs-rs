@@ -1,4 +1,4 @@
-//! Completion Queue (CQ) management.
+//! Completion queue — polling for completed work requests.
 //!
 //! A [`CompletionQueue`] (CQ) is the mechanism used to receive notifications about completed
 //! Work Requests (WR) from a Queue Pair (QP). When a Send or Receive operation finishes,
