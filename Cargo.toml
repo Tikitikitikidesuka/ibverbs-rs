@@ -29,6 +29,9 @@ rand = "0.10.0"
 [features]
 numa = []
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lints.clippy]
 cast_possible_truncation = "deny"
 cast_possible_wrap = "deny"
