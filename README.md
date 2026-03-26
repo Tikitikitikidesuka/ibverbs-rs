@@ -22,7 +22,7 @@ Built on top of [`ibverbs-sys`](https://crates.io/crates/ibverbs-sys).
 
 ## Safety model
 
-Two-sided operations (send/receive) are lifetime-safe through Rust's borrow checker —
+Two-sided operations (send/receive) are checked by Rust's borrow checker —
 the data buffers are borrowed for the duration of the operation.
 
 One-sided operations (RDMA read/write) require `unsafe` on the passive side because the
