@@ -74,5 +74,5 @@ point-to-point channels, multi-channel scatter/gather, and distributed network b
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
 
-Developed by Miguel Hermoso Mantecón and Jonatan Ziegler.
+Developed by Miguel Hermoso Mantecón and Jonatan Ziegler during their respective technical studentships at CERN.
 
