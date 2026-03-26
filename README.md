@@ -28,12 +28,12 @@ Built on top of [`ibverbs-sys`](https://crates.io/crates/ibverbs-sys).
 
 Choose the abstraction level that fits your use case:
 
-* **Single connection** — the [`channel`](https://docs.rs/ibverbs-rs/latest/ibverbs_rs/channel/index.html) module provides a fully memory-safe point-to-point RDMA connection.
-* **Multiple peers** — the [`multi_channel`](https://docs.rs/ibverbs-rs/latest/ibverbs_rs/multi_channel/index.html) module provides multiple indexed channels sharing memory regions.
-* **Distributed network** — the [`network`](https://docs.rs/ibverbs-rs/latest/ibverbs_rs/network/index.html) module sets up a ranked RDMA network
+* **Single connection** — the `channel` module provides a fully memory-safe point-to-point RDMA connection.
+* **Multiple peers** — the `multi_channel` module provides multiple indexed channels sharing memory regions.
+* **Distributed network** — the `network` module sets up a ranked RDMA network
   with barrier synchronization. Includes an out-of-band TCP exchanger for easy
   endpoint discovery and cluster bootstrapping.
-* **Low-level control** — the [`ibverbs`](https://docs.rs/ibverbs-rs/latest/ibverbs_rs/ibverbs/index.html) module exposes the raw primitives (devices,
+* **Low-level control** — the `ibverbs` module exposes the raw primitives (devices,
   protection domains, queue pairs, completion queues, memory regions, and work requests)
   for when you need full control over the RDMA stack.
 
