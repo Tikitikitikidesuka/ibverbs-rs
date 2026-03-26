@@ -110,6 +110,7 @@ pub fn set_numa_node_strict(node: i32) -> io::Result<()> {
     Ok(())
 }
 
+#[link(name = "numa")]
 unsafe extern "C" {
     fn numa_run_on_node(node: std::os::raw::c_int) -> std::os::raw::c_int;
     fn numa_set_localalloc();
