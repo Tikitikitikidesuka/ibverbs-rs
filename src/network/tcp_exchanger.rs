@@ -274,7 +274,6 @@ impl Exchanger {
         stream.write_all(encoded.as_slice()).await?;
         Ok(())
     }
-
 }
 
 #[cfg(test)]
@@ -299,8 +298,7 @@ mod tests {
                 .unwrap();
             drop(writer);
 
-            let msg: ExchangeMessage<String> =
-                Exchanger::read_stream(&mut reader).await.unwrap();
+            let msg: ExchangeMessage<String> = Exchanger::read_stream(&mut reader).await.unwrap();
             assert_eq!(msg.rank, 7);
             assert_eq!(msg.data, "test data");
         });
@@ -328,8 +326,7 @@ mod tests {
                 .unwrap();
             drop(writer);
 
-            let msg: ExchangeMessage<Endpoint> =
-                Exchanger::read_stream(&mut reader).await.unwrap();
+            let msg: ExchangeMessage<Endpoint> = Exchanger::read_stream(&mut reader).await.unwrap();
             assert_eq!(msg.rank, 3);
             assert_eq!(msg.data, endpoint);
         });
@@ -346,8 +343,7 @@ mod tests {
                 .unwrap();
             drop(writer);
 
-            let msg: ExchangeMessage<Vec<u64>> =
-                Exchanger::read_stream(&mut reader).await.unwrap();
+            let msg: ExchangeMessage<Vec<u64>> = Exchanger::read_stream(&mut reader).await.unwrap();
             assert_eq!(msg.rank, 0);
             assert_eq!(msg.data, data);
         });
