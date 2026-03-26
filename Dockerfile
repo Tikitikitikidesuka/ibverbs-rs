@@ -35,7 +35,7 @@ RUN rustup install stable && \
 WORKDIR /app
 
 # Pre-compile dependencies
-COPY Cargo.toml Cargo.lock build.rs ./
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "" > src/lib.rs && \
     cargo build --lib --all-features 2>/dev/null; \
     cargo build --lib --all-features --release 2>/dev/null; \
