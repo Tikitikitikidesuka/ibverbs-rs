@@ -1,6 +1,6 @@
 [package]
 name = "ibverbs-rs"
-version = "0.3.0"
+version = "0.4.0"
 description = "Safe, ergonomic Rust bindings for the InfiniBand libibverbs API"
 repository = "https://github.com/Tikitikitikidesuka/ibverbs-rs"
 license = "MIT OR Apache-2.0"
