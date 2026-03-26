@@ -1,6 +1,5 @@
 use crate::network::config::{NetworkConfig, NodeConfig};
 use ExchangeError::*;
-use bincode::serde::{decode_from_slice, encode_to_vec};
 use log::{debug, warn};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -19,12 +18,9 @@ pub enum ExchangeError {
     /// A rank referenced during the exchange is not present in the [`NetworkConfig`].
     #[error("Rank {rank} not in network")]
     InvalidRank { rank: usize },
-    /// An incoming message could not be decoded.
-    #[error("Error decoding data ({0})")]
-    DecodeError(#[from] bincode::error::DecodeError),
-    /// A message could not be serialized before sending.
-    #[error("Error encoding data ({0})")]
-    EncodeError(#[from] bincode::error::EncodeError),
+    /// A message could not be serialized or deserialized.
+    #[error("Error serializing/deserializing data ({0})")]
+    SerdeError(#[from] serde_json::Error),
     /// An underlying TCP I/O operation failed.
     #[error("Error during IO operation ({0})")]
     IoError(#[from] std::io::Error),
@@ -264,7 +260,7 @@ impl Exchanger {
 
         let mut msg_buf = vec![0u8; msg_size as usize];
         stream.read_exact(&mut msg_buf[..]).await?;
-        Ok(decode_from_slice(msg_buf.as_slice(), Self::bincode_config())?.0)
+        Ok(serde_json::from_slice(&msg_buf)?)
     }
 
     async fn write_stream<T: Serialize>(
@@ -272,16 +268,205 @@ impl Exchanger {
         data: &T,
         stream: &mut (impl AsyncWriteExt + Unpin),
     ) -> Result<(), ExchangeError> {
-        let encoded = encode_to_vec(ExchangeMessage { rank, data }, Self::bincode_config())?;
+        let encoded = serde_json::to_vec(&ExchangeMessage { rank, data })?;
         let len = u32::try_from(encoded.len()).map_err(|_| MessageTooLarge(encoded.len()))?;
         stream.write_all(len.to_be_bytes().as_ref()).await?;
         stream.write_all(encoded.as_slice()).await?;
         Ok(())
     }
 
-    fn bincode_config() -> impl bincode::config::Config {
-        bincode::config::standard()
-            .with_big_endian()
-            .with_variable_int_encoding()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn run_async<F: std::future::Future>(f: F) -> F::Output {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f)
+    }
+
+    #[test]
+    fn write_read_round_trip_string() {
+        run_async(async {
+            let (mut writer, mut reader) = tokio::io::duplex(1024);
+            Exchanger::write_stream(7, &"test data".to_string(), &mut writer)
+                .await
+                .unwrap();
+            drop(writer);
+
+            let msg: ExchangeMessage<String> =
+                Exchanger::read_stream(&mut reader).await.unwrap();
+            assert_eq!(msg.rank, 7);
+            assert_eq!(msg.data, "test data");
+        });
+    }
+
+    #[test]
+    fn write_read_round_trip_struct() {
+        #[derive(Debug, PartialEq, Serialize, Deserialize)]
+        struct Endpoint {
+            lid: u16,
+            qpn: u32,
+            psn: u32,
+        }
+
+        run_async(async {
+            let endpoint = Endpoint {
+                lid: 1,
+                qpn: 0x1234,
+                psn: 0xABCD,
+            };
+
+            let (mut writer, mut reader) = tokio::io::duplex(1024);
+            Exchanger::write_stream(3, &endpoint, &mut writer)
+                .await
+                .unwrap();
+            drop(writer);
+
+            let msg: ExchangeMessage<Endpoint> =
+                Exchanger::read_stream(&mut reader).await.unwrap();
+            assert_eq!(msg.rank, 3);
+            assert_eq!(msg.data, endpoint);
+        });
+    }
+
+    #[test]
+    fn write_read_round_trip_vec() {
+        run_async(async {
+            let data = vec![1u64, 2, 3, 4, 5];
+
+            let (mut writer, mut reader) = tokio::io::duplex(1024);
+            Exchanger::write_stream(0, &data, &mut writer)
+                .await
+                .unwrap();
+            drop(writer);
+
+            let msg: ExchangeMessage<Vec<u64>> =
+                Exchanger::read_stream(&mut reader).await.unwrap();
+            assert_eq!(msg.rank, 0);
+            assert_eq!(msg.data, data);
+        });
+    }
+
+    #[test]
+    fn read_stream_rejects_truncated_length() {
+        run_async(async {
+            let data = [0u8, 1];
+            let mut reader = &data[..];
+            assert!(Exchanger::read_stream::<String>(&mut reader).await.is_err());
+        });
+    }
+
+    #[test]
+    fn read_stream_rejects_truncated_body() {
+        run_async(async {
+            let mut data = Vec::new();
+            data.extend_from_slice(&100u32.to_be_bytes());
+            data.extend_from_slice(&[0u8, 1]);
+            let mut reader = &data[..];
+            assert!(Exchanger::read_stream::<String>(&mut reader).await.is_err());
+        });
+    }
+
+    #[test]
+    fn insert_if_valid_accepts_valid_rank() {
+        let mut received = HashMap::new();
+        let msg = ExchangeMessage {
+            rank: 2,
+            data: "hello".to_string(),
+        };
+        assert!(Exchanger::insert_if_valid(msg, &mut received, 0..5));
+        assert_eq!(received.get(&2).unwrap(), "hello");
+    }
+
+    #[test]
+    fn insert_if_valid_rejects_out_of_range() {
+        let mut received = HashMap::new();
+        let msg = ExchangeMessage {
+            rank: 10,
+            data: "hello".to_string(),
+        };
+        assert!(!Exchanger::insert_if_valid(msg, &mut received, 0..5));
+        assert!(received.is_empty());
+    }
+
+    #[test]
+    fn insert_if_valid_overwrites_duplicate() {
+        let mut received = HashMap::new();
+        received.insert(2, "first".to_string());
+        let msg = ExchangeMessage {
+            rank: 2,
+            data: "second".to_string(),
+        };
+        assert!(Exchanger::insert_if_valid(msg, &mut received, 0..5));
+        assert_eq!(received.get(&2).unwrap(), "second");
+    }
+
+    fn make_network(ports: &[u16]) -> NetworkConfig {
+        let mut builder = NetworkConfig::builder();
+        for (i, &port) in ports.iter().enumerate() {
+            builder = builder.add_node(
+                NodeConfig::builder()
+                    .hostname("127.0.0.1")
+                    .port(port)
+                    .ibdev("test0")
+                    .rankid(i)
+                    .build(),
+            );
+        }
+        builder.build().unwrap()
+    }
+
+    #[test]
+    fn two_node_exchange() {
+        let network = make_network(&[41100, 41101]);
+
+        let handles: Vec<_> = (0..2)
+            .map(|rank| {
+                let net = network.clone();
+                std::thread::spawn(move || {
+                    Exchanger::await_exchange_all(
+                        rank,
+                        &net,
+                        &format!("from_{rank}"),
+                        &ExchangeConfig::default(),
+                    )
+                })
+            })
+            .collect();
+
+        let expected = vec!["from_0".to_string(), "from_1".to_string()];
+        for handle in handles {
+            assert_eq!(handle.join().unwrap().unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn three_node_exchange() {
+        let network = make_network(&[41200, 41201, 41202]);
+
+        let handles: Vec<_> = (0..3)
+            .map(|rank| {
+                let net = network.clone();
+                std::thread::spawn(move || {
+                    Exchanger::await_exchange_all(
+                        rank,
+                        &net,
+                        &format!("from_{rank}"),
+                        &ExchangeConfig::default(),
+                    )
+                })
+            })
+            .collect();
+
+        let expected: Vec<String> = (0..3).map(|i| format!("from_{i}")).collect();
+        for handle in handles {
+            assert_eq!(handle.join().unwrap().unwrap(), expected);
+        }
     }
 }
