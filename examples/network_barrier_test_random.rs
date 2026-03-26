@@ -3,7 +3,7 @@ use ibverbs_rs::network::{
     BarrierAlgorithm, ExchangeConfig, Exchanger, Node, NodeConfig, RawNetworkConfig,
 };
 use log::LevelFilter::Debug;
-use rand::Rng;
+use rand::RngExt;
 use simple_logger::SimpleLogger;
 use std::io::Read;
 use std::time::Duration;
