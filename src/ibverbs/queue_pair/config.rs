@@ -106,7 +106,7 @@ impl MinRnrTimer {
 
     /// Creates a timer from a raw 5-bit code (1-31). Returns `None` if out of range.
     pub const fn limited(code: u8) -> Option<Self> {
-        if code > 0 && code < 32 {
+        if code < 32 {
             Some(MinRnrTimer(code))
         } else {
             None
