@@ -19,7 +19,82 @@ use crate::ibverbs::work::{
 use ibverbs_sys::*;
 use std::ptr;
 
+mod private {
+    pub trait Sealed {}
+}
+
+/// A work request that can be posted to a [`QueuePair`].
+///
+/// This trait is sealed and is implemented only for the supported work request
+/// types.
+pub trait WorkRequest: private::Sealed {
+    /// Posts this work request to `qp` using `wr_id`.
+    ///
+    /// `wr_id` is an application-defined identifier returned in the corresponding
+    /// work completion.
+    ///
+    /// # Safety
+    ///
+    /// The caller must uphold the safety requirements of the concrete
+    /// [`QueuePair`] posting method corresponding to `Self`.
+    ///
+    /// Specifically:
+    ///
+    /// - [`SendWorkRequest`] follows [`QueuePair::post_send`]
+    /// - [`ReceiveWorkRequest`] follows [`QueuePair::post_receive`]
+    /// - [`WriteWorkRequest`] follows [`QueuePair::post_write`]
+    /// - [`ReadWorkRequest`] follows [`QueuePair::post_read`]
+    unsafe fn post(self, qp: &mut QueuePair, wr_id: u64) -> IbvResult<()>;
+}
+
+impl<'wr, 'data> private::Sealed for SendWorkRequest<'wr, 'data> {}
+impl<'wr, 'data> WorkRequest for SendWorkRequest<'wr, 'data> {
+    unsafe fn post(self, qp: &mut QueuePair, wr_id: u64) -> IbvResult<()> {
+        unsafe { qp.post_send(self, wr_id) }
+    }
+}
+
+impl<'wr, 'data> private::Sealed for ReceiveWorkRequest<'wr, 'data> {}
+impl<'wr, 'data> WorkRequest for ReceiveWorkRequest<'wr, 'data> {
+    unsafe fn post(self, qp: &mut QueuePair, wr_id: u64) -> IbvResult<()> {
+        unsafe { qp.post_receive(self, wr_id) }
+    }
+}
+
+impl<'wr, 'data> private::Sealed for WriteWorkRequest<'wr, 'data> {}
+impl<'wr, 'data> WorkRequest for WriteWorkRequest<'wr, 'data> {
+    unsafe fn post(self, qp: &mut QueuePair, wr_id: u64) -> IbvResult<()> {
+        unsafe { qp.post_write(self, wr_id) }
+    }
+}
+
+impl<'wr, 'data> private::Sealed for ReadWorkRequest<'wr, 'data> {}
+impl<'wr, 'data> WorkRequest for ReadWorkRequest<'wr, 'data> {
+    unsafe fn post(self, qp: &mut QueuePair, wr_id: u64) -> IbvResult<()> {
+        unsafe { qp.post_read(self, wr_id) }
+    }
+}
+
 impl QueuePair {
+    /// Posts a typed work request to this queue pair.
+    ///
+    /// This is a convenience wrapper over [`WorkRequest::post`]. The concrete
+    /// operation is selected from the type of `wr`.
+    ///
+    /// `wr_id` is an application-defined identifier returned in the corresponding
+    /// work completion.
+    ///
+    /// # Safety
+    ///
+    /// The caller must uphold the safety requirements of the concrete posting
+    /// method corresponding to the type of `wr`.
+    pub unsafe fn post<W>(&mut self, wr: W, wr_id: u64) -> IbvResult<()>
+    where
+        W: WorkRequest,
+    {
+        unsafe { wr.post(self, wr_id) }
+    }
+
     /// Posts a **Send** request to the Send Queue.
     ///
     /// # Safety
