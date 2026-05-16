@@ -18,7 +18,7 @@ pub struct CachedCompletionQueue {
 
 impl CachedCompletionQueue {
     /// Wraps a [`CompletionQueue`] with an in-memory completion cache.
-    pub(super) fn wrap_cq(cq: CompletionQueue) -> Self {
+    pub fn wrap_cq(cq: CompletionQueue) -> Self {
         let poll_buf_length = cq.min_capacity() as usize;
         Self {
             cq,
