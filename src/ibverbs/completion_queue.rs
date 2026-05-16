@@ -176,7 +176,7 @@ pub struct PollSlot {
 /// This struct is returned by [`CompletionQueue::poll`]. It borrows the underlying
 /// [`PollSlot`] buffer and yields [`WorkCompletion`] objects.
 pub struct PolledCompletions<'a> {
-    wcs: &'a mut [PollSlot],
+    wcs: &'a [PollSlot],
 }
 
 impl PolledCompletions<'_> {
