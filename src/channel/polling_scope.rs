@@ -2,9 +2,8 @@ use crate::channel::pending_work::PendingWork;
 use crate::channel::{Channel, TransportError, TransportResult};
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
-use crate::ibverbs::work::{
-    ReadWorkRequest, ReceiveWorkRequest, SendWorkRequest, WorkSuccess, WriteWorkRequest,
-};
+use crate::ibverbs::queue_pair::ops::WorkRequest;
+use crate::ibverbs::work::WorkSuccess;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
@@ -215,60 +214,17 @@ enum AutoPollSuccess {
 impl<'scope, 'env, C> PollingScope<'scope, 'env, C> {
     // The slice cannot be used again until the work request is consumed,
     // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_send<F>(
+    pub(crate) fn channel_post<F, W>(
         &mut self,
         channel_selector: F,
-        wr: SendWorkRequest<'_, 'env>,
+        wr: W,
     ) -> IbvResult<ScopedPendingWork<'scope>>
     where
         F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
+        W: WorkRequest,
     {
         let channel = channel_selector(self.inner)?;
-        let wr = ScopedPendingWork::new(unsafe { channel.send_unpolled(wr)? });
-        self.wrs.push(wr.clone());
-        Ok(wr)
-    }
-
-    // The slice cannot be used again until the work request is consumed,
-    // so no overlapping operations can be done concurrently
-    pub(crate) fn channel_post_receive<F>(
-        &mut self,
-        channel_selector: F,
-        wr: ReceiveWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = ScopedPendingWork::new(unsafe { channel.receive_unpolled(wr)? });
-        self.wrs.push(wr.clone());
-        Ok(wr)
-    }
-
-    pub(crate) fn channel_post_write<F>(
-        &mut self,
-        channel_selector: F,
-        wr: WriteWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = ScopedPendingWork::new(unsafe { channel.write_unpolled(wr)? });
-        self.wrs.push(wr.clone());
-        Ok(wr)
-    }
-
-    pub(crate) fn channel_post_read<F>(
-        &mut self,
-        channel_selector: F,
-        wr: ReadWorkRequest<'_, 'env>,
-    ) -> IbvResult<ScopedPendingWork<'scope>>
-    where
-        F: FnOnce(&mut C) -> IbvResult<&mut Channel>,
-    {
-        let channel = channel_selector(self.inner)?;
-        let wr = ScopedPendingWork::new(unsafe { channel.read_unpolled(wr)? });
+        let wr = ScopedPendingWork::new(unsafe { channel.post(wr)? });
         self.wrs.push(wr.clone());
         Ok(wr)
     }

@@ -31,10 +31,10 @@ fn main() {
             let send_ge = [mr.gather_element_unchecked(send_mem)];
             let mut recv_se = [mr.scatter_element_unchecked(recv_mem)];
 
-            s.post_receive(ReceiveWorkRequest::new(&mut recv_se))?;
-            s.post_send(SendWorkRequest::new(&send_ge))?;
+            s.post(ReceiveWorkRequest::new(&mut recv_se))?;
+            s.post(SendWorkRequest::new(&send_ge))?;
 
-            Ok::<(), ScopeError<TransportError>>(())
+            Ok::<_, ScopeError<TransportError>>(())
         })
         .unwrap();
 
