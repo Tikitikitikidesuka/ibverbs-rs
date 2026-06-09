@@ -163,14 +163,13 @@ pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork
 pub struct Channel {
     qp: QueuePair,
     cq: Rc<RefCell<CachedCompletionQueue>>,
-    pd: ProtectionDomain,
     next_wr_id: u64,
 }
 
 impl Channel {
     /// Returns a reference to the channel's [`ProtectionDomain`].
     pub fn pd(&self) -> &ProtectionDomain {
-        &self.pd
+        &self.qp.pd()
     }
 }
 

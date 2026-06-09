@@ -84,7 +84,6 @@ impl PreparedChannel {
         Ok(Channel {
             qp,
             cq: Rc::new(RefCell::new(self.cq)),
-            pd: self.pd,
             next_wr_id: 0,
         })
     }
