@@ -18,7 +18,6 @@ pub struct CachedCompletionQueue {
 impl CachedCompletionQueue {
     /// Wraps a [`CompletionQueue`] with an in-memory completion cache.
     pub fn wrap_cq(cq: CompletionQueue) -> Self {
-        let poll_buf_length = cq.min_capacity() as usize;
         Self {
             cq,
             cache: IntMap::new(),
@@ -33,7 +32,7 @@ impl CachedCompletionQueue {
     /// Polls the completion queue and stores any new completions in the cache.
     ///
     /// Returns the number of new completions polled.
-    pub fn update(&mut self, completions: &mut [PollSlot],) -> IbvResult<usize> {
+    pub fn update(&mut self, completions: &mut [PollSlot]) -> IbvResult<usize> {
         // Poll the cq for new work completions
         let polled_wcs = self.cq.poll(completions)?;
         let polled_num = polled_wcs.len();
