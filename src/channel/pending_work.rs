@@ -1,5 +1,6 @@
 use crate::channel::TransportResult;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
+use crate::ibverbs::completion_queue::PollSlot;
 use crate::ibverbs::work::{WorkResult, WorkSuccess};
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
@@ -18,6 +19,7 @@ use std::rc::Rc;
 pub struct PendingWork<'a> {
     wr_id: u64,
     cq: Rc<RefCell<CachedCompletionQueue>>,
+    poll_buff: Rc<RefCell<Box<[PollSlot]>>>,
     status: Option<WorkResult>,
 
     /// SAFETY INVARIANT: The lifetime of the data must be the same as the lifetime of the work request.
@@ -27,9 +29,13 @@ pub struct PendingWork<'a> {
 impl<'a> PendingWork<'a> {
     /// SAFETY INVARIANT: The lifetime of the data involved must be the same as the lifetime of the work request.
     pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<CachedCompletionQueue>>) -> Self {
+        let poll_buf_length = cq.borrow().min_capacity() as usize;
         Self {
             wr_id,
             cq,
+            poll_buff: Rc::new(RefCell::new(
+                vec![PollSlot::default(); poll_buf_length].into_boxed_slice(),
+            )),
             status: None,
             _data_lifetime: PhantomData::<&'a [u8]>,
         }
@@ -70,6 +76,7 @@ impl PendingWork<'_> {
         }
 
         let mut self_cq = self.cq.borrow_mut();
+        let mut self_poll_buff = self.poll_buff.borrow_mut();
 
         // Check cache in case some other `IbvWorkRequest` polled the cq
         if let Some(status) = Self::consume_cache(self.wr_id, &mut self_cq) {
@@ -78,7 +85,7 @@ impl PendingWork<'_> {
         }
 
         // Otherwise, poll completion queue ourselves
-        let polled_num = match self_cq.update() {
+        let polled_num = match self_cq.update(&mut self_poll_buff) {
             Err(e) => return Some(Err(e.into())),
             Ok(n) => n,
         };

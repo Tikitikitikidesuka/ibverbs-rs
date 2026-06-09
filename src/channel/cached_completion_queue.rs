@@ -13,7 +13,6 @@ use intmap::IntMap;
 pub struct CachedCompletionQueue {
     cq: CompletionQueue,
     cache: IntMap<u64, WorkCompletion>,
-    poll_buf: Vec<PollSlot>,
 }
 
 impl CachedCompletionQueue {
@@ -23,16 +22,20 @@ impl CachedCompletionQueue {
         Self {
             cq,
             cache: IntMap::new(),
-            poll_buf: vec![PollSlot::default(); poll_buf_length],
         }
+    }
+
+    /// Minimum capacity of the wrapped [`CompletionQueue`]
+    pub fn min_capacity(&self) -> u32 {
+        self.cq.min_capacity()
     }
 
     /// Polls the completion queue and stores any new completions in the cache.
     ///
     /// Returns the number of new completions polled.
-    pub fn update(&mut self) -> IbvResult<usize> {
+    pub fn update(&mut self, completions: &mut [PollSlot],) -> IbvResult<usize> {
         // Poll the cq for new work completions
-        let polled_wcs = self.cq.poll(self.poll_buf.as_mut_slice())?;
+        let polled_wcs = self.cq.poll(completions)?;
         let polled_num = polled_wcs.len();
 
         // Fill cache with polled work completions
