@@ -136,7 +136,7 @@ use std::rc::Rc;
 use thiserror::Error;
 
 mod builder;
-mod cached_completion_queue;
+pub mod cached_completion_queue;
 mod ops;
 mod pending_work;
 mod polling_scope;
