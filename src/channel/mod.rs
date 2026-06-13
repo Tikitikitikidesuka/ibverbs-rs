@@ -150,6 +150,7 @@ pub use builder::channel_builder::{
 pub use builder::{ChannelBuilder, PreparedChannel};
 pub use pending_work::PendingWork;
 pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork};
+use crate::ibverbs::completion_queue::PollSlot;
 
 /// A safe RDMA communication endpoint built on top of a [`QueuePair`].
 ///
@@ -163,6 +164,7 @@ pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork
 pub struct Channel {
     qp: QueuePair,
     cq: Rc<RefCell<CachedCompletionQueue>>,
+    poll_buff: Rc<RefCell<Box<[PollSlot]>>>,
     next_wr_id: u64,
 }
 

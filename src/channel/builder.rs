@@ -1,6 +1,7 @@
 use crate::channel::Channel;
 use crate::channel::cached_completion_queue::CachedCompletionQueue;
 use crate::ibverbs::access_config::AccessFlags;
+use crate::ibverbs::completion_queue::PollSlot;
 use crate::ibverbs::error::IbvResult;
 use crate::ibverbs::protection_domain::ProtectionDomain;
 use crate::ibverbs::queue_pair::builder::{PreparedQueuePair, QueuePairEndpoint};
@@ -81,9 +82,13 @@ impl PreparedChannel {
     /// Connects to the remote peer and returns a ready-to-use [`Channel`].
     pub fn handshake(self, endpoint: QueuePairEndpoint) -> IbvResult<Channel> {
         let qp = self.qp.handshake(endpoint)?;
+        let cq_min_capacity = self.cq.min_capacity();
         Ok(Channel {
             qp,
             cq: Rc::new(RefCell::new(self.cq)),
+            poll_buff: Rc::new(RefCell::new(
+                vec![PollSlot::default(); cq_min_capacity as usize].into_boxed_slice(),
+            )),
             next_wr_id: 0,
         })
     }

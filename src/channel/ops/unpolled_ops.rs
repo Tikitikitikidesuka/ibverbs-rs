@@ -18,7 +18,7 @@ impl Channel {
     ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_send(wr, wr_id)? };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone(), self.poll_buff.clone()) })
     }
 
     /// Posts a receive operation without polling for completion.
@@ -33,7 +33,7 @@ impl Channel {
     ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_receive(wr, wr_id)? };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone(), self.poll_buff.clone()) })
     }
 
     /// Posts an RDMA write operation without polling for completion.
@@ -48,7 +48,7 @@ impl Channel {
     ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_write(wr, wr_id)? };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone(), self.poll_buff.clone()) })
     }
 
     /// Posts an RDMA read operation without polling for completion.
@@ -63,7 +63,7 @@ impl Channel {
     ) -> IbvResult<PendingWork<'data>> {
         let wr_id = self.get_and_advance_wr_id();
         unsafe { self.qp.post_read(wr, wr_id)? };
-        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone()) })
+        Ok(unsafe { PendingWork::new(wr_id, self.cq.clone(), self.poll_buff.clone()) })
     }
 
     fn get_and_advance_wr_id(&mut self) -> u64 {
