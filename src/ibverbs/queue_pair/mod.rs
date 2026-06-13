@@ -81,6 +81,12 @@ unsafe impl Send for QueuePair {}
 /// SAFETY: libibverbs resources are thread-safe.
 unsafe impl Sync for QueuePair {}
 
+impl QueuePair {
+    pub(crate) fn pd(&self) -> &ProtectionDomain {
+        &self.pd
+    }
+}
+
 impl Drop for QueuePair {
     fn drop(&mut self) {
         log::debug!("QueuePair destroyed");
