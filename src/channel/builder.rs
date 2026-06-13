@@ -56,7 +56,6 @@ impl Channel {
 
         Ok(PreparedChannel {
             cq: CachedCompletionQueue::wrap_cq(cq),
-            pd: pd.clone(),
             qp,
         })
     }
@@ -69,7 +68,6 @@ impl Channel {
 /// [`handshake`](Self::handshake) with the remote's endpoint to finish the connection.
 pub struct PreparedChannel {
     cq: CachedCompletionQueue,
-    pd: ProtectionDomain,
     qp: PreparedQueuePair,
 }
 

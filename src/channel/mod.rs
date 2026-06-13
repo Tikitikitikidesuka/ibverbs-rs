@@ -141,6 +141,7 @@ mod ops;
 mod pending_work;
 mod polling_scope;
 
+use crate::ibverbs::completion_queue::PollSlot;
 #[doc(hidden)]
 pub use builder::channel_builder::{
     Empty, SetAccess, SetAckTimeout, SetMaxAckRetries, SetMaxRecvSge, SetMaxRecvWr,
@@ -150,7 +151,6 @@ pub use builder::channel_builder::{
 pub use builder::{ChannelBuilder, PreparedChannel};
 pub use pending_work::PendingWork;
 pub use polling_scope::{PollingScope, ScopeError, ScopeResult, ScopedPendingWork};
-use crate::ibverbs::completion_queue::PollSlot;
 
 /// A safe RDMA communication endpoint built on top of a [`QueuePair`].
 ///

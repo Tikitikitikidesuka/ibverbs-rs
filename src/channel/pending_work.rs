@@ -28,8 +28,11 @@ pub struct PendingWork<'a> {
 
 impl<'a> PendingWork<'a> {
     /// SAFETY INVARIANT: The lifetime of the data involved must be the same as the lifetime of the work request.
-    pub(super) unsafe fn new(wr_id: u64, cq: Rc<RefCell<CachedCompletionQueue>>, poll_buff: Rc<RefCell<Box<[PollSlot]>>>) -> Self {
-        let poll_buf_length = cq.borrow().min_capacity() as usize;
+    pub(super) unsafe fn new(
+        wr_id: u64,
+        cq: Rc<RefCell<CachedCompletionQueue>>,
+        poll_buff: Rc<RefCell<Box<[PollSlot]>>>,
+    ) -> Self {
         Self {
             wr_id,
             cq,
